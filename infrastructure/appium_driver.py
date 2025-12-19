@@ -22,7 +22,7 @@ from infrastructure.capability_builder import (
     build_android_capabilities,
     AppiumCapabilities,
 )
-from infrastructure.appium_error_handler import AppiumError, validate_coordinates
+from infrastructure.appium_error_handler import AppiumError
 
 logger = logging.getLogger(__name__)
 
@@ -292,33 +292,13 @@ class AppiumDriver:
             return False
         
         try:
-            # Prefer coordinates (bbox) if available
-            if bbox and isinstance(bbox, dict):
-                top_left = bbox.get("top_left", [])
-                bottom_right = bbox.get("bottom_right", [])
-                if len(top_left) == 2 and len(bottom_right) == 2:
-                    # Calculate center coordinates
-                    x = (top_left[1] + bottom_right[1]) / 2
-                    y = (top_left[0] + bottom_right[0]) / 2
-                    
-                    # Get window size for coordinate validation
-                    window_size = self.helper.get_window_size()
-                    coords = validate_coordinates(
-                        x, y,
-                        window_size['width'],
-                        window_size['height']
-                    )
-                    
-                    # Perform tap at coordinates using W3C Actions
-                    self.helper.perform_w3c_tap(coords['x'], coords['y'])
-                    logger.debug(f"Tapped at coordinates ({coords['x']}, {coords['y']}) from bbox")
-                    return True
+
             
-            # Fall back to element lookup if no coordinates or coordinates failed
+            # Only use element lookup
             if target_identifier:
                 return self.helper.tap_element(target_identifier, strategy='id')
             
-            logger.error("tap() called without target_identifier or bbox")
+            logger.error("tap() called without target_identifier")
             return False
             
         except Exception as e:
@@ -672,34 +652,13 @@ class AppiumDriver:
             return False
         
         try:
-            # Get coordinates
-            x, y = None, None
-            
-            # Prefer coordinates (bbox) if available
-            if bbox and isinstance(bbox, dict):
-                top_left = bbox.get("top_left", [])
-                bottom_right = bbox.get("bottom_right", [])
-                if len(top_left) == 2 and len(bottom_right) == 2:
-                    x = (top_left[1] + bottom_right[1]) / 2
-                    y = (top_left[0] + bottom_right[0]) / 2
-                    
-                    # Get window size for coordinate validation
-                    window_size = self.helper.get_window_size()
-                    coords = validate_coordinates(
-                        x, y,
-                        window_size['width'],
-                        window_size['height']
-                    )
-                    x, y = coords['x'], coords['y']
-            
-            # Fall back to element lookup if no coordinates
-            if x is None or y is None:
-                if target_identifier:
-                    element = self.helper.find_element(target_identifier, strategy='id')
-                    x, y = self.helper._get_element_center(element)
-                else:
-                    logger.error("double_tap() called without target_identifier or bbox")
-                    return False
+            # Only use element lookup
+            if target_identifier:
+                element = self.helper.find_element(target_identifier, strategy='id')
+                x, y = self.helper._get_element_center(element)
+            else:
+                logger.error("double_tap() called without target_identifier")
+                return False
             
             # Perform double tap using specialized GestureHandler (delegated)
             if self.helper.gesture_handler:

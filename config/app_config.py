@@ -69,7 +69,9 @@ class Config:
             "GEMINI_API_KEY", 
             "OLLAMA_BASE_URL", 
             "MOBSF_API_KEY",
+            "TEST_EMAIL",
             "TEST_PASSWORD",
+            "TEST_NAME",
             "PCAPDROID_API_KEY"
         }
         self._init_paths()

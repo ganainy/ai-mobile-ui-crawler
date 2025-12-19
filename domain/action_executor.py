@@ -37,11 +37,8 @@ class ActionExecutor:
         target_id = action_data.get("target_identifier")
         bbox = action_data.get("target_bounding_box")
         
-        # Pass both target_identifier and bbox to driver.tap()
-        # The driver will call MCP server, which will:
-        # 1. Prefer coordinates (bbox) if available
-        # 2. Fall back to element lookup with multiple strategies if coordinates not available
-        # 3. Use element lookup as fallback if coordinates fail
+        # Pass target_identifier to driver.tap()
+        # Element lookup is now the only supported method.
         return self.driver.tap(target_id, bbox)
     
     def _execute_input_action(self, action_data: Dict[str, Any]) -> bool:
@@ -66,33 +63,8 @@ class ActionExecutor:
             default_duration_ms = LONG_PRESS_MIN_DURATION_MS
         duration_ms = action_data.get("duration_ms", default_duration_ms)
         
-        if not target_id and bbox and isinstance(bbox, dict):
-            top_left = bbox.get("top_left", [])
-            bottom_right = bbox.get("bottom_right", [])
-            if len(top_left) == 2 and len(bottom_right) == 2:
-                # Compute center to long press
-                y1, x1 = top_left
-                y2, x2 = bottom_right
-                center_x = (x1 + x2) / 2
-                center_y = (y1 + y2) / 2
-                window_size = self.driver.get_window_size()
-                if window_size:
-                    screen_width = window_size['width']
-                    screen_height = window_size['height']
-                    center_x = max(0, min(center_x, screen_width - 1))
-                    center_y = max(0, min(center_y, screen_height - 1))
-                    # Use coordinate tap with duration for long press - create bbox
-                    tap_bbox = {"top_left": [center_y, center_x], "bottom_right": [center_y, center_x]}
-                    return self.driver.tap(None, tap_bbox)
-                else:
-                    logger.error("Cannot get screen size for coordinate validation")
-                    return False
-            else:
-                logger.error("Invalid bounding box format for long_press")
-                return False
-        else:
-            # Prefer element-based long press via driver
-            return self.driver.long_press(target_id or "", duration_ms)
+        # Prefer element-based long press via driver
+        return self.driver.long_press(target_id or "", duration_ms)
     
     def _execute_double_tap_action(self, action_data: Dict[str, Any]) -> bool:
         """Execute double tap action with proper argument handling."""
