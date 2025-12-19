@@ -2,6 +2,7 @@ import sqlite3
 import os
 import json
 import logging
+import threading
 from typing import Any, List, Dict, Optional
 from platformdirs import user_config_dir
 
@@ -12,17 +13,53 @@ class UserConfigStore:
             os.makedirs(config_dir, exist_ok=True)
             db_path = os.path.join(config_dir, "config.db")
         self.db_path = db_path
-        self._conn: Optional[sqlite3.Connection] = sqlite3.connect(self.db_path)
+        self._conn: Optional[sqlite3.Connection] = None
+        self._conn_thread_ident: Optional[int] = None
         self._init_db()
 
     def _ensure_conn(self) -> sqlite3.Connection:
-        if self._conn is None:
-            raise RuntimeError("Database connection is not initialized")
-        return self._conn
+        """Ensure we have a valid connection for the current thread."""
+        current_thread_id = threading.get_ident()
+        
+        # If we have a connection, check if it's still usable
+        if self._conn is not None:
+            # With check_same_thread=False, connections can be used from any thread
+            # But we still track the creating thread for logging
+            try:
+                # Check if the connection is still alive and usable
+                self._conn.execute("SELECT 1").fetchone()
+                return self._conn
+            except sqlite3.Error as e:
+                logging.warning(f"⚠️ Existing database connection is not usable ({e}). Reconnecting.")
+                try:
+                    self._conn.close()
+                except Exception:
+                    pass
+                self._conn = None
+                self._conn_thread_ident = None
+        
+        # Create a new connection
+        # Use check_same_thread=False to allow multi-threaded access (safe with WAL mode)
+        try:
+            self._conn = sqlite3.connect(self.db_path, check_same_thread=False)
+            self._conn_thread_ident = current_thread_id
+            # Enable WAL mode for better concurrency and thread safety
+            self._conn.execute("PRAGMA journal_mode=WAL;")
+            logging.debug(f"Created database connection (created in thread {current_thread_id})")
+            return self._conn
+        except sqlite3.Error as e:
+            logging.error(f"🔴 Failed to create database connection in thread {current_thread_id}: {e}", exc_info=True)
+            self._conn = None
+            self._conn_thread_ident = None
+            raise RuntimeError(f"Database connection is not initialized: {e}")
 
     def _init_db(self):
         conn = self._ensure_conn()
-        conn.execute("PRAGMA journal_mode=WAL;")
+        # WAL mode is already set in _ensure_conn, but ensure it's set here too for initialization
+        try:
+            conn.execute("PRAGMA journal_mode=WAL;")
+        except sqlite3.Error:
+            pass  # WAL mode might already be set
 
         # Create table if it doesn't exist (for fresh databases)
         conn.execute("""
@@ -95,9 +132,23 @@ class UserConfigStore:
         conn.commit()
 
     def close(self):
+        """Close the database connection if it exists."""
+        current_thread_id = threading.get_ident()
         if hasattr(self, '_conn') and self._conn:
-            self._conn.close()
-            self._conn = None
+            if self._conn_thread_ident is not None and self._conn_thread_ident != current_thread_id:
+                logging.warning(
+                    f"⚠️ Attempting to close DB connection from thread {current_thread_id}, "
+                    f"but it was created by/owned by thread {self._conn_thread_ident}. "
+                    f"This might lead to issues if the original thread still expects to use it."
+                )
+            try:
+                self._conn.close()
+                logging.debug(f"Database connection closed (Closed by thread: {current_thread_id}, Owned by: {self._conn_thread_ident})")
+            except Exception as e:
+                logging.error(f"Error closing database connection in thread {current_thread_id}: {e}", exc_info=True)
+            finally:
+                self._conn = None
+                self._conn_thread_ident = None
 
     def is_first_launch(self) -> bool:
         """Check if this is the first launch by checking if user_preferences table is empty.

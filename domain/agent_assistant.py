@@ -20,6 +20,9 @@ from langgraph.checkpoint.memory import MemorySaver
 # Always use absolute import for model_adapters
 from domain.model_adapters import create_model_adapter, Session
 from domain.provider_utils import get_provider_api_key, get_provider_config_key, validate_provider_config
+from domain.action_executor import ActionExecutor
+from domain.prompt_builder import PromptBuilder, ActionDecisionChain
+from domain.langchain_wrapper import LangChainWrapper
 from config.numeric_constants import (
     DEFAULT_AI_PROVIDER,
     DEFAULT_MODEL_TEMP,
@@ -49,34 +52,6 @@ from utils.utils import simplify_xml_for_ai
 class Tools:
     def __init__(self, driver):
         self.driver = driver
-
-# Update ActionDecisionChain with real implementation
-class ActionDecisionChain:
-    def __init__(self, chain):
-        self.chain = chain
-
-    def run(self, context: Dict[str, Any]) -> Dict[str, Any]:
-        """Run the decision chain with the given context."""
-        try:
-            # The chain expects a dict with prompt variables
-            # Format the context for the prompt template
-            result = self.chain.invoke(context)
-            # If result is a string, try to parse as JSON
-            if isinstance(result, str):
-                try:
-                    return json.loads(result)
-                except json.JSONDecodeError:
-                    # Try to extract JSON from text if wrapped
-                    json_match = re.search(r'\{[^{}]*\}', result, re.DOTALL)
-                    if json_match:
-                        return json.loads(json_match.group())
-                    from config.numeric_constants import RESULT_TRUNCATION_LENGTH
-                    logging.warning(f"Could not parse JSON from chain result: {result[:RESULT_TRUNCATION_LENGTH]}")
-                    return {}
-            return result if isinstance(result, dict) else {}
-        except Exception as e:
-            logging.error(f"Error running ActionDecisionChain: {e}", exc_info=True)
-            return {}
 
 # Define the Pydantic model for ActionData
 class ActionData(BaseModel):
@@ -114,7 +89,6 @@ class AgentAssistant:
                 app_config, # Type hint with your actual Config class
                 model_alias_override: Optional[str] = None,
                 safety_settings_override: Optional[Dict] = None,
-                agent_tools=None,
                 ui_callback=None,
                 tools=None):  # Added tools parameter
         if tools is None:
@@ -125,9 +99,9 @@ class AgentAssistant:
         self.tools = tools
         self.cfg = app_config
         self.response_cache: Dict[str, Tuple[Dict[str, Any], float, int]] = {}
-        self.agent_tools = agent_tools  # May be None initially and set later
         self.ui_callback = ui_callback  # Callback for UI updates
         logging.debug("AI response cache initialized.")
+
 
         # Determine which AI provider to use
         self.ai_provider = self.cfg.get('AI_PROVIDER', DEFAULT_AI_PROVIDER).lower()
@@ -175,18 +149,14 @@ class AgentAssistant:
         # Initialize provider-agnostic session
         self._init_session(user_id=None)
         
-        # Initialize AI interaction logger (must be before LangChain components)
-        self.ai_interaction_readable_logger = None
-        self._setup_ai_interaction_logger()
+        # Initialize action executor (handles all action execution logic)
+        self.action_executor = ActionExecutor(self.tools.driver, self.cfg)
         
-        # Track if we've logged the static prompt parts (schema and actions)
-        self._static_prompt_logged = False
+        # Initialize prompt builder
+        self.prompt_builder = PromptBuilder(self.cfg)
         
         # Initialize LangChain components for orchestration
         self._init_langchain_components()
-        
-        # Initialize action dispatch map
-        self._init_action_dispatch_map()
 
     def _init_session(self, user_id: Optional[str] = None):
         """Initialize a new provider-agnostic session."""
@@ -210,374 +180,31 @@ class AgentAssistant:
         )
         logging.debug(f"Session initialized: {self.session}")
 
-    def _create_langchain_llm_wrapper(self):
-        """Create a LangChain-compatible LLM wrapper around the existing model adapter."""
-        def _llm_call(prompt_input) -> str:
-            """Call the model adapter and return response text."""
-            # Handle different input types from LangChain
-            if hasattr(prompt_input, 'messages'):
-                # ChatPromptValue - extract text from messages
-                prompt_text = ""
-                for message in prompt_input.messages:
-                    if hasattr(message, 'content'):
-                        prompt_text += str(message.content) + "\n"
-            elif hasattr(prompt_input, 'content'):
-                # Single message
-                prompt_text = str(prompt_input.content)
-            else:
-                # Plain string
-                prompt_text = str(prompt_input)
-
-            # Log the AI input (prompt) - only log dynamic parts to avoid repetition
-            if self.ai_interaction_readable_logger:
-                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                self.ai_interaction_readable_logger.info("=" * 80)
-                self.ai_interaction_readable_logger.info(f"AI INPUT - {timestamp}")
-                self.ai_interaction_readable_logger.info("=" * 80)
-                # Extract and log only the dynamic parts (everything after the static prompt)
-                # The static prompt starts with "You are an AI agent..." and ends before "Current screen XML:"
-                # We'll log everything from "Current screen XML:" onwards
-                if "Current screen XML:" in prompt_text:
-                    # Find where the dynamic part starts
-                    dynamic_start = prompt_text.find("Current screen XML:")
-                    dynamic_part = prompt_text[dynamic_start:]
-                    self.ai_interaction_readable_logger.info(dynamic_part)
-                else:
-                    # Fallback: log the full prompt if we can't find the marker
-                    self.ai_interaction_readable_logger.info(prompt_text)
-                self.ai_interaction_readable_logger.info("")
-
-            # Determine if we should include image context
-            prepared_image = None
-            enable_image_context = self.cfg.get('ENABLE_IMAGE_CONTEXT', False)
-            
-            if enable_image_context and hasattr(self, '_current_prepared_image'):
-                # Check if provider/model supports image context
-                try:
-                    from domain.providers.registry import ProviderRegistry
-                    provider_strategy = ProviderRegistry.get_by_name(self.ai_provider)
-                    if provider_strategy:
-                        model_name = self.actual_model_name if hasattr(self, 'actual_model_name') else self.model_alias
-                        if provider_strategy.supports_image_context(self.cfg, model_name):
-                            prepared_image = getattr(self, '_current_prepared_image', None)
-                            if prepared_image:
-                                logging.info(f"🖼️  SENDING IMAGE TO AI: Yes (size: {prepared_image.size[0]}x{prepared_image.size[1]})")
-                            else:
-                                logging.warning(f"🖼️  SENDING IMAGE TO AI: No (prepared image is None)")
-                        else:
-                            logging.info(f"🖼️  SENDING IMAGE TO AI: No (model '{model_name}' does not support image context)")
-                    else:
-                        logging.warning(f"🖼️  SENDING IMAGE TO AI: No (could not get provider strategy)")
-                except Exception as e:
-                    logging.warning(f"🖼️  SENDING IMAGE TO AI: No (error checking support: {e})", exc_info=True)
-            elif enable_image_context:
-                logging.info(f"🖼️  SENDING IMAGE TO AI: No (ENABLE_IMAGE_CONTEXT=True but no prepared image available)")
-            else:
-                logging.debug(f"🖼️  SENDING IMAGE TO AI: No (ENABLE_IMAGE_CONTEXT=False)")
-
-            try:
-                response_text, metadata = self.model_adapter.generate_response(
-                    prompt=prompt_text,
-                    image=prepared_image,
-                    image_format=self.cfg.get('IMAGE_FORMAT', None),
-                    image_quality=self.cfg.get('IMAGE_QUALITY', None)
-                )
-                
-                # Log the AI response
-                if self.ai_interaction_readable_logger:
-                    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    self.ai_interaction_readable_logger.info("=" * 80)
-                    self.ai_interaction_readable_logger.info(f"AI RESPONSE - {timestamp}")
-                    self.ai_interaction_readable_logger.info("=" * 80)
-                    self.ai_interaction_readable_logger.info(response_text)
-                    self.ai_interaction_readable_logger.info("")
-                    self.ai_interaction_readable_logger.info("")
-                
-                return response_text
-            except Exception as e:
-                logging.error(f"Error in LangChain LLM wrapper: {e}")
-                # Log error if logger is available
-                if self.ai_interaction_readable_logger:
-                    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    self.ai_interaction_readable_logger.info("=" * 80)
-                    self.ai_interaction_readable_logger.info(f"AI ERROR - {timestamp}")
-                    self.ai_interaction_readable_logger.info("=" * 80)
-                    self.ai_interaction_readable_logger.info(f"Error: {str(e)}")
-                    self.ai_interaction_readable_logger.info("")
-                    self.ai_interaction_readable_logger.info("")
-                return ""
-
-        return RunnableLambda(_llm_call)
-
-    def _create_prompt_chain(self, prompt_template: str, llm_wrapper):
-        """Create a LangChain Runnable chain from a prompt template.
-        
-        Args:
-            prompt_template: The prompt template string with placeholders
-            llm_wrapper: The LLM Runnable wrapper
-            
-        Returns:
-            A Runnable chain: PromptTemplate | LLM | OutputParser
-        """
-        # Format the template with static values
-        # Get available actions from config property (reads from database or defaults)
-        available_actions = get_available_actions(self.cfg)
-        action_list_str = "\n".join([f"- {action}: {desc}" for action, desc in available_actions.items()])
-        json_output_guidance = json.dumps(JSON_OUTPUT_SCHEMA, indent=2)
-        
-        # Create formatted prompt string
-        formatted_prompt = prompt_template.format(
-            json_schema=json_output_guidance,
-            action_list=action_list_str
-        )
-        
-        # Log static prompt parts once
-        if self.ai_interaction_readable_logger and not self._static_prompt_logged:
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            self.ai_interaction_readable_logger.info("=" * 80)
-            self.ai_interaction_readable_logger.info(f"AI PROMPT CONFIGURATION - {timestamp}")
-            self.ai_interaction_readable_logger.info("=" * 80)
-            self.ai_interaction_readable_logger.info(formatted_prompt)
-            self.ai_interaction_readable_logger.info("")
-            self.ai_interaction_readable_logger.info("(Note: The above JSON schema and available actions are static and will not be repeated in subsequent logs)")
-            self.ai_interaction_readable_logger.info("")
-            self._static_prompt_logged = True
-        
-        # Create a PromptTemplate that accepts dynamic context variables
-        # We'll inject the formatted prompt as a system message
-        # For simplicity, create a chain that formats the prompt with context
-        def format_prompt_with_context(context: Dict[str, Any]) -> str:
-            """Format the prompt with context variables."""
-            # Build the full prompt with context
-            prompt_parts = [formatted_prompt]
-            
-            # Build dynamic parts separately for logging
-            dynamic_parts = []
-            
-            # Add context information
-            if context.get("xml_context"):
-                # XML is already simplified in _get_next_action_langchain, so use it directly
-                xml_string = context['xml_context']
-                
-                # Ensure it's a string (should already be simplified at this point)
-                if not isinstance(xml_string, str):
-                    xml_string = str(xml_string)
-                
-                # Use the simplified XML directly (no need to simplify again)
-                xml_part = f"\n\nCurrent screen XML:\n{xml_string}"
-                prompt_parts.append(xml_part)
-                dynamic_parts.append(xml_part)
-            
-            # Add stuck detection warning if applicable
-            if context.get("is_stuck"):
-                stuck_reason = context.get("stuck_reason", "Multiple actions on same screen")
-                current_screen_id = context.get('current_screen_id')
-                current_screen_actions = context.get('current_screen_actions', [])
-                
-                # Extract forbidden actions (actions that stayed on same screen)
-                forbidden_actions = []
-                for action in current_screen_actions:
-                    action_desc = action.get('action_description', '')
-                    success = action.get('execution_success', False)
-                    to_screen_id = action.get('to_screen_id')
-                    
-                    # Include actions that either:
-                    # 1. Stayed on the same screen (to_screen_id == current_screen_id)
-                    # 2. Had no navigation (to_screen_id is None) and succeeded
-                    if success and (to_screen_id == current_screen_id or to_screen_id is None):
-                        # Extract the target identifier from action description
-                        # Format: "click on btn_scan_erx" -> "btn_scan_erx"
-                        # Format: "scroll_down on cl_home_no_receipts" -> "scroll_down on cl_home_no_receipts"
-                        forbidden_actions.append(action_desc)
-                
-                # Build forbidden actions list
-                forbidden_text = ""
-                if forbidden_actions:
-                    forbidden_lines = ["\n🚫 FORBIDDEN ACTIONS - DO NOT REPEAT THESE:"]
-                    for action in forbidden_actions:
-                        forbidden_lines.append(f"  - {action}")
-                    forbidden_text = "\n".join(forbidden_lines)
-                
-                # Common navigation resource IDs (can be extended)
-                # These are examples based on common patterns - the AI should look for similar patterns
-                navigation_hints = """
-Look for these navigation elements in the XML (HIGHEST PRIORITY):
-- Bottom navigation tabs: tv_home, tv_assortment, tv_cart, tv_account, tv_erx, or any element with "tv_" prefix in bottom navigation area
-- Navigation buttons: Any element with "nav", "menu", "tab", "bar" in resource-id
-- Back buttons: Elements with "back", "arrow", "up" in resource-id or content-desc, or use the "back" action
-- Menu items: Elements that clearly lead to different app sections
-- Tab indicators: Elements that switch between different views/screens
-"""
-                
-                stuck_warning = f"""
-⚠️ CRITICAL: STUCK DETECTION - {stuck_reason}
-
-You are stuck in a loop on the same screen. You MUST break out of this loop immediately.
-
-{forbidden_text}
-
-PRIORITY ORDER FOR YOUR NEXT ACTION (choose one):
-1. 🎯 NAVIGATION ACTIONS (HIGHEST PRIORITY) - Use bottom navigation or menu items:
-   - Click on navigation tabs (tv_home, tv_assortment, tv_cart, tv_account, etc.)
-   - These will take you to DIFFERENT screens and break the loop
-   {navigation_hints}
-
-2. ⬅️ BACK BUTTON (HIGH PRIORITY):
-   - Use the "back" action to exit this screen
-   - This will return you to a previous screen
-
-3. 📜 SCROLL ACTIONS (MEDIUM PRIORITY):
-   - Only if scrolling reveals NEW navigation elements you haven't tried
-   - Do NOT scroll if you've already scrolled on this screen
-
-4. 🚫 DO NOT:
-   - Repeat any of the forbidden actions listed above
-   - Click buttons you've already clicked on this screen
-   - Try variations of actions you've already attempted
-   - Stay on this screen - you MUST navigate away
-
-YOUR TASK: Choose an action that will take you to a DIFFERENT screen.
-In your reasoning, explicitly state: "I am navigating away from this screen to break the loop by..."
-"""
-                prompt_parts.append(stuck_warning)
-                dynamic_parts.append(stuck_warning)
-            
-            # Format action history with success/failure indicators
-            if context.get("action_history"):
-                action_history = context['action_history']
-                if action_history:
-                    history_lines = ["\n\nRecent Actions:"]
-                    for step in action_history[-10:]:  # Show last 10 actions
-                        step_num = step.get('step_number', '?')
-                        action_desc = step.get('action_description', 'unknown action')
-                        success = step.get('execution_success', False)
-                        error_msg = step.get('error_message')
-                        from_screen_id = step.get('from_screen_id')
-                        to_screen_id = step.get('to_screen_id')
-                        
-                        status = "SUCCESS" if success else "FAILED"
-                        details = []
-                        if to_screen_id:
-                            if from_screen_id == to_screen_id:
-                                details.append("stayed on same screen")
-                            else:
-                                details.append(f"navigated to screen #{to_screen_id}")
-                        elif success:
-                            details.append("no navigation occurred")
-                        if error_msg:
-                            details.append(f"error: {error_msg}")
-                        
-                        detail_str = f" ({', '.join(details)})" if details else ""
-                        history_lines.append(f"- Step {step_num}: {action_desc} → {status}{detail_str}")
-                    
-                    actions_part = "\n".join(history_lines)
-                    prompt_parts.append(actions_part)
-                    dynamic_parts.append(actions_part)
-            
-            # Format visited screens information
-            if context.get("visited_screens"):
-                visited_screens = context['visited_screens']
-                if visited_screens:
-                    screens_lines = ["\n\nVisited Screens (this run):"]
-                    for screen in visited_screens[:15]:  # Show top 15 most visited screens
-                        screen_id = screen.get('screen_id', '?')
-                        activity = screen.get('activity_name', 'UnknownActivity')
-                        visit_count = screen.get('visit_count', 0)
-                        screens_lines.append(f"- Screen #{screen_id} ({activity}): visited {visit_count} time{'s' if visit_count != 1 else ''}")
-                    
-                    screens_part = "\n".join(screens_lines)
-                    prompt_parts.append(screens_part)
-                    dynamic_parts.append(screens_part)
-            
-            # Format current screen actions (if revisiting)
-            if context.get("current_screen_actions") and len(context['current_screen_actions']) > 0:
-                current_screen_actions = context['current_screen_actions']
-                current_screen_id = context.get('current_screen_id')
-                actions_lines = [f"\n\nActions already tried on this screen (Screen #{current_screen_id}):"]
-                for action in current_screen_actions:
-                    action_desc = action.get('action_description', 'unknown action')
-                    success = action.get('execution_success', False)
-                    error_msg = action.get('error_message')
-                    to_screen_id = action.get('to_screen_id')
-                    
-                    status = "SUCCESS" if success else "FAILED"
-                    details = []
-                    if to_screen_id:
-                        if to_screen_id == current_screen_id:
-                            details.append("stayed on same screen")
-                        else:
-                            details.append(f"navigated to screen #{to_screen_id}")
-                    elif success:
-                        details.append("no navigation occurred")
-                    if error_msg:
-                        details.append(f"error: {error_msg}")
-                    
-                    detail_str = f" ({', '.join(details)})" if details else ""
-                    actions_lines.append(f"- {action_desc} → {status}{detail_str}")
-                
-                current_actions_part = "\n".join(actions_lines)
-                prompt_parts.append(current_actions_part)
-                dynamic_parts.append(current_actions_part)
-            
-            if context.get("last_action_feedback"):
-                feedback_part = f"\n\nLast action feedback: {context['last_action_feedback']}"
-                prompt_parts.append(feedback_part)
-                dynamic_parts.append(feedback_part)
-            
-            if context.get("current_screen_visit_count"):
-                visit_count_part = f"\n\nScreen visit count: {context['current_screen_visit_count']}"
-                prompt_parts.append(visit_count_part)
-                dynamic_parts.append(visit_count_part)
-            
-            closing_part = "\n\nPlease respond with a JSON object matching the schema above."
-            prompt_parts.append(closing_part)
-            dynamic_parts.append(closing_part)
-            
-            # Store dynamic parts in context for logging
-            context['_dynamic_prompt_parts'] = "\n".join(dynamic_parts)
-            
-            # Store the full prompt in context for database storage
-            full_prompt = "\n".join(prompt_parts)
-            context['_full_ai_input_prompt'] = full_prompt
-            
-            return full_prompt
-        
-        # Create chain: format prompt -> LLM -> parse JSON
-        def parse_json_output(llm_output: str) -> Dict[str, Any]:
-            """Parse JSON from LLM output."""
-            try:
-                # Try direct JSON parse
-                return json.loads(llm_output)
-            except json.JSONDecodeError:
-                # Try to extract JSON from markdown code blocks or text
-                json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', llm_output, re.DOTALL)
-                if json_match:
-                    return json.loads(json_match.group(1))
-                # Try to find JSON object in text
-                json_match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', llm_output, re.DOTALL)
-                if json_match:
-                    return json.loads(json_match.group())
-                logging.warning(f"Could not parse JSON from LLM output: {llm_output[:200]}")
-                return {}
-        
-        # Chain: format prompt -> LLM -> parse JSON
-        chain = RunnableLambda(format_prompt_with_context) | llm_wrapper | RunnableLambda(parse_json_output)
-        return chain
-
     def _init_langchain_components(self):
         """Initialize LangChain components for orchestration."""
         try:
             logging.debug("Initializing LangChain components for AI orchestration")
 
             # Create the LLM wrapper
-            self.langchain_llm = self._create_langchain_llm_wrapper()
+            wrapper = LangChainWrapper(
+                model_adapter=self.model_adapter,
+                config=self.cfg,
+                ai_provider=self.ai_provider,
+                model_name=self.actual_model_name,
+                interaction_logger=self.ai_interaction_readable_logger,
+                get_current_image=lambda: getattr(self, '_current_prepared_image', None)
+            )
+            self.langchain_llm = wrapper.create_llm_wrapper()
 
-            # Create the action decision chain with proper Runnable chain
-            # Use config property (reads from database or None) - this is the editable part only
+            # Create the action decision chain
             custom_prompt_part = self.cfg.CRAWLER_ACTION_DECISION_PROMPT
-            # Build full prompt by combining custom part with fixed part (schema/actions)
             action_decision_prompt = build_action_decision_prompt(custom_prompt_part)
-            action_chain = self._create_prompt_chain(action_decision_prompt, self.langchain_llm)
+            
+            action_chain = self.prompt_builder.create_prompt_chain(
+                action_decision_prompt, 
+                self.langchain_llm,
+                self.ai_interaction_readable_logger
+            )
             self.action_decision_chain = ActionDecisionChain(chain=action_chain)
 
             # Initialize memory checkpointer for cross-request context
@@ -589,188 +216,12 @@ In your reasoning, explicitly state: "I am navigating away from this screen to b
             logging.error(f"Failed to initialize LangChain components: {e}", exc_info=True)
             raise
 
-    def _execute_click_action(self, action_data: Dict[str, Any]) -> bool:
-        """Execute click action with proper argument handling."""
-        target_id = action_data.get("target_identifier")
-        bbox = action_data.get("target_bounding_box")
-        
-        # Pass both target_identifier and bbox to driver.tap()
-        # The driver will call MCP server, which will:
-        # 1. Prefer coordinates (bbox) if available
-        # 2. Fall back to element lookup with multiple strategies if coordinates not available
-        # 3. Use element lookup as fallback if coordinates fail
-        return self.tools.driver.tap(target_id, bbox)
-    
-    def _execute_input_action(self, action_data: Dict[str, Any]) -> bool:
-        """Execute input action with proper argument handling."""
-        target_id = action_data.get("target_identifier")
-        input_text = action_data.get("input_text")
-        if not target_id:
-            logging.error("Cannot execute input: No target identifier provided")
-            return False
-        if input_text is None:
-            input_text = ""  # Empty string for clear operations
-        return self.tools.driver.input_text(target_id, input_text)
-    
-    def _execute_long_press_action(self, action_data: Dict[str, Any]) -> bool:
-        """Execute long press action with proper argument handling."""
-        target_id = action_data.get("target_identifier")
-        bbox = action_data.get("target_bounding_box")
-        # Default duration from config
-        try:
-            default_duration_ms = int(self.cfg.get('LONG_PRESS_MIN_DURATION_MS', LONG_PRESS_MIN_DURATION_MS))
-        except Exception:
-            default_duration_ms = LONG_PRESS_MIN_DURATION_MS
-        duration_ms = action_data.get("duration_ms", default_duration_ms)
-        
-        if not target_id and bbox and isinstance(bbox, dict):
-            top_left = bbox.get("top_left", [])
-            bottom_right = bbox.get("bottom_right", [])
-            if len(top_left) == 2 and len(bottom_right) == 2:
-                # Compute center to long press
-                y1, x1 = top_left
-                y2, x2 = bottom_right
-                center_x = (x1 + x2) / 2
-                center_y = (y1 + y2) / 2
-                window_size = self.tools.driver.get_window_size()
-                if window_size:
-                    screen_width = window_size['width']
-                    screen_height = window_size['height']
-                    center_x = max(0, min(center_x, screen_width - 1))
-                    center_y = max(0, min(center_y, screen_height - 1))
-                    # Use coordinate tap with duration for long press - create bbox
-                    tap_bbox = {"top_left": [center_y, center_x], "bottom_right": [center_y, center_x]}
-                    return self.tools.driver.tap(None, tap_bbox)
-                else:
-                    logging.error("Cannot get screen size for coordinate validation")
-                    return False
-            else:
-                logging.error("Invalid bounding box format for long_press")
-                return False
-        else:
-            # Prefer element-based long press via driver
-            return self.tools.driver.long_press(target_id or "", duration_ms)
-    
-    def _execute_double_tap_action(self, action_data: Dict[str, Any]) -> bool:
-        """Execute double tap action with proper argument handling."""
-        target_id = action_data.get("target_identifier")
-        bbox = action_data.get("target_bounding_box")
-        
-        # Pass both target_identifier and bbox to driver.double_tap()
-        return self.tools.driver.double_tap(target_id, bbox)
-    
-    def _execute_clear_text_action(self, action_data: Dict[str, Any]) -> bool:
-        """Execute clear text action with proper argument handling."""
-        target_id = action_data.get("target_identifier")
-        if not target_id:
-            logging.error("Cannot execute clear_text: No target identifier provided")
-            return False
-        return self.tools.driver.clear_text(target_id)
-    
-    def _execute_replace_text_action(self, action_data: Dict[str, Any]) -> bool:
-        """Execute replace text action with proper argument handling."""
-        target_id = action_data.get("target_identifier")
-        input_text = action_data.get("input_text")
-        if not target_id:
-            logging.error("Cannot execute replace_text: No target identifier provided")
-            return False
-        if input_text is None:
-            logging.error("Cannot execute replace_text: No input_text provided")
-            return False
-        return self.tools.driver.replace_text(target_id, input_text)
-    
-    def _execute_flick_action(self, action_data: Dict[str, Any]) -> bool:
-        """Execute flick action with proper argument handling."""
-        # Try to get direction from action_data or infer from reasoning/target
-        direction = action_data.get("direction")
-        if not direction:
-            # Try to infer from reasoning or target_identifier
-            reasoning = action_data.get("reasoning", "").lower()
-            target_id = action_data.get("target_identifier", "").lower()
-            
-            if "up" in reasoning or "up" in target_id:
-                direction = "up"
-            elif "down" in reasoning or "down" in target_id:
-                direction = "down"
-            elif "left" in reasoning or "left" in target_id:
-                direction = "left"
-            elif "right" in reasoning or "right" in target_id:
-                direction = "right"
-            else:
-                # Default to down
-                direction = "down"
-                logging.debug("No direction specified for flick, defaulting to 'down'")
-        
-        return self.tools.driver.flick(direction.lower())
-    
-    def _execute_reset_app_action(self, action_data: Dict[str, Any]) -> bool:
-        """Execute reset app action."""
-        # reset_app doesn't need any parameters
-        return self.tools.driver.reset_app()
-
-    def _init_action_dispatch_map(self):
-        """Initialize the action dispatch map for efficient action execution."""
-        self.action_dispatch_map = {
-            "click": self._execute_click_action,
-            "input": self._execute_input_action,
-            "scroll_down": lambda action_data: self.tools.driver.scroll("down"),
-            "scroll_up": lambda action_data: self.tools.driver.scroll("up"),
-            "swipe_left": lambda action_data: self.tools.driver.scroll("left"),
-            "swipe_right": lambda action_data: self.tools.driver.scroll("right"),
-            "back": self.tools.driver.press_back,
-            "long_press": self._execute_long_press_action,
-            "double_tap": self._execute_double_tap_action,
-            "clear_text": self._execute_clear_text_action,
-            "replace_text": self._execute_replace_text_action,
-            "flick": self._execute_flick_action,
-            "reset_app": self._execute_reset_app_action
-        }
-    
-    def _normalize_action_type(self, action_type: str, action_data: Dict[str, Any]) -> str:
-        """Normalize generic action types to specific ones.
-        
-        Args:
-            action_type: The action type string (may be generic like "scroll" or "swipe")
-            action_data: The full action data dictionary for context
-            
-        Returns:
-            Normalized action type string matching one of the supported actions
-        """
-        # If action is already specific, return as-is
-        if action_type in self.action_dispatch_map:
-            return action_type
-        
-        # Map generic actions to specific ones
-        target_identifier = action_data.get("target_identifier", "").lower()
-        reasoning = action_data.get("reasoning", "").lower()
-        
-        if action_type == "scroll":
-            # Try to infer direction from context
-            if "up" in target_identifier or "up" in reasoning:
-                return "scroll_up"
-            elif "down" in target_identifier or "down" in reasoning:
-                return "scroll_down"
-            else:
-                # Default to scroll_down (most common)
-                logging.debug(f"Generic 'scroll' action mapped to 'scroll_down' (default)")
-                return "scroll_down"
-        
-        elif action_type == "swipe":
-            # Try to infer direction from context
-            if "left" in target_identifier or "left" in reasoning:
-                return "swipe_left"
-            elif "right" in target_identifier or "right" in reasoning:
-                return "swipe_right"
-            else:
-                # Default to swipe_left (common for navigation)
-                logging.debug(f"Generic 'swipe' action mapped to 'swipe_left' (default)")
-                return "swipe_left"
-        
-        # Return original if no mapping found
-        return action_type
-    
     def execute_action(self, action_data: Dict[str, Any]) -> bool:
-        """Execute an action based on the action_data dictionary.
+        """
+        Execute an action based on the action_data dictionary.
+        
+        This method delegates to the ActionExecutor module which handles
+        all action execution logic.
         
         Args:
             action_data: Dictionary containing action information with at least an 'action' key.
@@ -785,44 +236,11 @@ In your reasoning, explicitly state: "I am navigating away from this screen to b
                 logging.error("Cannot execute action: Driver not connected")
                 return False
             
-            # Get the action type
-            action_type = action_data.get("action", "").lower()
-            
-            if not action_type:
-                logging.error("Cannot execute action: No action type specified")
-                return False
-            
-            # Map generic actions to specific ones if needed
-            action_type = self._normalize_action_type(action_type, action_data)
-            
-            # Look up the handler in the dispatch map
-            handler = self.action_dispatch_map.get(action_type)
-            
-            if not handler:
-                logging.error(f"Unknown action type: {action_type}. Available actions: {list(self.action_dispatch_map.keys())}")
-                return False
-            
-            # Execute the handler
-            try:
-                logging.debug(f"Executing action: {action_type}")
-                # Some handlers expect action_data, others don't (like press_back, reset_app)
-                if action_type in ["back", "reset_app"]:
-                    result = handler()
-                else:
-                    result = handler(action_data)
-                
-                if result:
-                    logging.debug(f"[OK] Successfully executed action: {action_type}")
-                else:
-                    logging.warning(f"[FAIL] Action execution returned False: {action_type}")
-                
-                return bool(result)
-            except Exception as e:
-                logging.error(f"[ERROR] Error executing action {action_type}: {e}", exc_info=True)
-                return False
+            # Delegate to ActionExecutor
+            return self.action_executor.execute_action(action_data)
                 
         except Exception as e:
-            logging.error(f"Unexpected error in execute_action: {e}", exc_info=True)
+            logging.error(f"Error in execute_action wrapper: {e}", exc_info=True)
             return False
 
     def _initialize_model(self, model_config, safety_settings_override):
