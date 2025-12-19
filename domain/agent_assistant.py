@@ -155,6 +155,9 @@ class AgentAssistant:
         # Initialize prompt builder
         self.prompt_builder = PromptBuilder(self.cfg)
         
+        # Initialize logger before LangChain components
+        self._setup_ai_interaction_logger()
+        
         # Initialize LangChain components for orchestration
         self._init_langchain_components()
 

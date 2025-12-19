@@ -101,7 +101,7 @@ class VideoRecordingManager:
                 self._is_recording = True
                 logging.debug("Video recording started successfully")
             else:
-                logging.error("Failed to start video recording")
+                logging.debug("Video recording did not start (this may be benign)")
                 self.video_file_path = None
             
             return success

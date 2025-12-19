@@ -262,6 +262,17 @@ class AppiumDriver:
             logger.error(f"Error getting screenshot: {e}")
             return None
     
+    def get_screenshot_bytes(self) -> Optional[bytes]:
+        """Get screenshot as raw bytes."""
+        screenshot_base64 = self.get_screenshot_as_base64()
+        if screenshot_base64:
+            try:
+                return base64.b64decode(screenshot_base64)
+            except Exception as e:
+                logger.error(f"Error decoding screenshot to bytes: {e}")
+                return None
+        return None
+    
     def tap(
         self,
         target_identifier: Optional[str],
@@ -481,8 +492,23 @@ class AppiumDriver:
             return True
             
         except Exception as e:
-            logger.error(f"Failed to start video recording: {e}", exc_info=True)
-            return False
+            error_str = str(e)
+            # This is a benign error - Appium tries to stop a non-existent recording before starting
+            if "No such process" in error_str or "screenrecord" in error_str:
+                logger.debug(f"Benign video recording init (no prior recording): {error_str[:100]}")
+                # Try starting again - sometimes it works on second attempt
+                try:
+                    driver = self.helper.get_driver()
+                    if driver:
+                        driver.start_recording_screen(**kwargs)
+                        logger.info("Started video recording.")
+                        return True
+                except Exception:
+                    pass
+                return False
+            else:
+                logger.error(f"Failed to start video recording: {e}")
+                return False
     
     def stop_video_recording(self) -> Optional[str]:
         """

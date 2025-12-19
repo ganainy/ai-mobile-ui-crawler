@@ -510,9 +510,9 @@ class CrawlerLoop:
                     if success:
                         logger.debug("Video recording started successfully")
                     else:
-                        logger.warning("Failed to start video recording")
+                        logger.debug("Video recording did not start (this may be benign)")
                 except Exception as e:
-                    logger.error(f"Failed to start video recording: {e}", exc_info=True)
+                    logger.debug(f"Video recording init issue (may be benign): {e}")
             
             # Main loop
             while True:
@@ -772,6 +772,17 @@ def run_crawler_loop(config: Optional[Config] = None):
             handlers=handlers,
             force=True  # Force reconfiguration in case logging was already set up
         )
+        
+        # Silence noisy third-party loggers
+        noisy_loggers = [
+            "httpx", "httpcore", "urllib3",
+            "openai", "openai._base_client",
+            "google.api_core", "google.auth", "google.generativeai",
+            "appium.webdriver.webdriver", "selenium.webdriver.remote.remote_connection",
+            "asyncio", "PIL",
+        ]
+        for lib_name in noisy_loggers:
+            logging.getLogger(lib_name).setLevel(logging.WARNING)
         
         # Create and run crawler loop - use minimal logging to avoid daemon thread issues
         try:

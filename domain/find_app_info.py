@@ -513,53 +513,68 @@ def generate_app_info_cache():
             model_config = {
                 "description": f"Health app classifier using {default_ai_model_name}",
                 "generation_config": {
-                    "temperature": 0.1,  # Low temperature for consistent classification
+                    "temperature": 0.1,
+                    "max_output_tokens": 8192  # Ensure enough tokens for full batch response
                 }
             }
             model_adapter.initialize(model_config, ai_model_safety_settings)
             
             print(f"  Using AI model: {default_ai_model_name} (provider: {ai_provider})")
-            print(f"  Classifying {num_apps} apps in a single AI call...")
+            print(f"  Using AI model: {default_ai_model_name} (provider: {ai_provider})")
             
-            # Build a single prompt with all apps
-            apps_list = []
-            for idx, app in enumerate(all_apps_info):
-                app_name = app.get("app_name")
-                # Handle None/null values from JSON
-                if not app_name or (isinstance(app_name, str) and app_name.strip() == ""):
-                    app_name_display = "[MISSING - please provide]"
-                else:
-                    app_name_display = app_name
-                package_name = app.get("package_name", "")
+            # Batch processing settings
+            BATCH_SIZE = 25
+            total_apps = len(all_apps_info)
+            num_batches = (total_apps + BATCH_SIZE - 1) // BATCH_SIZE
+            print(f"  Classifying {total_apps} apps in {num_batches} batches (batch size: {BATCH_SIZE})...")
+            
+            # Process in batches
+            classification_map = {}
+            app_name_map = {}
+            
+            for batch_idx in range(num_batches):
+                start_idx = batch_idx * BATCH_SIZE
+                end_idx = min(start_idx + BATCH_SIZE, total_apps)
+                current_batch = all_apps_info[start_idx:end_idx]
                 
-                if not app_name or (isinstance(app_name, str) and app_name.strip() == ""):
-                    apps_list.append(f"{idx}. App name: [MISSING - please provide] | Package: {package_name}")
+                print(f"  Processing batch {batch_idx + 1}/{num_batches} (apps {start_idx} to {end_idx - 1})...")
+                
+                # Identify missing names in this batch
+                batch_missing_names = 0
+                batch_apps_list = []
+                
+                for i, app in enumerate(current_batch):
+                    global_idx = start_idx + i
+                    app_name = app.get("app_name")
+                    package_name = app.get("package_name", "")
+                    
+                    if not app_name or (isinstance(app_name, str) and app_name.strip() == "") or app_name == "Unknown":
+                        batch_missing_names += 1
+                        batch_apps_list.append(f"{global_idx}. App name: [MISSING - please provide] | Package: {package_name}")
+                    else:
+                        batch_apps_list.append(f"{global_idx}. App name: {app_name} | Package: {package_name}")
+                
+                apps_text = "\n".join(batch_apps_list)
+                
+                # Build instructions based on missing names in this batch
+                if batch_missing_names > 0:
+                    json_format_example = """{
+  "classifications": [
+    {"index": """ + str(start_idx) + """, "is_health_app": true, "app_name": "App Name Here"},
+    {"index": """ + str(start_idx + 1) + """, "is_health_app": false, "app_name": "Another App Name"}
+  ]
+}"""
+                    app_name_instruction = f"\nIMPORTANT: Only include the 'app_name' field in your response for apps that have '[MISSING - please provide]' as the app name. For apps that already have a name, DO NOT include the 'app_name' field."
                 else:
-                    apps_list.append(f"{idx}. App name: {app_name} | Package: {package_name}")
-            
-            apps_text = "\n".join(apps_list)
-            
-            # Build JSON format example - include app_name only when needed
-            if num_missing_names > 0:
-                json_format_example = """{
+                    json_format_example = """{
   "classifications": [
-    {"index": 0, "is_health_app": true, "app_name": "App Name Here"},
-    {"index": 1, "is_health_app": false, "app_name": "Another App Name"},
-    ...
+    {"index": """ + str(start_idx) + """, "is_health_app": true},
+    {"index": """ + str(start_idx + 1) + """, "is_health_app": false}
   ]
 }"""
-                app_name_instruction = f"\nIMPORTANT: Only include the 'app_name' field in your response for apps that have '[MISSING - please provide]' as the app name. For apps that already have a name, DO NOT include the 'app_name' field in your response - only include 'index' and 'is_health_app'."
-            else:
-                json_format_example = """{
-  "classifications": [
-    {"index": 0, "is_health_app": true},
-    {"index": 1, "is_health_app": false},
-    ...
-  ]
-}"""
-                app_name_instruction = ""
-            
-            prompt = f"""Classify the following Android apps as health-related or not. A health app is one that:
+                    app_name_instruction = ""
+                
+                prompt = f"""Classify the following Android apps as health-related or not. A health app is one that:
 - Tracks fitness, exercise, or physical activity
 - Monitors health metrics (heart rate, blood pressure, sleep, etc.)
 - Manages medical conditions or medications
@@ -571,146 +586,116 @@ Return ONLY a valid JSON object with this exact format:
 {json_format_example}
 
 For each app, set "is_health_app" to true if it's health-related, false if it's not.{app_name_instruction}
-IMPORTANT: You must return classifications for ALL {num_apps} apps (indices 0 to {num_apps - 1}). Do not truncate the response.
+IMPORTANT: You must return classifications for ALL {len(current_batch)} apps in this batch (indices {start_idx} to {end_idx - 1}). Do not truncate.
 
 Apps to classify:
 {apps_text}
 
-Return the complete JSON classification for all {num_apps} apps now:"""
-            
-            # Get AI classification for all apps in one call
-            try:
-                response_text, metadata = model_adapter.generate_response(prompt)
-                if not response_text or len(response_text.strip()) == 0:
-                    raise ValueError("AI model returned empty response. Check if the model is running and accessible.")
-                response_text = response_text.strip()
-            except Exception as ai_error:
-                raise  # Re-raise to be caught by outer exception handler
-            
-            # Try to extract JSON from the response
-            # Sometimes the model wraps JSON in markdown code blocks
-            json_start = response_text.find("{")
-            json_end = response_text.rfind("}") + 1
-            if json_start >= 0 and json_end > json_start:
-                json_text = response_text[json_start:json_end]
-            else:
-                json_text = response_text
-            
-            # Check if JSON appears incomplete (common signs: missing closing brackets, incomplete last entry)
-            json_text_stripped = json_text.strip()
-            if json_text_stripped and not json_text_stripped.endswith("}"):
-                print(f"  ⚠️ Warning: JSON response appears incomplete (doesn't end with '}}'). Response length: {len(json_text)} chars", file=sys.stderr)
-                print(f"  Last 200 chars: {json_text[-200:]}", file=sys.stderr)
-            
-            # Parse the JSON response
-            try:
-                classifications_data = json.loads(json_text)
-                classifications = classifications_data.get("classifications", [])
-                
-                # Create a mapping from index to classification and app name
-                classification_map = {}
-                app_name_map = {}
-                for item in classifications:
-                    idx = item.get("index")
-                    is_health = item.get("is_health_app")
-                    app_name = item.get("app_name")
-                    if idx is not None:
-                        classification_map[idx] = is_health
-                        # Only store app names from AI if the app actually needs a name
-                        # This prevents misalignment where AI provides names for apps that already have them
-                        # Also ignore placeholder text that the AI might return
-                        if (app_name and 
-                            app_name != "[MISSING - please provide]" and
-                            idx < len(all_apps_info)):
-                            current_app = all_apps_info[idx]
-                            current_name = current_app.get("app_name")
-                            # Only store if the current name is missing, None, or "Unknown"
-                            # Handle None (null from JSON) and empty strings
-                            if (not current_name or 
-                                current_name == "Unknown" or 
-                                current_name == "[MISSING - please provide]" or
-                                (isinstance(current_name, str) and current_name.strip() == "")):
-                                app_name_map[idx] = app_name
-                
-                # Apply classifications and app names to apps
-                names_filled = 0
-                for idx, app in enumerate(all_apps_info):
-                    is_health = classification_map.get(idx)
-                    ai_provided_name = app_name_map.get(idx)
+Return the JSON classification now:"""
+
+                # Call AI for this batch
+                try:
+                    response_text, _ = model_adapter.generate_response(prompt)
+                    if not response_text or len(response_text.strip()) == 0:
+                        raise ValueError("Empty response from AI")
                     
-                    # Update app name if AI provided one and current name is missing
-                    # Only update if the app name is actually missing, None, or "Unknown"
-                    # This prevents misalignment issues where AI provides names for apps that already have them
-                    updated_app = {**app}
-                    current_app_name = app.get("app_name")
-                    # Handle None (null from JSON), empty strings, and "Unknown"
-                    if ai_provided_name and (
-                        not current_app_name or 
-                        current_app_name == "Unknown" or 
-                        (isinstance(current_app_name, str) and current_app_name.strip() == "")
-                    ):
-                        # Only apply the AI-provided name if the current name is truly missing
-                        updated_app["app_name"] = ai_provided_name
-                        names_filled += 1
+                    # Strip markdown code blocks if present
+                    clean_response = response_text.strip()
+                    if clean_response.startswith("```"):
+                        # Remove opening ```json or ``` line
+                        lines = clean_response.split("\n")
+                        if lines[0].startswith("```"):
+                            lines = lines[1:]
+                        # Remove closing ``` if present
+                        if lines and lines[-1].strip() == "```":
+                            lines = lines[:-1]
+                        clean_response = "\n".join(lines)
                     
-                    if is_health is None:
-                        # If classification missing, mark as unknown
-                        print(f"    Warning: No classification for app {idx} ({updated_app.get('package_name', 'unknown')})", file=sys.stderr)
-                        unified_apps.append({**updated_app, "is_health_app": None})
+                    # Extract JSON
+                    json_start = clean_response.find("{")
+                    json_end = clean_response.rfind("}") + 1
+                    if json_start >= 0 and json_end > json_start:
+                        json_text = clean_response[json_start:json_end]
                     else:
-                        unified_apps.append({**updated_app, "is_health_app": bool(is_health)})
-                
-                classified_count = len([a for a in unified_apps if a.get("is_health_app") is not None])
-                ai_filter_was_effectively_applied = True
-                print(f"  ✓ Successfully classified {classified_count}/{len(all_apps_info)} apps using AI (single call)")
-                if names_filled > 0:
-                    print(f"  ✓ Filled in {names_filled} missing app names")
-                
-            except ValueError as e:
-                # Catch model validation errors from create_model_adapter
-                # These include helpful instructions on how to select a model
-                ai_filter_error = str(e)
-                print(f"  ✗ {ai_filter_error}", file=sys.stderr)
-            except json.JSONDecodeError as e:
-                ai_filter_error = f"Failed to parse AI response as JSON: {e}"
-                print(f"  ✗ {ai_filter_error}", file=sys.stderr)
-                print(f"  Error location: line {e.lineno}, column {e.colno}", file=sys.stderr)
-                print(f"  AI response length: {len(response_text)} chars", file=sys.stderr)
-                print(f"  AI response (first 500 chars): {response_text[:500]}", file=sys.stderr)
-                if len(response_text) > 500:
-                    print(f"  AI response (last 500 chars): {response_text[-500:]}", file=sys.stderr)
-                
-                # Check if response was likely truncated due to token limit
-                if len(response_text) > 0 and not response_text.rstrip().endswith("}"):
-                    print(f"  ⚠️ Response appears truncated (doesn't end with '}}'). This may indicate the model hit a token limit.", file=sys.stderr)
-                    print(f"  💡 Suggestion: Try using a model with a larger context window, or reduce the number of apps classified at once.", file=sys.stderr)
-                
-                print(f"  Falling back to marking all apps as unknown health status.")
-                # Fall through to mark all as unknown
-                unified_apps = [
-                    {**app, "is_health_app": None}
-                    for app in all_apps_info
-                ]
+                        raise ValueError(f"No valid JSON found in response. Response length: {len(response_text)}")
+                        
+                    # Parse JSON
+                    batch_data = json.loads(json_text)
+                    batch_classifications = batch_data.get("classifications", [])
+                    
+                    # Store results
+                    for item in batch_classifications:
+                        idx = item.get("index")
+                        is_health = item.get("is_health_app")
+                        app_name = item.get("app_name")
+                        
+                        if idx is not None and start_idx <= idx < end_idx:
+                            classification_map[idx] = is_health
+                            if app_name and app_name != "[MISSING - please provide]":
+                                app_name_map[idx] = app_name
+                                
+                except Exception as e:
+                    print(f"    Warning: Failed to classify batch {batch_idx + 1}: {e}", file=sys.stderr)
+                    print(f"    [DEBUG] Raw response length: {len(response_text) if 'response_text' in locals() else 'N/A'}", file=sys.stderr)
+                    if 'response_text' in locals() and response_text:
+                        print(f"    [DEBUG] Raw response first 200 chars: {response_text[:200]!r}", file=sys.stderr)
+                    else:
+                        print(f"    [DEBUG] Raw response is empty or None", file=sys.stderr)
+                        
+                    # Don't abort, just continue to next batch (items will remain unknown)
+
+            # Apply accumulated results
+            names_filled = 0
+            unified_apps = []
             
+            for idx, app in enumerate(all_apps_info):
+                is_health = classification_map.get(idx)
+                ai_provided_name = app_name_map.get(idx)
+                
+                updated_app = {**app}
+                current_app_name = app.get("app_name")
+                
+                # Update name if needed
+                if ai_provided_name and (
+                    not current_app_name or 
+                    current_app_name == "Unknown" or 
+                    current_app_name == "[MISSING - please provide]" or
+                    (isinstance(current_app_name, str) and current_app_name.strip() == "")
+                ):
+                    updated_app["app_name"] = ai_provided_name
+                    names_filled += 1
+                
+                if is_health is None:
+                    unified_apps.append({**updated_app, "is_health_app": None})
+                else:
+                    unified_apps.append({**updated_app, "is_health_app": bool(is_health)})
+            
+            classified_count = len([a for a in unified_apps if a.get("is_health_app") is not None])
+            if classified_count > 0:
+                ai_filter_was_effectively_applied = True
+                print(f"  [OK] Successfully classified {classified_count}/{total_apps} apps using AI")
+                if names_filled > 0:
+                    print(f"  [OK] Filled in {names_filled} missing app names")
+            else:
+                print(f"  Warning: No apps were successfully classified by AI.", file=sys.stderr)
+                
         except Exception as e:
             ai_filter_error = str(e)
-            print(f"  ✗ AI filtering failed: {e}", file=sys.stderr)
-            if not isinstance(e, ValueError):
-                traceback.print_exc(file=sys.stderr)
+            print(f"  [ERR] AI filtering failed: {e}", file=sys.stderr)
+            traceback.print_exc(file=sys.stderr)
             print(f"  Falling back to marking all apps as unknown health status.")
-            # Fall through to mark all as unknown
             unified_apps = [
                 {**app, "is_health_app": None}
                 for app in all_apps_info
             ]
     else:
         # AI filtering prerequisites not met
-        # Error messages already printed in _check_ai_filtering_prerequisites()
-        # Mark all apps as unknown
         unified_apps = [
             {**app, "is_health_app": None}
             for app in all_apps_info
         ]
+            
+
     
     # Final step: Generate app names from package names for any apps still missing names
     # This provides a fallback when both ADB and AI fail to provide names

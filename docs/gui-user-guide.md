@@ -106,12 +106,6 @@ For easier access, you can create a desktop shortcut that launches the UI with a
 - `run_ui.vbs` - VBScript that launches the UI silently (automatically detects and activates virtual environment)
 - `crawler_logo.ico` - Icon file for the shortcut (optional, but recommended)
 
-### Troubleshooting
-
-- **Icon not appearing:** Refresh your desktop (press F5) or right-click desktop → Refresh
-- **Shortcut not working:** Ensure your virtual environment exists and contains all required packages
-- **Need to see logs:** Run `python run_ui.py` directly from a terminal instead of using the shortcut
-
 ## Key UI areas
 
 - Main window

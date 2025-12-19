@@ -660,7 +660,7 @@ class ComponentFactory:
         tooltips: Dict[str, str],
         config_handler: Any,
     ) -> QGroupBox:
-        """Create the API Keys settings group."""
+        """Create the API Keys & Credentials settings group."""
         from ui.strings import (
             API_KEYS_GROUP,
             OPENROUTER_API_KEY_PLACEHOLDER,
@@ -668,8 +668,11 @@ class ComponentFactory:
             MOBSF_API_KEY_PLACEHOLDER,
         )
         
-        api_keys_group = QGroupBox(API_KEYS_GROUP)
+        # Rename group to reflect it contains more than just API keys
+        api_keys_group = QGroupBox("API Keys & Credentials")
         api_keys_layout = QFormLayout(api_keys_group)
+        
+        # --- API Keys ---
         
         # OpenRouter API Key
         _, openrouter_container, openrouter_label = ComponentFactory._create_api_key_field_with_toggle(
@@ -681,14 +684,6 @@ class ComponentFactory:
         )
         api_keys_layout.addRow(openrouter_label, openrouter_container)
         
-        # Load current value from environment/config
-        try:
-            openrouter_key = config_handler.config.get("OPENROUTER_API_KEY")
-            if openrouter_key:
-                config_widgets["OPENROUTER_API_KEY"].setText(openrouter_key)
-        except Exception:
-            pass
-        
         # Gemini API Key
         _, gemini_container, gemini_label = ComponentFactory._create_api_key_field_with_toggle(
             config_widgets,
@@ -698,14 +693,6 @@ class ComponentFactory:
             tooltips.get("GEMINI_API_KEY", ""),
         )
         api_keys_layout.addRow(gemini_label, gemini_container)
-        
-        # Load current value from environment/config
-        try:
-            gemini_key = config_handler.config.get("GEMINI_API_KEY")
-            if gemini_key:
-                config_widgets["GEMINI_API_KEY"].setText(gemini_key)
-        except Exception:
-            pass
         
         # MobSF API Key
         _, mobsf_container, mobsf_label = ComponentFactory._create_api_key_field_with_toggle(
@@ -717,17 +704,74 @@ class ComponentFactory:
         )
         api_keys_layout.addRow(mobsf_label, mobsf_container)
         
-        # Store references for visibility control (used by MobSF enable checkbox)
+        # Store references for visibility control
         config_widgets["MOBSF_API_KEY_LABEL"] = mobsf_label
         config_widgets["MOBSF_API_KEY_CONTAINER"] = mobsf_container
+
+        # PCAPDroid API Key
+        _, pcap_container, pcap_label = ComponentFactory._create_api_key_field_with_toggle(
+            config_widgets,
+            "PCAPDROID_API_KEY",
+            "Enter PCAPDroid API Key...",
+            "PCAPDroid API Key: ",
+            "API Key for PCAPDroid traffic capture integration",
+        )
+        api_keys_layout.addRow(pcap_label, pcap_container)
         
-        # Load current value from environment/config
-        try:
-            mobsf_key = config_handler.config.get("MOBSF_API_KEY")
-            if mobsf_key:
-                config_widgets["MOBSF_API_KEY"].setText(mobsf_key)
-        except Exception:
-            pass
+        # --- Ollama Configuration ---
+        
+        ollama_url_field = QLineEdit()
+        ollama_url_field.setPlaceholderText("http://localhost:11434")
+        config_widgets["OLLAMA_BASE_URL"] = ollama_url_field
+        ollama_label = QLabel("Ollama Base URL: ")
+        ollama_label.setToolTip("Base URL for local Ollama instance")
+        api_keys_layout.addRow(ollama_label, ollama_url_field)
+
+        # --- Test Credentials ---
+        
+        # Test Email
+        test_email_field = QLineEdit()
+        test_email_field.setPlaceholderText("test@example.com")
+        config_widgets["TEST_EMAIL"] = test_email_field
+        test_email_label = QLabel("Test Account Email: ")
+        test_email_label.setToolTip("Email address for AI to use during login/signup flows")
+        api_keys_layout.addRow(test_email_label, test_email_field)
+        
+        # Test Password
+        _, test_pwd_container, test_pwd_label = ComponentFactory._create_api_key_field_with_toggle(
+            config_widgets,
+            "TEST_PASSWORD",
+            "Enter test account password",
+            "Test Account Password: ",
+            "Password for AI to use during login/signup flows",
+        )
+        api_keys_layout.addRow(test_pwd_label, test_pwd_container)
+        
+        # Test Name
+        test_name_field = QLineEdit()
+        test_name_field.setPlaceholderText("Test User")
+        config_widgets["TEST_NAME"] = test_name_field
+        test_name_label = QLabel("Test Account Name: ")
+        test_name_label.setToolTip("Name for AI to use during form filling")
+        api_keys_layout.addRow(test_name_label, test_name_field)
+        
+        # --- Load Values ---
+        
+        keys_to_load = [
+            "OPENROUTER_API_KEY", "GEMINI_API_KEY", "MOBSF_API_KEY", 
+            "PCAPDROID_API_KEY", "OLLAMA_BASE_URL", 
+            "TEST_EMAIL", "TEST_PASSWORD", "TEST_NAME"
+        ]
+        
+        for key in keys_to_load:
+            try:
+                val = config_handler.config.get(key)
+                if val:
+                    widget = config_widgets.get(key)
+                    if isinstance(widget, QLineEdit):
+                        widget.setText(str(val))
+            except Exception:
+                pass
         
         layout.addRow(api_keys_group)
         return api_keys_group

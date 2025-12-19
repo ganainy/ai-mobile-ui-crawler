@@ -29,6 +29,12 @@ class AgentManager:
                 
             self.agent_assistant = AgentAssistant(self.config, model_alias_override=model)
             return self.agent_assistant
+        except ValueError as e:
+            # Expected error when API keys are not set yet
+            self.agent_assistant = None
+            self.log_callback(f"Agent not initialized: {e}", "orange")
+            logging.warning(f"Agent init skipped: {e}")
+            return None
         except Exception as e:
             self.agent_assistant = None
             self.log_callback(f"Failed to initialize AgentAssistant: {e}", "red")

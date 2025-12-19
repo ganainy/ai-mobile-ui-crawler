@@ -64,7 +64,14 @@ class Config:
             logging.warning("python-dotenv not available, skipping .env loading")
         except Exception as e:
             logging.warning(f"Error loading .env: {e}")
-        self._secrets = {"OPENROUTER_API_KEY", "GEMINI_API_KEY", "OLLAMA_BASE_URL", "MOBSF_API_KEY"}
+        self._secrets = {
+            "OPENROUTER_API_KEY", 
+            "GEMINI_API_KEY", 
+            "OLLAMA_BASE_URL", 
+            "MOBSF_API_KEY",
+            "TEST_PASSWORD",
+            "PCAPDROID_API_KEY"
+        }
         self._init_paths()
         self._path_manager = SessionPathManager(self)
         # Collect default settings snapshot for to_dict() and reset_settings()
@@ -203,11 +210,60 @@ class Config:
         if self._is_secret(key):
             if value is None:
                 self._env.pop(key.upper(), None)
+                # Also remove from .env file
+                self._save_secret_to_env(key.upper(), "")
             else:
-                self._env[key.upper()] = str(value)
+                str_value = str(value)
+                self._env[key.upper()] = str_value
+                # Save to .env file
+                self._save_secret_to_env(key.upper(), str_value)
             return
 
         self._user_store.set(key, value)
+
+    def _save_secret_to_env(self, key: str, value: str) -> None:
+        """
+        Save a secret to the .env file using python-dotenv.
+        
+        Args:
+            key: Secret key name
+            value: Secret value
+        """
+        try:
+            from dotenv import set_key, load_dotenv
+        except ImportError:
+            logging.error("python-dotenv not available. Cannot save API keys to .env file.")
+            return
+        
+        try:
+            # Get project root directory
+            from utils.paths import find_project_root
+            project_root = find_project_root(Path(self.BASE_DIR))
+            env_file_path = project_root / '.env'
+            
+            # Ensure .env file exists (create if it doesn't)
+            if not env_file_path.exists():
+                env_file_path.touch()
+                logging.info(f"Created .env file at {env_file_path}")
+            
+            # Load existing .env file to preserve other variables (although set_key handles this)
+            # We don't strictly need load_dotenv here for set_key to work, but it's good practice
+            # to acknowledge the file exists.
+            
+            # Normalize key to uppercase
+            normalized_key = key.upper()
+            
+            # Only save non-empty values
+            if value and value.strip():
+                set_key(str(env_file_path), normalized_key, value.strip())
+                logging.debug(f"Saved {normalized_key} to .env file")
+            else:
+                # If value is empty, remove the key from .env (set to empty string)
+                set_key(str(env_file_path), normalized_key, "")
+                logging.debug(f"Removed {normalized_key} from .env file (empty value)")
+                
+        except Exception as e:
+            logging.error(f"Failed to save secret {key} to .env file: {e}")
 
     # Path-related properties delegated to SessionPathManager
     @property
@@ -231,6 +287,11 @@ class Config:
     @property
     def ENABLE_IMAGE_CONTEXT(self):
         return self.get("enable_image_context")
+
+    @property
+    def STABILITY_WAIT(self):
+        from config.numeric_constants import STABILITY_WAIT_DEFAULT
+        return self.get("STABILITY_WAIT", STABILITY_WAIT_DEFAULT)
 
     @property
     def XML_SNIPPET_MAX_LEN(self):
@@ -799,6 +860,14 @@ USE_ADB_INPUT_FALLBACK = True
 SAFE_TAP_MARGIN_RATIO = 0.03  # 3% from each screen edge considered unsafe
 SAFE_TAP_EDGE_HANDLING = "snap"  # Options: 'reject' or 'snap' to safe area
 TOAST_DISMISS_WAIT_MS = 1200  # Wait time for transient toast overlays to dismiss
+
+# Test Credentials Defaults
+TEST_EMAIL = None
+TEST_PASSWORD = None
+TEST_NAME = None
+
+# Ollama Defaults
+OLLAMA_BASE_URL = "http://localhost:11434"
 
 # Element selection heuristics and behavior
 DISABLE_EXPENSIVE_XPATH = False  # Keep robust XPath strategies enabled by default

@@ -732,6 +732,23 @@ class CrawlerManager(QObject):
                 line = line.strip()
                 if not line:
                     continue
+                
+                # Skip UI control messages (handled separately below)
+                if any(line.startswith(p) for p in ['UI_STEP:', 'UI_ACTION:', 'UI_SCREENSHOT:', 'UI_STATUS:', 'UI_FOCUS:', 'UI_END:']):
+                    continue
+                
+                # Skip tracebacks and stack traces (remaining sources of clutter)
+                # Most noisy third-party logging is now silenced at the source
+                skip_patterns = [
+                    'Traceback (most recent call last):',
+                    'File "',  # Stack trace file lines
+                    '    at ',  # JS-style stack traces
+                    'Stacktrace:',
+                    'The above error is caused by',
+                ]
+                
+                if any(pattern in line for pattern in skip_patterns):
+                    continue
 
                 color = 'white'
                 message = line
@@ -745,8 +762,6 @@ class CrawlerManager(QObject):
                     'ERROR:': 'red',
                     '[CRITICAL]': 'red',
                     'CRITICAL:': 'red',
-                    '[DEBUG]': 'gray',
-                    'DEBUG:': 'gray',
                 }
 
                 for prefix, p_color in prefixes.items():
@@ -755,8 +770,7 @@ class CrawlerManager(QObject):
                         color = p_color
                         break
                 
-                if not any(line.startswith(p) for p in ['UI_STEP:', 'UI_ACTION:', 'UI_SCREENSHOT:', 'UI_STATUS:', 'UI_FOCUS:', 'UI_END:']):
-                    self.main_controller.log_message(message, color)
+                self.main_controller.log_message(message, color)
 
             # Check for UI_STEP_PREFIX:step (use last match if multiple found)
             step_matches = re.findall(r'UI_STEP:(\d+)', output)

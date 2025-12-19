@@ -171,10 +171,14 @@ class ConfigManager(QObject):
         If a key is provided, only that key's widget value is saved.
         Otherwise, all widget values are saved.
         
-        API keys are saved to .env file, other settings to SQLite.
+        All settings (including API keys) are handled via Config.set(), which
+        automatically routes secrets to .env and other settings to SQLite.
         """
         config_data = {}
-        api_keys_to_save = {}  # Track API keys separately for .env file
+        
+        # Track what we're saving for user feedback
+        saved_count = 0
+        is_api_key_save = False
 
         if key and key in self.main_controller.config_widgets:
             # Skip service-managed keys - they're handled separately
@@ -185,11 +189,9 @@ class ConfigManager(QObject):
             widget = self.main_controller.config_widgets[key]
             value = self._get_widget_value(key, widget)
             if value is not None:  # Skip None values (e.g., read-only QLabel widgets)
-                # Check if this is an API key (secret)
+                config_data[key] = value
                 if self._is_api_key(key):
-                    api_keys_to_save[key] = value
-                else:
-                    config_data[key] = value
+                    is_api_key_save = True
         else:
             # Fallback to saving all widgets if no key is provided
             for k, widget in self.main_controller.config_widgets.items():
@@ -201,11 +203,9 @@ class ConfigManager(QObject):
                     continue
                 value = self._get_widget_value(k, widget)
                 if value is not None:  # Skip None values (e.g., read-only QLabel widgets)
-                    # Check if this is an API key (secret)
+                    config_data[k] = value
                     if self._is_api_key(k):
-                        api_keys_to_save[k] = value
-                    else:
-                        config_data[k] = value
+                        is_api_key_save = True
 
         # --- Always save these non-widget settings ---
         # Save UI mode setting
@@ -227,40 +227,34 @@ class ConfigManager(QObject):
                     'app_name': selected_data.get('app_name', '')
                 }
         
-        # Save API keys to .env file
-        if api_keys_to_save:
-            self._save_api_keys_to_env(api_keys_to_save)
-        
-        # Update the config object and persist to SQLite (non-secrets only)
+        # Update the config object using the centralized set() method
+        # This handles both SQLite persistence and .env file updates for secrets
         for k, value in config_data.items():
             self.config.set(k, value)
-
-        # Also update environment variables for API keys (Config.set() handles this)
-        for k, value in api_keys_to_save.items():
-            self.config.set(k, value)
+            saved_count += 1
 
         # Provide user feedback
-        if api_keys_to_save and config_data:
-            self.main_controller.log_message(
-                f"Configuration saved: {len(config_data)} settings to SQLite, {len(api_keys_to_save)} API key(s) to .env file.", 
-                'green'
-            )
-            # Play success sound
-            if hasattr(self.main_controller, '_audio_alert'):
-                self.main_controller._audio_alert('finish')
-        elif api_keys_to_save:
-            self.main_controller.log_message(
-                f"API key(s) saved to .env file: {', '.join(api_keys_to_save.keys())}.", 
-                'green'
-            )
-            # Play success sound
-            if hasattr(self.main_controller, '_audio_alert'):
-                self.main_controller._audio_alert('finish')
-        else:
-            self.main_controller.log_message("Configuration auto-saved to SQLite successfully.", 'green')
-            # Play success sound for auto-save
-            if hasattr(self.main_controller, '_audio_alert'):
-                self.main_controller._audio_alert('finish')
+        if saved_count > 0:
+            if is_api_key_save:
+                # Play success sound
+                if hasattr(self.main_controller, '_audio_alert'):
+                    self.main_controller._audio_alert('finish')
+                    
+                self.main_controller.log_message(
+                    f"Configuration saved (including API keys).", 
+                    'green'
+                )
+                
+                # Reload agent if API keys changed
+                if hasattr(self.main_controller, 'agent_manager'):
+                    logging.info("Reloading agent after API key update...")
+                    self.main_controller.agent_manager.init_agent()
+                    self.main_controller.log_message("Agent re-initialized with new keys.", "green")
+            else:
+                self.main_controller.log_message("Configuration auto-saved.", 'green')
+                # Play success sound for auto-save
+                if hasattr(self.main_controller, '_audio_alert'):
+                    self.main_controller._audio_alert('finish')
 
     def _is_api_key(self, key: str) -> bool:
         """
@@ -279,59 +273,6 @@ class ConfigManager(QObject):
             return True
         # Also check if key ends with "_KEY" (pattern matching)
         return key == upper_key and upper_key.endswith("_KEY")
-
-    def _save_api_keys_to_env(self, api_keys: Dict[str, str]) -> None:
-        """
-        Save API keys to the .env file using python-dotenv.
-        
-        Args:
-            api_keys: Dictionary mapping API key names to their values
-        """
-        try:
-            from dotenv import set_key, load_dotenv
-        except ImportError:
-            error_msg = "python-dotenv not available. Cannot save API keys to .env file. Please install it with: pip install python-dotenv"
-            logging.error(error_msg)
-            self.main_controller.log_message(error_msg, 'red')
-            return
-        
-        try:
-            # Get project root directory
-            from utils.paths import find_project_root
-            project_root = find_project_root(Path(self.config.BASE_DIR))
-            env_file_path = project_root / '.env'
-            
-            # Ensure .env file exists (create if it doesn't)
-            if not env_file_path.exists():
-                env_file_path.touch()
-                logging.info(f"Created .env file at {env_file_path}")
-            
-            # Load existing .env file to preserve other variables
-            load_dotenv(env_file_path, override=False)
-            
-            # Save each API key to .env file
-            saved_keys = []
-            for key, value in api_keys.items():
-                # Normalize key to uppercase (standard for .env files)
-                normalized_key = key.upper()
-                
-                # Only save non-empty values
-                if value and value.strip():
-                    set_key(str(env_file_path), normalized_key, value.strip())
-                    saved_keys.append(normalized_key)
-                    logging.debug(f"Saved {normalized_key} to .env file")
-                else:
-                    # If value is empty, remove the key from .env
-                    set_key(str(env_file_path), normalized_key, "")
-                    logging.debug(f"Removed {normalized_key} from .env file (empty value)")
-            
-            if saved_keys:
-                logging.info(f"Successfully saved {len(saved_keys)} API key(s) to .env file: {', '.join(saved_keys)}")
-            
-        except Exception as e:
-            error_msg = f"Failed to save API keys to .env file: {e}"
-            logging.exception(error_msg)
-            self.main_controller.log_message(error_msg, 'red')
 
     @Slot()
     def reset_settings(self) -> None:
@@ -912,8 +853,9 @@ class ConfigManager(QObject):
                     # Save to SQLite via prompts service with debounce (save 1 second after user stops typing)
                     # Double-check widget type before connecting
                     if isinstance(widget, QTextEdit):
-                        def on_text_changed():
-                            self._debounce_prompt_save(key, 'ACTION_DECISION_PROMPT', widget)
+                        # Capture key and widget by value using default arguments to avoid closure bug
+                        def on_text_changed(k=key, w=widget):
+                            self._debounce_prompt_save(k, 'ACTION_DECISION_PROMPT', w)
                         widget.textChanged.connect(on_text_changed)
                     else:
                         logging.warning(f"Widget for key '{key}' is not a QTextEdit, skipping prompt auto-save connection")

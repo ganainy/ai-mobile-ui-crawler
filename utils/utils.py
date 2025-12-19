@@ -199,7 +199,27 @@ class LoggerManager:
 
 
         if numeric_level > logging.DEBUG:
-            for lib_name in ["appium.webdriver.webdriver", "urllib3.connectionpool", "selenium.webdriver.remote.remote_connection"]:
+            # Silence noisy third-party loggers
+            noisy_loggers = [
+                # Appium/Selenium
+                "appium.webdriver.webdriver",
+                "urllib3.connectionpool",
+                "selenium.webdriver.remote.remote_connection",
+                # HTTP clients
+                "httpx",
+                "httpcore",
+                "urllib3",
+                # AI SDKs
+                "openai",
+                "openai._base_client",
+                "google.api_core",
+                "google.auth",
+                "google.generativeai",
+                # Other noisy libraries
+                "asyncio",
+                "PIL",
+            ]
+            for lib_name in noisy_loggers:
                 logging.getLogger(lib_name).setLevel(logging.WARNING)
 
         return logger

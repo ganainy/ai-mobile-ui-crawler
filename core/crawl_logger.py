@@ -26,49 +26,19 @@ class CrawlLogger:
                         current_screen_id: Optional[int], 
                         current_screen_visit_count: int, 
                         current_screen_actions: List[Dict[str, Any]]):
-        """Log the context being sent to the AI."""
-        logger.info("=" * 80)
-        logger.info(f"AI CONTEXT - Step {step_count}")
-        logger.info("=" * 80)
+        """Log the context being sent to the AI (compact version)."""
+        # Log a compact summary instead of verbose details
+        context_summary = (
+            f"Step {step_count} | Screen #{current_screen_id} "
+            f"(visit #{current_screen_visit_count}) | "
+            f"History: {len(action_history)} actions | "
+            f"Screens: {len(visited_screens)}"
+        )
+        
         if is_stuck:
-            logger.info(f"⚠️ STUCK DETECTED: {stuck_reason}")
-            logger.info("=" * 80)
+            logger.warning(f"⚠️ STUCK: {stuck_reason}")
         
-        logger.info(f"Action History: {len(action_history)} entries")
-        for action in action_history[-10:]:
-            step_num = action.get('step_number', '?')
-            action_desc = action.get('action_description', 'unknown')
-            success = action.get('execution_success', False)
-            status = "✓" if success else "✗"
-            from_screen = action.get('from_screen_id')
-            to_screen = action.get('to_screen_id')
-            error = action.get('error_message')
-            
-            screen_info = self._get_transition_message(from_screen, to_screen)
-            error_info = f" ({error})" if error else ""
-            logger.info(f"  [{status}] Step {step_num}: {action_desc}{screen_info}{error_info}")
-        
-        logger.info(f"Visited Screens: {len(visited_screens)} screens")
-        for screen in visited_screens[:10]:
-            screen_id = screen.get('screen_id', '?')
-            activity = screen.get('activity_name', 'UnknownActivity')
-            visit_count = screen.get('visit_count', 0)
-            logger.info(f"  Screen #{screen_id} ({activity}): {visit_count} visit(s)")
-        
-        logger.info(f"Current Screen ID: {current_screen_id}")
-        logger.info(f"Current Screen Visit Count: {current_screen_visit_count}")
-        logger.info(f"Current Screen Actions: {len(current_screen_actions)} actions tried")
-        for action in current_screen_actions:
-            action_desc = action.get('action_description', 'unknown')
-            success = action.get('execution_success', False)
-            status = "✓" if success else "✗"
-            to_screen = action.get('to_screen_id')
-            error = action.get('error_message')
-            
-            screen_info = self._get_transition_message(current_screen_id, to_screen)
-            error_info = f" ({error})" if error else ""
-            logger.info(f"  [{status}] {action_desc}{screen_info}{error_info}")
-        logger.info("=" * 80)
+        logger.info(context_summary)
 
     def log_ai_decision(self, action_data: Dict[str, Any], decision_time: float):
         """Log the AI's decision."""

@@ -42,6 +42,7 @@ from ui.device_manager import DeviceManager
 from ui.report_manager import ReportManager
 from ui.agent_manager import AgentManager
 from ui.ui_utils import update_screenshot
+from ui.logo_widget import LogoWidget
 
 
 class CrawlerControllerWindow(QMainWindow):
