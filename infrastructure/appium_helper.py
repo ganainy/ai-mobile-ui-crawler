@@ -38,14 +38,11 @@ from infrastructure.appium_error_handler import (
 )
 from infrastructure.capability_builder import AppiumCapabilities
 from infrastructure.device_detection import Platform, DeviceInfo
+from infrastructure.session_manager import SessionManager
+from infrastructure.element_finder import ElementFinder, LocatorStrategy
+from infrastructure.gesture_handler import GestureHandler
 
 logger = logging.getLogger(__name__)
-
-LocatorStrategy = Literal[
-    'id', 'xpath', 'accessibility id', 'class name', 'css selector',
-    'tag name', 'link text', 'partial link text', 'name',
-    'android uiautomator'
-]
 
 
 @dataclass
@@ -88,21 +85,72 @@ class AppiumHelper:
             retry_delay: Delay between retries in seconds
             implicit_wait: Implicit wait timeout in milliseconds
         """
-        self.driver: Optional[webdriver.Remote] = None
-        self.last_capabilities: Optional[AppiumCapabilities] = None
-        self.last_appium_url: Optional[str] = None
+        # Specialized components
+        self.session_manager = SessionManager(max_retries, retry_delay, implicit_wait)
+        self.element_finder: Optional[ElementFinder] = None
+        self.gesture_handler: Optional[GestureHandler] = None
+        
         self.max_retries = max_retries
         self.retry_delay = retry_delay
         self.implicit_wait = implicit_wait
-        self._current_implicit_wait: Optional[float] = None  # Track current implicit wait in seconds
         self.action_history: List[ActionHistory] = []
         
-        # App context tracking
-        self.target_package: Optional[str] = None
-        self.target_activity: Optional[str] = None
-        self.allowed_external_packages: List[str] = []
-        self.consecutive_context_failures: int = 0
+        # Context tracking
         self.max_consecutive_context_failures: int = 3
+
+    @property
+    def driver(self) -> Optional[webdriver.Remote]:
+        return self.session_manager.driver
+
+    @property
+    def last_capabilities(self) -> Optional[AppiumCapabilities]:
+        return self.session_manager.last_capabilities
+
+    @property
+    def last_appium_url(self) -> Optional[str]:
+        return self.session_manager.last_appium_url
+
+    @property
+    def target_package(self) -> Optional[str]:
+        return self.session_manager.target_package
+
+    @target_package.setter
+    def target_package(self, value):
+        self.session_manager.target_package = value
+        if self.element_finder:
+            self.element_finder.target_package = value
+
+    @property
+    def target_activity(self) -> Optional[str]:
+        return self.session_manager.target_activity
+
+    @target_activity.setter
+    def target_activity(self, value):
+        self.session_manager.target_activity = value
+
+    @property
+    def allowed_external_packages(self) -> List[str]:
+        return self.session_manager.allowed_external_packages
+
+    @allowed_external_packages.setter
+    def allowed_external_packages(self, value):
+        self.session_manager.allowed_external_packages = value
+
+    @property
+    def consecutive_context_failures(self) -> int:
+        return self.session_manager.consecutive_context_failures
+
+    @consecutive_context_failures.setter
+    def consecutive_context_failures(self, value):
+        self.session_manager.consecutive_context_failures = value
+
+    @property
+    def _current_implicit_wait(self) -> Optional[float]:
+        return self.session_manager._current_implicit_wait
+
+    @_current_implicit_wait.setter
+    def _current_implicit_wait(self, value):
+        self.session_manager._current_implicit_wait = value
     
     def initialize_driver(
         self,
@@ -110,203 +158,24 @@ class AppiumHelper:
         appium_url: str = 'http://localhost:4723',
         context_config: Optional[Dict[str, Any]] = None
     ) -> None:
-        """
-        Initialize WebDriver session with capabilities.
+        """Initialize WebDriver session and specialized components."""
+        self.session_manager.initialize_driver(capabilities, appium_url, context_config)
         
-        Args:
-            capabilities: Appium capabilities dictionary
-            appium_url: Appium server URL
-            context_config: App context configuration (targetPackage, targetActivity, allowedExternalPackages)
-        """
-        start_time = time.time()
-        
-        try:
-            logger.debug(
-                f'Initializing Appium session: platform={capabilities.get("platformName")}, '
-                f'automationName={capabilities.get("appium:automationName")}, '
-                f'deviceName={capabilities.get("appium:deviceName")}'
-            )
-            
-            # Parse URL - ensure we use just the base URL without path
-            parsed_url = urlparse(appium_url)
-            # Remove any path from URL, use just scheme://host:port
-            server_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
-            
-            # Create Android/UiAutomator2 options
-            options = UiAutomator2Options()
-            
-            # Log capabilities for debugging
-            logger.debug(f'Loading capabilities: {list(capabilities.keys())}')
-            
-            # Load all capabilities into options object
-            # load_capabilities accepts a dict and returns the options object
-            # It handles both appium: prefixed and non-prefixed keys
-            try:
-                options.load_capabilities(capabilities)
-            except Exception as load_error:
-                logger.warning(f'load_capabilities failed, trying direct assignment: {load_error}')
-                # Fallback: try setting capabilities directly
-                # Convert appium: prefixed keys to option attributes
-                for key, value in capabilities.items():
-                    if value is not None:
-                        try:
-                            # Try with appium: prefix first
-                            if hasattr(options, key):
-                                setattr(options, key, value)
-                            # Try without appium: prefix
-                            elif key.startswith('appium:'):
-                                option_key = key.replace('appium:', '')
-                                if hasattr(options, option_key):
-                                    setattr(options, option_key, value)
-                        except Exception:
-                            # If direct assignment fails, continue
-                            pass
-            
-            logger.debug(f'Server URL: {server_url}')
-            
-            # Create driver with options
-            self.driver = webdriver.Remote(
-                command_executor=server_url,
-                options=options
-            )
-            
-            self.last_capabilities = capabilities
-            self.last_appium_url = appium_url
-            
-            # Store app context information
-            if context_config:
-                self.target_package = context_config.get('targetPackage')
-                self.target_activity = context_config.get('targetActivity')
-                self.allowed_external_packages = context_config.get('allowedExternalPackages', [])
-            else:
-                # Extract from capabilities if not provided
-                self.target_package = capabilities.get('appium:appPackage')
-                self.target_activity = capabilities.get('appium:appActivity')
-                self.allowed_external_packages = []
-            
-            self.consecutive_context_failures = 0
-            
-            # Set implicit wait
-            implicit_wait_seconds = self.implicit_wait / 1000.0  # Convert ms to seconds
-            self.driver.implicitly_wait(implicit_wait_seconds)
-            self._current_implicit_wait = implicit_wait_seconds  # Track the current value
-            
-            # Apply performance-optimizing driver settings
-            self._apply_performance_settings()
-            
-            duration = (time.time() - start_time) * 1000
-            session_id = self.driver.session_id
-            
-            logger.debug(
-                f'Appium session initialized successfully: sessionId={session_id}, '
-                f'duration={duration:.0f}ms'
-            )
-            
-        except Exception as error:
-            duration = (time.time() - start_time) * 1000
-            logger.error(
-                f'Failed to initialize Appium session: {error}, duration={duration:.0f}ms'
-            )
-            raise AppiumError(
-                f'Failed to initialize Appium session: {error}',
-                'SESSION_INIT_FAILED',
-                {'error': str(error)}
-            )
+        # Initialize specialized components with the new driver
+        self.element_finder = ElementFinder(self.driver, self.target_package)
+        self.gesture_handler = GestureHandler(self.driver)
     
     def _apply_performance_settings(self) -> None:
-        """
-        Apply performance-optimizing driver settings after session initialization.
-        
-        These settings dramatically improve element finding speed by:
-        - Disabling idle waiting (waitForIdleTimeout: 0)
-        - Limiting XML tree depth (snapshotMaxDepth)
-        - Filtering non-interactive elements (ignoreUnimportantViews)
-        """
-        if not self.driver:
-            return
-        
-        try:
-            # Get performance settings from config if available, otherwise use defaults
-            # Note: These settings are applied via driver.update_settings() after session init
-            # The capabilities we set earlier may not work for all settings, so we apply them here too
-            performance_settings = {
-                'waitForIdleTimeout': 0,  # Disable idle waiting for faster element finding
-                'snapshotMaxDepth': 25,  # Limit XML tree depth to reduce scanning overhead
-                'ignoreUnimportantViews': True,  # Filter out non-interactive elements
-            }
-            
-            # Update driver settings
-            self.driver.update_settings(performance_settings)
-            logger.debug(f'Applied performance settings: {performance_settings}')
-        except Exception as error:
-            # Non-critical - log warning but don't fail
-            logger.warning(f'Failed to apply performance settings: {error}')
+        """Apply performance settings (delegated)."""
+        self.session_manager.apply_performance_settings()
     
     def validate_session(self) -> bool:
-        """
-        Validate if current session is still active.
-        
-        Returns:
-            True if session is valid, False otherwise
-        """
-        if not self.driver:
-            return False
-        
-        try:
-            # Try to get page source to validate session
-            self.driver.page_source
-            return True
-        except Exception as error:
-            if is_session_terminated(error):
-                logger.warning('Session terminated, attempting recovery...')
-                return self._attempt_session_recovery()
-            return False
+        """Validate if current session is still active (delegated)."""
+        return self.session_manager.validate_session()
     
     def _attempt_session_recovery(self) -> bool:
-        """
-        Attempt to recover from session termination.
-        
-        Returns:
-            True if recovery successful, False otherwise
-        """
-        if not self.last_capabilities or not self.last_appium_url:
-            logger.error('Cannot recover session: missing capabilities or URL')
-            return False
-        
-        for attempt in range(1, self.max_retries + 1):
-            try:
-                logger.info(f'Session recovery attempt {attempt}/{self.max_retries}')
-                
-                # Clean up existing session
-                if self.driver:
-                    try:
-                        self.driver.quit()
-                    except Exception:
-                        pass  # Ignore cleanup errors
-                    self.driver = None
-                
-                # Reinitialize session (preserve context config)
-                self.initialize_driver(
-                    self.last_capabilities,
-                    self.last_appium_url,
-                    {
-                        'targetPackage': self.target_package,
-                        'targetActivity': self.target_activity,
-                        'allowedExternalPackages': self.allowed_external_packages
-                    }
-                )
-                
-                logger.info('Session recovery successful')
-                return True
-                
-            except Exception as error:
-                logger.error(f'Session recovery attempt {attempt} failed: {error}')
-                
-                if attempt < self.max_retries:
-                    time.sleep(self.retry_delay * attempt)
-        
-        logger.error('Session recovery failed after all attempts')
-        return False
+        """Attempt to recover from session termination (delegated)."""
+        return self.session_manager.recover_session()
     
     def safe_execute(self, operation, error_message: str = 'Operation failed'):
         """
@@ -334,30 +203,12 @@ class AppiumHelper:
         )
     
     def _get_locator(self, selector: str, strategy: LocatorStrategy) -> tuple:
-        """
-        Get Selenium/Appium locator tuple from strategy and selector.
-        
-        Args:
-            selector: Element selector
-            strategy: Locator strategy
-            
-        Returns:
-            Tuple of (By, selector) for use with find_element
-        """
-        strategy_map = {
-            'id': (AppiumBy.ID, selector),
-            'xpath': (AppiumBy.XPATH, selector),
-            'accessibility id': (AppiumBy.ACCESSIBILITY_ID, selector),
-            'class name': (AppiumBy.CLASS_NAME, selector),
-            'css selector': (AppiumBy.CSS_SELECTOR, selector),
-            'tag name': (AppiumBy.TAG_NAME, selector),
-            'link text': (AppiumBy.LINK_TEXT, selector),
-            'partial link text': (AppiumBy.PARTIAL_LINK_TEXT, selector),
-            'name': (AppiumBy.NAME, selector),
-            'android uiautomator': (AppiumBy.ANDROID_UIAUTOMATOR, selector),
-        }
-        
-        return strategy_map.get(strategy, (AppiumBy.ID, selector))
+        """Get locator tuple (delegated)."""
+        if not self.element_finder:
+            # Fallback if not initialized
+            from appium.webdriver.common.appiumby import AppiumBy
+            return (AppiumBy.ID, selector)
+        return self.element_finder.get_locator(selector, strategy)
     
     def find_element(
         self,
@@ -365,170 +216,13 @@ class AppiumHelper:
         strategy: LocatorStrategy = 'id',
         timeout_ms: int = 10000
     ) -> WebElement:
-        """
-        Find element with specified strategy.
-        
-        Args:
-            selector: Element selector
-            strategy: Locator strategy
-            timeout_ms: Timeout in milliseconds
-            
-        Returns:
-            Found WebElement
-            
-        Raises:
-            ElementNotFoundError: If element not found
-        """
+        """Find element (delegated)."""
         def _find():
-            start_time = time.time()
-            last_error: Optional[Exception] = None
-            
-            try:
-                # Temporarily reduce implicit wait to 2 seconds for faster attempts
-                original_timeout = self._current_implicit_wait or (self.implicit_wait / 1000.0)
-                reduced_implicit_wait = 2.0  # Lower implicit wait for faster attempts
-                
-                if abs(original_timeout - reduced_implicit_wait) > 0.1:
-                    self.driver.implicitly_wait(reduced_implicit_wait)
-                    self._current_implicit_wait = reduced_implicit_wait
-                
-                try:
-                    # For Android with 'id' strategy, prioritize UIAutomator (proven to be ~100x faster)
-                    if strategy == 'id' and self._get_current_platform() == 'android':
-                        # Primary strategy: Android UIAutomator (fastest for Android resource IDs)
-                        strategy_start = time.time()
-                        logger.debug(f'[Element Find] Attempting primary strategy: Android UIAutomator for "{selector}"')
-                        try:
-                            uiautomator_selector = f'new UiSelector().resourceId("{selector}")'
-                            element = self.driver.find_element(AppiumBy.ANDROID_UIAUTOMATOR, uiautomator_selector)
-                            if element.is_displayed():
-                                strategy_duration = (time.time() - strategy_start) * 1000
-                                total_duration = (time.time() - start_time) * 1000
-                                logger.debug(f'[Element Find] ✓ Primary strategy (UIAutomator) SUCCESS in {strategy_duration:.0f}ms (total: {total_duration:.0f}ms)')
-                                return element
-                        except (NoSuchElementException, TimeoutException) as e:
-                            strategy_duration = (time.time() - strategy_start) * 1000
-                            logger.debug(f'[Element Find] ✗ Primary strategy (UIAutomator) FAILED in {strategy_duration:.0f}ms')
-                            last_error = e
-                        
-                        # Fallback 1: Standard ID with explicit wait (slower but more compatible)
-                        by, value = self._get_locator(selector, strategy)
-                        explicit_timeout = min(timeout_ms / 1000.0, 3.0)  # Reduced to 3 seconds for fallback
-                        fallback_start = time.time()
-                        logger.debug(f'[Element Find] Attempting fallback 1: ID (visibility) for "{selector}"')
-                        try:
-                            wait = WebDriverWait(self.driver, explicit_timeout)
-                            element = wait.until(EC.visibility_of_element_located((by, value)))
-                            fallback_duration = (time.time() - fallback_start) * 1000
-                            total_duration = (time.time() - start_time) * 1000
-                            logger.debug(f'[Element Find] ✓ Fallback 1 (ID visibility) SUCCESS in {fallback_duration:.0f}ms (total: {total_duration:.0f}ms)')
-                            return element
-                        except (NoSuchElementException, TimeoutException) as e:
-                            fallback_duration = (time.time() - fallback_start) * 1000
-                            logger.debug(f'[Element Find] ✗ Fallback 1 (ID visibility) FAILED in {fallback_duration:.0f}ms')
-                        
-                        # Fallback 2: Accessibility ID
-                        fallback_start = time.time()
-                        logger.debug(f'[Element Find] Attempting fallback 2: Accessibility ID for "{selector}"')
-                        try:
-                            element = self.driver.find_element(AppiumBy.ACCESSIBILITY_ID, selector)
-                            if element.is_displayed():
-                                fallback_duration = (time.time() - fallback_start) * 1000
-                                total_duration = (time.time() - start_time) * 1000
-                                logger.debug(f'[Element Find] ✓ Fallback 2 (Accessibility ID) SUCCESS in {fallback_duration:.0f}ms (total: {total_duration:.0f}ms)')
-                                return element
-                        except (NoSuchElementException, TimeoutException) as e:
-                            fallback_duration = (time.time() - fallback_start) * 1000
-                            logger.debug(f'[Element Find] ✗ Fallback 2 (Accessibility ID) FAILED in {fallback_duration:.0f}ms')
-                        
-                        # Fallback 3: Package-prefixed ID (for traditional views)
-                        if ':' not in selector and self.target_package:
-                            package_prefixed = f'{self.target_package}:id/{selector}'
-                            fallback_start = time.time()
-                            logger.debug(f'[Element Find] Attempting fallback 3: Package-prefixed ID for "{package_prefixed}"')
-                            try:
-                                element = self.driver.find_element(by, package_prefixed)
-                                if element.is_displayed():
-                                    fallback_duration = (time.time() - fallback_start) * 1000
-                                    total_duration = (time.time() - start_time) * 1000
-                                    logger.debug(f'[Element Find] ✓ Fallback 3 (Package-prefixed ID) SUCCESS in {fallback_duration:.0f}ms (total: {total_duration:.0f}ms)')
-                                    return element
-                            except (NoSuchElementException, TimeoutException) as e:
-                                fallback_duration = (time.time() - fallback_start) * 1000
-                                logger.debug(f'[Element Find] ✗ Fallback 3 (Package-prefixed ID) FAILED in {fallback_duration:.0f}ms')
-                        
-                        # Fallback 4: XPath by resource-id (slower, last resort)
-                        fallback_start = time.time()
-                        logger.debug(f'[Element Find] Attempting fallback 4: XPath (resource-id) for "{selector}"')
-                        try:
-                            xpath_exact = f'//*[@resource-id="{selector}"]'
-                            element = self.driver.find_element(AppiumBy.XPATH, xpath_exact)
-                            if element.is_displayed():
-                                fallback_duration = (time.time() - fallback_start) * 1000
-                                total_duration = (time.time() - start_time) * 1000
-                                logger.debug(f'[Element Find] ✓ Fallback 4 (XPath resource-id) SUCCESS in {fallback_duration:.0f}ms (total: {total_duration:.0f}ms)')
-                                return element
-                        except (NoSuchElementException, TimeoutException) as e:
-                            fallback_duration = (time.time() - fallback_start) * 1000
-                            logger.debug(f'[Element Find] ✗ Fallback 4 (XPath resource-id) FAILED in {fallback_duration:.0f}ms')
-                        
-                        # Fallback 5: XPath with package prefix (last resort)
-                        if ':' not in selector and self.target_package:
-                            package_prefixed = f'{self.target_package}:id/{selector}'
-                            fallback_start = time.time()
-                            logger.debug(f'[Element Find] Attempting fallback 5: XPath (prefixed resource-id) for "{package_prefixed}"')
-                            try:
-                                xpath_prefixed = f'//*[@resource-id="{package_prefixed}"]'
-                                element = self.driver.find_element(AppiumBy.XPATH, xpath_prefixed)
-                                if element.is_displayed():
-                                    fallback_duration = (time.time() - fallback_start) * 1000
-                                    total_duration = (time.time() - start_time) * 1000
-                                    logger.debug(f'[Element Find] ✓ Fallback 5 (XPath prefixed) SUCCESS in {fallback_duration:.0f}ms (total: {total_duration:.0f}ms)')
-                                    return element
-                            except (NoSuchElementException, TimeoutException) as e:
-                                fallback_duration = (time.time() - fallback_start) * 1000
-                                logger.debug(f'[Element Find] ✗ Fallback 5 (XPath prefixed) FAILED in {fallback_duration:.0f}ms')
-                        
-                        # If all strategies failed, raise the last error
-                        if last_error:
-                            raise last_error
-                        raise ElementNotFoundError(f'Element not found with any strategy: {selector}')
-                    else:
-                        # For non-Android or non-ID strategies, use standard approach
-                        by, value = self._get_locator(selector, strategy)
-                        explicit_timeout = min(timeout_ms / 1000.0, 5.0)  # Cap at 5 seconds for explicit wait
-                        
-                        # Primary strategy timing
-                        strategy_start = time.time()
-                        logger.debug(f'[Element Find] Attempting primary strategy: {strategy} for "{selector}"')
-                        
-                        # Use explicit WebDriverWait for more precise control
-                        wait = WebDriverWait(self.driver, explicit_timeout)
-                        # Wait for element to be present and visible
-                        element = wait.until(EC.visibility_of_element_located((by, value)))
-                        
-                        strategy_duration = (time.time() - strategy_start) * 1000
-                        total_duration = (time.time() - start_time) * 1000
-                        logger.debug(f'[Element Find] ✓ Primary strategy ({strategy}) SUCCESS in {strategy_duration:.0f}ms (total: {total_duration:.0f}ms)')
-                        
-                        return element
-                except (NoSuchElementException, TimeoutException) as error:
-                    # This catches exceptions from the non-Android/non-ID path
-                    last_error = error
-                    raise
-                finally:
-                    # Restore original timeout if we changed it
-                    if abs(self._current_implicit_wait - original_timeout) > 0.1:
-                        self.driver.implicitly_wait(original_timeout)
-                        self._current_implicit_wait = original_timeout
-                    
-            except (NoSuchElementException, TimeoutException, ElementNotFoundError) as error:
-                duration = (time.time() - start_time) * 1000
-                error_msg = f'Element not found with {strategy}: {selector}'
-                if last_error:
-                    error_msg += f' (tried fallback strategies)'
-                logger.error(f'{error_msg}, duration={duration:.0f}ms')
-                raise ElementNotFoundError(error_msg) from error
+            return self.element_finder.find_element(
+                selector, strategy, timeout_ms, self.implicit_wait, 
+                self._get_current_platform() or 'android'
+            )
+        return self.safe_execute(_find, f'Find element with {strategy}: {selector}')
         
         return self.safe_execute(_find, f'Find element with {strategy}: {selector}')
     
@@ -537,53 +231,15 @@ class AppiumHelper:
         selector: str,
         strategy: LocatorStrategy = 'id'
     ) -> List[WebElement]:
-        """
-        Find multiple elements with specified strategy.
-        
-        Args:
-            selector: Element selector
-            strategy: Locator strategy
-            
-        Returns:
-            List of found WebElements
-        """
-        def _find():
-            start_time = time.time()
-            
-            try:
-                by, value = self._get_locator(selector, strategy)
-                elements = self.driver.find_elements(by, value)
-                
-                duration = (time.time() - start_time) * 1000
-                logger.debug(
-                    f'Found {len(elements)} elements with {strategy}: {selector} in {duration:.0f}ms'
-                )
-                
-                return elements
-            except Exception as error:
-                duration = (time.time() - start_time) * 1000
-                logger.error(
-                    f'Error finding elements with {strategy}: {selector}, duration={duration:.0f}ms'
-                )
-                return []
-        
-        return self.safe_execute(_find, f'Find elements with {strategy}: {selector}')
+        """Find multiple elements (delegated)."""
+        return self.element_finder.find_elements(selector, strategy)
     
     def tap_element(
         self,
         selector: str,
         strategy: LocatorStrategy = 'id'
     ) -> bool:
-        """
-        Tap element with multiple fallback strategies.
-        
-        Args:
-            selector: Element selector
-            strategy: Locator strategy
-            
-        Returns:
-            True if tap successful
-        """
+        """Tap element with fallback strategies (delegated)."""
         start_time = time.time()
         
         def _tap():
@@ -599,10 +255,10 @@ class AppiumHelper:
                 last_error = click_error
                 logger.debug('Standard click failed, trying W3C Actions')
             
-            # Method 2: W3C Actions API
+            # Method 2: W3C Actions API (delegated center and tap)
             try:
-                x, y = self._get_element_center(element)
-                self.perform_w3c_tap(x, y)
+                x, y = self.gesture_handler.get_element_center(element)
+                self.gesture_handler.perform_w3c_tap(x, y)
                 self._record_action('tap', selector, True, time.time() - start_time)
                 return True
             except Exception as w3c_error:
@@ -611,7 +267,7 @@ class AppiumHelper:
             
             # Method 3: Mobile tap command
             try:
-                x, y = self._get_element_center(element)
+                x, y = self.gesture_handler.get_element_center(element)
                 self.driver.execute_script('mobile: tap', {'x': x, 'y': y})
                 self._record_action('tap', selector, True, time.time() - start_time)
                 return True
@@ -621,9 +277,7 @@ class AppiumHelper:
             # All methods failed
             error_msg = str(last_error) if last_error else 'Unknown error'
             self._record_action('tap', selector, False, time.time() - start_time, error_msg)
-            raise GestureFailedError(
-                f'Failed to tap element after all fallback methods: {error_msg}'
-            )
+            raise GestureFailedError(f'Failed to tap element after all fallback methods: {error_msg}')
         
         return self.safe_execute(_tap, f'Tap element: {selector}')
     
@@ -684,43 +338,12 @@ class AppiumHelper:
         return self.safe_execute(_send, f'Send keys to element: {selector}')
     
     def perform_w3c_tap(self, x: float, y: float) -> None:
-        """
-        Perform W3C Actions API tap at coordinates.
-        
-        Args:
-            x: X coordinate
-            y: Y coordinate
-        """
-        from selenium.webdriver.common.action_chains import ActionChains
-        from selenium.webdriver.common.actions import interaction
-        from selenium.webdriver.common.actions.action_builder import ActionBuilder
-        from selenium.webdriver.common.actions.pointer_input import PointerInput
-        
-        actions = ActionChains(self.driver)
-        actions.w3c_actions = ActionBuilder(self.driver, mouse=PointerInput(interaction.POINTER_TOUCH, "touch"))
-        actions.w3c_actions.pointer_action.move_to_location(x, y)
-        actions.w3c_actions.pointer_action.pointer_down()
-        actions.w3c_actions.pointer_action.pause(0.1)
-        actions.w3c_actions.pointer_action.pointer_up()
-        actions.perform()
-    
+        """Perform W3C tap (delegated)."""
+        self.gesture_handler.perform_w3c_tap(x, y)
+
     def _get_element_center(self, element: WebElement) -> tuple[float, float]:
-        """
-        Get element center coordinates.
-        
-        Args:
-            element: WebElement
-            
-        Returns:
-            Tuple of (x, y) coordinates
-        """
-        location = element.location
-        size = element.size
-        
-        return (
-            location['x'] + size['width'] / 2,
-            location['y'] + size['height'] / 2
-        )
+        """Get element center (delegated)."""
+        return self.gesture_handler.get_element_center(element)
     
     def _record_action(
         self,
@@ -800,22 +423,8 @@ class AppiumHelper:
         return None
     
     def close_driver(self) -> None:
-        """Close driver and clean up session."""
-        if self.driver:
-            try:
-                session_id = self.driver.session_id
-                self.driver.quit()
-                logger.info(f'Session closed: {session_id}')
-            except Exception as error:
-                logger.error(f'Error closing session: {error}')
-            finally:
-                self.driver = None
-                self.last_capabilities = None
-                self.last_appium_url = None
-                self.target_package = None
-                self.target_activity = None
-                self.allowed_external_packages = []
-                self.consecutive_context_failures = 0
+        """Close driver session (delegated)."""
+        self.session_manager.close_session()
     
     def get_page_source(self) -> str:
         """

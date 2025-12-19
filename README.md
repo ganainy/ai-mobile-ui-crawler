@@ -1,6 +1,6 @@
 # AI-Driven Android App Crawler
 
-[![Python Version](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/)
+[![Python Version](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/)
 [![Status](https://img.shields.io/badge/status-development-yellow.svg)]()
 
 ## Overview
@@ -64,9 +64,11 @@ The system uses Appium-Python-Client for direct mobile device interaction. No ex
 - **`run_ui.py`** - GUI entry point
 - **`cli/main.py`** - CLI command orchestration
 - **`core/crawler.py`** - Main crawling logic and state transitions
-- **`domain/agent_assistant.py`** - AI-driven action orchestration
+- **`domain/agent_assistant.py`** - Main AI orchestration (lean container)
+- **`domain/action_executor.py`** - Device interaction logic and action dispatching
+- **`domain/prompt_builder.py`** - Dynamic prompt construction and JSON output parsing
+- **`domain/langchain_wrapper.py`** - LangChain model adapters and multimodal context
 - **`domain/model_adapters.py`** - Unified AI provider integration
-- **`domain/agent_tools.py`** - Device interaction tools
 - **`infrastructure/appium_helper.py`** - Core Appium session management
 - **`infrastructure/device_detection.py`** - Device/emulator detection
 - **`infrastructure/capability_builder.py`** - W3C capability building
@@ -138,7 +140,7 @@ output_data/app_info/<device_id>/
 ## Prerequisites
 
 ### Required
-- Python 3.8+
+- Python 3.12+
 - Node.js & npm (for Appium)
 - Android SDK with ADB
 

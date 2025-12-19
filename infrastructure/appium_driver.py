@@ -362,25 +362,11 @@ class AppiumDriver:
                 logger.error(f"Invalid scroll direction: {direction}")
                 return False
             
-            # Perform swipe for scrolling
-            driver = self.helper.get_driver()
-            if driver:
-                from selenium.webdriver.common.action_chains import ActionChains
-                from selenium.webdriver.common.actions import interaction
-                from selenium.webdriver.common.actions.action_builder import ActionBuilder
-                from selenium.webdriver.common.actions.pointer_input import PointerInput
-                
-                actions = ActionChains(driver)
-                actions.w3c_actions = ActionBuilder(
-                    driver, mouse=PointerInput(interaction.POINTER_TOUCH, "touch")
+            # Perform swipe for scrolling (delegated to GestureHandler)
+            if self.helper.gesture_handler:
+                self.helper.gesture_handler.perform_w3c_swipe(
+                    start_x, start_y, end_x, end_y, duration_sec=0.8
                 )
-                actions.w3c_actions.pointer_action.move_to_location(start_x, start_y)
-                actions.w3c_actions.pointer_action.pointer_down()
-                actions.w3c_actions.pointer_action.move_to_location(end_x, end_y)
-                actions.w3c_actions.pointer_action.pause(0.8)
-                actions.w3c_actions.pointer_action.pointer_up()
-                actions.perform()
-                
                 logger.debug(f"Scrolled {direction} from ({start_x}, {start_y}) to ({end_x}, {end_y})")
                 return True
             
@@ -409,24 +395,9 @@ class AppiumDriver:
             element = self.helper.find_element(target_identifier, strategy='id')
             x, y = self.helper._get_element_center(element)
             
-            # Perform long press using W3C Actions with longer duration
-            driver = self.helper.get_driver()
-            if driver:
-                from selenium.webdriver.common.action_chains import ActionChains
-                from selenium.webdriver.common.actions import interaction
-                from selenium.webdriver.common.actions.action_builder import ActionBuilder
-                from selenium.webdriver.common.actions.pointer_input import PointerInput
-                
-                actions = ActionChains(driver)
-                actions.w3c_actions = ActionBuilder(
-                    driver, mouse=PointerInput(interaction.POINTER_TOUCH, "touch")
-                )
-                actions.w3c_actions.pointer_action.move_to_location(x, y)
-                actions.w3c_actions.pointer_action.pointer_down()
-                actions.w3c_actions.pointer_action.pause(duration / 1000.0)
-                actions.w3c_actions.pointer_action.pointer_up()
-                actions.perform()
-                
+            # Perform long press using specialized GestureHandler
+            if self.helper.gesture_handler:
+                self.helper.gesture_handler.perform_w3c_long_press(x, y, duration)
                 logger.debug(f"Long pressed element {target_identifier} for {duration}ms")
                 return True
             
@@ -704,32 +675,9 @@ class AppiumDriver:
                     logger.error("double_tap() called without target_identifier or bbox")
                     return False
             
-            # Perform double tap using W3C Actions (two quick taps)
-            driver = self.helper.get_driver()
-            if driver:
-                from selenium.webdriver.common.action_chains import ActionChains
-                from selenium.webdriver.common.actions import interaction
-                from selenium.webdriver.common.actions.action_builder import ActionBuilder
-                from selenium.webdriver.common.actions.pointer_input import PointerInput
-                
-                actions = ActionChains(driver)
-                actions.w3c_actions = ActionBuilder(
-                    driver, mouse=PointerInput(interaction.POINTER_TOUCH, "touch")
-                )
-                # First tap
-                actions.w3c_actions.pointer_action.move_to_location(x, y)
-                actions.w3c_actions.pointer_action.pointer_down()
-                actions.w3c_actions.pointer_action.pause(0.05)
-                actions.w3c_actions.pointer_action.pointer_up()
-                # Brief pause between taps
-                actions.w3c_actions.pointer_action.pause(0.05)
-                # Second tap
-                actions.w3c_actions.pointer_action.move_to_location(x, y)
-                actions.w3c_actions.pointer_action.pointer_down()
-                actions.w3c_actions.pointer_action.pause(0.05)
-                actions.w3c_actions.pointer_action.pointer_up()
-                actions.perform()
-                
+            # Perform double tap using specialized GestureHandler (delegated)
+            if self.helper.gesture_handler:
+                self.helper.gesture_handler.perform_w3c_double_tap(x, y)
                 logger.debug(f"Double tapped at coordinates ({x}, {y})")
                 return True
             
@@ -835,25 +783,11 @@ class AppiumDriver:
                 logger.error(f"Invalid flick direction: {direction}")
                 return False
             
-            # Perform fast swipe for flicking (shorter duration than scroll)
-            driver = self.helper.get_driver()
-            if driver:
-                from selenium.webdriver.common.action_chains import ActionChains
-                from selenium.webdriver.common.actions import interaction
-                from selenium.webdriver.common.actions.action_builder import ActionBuilder
-                from selenium.webdriver.common.actions.pointer_input import PointerInput
-                
-                actions = ActionChains(driver)
-                actions.w3c_actions = ActionBuilder(
-                    driver, mouse=PointerInput(interaction.POINTER_TOUCH, "touch")
+            # Perform fast swipe for flicking (delegated to GestureHandler)
+            if self.helper.gesture_handler:
+                self.helper.gesture_handler.perform_w3c_swipe(
+                    start_x, start_y, end_x, end_y, duration_sec=0.2
                 )
-                actions.w3c_actions.pointer_action.move_to_location(start_x, start_y)
-                actions.w3c_actions.pointer_action.pointer_down()
-                actions.w3c_actions.pointer_action.move_to_location(end_x, end_y)
-                actions.w3c_actions.pointer_action.pause(0.2)  # Faster than scroll (0.8s)
-                actions.w3c_actions.pointer_action.pointer_up()
-                actions.perform()
-                
                 logger.debug(f"Flicked {direction} from ({start_x}, {start_y}) to ({end_x}, {end_y})")
                 return True
             
