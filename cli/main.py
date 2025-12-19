@@ -12,17 +12,6 @@ from cli.argument_parser import build_parser
 from cli.shared.context import ApplicationContext
 
 
-# def _get_banner() -> str:
-#     """Get the banner for the CLI."""   
-#     return r"""
-#     █████╗ ██╗    ██████╗██████╗  █████╗ ██╗    ██╗██╗     
-#    ██╔══██╗██║   ██╔════╝██╔══██╗██╔══██╗██║    ██║██║     
-#    ███████║██║   ██║     ██████╔╝███████║██║ █╗ ██║██║     
-#    ██╔══██║██║   ██║     ██╔══██╗██╔══██║██║███╗██║██║     
-#    ██║  ██║██║   ╚██████╗██║  ██║██║  ██║╚███╔███╔╝███████╗
-#    ╚═╝  ╚═╝╚═╝    ╚═════╝╚═╝  ╚═╝╚═╝  ╚═╝ ╚══╝╚══╝ ╚══════╝
-#     """
-
 
 def run(args: Optional[List[str]] = None) -> int:
     """
@@ -34,9 +23,6 @@ def run(args: Optional[List[str]] = None) -> int:
     Returns:
         Exit code
     """
-    # Display banner
-    # print(_get_banner())
-    
     try:
         # Build argument parser
         parser = build_parser()

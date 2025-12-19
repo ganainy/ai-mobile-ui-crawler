@@ -8,8 +8,8 @@
 An automated Android app testing tool powered by pluggable AI model adapters (Gemini, Ollama, OpenRouter). Intelligently explores applications by analyzing visual layouts and structural information to discover new states and interactions.
 
 **Available Interfaces:**
-- **CLI Controller** - Command-line interface for automation and scripting. See [`docs/cli-user-guide.md`](docs/cli-user-guide.md:1).
-- **UI Controller** - Graphical user interface for interactive use. See [`docs/gui-user-guide.md`](docs/gui-user-guide.md:1).
+- **CLI Controller** - Command-line interface for automation and scripting. See [`docs/cli-user-guide.md`](docs/cli-user-guide.md).
+- **UI Controller** - Graphical user interface for interactive use. See [`docs/gui-user-guide.md`](docs/gui-user-guide.md).
 
 ## Features
 
