@@ -309,6 +309,9 @@ class UserConfigStore:
         return 'str'
 
     def _to_storage_str(self, value: Any, type_: str) -> str:
+        # Handle None values - convert to empty string to avoid storing literal "None"
+        if value is None:
+            return ''
         if type_ == 'bool':
             return 'true' if value else 'false'
         elif type_ == 'json':

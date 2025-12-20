@@ -783,9 +783,10 @@ class ConfigManager(QObject):
                 if 'APP_ACTIVITY' in self.main_controller.config_widgets:
                     self.main_controller.config_widgets['APP_ACTIVITY'].setText("")
                 
-                # Clear from config as well
-                self.config.set('APP_PACKAGE', None)
-                self.config.set('APP_ACTIVITY', None)
+                # Clear from config as well - use empty string, not None
+                # (None gets converted to string "None" by the storage layer)
+                self.config.set('APP_PACKAGE', '')
+                self.config.set('APP_ACTIVITY', '')
                 
                 # Save the cleared state
                 self.save_config()

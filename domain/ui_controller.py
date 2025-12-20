@@ -1063,6 +1063,14 @@ class CrawlerControllerWindow(QMainWindow):
         """Generate a PDF report (delegated)."""
         self.report_manager.generate_report()
 
+    @slot()
+    def open_session_folder(self):
+        """Open the current session folder in file explorer (delegated)."""
+        if hasattr(self, 'crawler_manager') and self.crawler_manager:
+            self.crawler_manager.open_session_folder()
+        else:
+            self.log_message("ERROR: Crawler manager not initialized", "red")
+
     # _get_connected_devices removed as it's now handled by DeviceManager/DeviceDetection
 
     def _populate_device_dropdown(self):

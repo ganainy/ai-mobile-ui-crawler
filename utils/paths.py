@@ -95,8 +95,10 @@ class SessionPathManager:
     def _get_app_package(self) -> str:
         if not self._app_package:
             self._app_package = self.config.get(SessionKeys.APP_PACKAGE)
-            if not self._app_package:
-                raise ValueError("APP_PACKAGE must be set in configuration")
+            # Reject missing, None, empty strings, or literal "None" string
+            if not self._app_package or self._app_package == "None":
+                self._app_package = None  # Reset so next call can retry
+                raise ValueError("APP_PACKAGE must be set in configuration before creating session paths")
         assert self._app_package is not None
         return self._app_package
 
@@ -111,18 +113,12 @@ class SessionPathManager:
         
         This is a best-effort attempt - if device detection fails, device info will be
         set later when AppiumDriver.initialize_session() is called.
+        
+        NOTE: We intentionally do NOT load stored device info from config here.
+        Stored device info may be stale (from a previous session with a different device).
+        Instead, we only detect the currently connected device at runtime.
         """
         try:
-            # Check if device info is already set in config (e.g., from previous session)
-            device_udid = self.config.get(SessionKeys.TARGET_DEVICE_UDID)
-            device_name = self.config.get(SessionKeys.TARGET_DEVICE_NAME)
-            
-            if device_udid or device_name:
-                self._device_udid = device_udid
-                self._device_name = device_name
-                logger = logging.getLogger(__name__)
-                return
-            
             # Try to detect device early using device detection
             try:
                 from infrastructure.device_detection import detect_all_devices, select_best_device

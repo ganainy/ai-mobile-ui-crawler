@@ -801,3 +801,100 @@ class CrawlerManager(QObject):
         except Exception as e:
             self.main_controller.log_message(f"Error processing crawler output: {e}", 'red')
             logging.error(f"Error processing crawler output: {e}")
+
+    @Slot()
+    def open_session_folder(self) -> None:
+        """Open the current session's output folder in the system file explorer."""
+        from pathlib import Path
+        import subprocess
+        import platform
+        
+        try:
+            # Try to get session directory from config
+            session_dir = None
+            
+            # Method 1: Try the SESSION_DIR property (if device info is set)
+            try:
+                session_dir_str = self.config.SESSION_DIR
+                if session_dir_str and '{' not in session_dir_str:  # Ensure not a template
+                    session_dir = Path(session_dir_str)
+                    if session_dir.exists():
+                        self._open_folder_in_explorer(session_dir)
+                        return
+            except (RuntimeError, AttributeError):
+                # SESSION_DIR property may raise RuntimeError if device info not available
+                pass
+            
+            # Method 2: Fallback - find latest session for current app package
+            app_package = self.config.get('APP_PACKAGE', None)
+            output_data_dir = self.config.get('OUTPUT_DATA_DIR', None)
+            
+            if not app_package:
+                self.main_controller.log_message(
+                    "⚠️ No target app selected. Please select an app first.", 'orange'
+                )
+                return
+            
+            if not output_data_dir:
+                self.main_controller.log_message(
+                    "⚠️ Output directory not configured.", 'orange'
+                )
+                return
+            
+            # Look for session directories matching the app package
+            output_dir = Path(output_data_dir)
+            sessions_dir = output_dir / "sessions"
+            
+            if not sessions_dir.exists():
+                self.main_controller.log_message(
+                    f"⚠️ Sessions directory not found: {sessions_dir}", 'orange'
+                )
+                return
+            
+            # Find all session directories for this app package
+            candidates = []
+            for sd in sessions_dir.iterdir():
+                if sd.is_dir() and app_package in sd.name:
+                    candidates.append(sd)
+            
+            if not candidates:
+                self.main_controller.log_message(
+                    f"⚠️ No session directories found for '{app_package}'", 'orange'
+                )
+                return
+            
+            # Sort by name (descending) to get the latest session
+            candidates.sort(key=lambda p: p.name, reverse=True)
+            session_dir = candidates[0]
+            
+            self._open_folder_in_explorer(session_dir)
+            
+        except Exception as e:
+            self.main_controller.log_message(f"Error opening session folder: {e}", 'red')
+            logging.error(f"Error opening session folder: {e}")
+    
+    def _open_folder_in_explorer(self, folder_path: 'Path') -> None:
+        """Open a folder in the system's file explorer (cross-platform)."""
+        import subprocess
+        import platform
+        
+        folder_str = str(folder_path.resolve())
+        
+        try:
+            system = platform.system()
+            
+            if system == 'Windows':
+                # Use os.startfile for Windows
+                os.startfile(folder_str)
+            elif system == 'Darwin':
+                # macOS
+                subprocess.run(['open', folder_str], check=True)
+            else:
+                # Linux and other Unix-like systems
+                subprocess.run(['xdg-open', folder_str], check=True)
+            
+            self.main_controller.log_message(f"📂 Opened folder: {folder_str}", 'green')
+            
+        except Exception as e:
+            self.main_controller.log_message(f"Error opening folder: {e}", 'red')
+            logging.error(f"Error opening folder {folder_str}: {e}")

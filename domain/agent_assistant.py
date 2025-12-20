@@ -329,7 +329,9 @@ class AgentAssistant:
         try:
             target_log_dir = self.cfg.LOG_DIR if hasattr(self.cfg, 'LOG_DIR') else self.cfg.get('LOG_DIR', None)
         except Exception as e:
-            logging.warning(f"Could not get LOG_DIR property: {e}, trying get() method")
+            # Only log warning if it's NOT the expected "APP_PACKAGE not set" error
+            if "APP_PACKAGE must be set" not in str(e):
+                logging.warning(f"Could not get LOG_DIR property: {e}, trying get() method")
             target_log_dir = self.cfg.get('LOG_DIR', None)
         
         # Don't create directory here - it will be created when the file handler is created
@@ -354,7 +356,13 @@ class AgentAssistant:
             has_real_device = device_name or device_udid
             
             # Only create directory and file handler if we have a real device or if forcing recreate
-            if has_real_device or force_recreate:
+            # BUT: To prevent premature dashboard folder creation, we check if the directory actually exists
+            # or if we are clearly running a crawl (which would have created it).
+            # If we are just starting the UI, we should skip creating the file handler if the dir doesn't exist.
+            
+            should_create = force_recreate or (target_log_dir and os.path.exists(target_log_dir))
+            
+            if has_real_device and should_create:
                 try:
                     # Create directory only when actually creating the file handler
                     os.makedirs(target_log_dir, exist_ok=True)
@@ -368,7 +376,7 @@ class AgentAssistant:
                     if not logger.handlers:
                         logger.addHandler(logging.NullHandler())
             else:
-                # Delay file handler creation until device is initialized
+                # Delay file handler creation until directory is created by the crawler
                 # Use NullHandler for now to avoid creating directories
                 if not logger.handlers:
                     logger.addHandler(logging.NullHandler())

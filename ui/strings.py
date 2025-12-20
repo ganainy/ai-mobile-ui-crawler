@@ -91,6 +91,7 @@ MOBSF_API_URL_PLACEHOLDER = "Your MobSF API URL"
 # ========== Buttons ==========
 PRE_CHECK_TOOLTIP = "Run pre-crawl validation checks for services and configuration"
 GENERATE_REPORT_TOOLTIP = "Generate a report from the crawl data"
+OPEN_SESSION_FOLDER_TOOLTIP = "Open the current session's output folder in the file explorer"
 
 # ========== CLI Messages ==========
 CLI_ERROR_PREFIX = "[ERROR]"

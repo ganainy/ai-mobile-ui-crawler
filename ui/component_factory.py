@@ -873,6 +873,14 @@ class ComponentFactory:
         )
         pre_check_btn.clicked.connect(controls_handler.perform_pre_crawl_validation)
 
+        # Add open session folder button
+        controls_handler.open_session_folder_btn = QPushButton("📂 Open Session Folder")
+        controls_handler.open_session_folder_btn.setToolTip(
+            "Open the current session's output folder in the file explorer"
+        )
+        controls_handler.open_session_folder_btn.setEnabled(True)
+        controls_handler.open_session_folder_btn.clicked.connect(controls_handler.open_session_folder)
+
         # Add generate report button
         controls_handler.generate_report_btn = QPushButton("📄 Generate Report (PDF)")
         controls_handler.generate_report_btn.setToolTip(
@@ -886,6 +894,7 @@ class ComponentFactory:
         controls_handler.stop_btn.clicked.connect(controls_handler.stop_crawler)
 
         layout.addWidget(pre_check_btn)
+        layout.addWidget(controls_handler.open_session_folder_btn)
         layout.addWidget(controls_handler.generate_report_btn)
         layout.addWidget(controls_handler.start_btn)
         layout.addWidget(controls_handler.stop_btn)
