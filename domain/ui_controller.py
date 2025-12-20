@@ -43,6 +43,7 @@ from ui.report_manager import ReportManager
 from ui.agent_manager import AgentManager
 from ui.ui_utils import update_screenshot
 from ui.logo_widget import LogoWidget
+from domain.prompt_builder import PromptBuilder
 
 
 class CrawlerControllerWindow(QMainWindow):
@@ -135,14 +136,25 @@ class CrawlerControllerWindow(QMainWindow):
         # Load configuration
         self.config_manager.load_config()
 
-        # Initialize AgentAssistant after config is loaded
-        self.agent_manager.init_agent()
+        # Initialize AgentAssistant after config is loaded (deferred to prevent UI freeze on startup)
+        # Use a small delay to allow the window to render first
+        QTimer.singleShot(100, lambda: self.agent_manager.init_agent())
 
         # Attempt to load cached health apps
         self._attempt_load_cached_health_apps()
 
         # Connect signals to slots
         self._connect_signals()
+
+        # Initialize preview prompt builder and timer
+        self._preview_prompt_builder = PromptBuilder(self.config)
+        self._preview_timer = QTimer(self)
+        self._preview_timer.setSingleShot(True)
+        self._preview_timer.setInterval(500)  # 500ms debounce
+        self._preview_timer.timeout.connect(self.refresh_prompt_preview)
+        
+        # Setup live preview connections
+        self._setup_live_preview_connections()
 
         # Connect the refresh devices button
         if hasattr(self, "refresh_devices_btn") and self.refresh_devices_btn:
@@ -571,6 +583,110 @@ class CrawlerControllerWindow(QMainWindow):
         """Create tooltips for UI elements."""
         from ui.strings import get_tooltips_dict
         return get_tooltips_dict()
+
+    def _setup_live_preview_connections(self):
+        """Connect signals for live prompt preview."""
+        # 1. Prompt Field
+        if "CRAWLER_ACTION_DECISION_PROMPT" in self.config_widgets:
+            prompt_widget = self.config_widgets["CRAWLER_ACTION_DECISION_PROMPT"]
+            if isinstance(prompt_widget, QTextEdit):
+                prompt_widget.textChanged.connect(self._trigger_preview_update)
+                
+        # 2. Available Actions
+        if "CRAWLER_AVAILABLE_ACTIONS" in self.config_widgets:
+            actions_widget = self.config_widgets["CRAWLER_AVAILABLE_ACTIONS"]
+            if hasattr(actions_widget, 'actionsChanged'):
+                actions_widget.actionsChanged.connect(self._trigger_preview_update)
+                
+        # 3. Focus Areas
+        if hasattr(self, 'focus_areas_widget') and self.focus_areas_widget:
+             if hasattr(self.focus_areas_widget, 'focus_areas_changed'):
+                self.focus_areas_widget.focus_areas_changed.connect(
+                    lambda _: self._trigger_preview_update()
+                )
+
+    def _trigger_preview_update(self):
+        """Trigger a debounced preview update."""
+        self._preview_timer.start()
+
+    def refresh_prompt_preview(self):
+        """Regenerate the 'Next AI Input' preview based on current UI state."""
+        try:
+            # Gather current values
+            
+            # 1. Prompt Template
+            prompt_template = ""
+            if "CRAWLER_ACTION_DECISION_PROMPT" in self.config_widgets:
+                prompt_widget = self.config_widgets["CRAWLER_ACTION_DECISION_PROMPT"]
+                if isinstance(prompt_widget, QTextEdit):
+                    prompt_template = prompt_widget.toPlainText()
+            
+            # 2. Available Actions
+            available_actions = {}
+            if "CRAWLER_AVAILABLE_ACTIONS" in self.config_widgets:
+                actions_widget = self.config_widgets["CRAWLER_AVAILABLE_ACTIONS"]
+                if hasattr(actions_widget, 'get_enabled_actions'):
+                    available_actions = actions_widget.get_enabled_actions()
+            
+            # 3. Focus Areas
+            focus_areas = []
+            if hasattr(self, 'focus_areas_widget') and self.focus_areas_widget:
+                if hasattr(self.focus_areas_widget, 'get_enabled_focus_areas'):
+                    # Convert FocusArea objects to dicts if needed, or pass as is 
+                    # PromptBuilder handles objects or dicts for focus areas
+                    focus_areas = [
+                        {
+                            'name': fa.name,
+                            'description': fa.description,
+                            'prompt_modifier': fa.prompt_modifier,
+                            'enabled': fa.enabled,
+                            'priority': fa.priority
+                        } 
+                        for fa in self.focus_areas_widget.get_enabled_focus_areas()
+                    ]
+
+            # Construct Mock Context
+            mock_context = {
+                'available_actions': available_actions,
+                'focus_areas': focus_areas,
+                'xml_context': "<!-- XML Context Placeholder (Live Preview) -->\n<root>\n  <node text='Example App UI' />\n</root>",
+                'ocr_context': [
+                    {'text': 'Example Button', 'bounds': '[100,200][300,400]'},
+                    {'text': 'Menu Icon', 'bounds': '[10,10][50,50]'}
+                ],
+                'action_history': [
+                    {
+                        'step_number': 1, 
+                        'action_description': 'launched_app', 
+                        'execution_success': True,
+                        'to_screen_id': '0'
+                    }
+                ],
+                'current_screen_actions': [],
+                'current_screen_id': '0',
+                'visited_screens': [{'screen_id': '0', 'activity_name': 'MainActivity', 'visit_count': 1}]
+            }
+            
+            # Generate Prompt
+            # We don't need a static prompt part here, PromptBuilder will generate it
+            # using the provided available_actions in mock_context if we logic it right,
+            # OR we can let it use self.cfg. But we want the LIVE available actions.
+            
+            # PromptBuilder.format_prompt uses context['available_actions'] override if present
+            # as per my refactor.
+            
+            preview_text = self._preview_prompt_builder.format_prompt(
+                prompt_template=prompt_template,
+                context=mock_context
+            )
+            
+            # Update Display
+            # Add a visual indicator that this is a PREVIEW
+            preview_header = "🔍 LIVE PREVIEW (Based on current settings)\n" + ("-" * 40) + "\n"
+            self.update_ai_input(preview_header + preview_text)
+            
+        except Exception as e:
+            self.log_message(f"Error updating prompt preview: {e}", "red")
 
     def _connect_signals(self):
         """Connect signals to slots safely."""

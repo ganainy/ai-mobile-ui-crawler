@@ -3,7 +3,7 @@
 import logging
 from typing import Any, Dict, List, Optional
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QFrame,
@@ -16,6 +16,8 @@ from PySide6.QtWidgets import (
 
 class AvailableActionsWidget(QWidget):
     """Widget for displaying and managing available crawler actions with checkboxes."""
+    
+    actionsChanged = Signal()  # Emitted when any action is toggled
     
     def __init__(self, actions_service: Optional[Any] = None, parent: Optional[QWidget] = None):
         """
@@ -177,7 +179,7 @@ class AvailableActionsWidget(QWidget):
             if success:
                 # No need to reload - checkbox state is already correct and database is updated
                 # Reloading would reset scroll position unnecessarily
-                pass
+                self.actionsChanged.emit()
             else:
                 logging.error(f"Failed to update action '{action_name}': {message}")
                 # Revert checkbox state on failure
