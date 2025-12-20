@@ -27,6 +27,60 @@ except ImportError as e:
     logging.warning(f"⚠️ lxml not available, falling back to xml.etree.ElementTree. Error: {e}")
 import re
 
+
+def repair_json_string(s: str) -> str:
+    """Repair common LLM JSON errors."""
+    # Remove trailing commas before closing braces/brackets
+    s = re.sub(r',\s*([\]}])', r'\1', s)
+    
+    # Handle unescaped backslashes (very common in reasoning or paths)
+    # This is tricky; we want to escape backslashes that aren't part of a valid escape sequence
+    # Valid: \", \\, \/, \b, \f, \n, \r, \t, \uXXXX
+    # We'll just escape all backslashes that aren't followed by one of those
+    def escape_backslash(match):
+        next_char = match.group(1)
+        if next_char in ['"', '\\', '/', 'b', 'f', 'n', 'r', 't', 'u']:
+            return match.group(0)
+        return '\\\\' + next_char
+        
+    s = re.sub(r'\\(.)', escape_backslash, s, flags=re.DOTALL)
+    
+    # Also handle naked backslashes at the end of the string
+    if s.endswith('\\'):
+        s = s[:-1] + '\\\\'
+        
+    return s
+
+
+def parse_json_robust(text: str) -> Dict[str, Any]:
+    """Robust JSON parsing with fallback and repair."""
+    if not text:
+        return {}
+    
+    # 1. Direct parse
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+    
+    # 2. Markdown extraction
+    json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', text, re.DOTALL)
+    if json_match:
+        try:
+            return json.loads(repair_json_string(json_match.group(1)))
+        except json.JSONDecodeError:
+            pass
+    
+    # 3. Brace extraction
+    json_match = re.search(r'(\{.*\})', text, re.DOTALL)
+    if json_match:
+        try:
+            return json.loads(repair_json_string(json_match.group(1)))
+        except json.JSONDecodeError:
+            pass
+            
+    return {}
+
 # --- Global Script Start Time (for ElapsedTimeFormatter) ---
 SCRIPT_START_TIME = time.time()
 

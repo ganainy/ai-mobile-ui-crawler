@@ -156,10 +156,15 @@ DEFAULT_MAX_TOKENS = 4096
 LOOP_VISIT_THRESHOLD = 3
 LOOP_HISTORY_LENGTH = 6
 
+# ========== Exploration Journal Constants ==========
+
+# Default max length for AI exploration journal (characters)
+EXPLORATION_JOURNAL_MAX_LENGTH_DEFAULT = 2000
+
 # ========== Logging Constants ==========
 
-# AI interaction log filename
-AI_LOG_FILENAME = 'readable.log'
+# AI interaction log filename (unified log for all crawler activity)
+AI_LOG_FILENAME = 'crawler.log'
 
 # ========== Provider Defaults ==========
 

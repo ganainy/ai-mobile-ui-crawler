@@ -599,28 +599,9 @@ Return the JSON classification now:"""
                     if not response_text or len(response_text.strip()) == 0:
                         raise ValueError("Empty response from AI")
                     
-                    # Strip markdown code blocks if present
-                    clean_response = response_text.strip()
-                    if clean_response.startswith("```"):
-                        # Remove opening ```json or ``` line
-                        lines = clean_response.split("\n")
-                        if lines[0].startswith("```"):
-                            lines = lines[1:]
-                        # Remove closing ``` if present
-                        if lines and lines[-1].strip() == "```":
-                            lines = lines[:-1]
-                        clean_response = "\n".join(lines)
-                    
-                    # Extract JSON
-                    json_start = clean_response.find("{")
-                    json_end = clean_response.rfind("}") + 1
-                    if json_start >= 0 and json_end > json_start:
-                        json_text = clean_response[json_start:json_end]
-                    else:
-                        raise ValueError(f"No valid JSON found in response. Response length: {len(response_text)}")
-                        
-                    # Parse JSON
-                    batch_data = json.loads(json_text)
+                    # Parse JSON using robust utility
+                    from utils.utils import parse_json_robust
+                    batch_data = parse_json_robust(response_text)
                     batch_classifications = batch_data.get("classifications", [])
                     
                     # Store results

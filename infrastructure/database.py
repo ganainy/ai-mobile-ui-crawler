@@ -178,7 +178,8 @@ class DatabaseManager:
             start_activity TEXT NOT NULL,
             start_time DATETIME DEFAULT CURRENT_TIMESTAMP,
             end_time DATETIME,
-            status TEXT DEFAULT 'STARTED'
+            status TEXT DEFAULT 'STARTED',
+            exploration_journal TEXT
         );
         """
         sql_create_steps_log = f"""
@@ -253,6 +254,17 @@ class DatabaseManager:
                     pass
             else:
                 pass
+            
+            # Check and add exploration_journal column to runs table if not exists
+            cursor.execute("PRAGMA table_info(runs)")
+            runs_columns = [row[1] for row in cursor.fetchall()]
+            if "exploration_journal" not in runs_columns:
+                try:
+                    self._execute_sql("ALTER TABLE runs ADD COLUMN exploration_journal TEXT;", commit=True)
+                except sqlite3.Error:
+                    # Column might have been added by another thread, ignore
+                    pass
+            
             self._execute_sql(f"CREATE INDEX IF NOT EXISTS idx_steps_log_run_step ON steps_log(run_id, step_number);", commit=True)
             self._execute_sql(f"CREATE INDEX IF NOT EXISTS idx_steps_log_from_screen ON steps_log(from_screen_id);", commit=True)
             self._execute_sql(sql_create_transitions_simplified, commit=True)
@@ -287,6 +299,35 @@ class DatabaseManager:
             sql = "UPDATE runs SET status = ? WHERE run_id = ?"
             params = (status, run_id)
         result = self._execute_sql(sql, params, commit=True)
+        return result is not None
+
+    def get_exploration_journal(self, run_id: int) -> Optional[str]:
+        """
+        Get the exploration journal for a run.
+        
+        Args:
+            run_id: The run ID to query
+            
+        Returns:
+            The exploration journal text, or None/empty string if not set
+        """
+        sql = "SELECT exploration_journal FROM runs WHERE run_id = ?"
+        result = self._execute_sql(sql, (run_id,), fetch_one=True, commit=False)
+        return result[0] if result and result[0] else ""
+
+    def update_exploration_journal(self, run_id: int, journal: str) -> bool:
+        """
+        Update the exploration journal for a run.
+        
+        Args:
+            run_id: The run ID to update
+            journal: The new exploration journal text
+            
+        Returns:
+            True if update was successful
+        """
+        sql = "UPDATE runs SET exploration_journal = ? WHERE run_id = ?"
+        result = self._execute_sql(sql, (journal, run_id), commit=True)
         return result is not None
 
     def insert_screen(self, composite_hash: str, xml_hash: str, visual_hash: str,

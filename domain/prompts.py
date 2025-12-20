@@ -4,6 +4,10 @@ from typing import Dict, Optional, Any
 JSON_OUTPUT_SCHEMA = {
     "type": "object",
     "properties": {
+        "exploration_journal": {
+            "type": "string",
+            "description": "Updated exploration journal. Include what happened from your action. Compress older entries if needed to fit within the character limit."
+        },
         "action": {"type": "string"},
         "target_identifier": {"type": "string"},
         "target_bounding_box": {
@@ -16,7 +20,7 @@ JSON_OUTPUT_SCHEMA = {
         "input_text": {"type": ["string", "null"]},
         "reasoning": {"type": "string"},
     },
-    "required": ["action", "target_identifier", "reasoning"]
+    "required": ["exploration_journal", "action", "target_identifier", "reasoning"]
 }
 
 # Fallback available actions (used only when config is not available)
@@ -73,12 +77,28 @@ Strategize your actions to:
 
 # Fixed part - automatically appended by code, not editable by users
 ACTION_DECISION_FIXED_PART = """
+EXPLORATION JOURNAL RULES:
+- You MUST output an updated exploration_journal that records your actions and their outcomes
+- Maximum journal length: {journal_max_length} characters
+- FORMAT REQUIRED - Each entry must include:
+  • What action you took: "CLICKED addMedication" or "SCROLLED down"
+  • What happened: "→ NEW: time selection screen" or "→ SAME screen (no effect)"
+  • Key observations about the new/current screen
+- Example format: "CLICKED ctaButton → NEW: medication list screen with 3 items. CLICKED back → returned to home."
+- When approaching limit, compress OLDEST entries but keep:
+  • Dead-ends to avoid (actions that had no effect)
+  • Last 3+ actions with full detail
+- On first action (empty journal), describe the initial screen state
+- CRITICAL: If an action keeps you on the same screen, note it as ineffective to avoid repeating
+
 Use the following JSON schema to structure your output:
 {json_schema}
 
-IMPORTANT: For target_identifier, you MUST use:
-- If OCR context is provided: Use the exact "ocr_X" IDs listed (e.g., "ocr_0", "ocr_5"). Do NOT invent element names.
-- If XML context is provided: Use the resource-id or unique identifier from the XML.
+IMPORTANT - target_identifier rules:
+- For OCR context: Use exact "ocr_X" IDs (e.g., "ocr_0", "ocr_5")
+- For XML context: Use ONLY the resource-id attribute (e.g., "addMedication", "ctaButton")
+- NEVER use class names like "android.widget.Button" or "android.view.View" - these are NOT valid identifiers
+- For scroll/swipe/back actions: Use "screen" as the target_identifier
 
 Available actions:
 {action_list}

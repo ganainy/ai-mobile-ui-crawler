@@ -144,7 +144,7 @@ class CrawlerLoop:
                         os.makedirs(log_dir, exist_ok=True)
                         log_file_name = self.config.get('LOG_FILE_NAME')
                         if not log_file_name:
-                            log_file_name = 'full.log'  # Use default from module constant if not set
+                            log_file_name = 'crawler.log'  # Unified log file
                         log_file = os.path.join(log_dir, log_file_name)
                         
                         # Add file handler to root logger if not already present
@@ -387,12 +387,15 @@ class CrawlerLoop:
             
             # UI_SCREENSHOT print removed (handled above with fresh candidate)
             
-            # 6. Build context for AI
+            # 6. Load exploration journal from DB
+            exploration_journal = ""
+            if self.db_manager and self.current_run_id:
+                exploration_journal = self.db_manager.get_exploration_journal(self.current_run_id) or ""
+            
+            # 7. Detect if stuck (still uses internal tracking for now)
             action_history, visited_screens, current_screen_actions = self.context_builder.get_crawl_context(
                 self.current_run_id, from_screen_id
             )
-            
-            # 7. Detect if stuck
             is_stuck, stuck_reason = self.stuck_detector.check_if_stuck(
                 from_screen_id, current_screen_visit_count, action_history, current_screen_actions
             )
@@ -418,8 +421,6 @@ class CrawlerLoop:
             action_result = self.agent_assistant._get_next_action_langchain(
                 screenshot_bytes=final_screen.screenshot_bytes,
                 xml_context=final_screen.xml_content or "",
-                action_history=action_history,
-                visited_screens=visited_screens,
                 current_screen_actions=current_screen_actions,
                 current_screen_id=from_screen_id,
                 current_screen_visit_count=current_screen_visit_count,
@@ -427,7 +428,8 @@ class CrawlerLoop:
                 last_action_feedback=self.last_action_feedback,
                 is_stuck=is_stuck,
                 stuck_reason=stuck_reason if is_stuck else None,
-                ocr_results=candidate_screen.ocr_results if candidate_screen else None
+                ocr_results=candidate_screen.ocr_results if candidate_screen else None,
+                exploration_journal=exploration_journal
             )
             ai_decision_time = time.time() - ai_decision_start
             
@@ -440,7 +442,11 @@ class CrawlerLoop:
                 self.last_action_feedback = "AI decision failed"
                 return True
             
-            action_data, confidence, token_count, ai_input_prompt = action_result
+            action_data, confidence, token_count, ai_input_prompt, new_exploration_journal = action_result
+            
+            # Save the updated exploration journal to DB
+            if self.db_manager and self.current_run_id and new_exploration_journal:
+                self.db_manager.update_exploration_journal(self.current_run_id, new_exploration_journal)
             
             # Check for shutdown/pause after AI return but before action execution
             # This allows "pausing mid-thought"

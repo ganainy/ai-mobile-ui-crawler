@@ -57,7 +57,7 @@ class Tools:
 # Define the Pydantic model for ActionData
 class ActionData(BaseModel):
     action: str
-    target_identifier: str
+    target_identifier: Optional[str] = None  # Optional for actions like scroll
     target_bounding_box: Optional[Dict[str, Any]] = None
     input_text: Optional[str] = None
     reasoning: str
@@ -337,52 +337,19 @@ class AgentAssistant:
         # This allows path regeneration to work without directory locks
         
         # Configure logger settings
+        # Configure logger settings
         logger.setLevel(logging.INFO)
-        logger.propagate = False
-        if logger.hasHandlers() and not force_recreate:
-            return  # Already has handlers and not forcing recreate
-
-        if target_log_dir:
-            # Check if we have a real device ID - don't create directory for unknown_device
-            # Get device info from path_manager if available
-            if hasattr(self.cfg, '_path_manager'):
-                path_manager = self.cfg._path_manager
-                device_name = path_manager.get_device_name()
-                device_udid = path_manager.get_device_udid()
-            else:
-                device_name = None
-                device_udid = None
-            has_real_device = device_name or device_udid
-            
-            # Only create directory and file handler if we have a real device or if forcing recreate
-            # BUT: To prevent premature dashboard folder creation, we check if the directory actually exists
-            # or if we are clearly running a crawl (which would have created it).
-            # If we are just starting the UI, we should skip creating the file handler if the dir doesn't exist.
-            
-            should_create = force_recreate or (target_log_dir and os.path.exists(target_log_dir))
-            
-            if has_real_device and should_create:
-                try:
-                    # Create directory only when actually creating the file handler
-                    os.makedirs(target_log_dir, exist_ok=True)
-                    readable_path = os.path.join(target_log_dir, AI_LOG_FILENAME)
-                    fh_readable = logging.FileHandler(readable_path, encoding='utf-8')
-                    fh_readable.setLevel(logging.INFO)
-                    fh_readable.setFormatter(logging.Formatter('%(message)s'))
-                    logger.addHandler(fh_readable)
-                except OSError as e:
-                    logging.error(f"Could not create AI interactions readable log file: {e}")
-                    if not logger.handlers:
-                        logger.addHandler(logging.NullHandler())
-            else:
-                # Delay file handler creation until directory is created by the crawler
-                # Use NullHandler for now to avoid creating directories
-                if not logger.handlers:
-                    logger.addHandler(logging.NullHandler())
-        else:
-            logging.warning("Log directory not available, AI interaction readable log will not be saved.")
-            if not logger.handlers:
-                logger.addHandler(logging.NullHandler())
+        logger.propagate = True  # Propagate to root logger (which writes to crawler.log)
+        
+        # We don't add specific handlers anymore - we rely on the root logger's handler
+        # which is configured in crawler_loop.py to write to the single log file.
+        
+        # Helper logic to ensure no old handlers remain
+        for handler in list(logger.handlers):
+            try:
+                logger.removeHandler(handler)
+            except Exception:
+                pass
 
 
     def _prepare_image_part(self, screenshot_bytes: Optional[bytes]) -> Optional[Image.Image]:
@@ -496,15 +463,16 @@ class AgentAssistant:
                                    last_action_feedback: Optional[str] = None,
                                    is_stuck: bool = False,
                                    stuck_reason: Optional[str] = None,
-                                   ocr_results: Optional[List[Dict[str, Any]]] = None) -> Optional[Tuple[Dict[str, Any], float, int, Optional[str]]]:
+                                   ocr_results: Optional[List[Dict[str, Any]]] = None,
+                                   exploration_journal: Optional[str] = None) -> Optional[Tuple[Dict[str, Any], float, int, Optional[str], Optional[str]]]:
         """Get the next action using LangChain decision chain.
         
         Args:
             screenshot_bytes: Screenshot image bytes (optional, for future vision support)
             xml_context: XML representation of current screen
-            action_history: List of structured action history entries with success/failure info
-            visited_screens: List of visited screens with visit counts (filtered to exclude system dialogs)
-            current_screen_actions: List of actions already tried on current screen
+            action_history: List of structured action history entries with success/failure info (DEPRECATED - use exploration_journal)
+            visited_screens: List of visited screens with visit counts (DEPRECATED - use exploration_journal)
+            current_screen_actions: List of actions already tried on current screen (DEPRECATED - use exploration_journal)
             current_screen_id: ID of current screen (if known)
             current_screen_visit_count: Number of times current screen has been visited
             current_composite_hash: Hash of current screen state
@@ -512,9 +480,10 @@ class AgentAssistant:
             is_stuck: Whether the crawler is detected to be stuck on the same screen
             stuck_reason: Reason why the crawler is considered stuck
             ocr_results: List of OCR detected elements (text, bounds, confidence)
+            exploration_journal: AI-maintained exploration journal (replaces action_history, visited_screens, current_screen_actions)
             
         Returns:
-            Tuple of (action_data dict, confidence float, token_count int, ai_input_prompt str) or None on error
+            Tuple of (action_data dict, confidence float, token_count int, ai_input_prompt str, exploration_journal str) or None on error
         """
         try:
             # Determine which context sources to use based on config
@@ -527,9 +496,8 @@ class AgentAssistant:
                 "screenshot_bytes": screenshot_bytes,
                 "xml_context": None, # Will be set later if enabled
                 "ocr_context": ocr_results if ContextSource.OCR in context_source else None,
-                "action_history": action_history or [],
-                "visited_screens": visited_screens or [],
-                "current_screen_actions": current_screen_actions or [],
+                "exploration_journal": exploration_journal or "",
+                "current_screen_actions": current_screen_actions or [],  # For stuck detection
                 "current_screen_id": current_screen_id,
                 "current_screen_visit_count": current_screen_visit_count or 0,
                 "current_composite_hash": current_composite_hash or "",
@@ -674,7 +642,9 @@ class AgentAssistant:
 
             # Return with metadata (confidence and token count are placeholders for now)
             # Include the AI input prompt for database storage
-            return validated_data, 0.0, 0, ai_input_prompt
+            # Also include the exploration_journal from the AI response
+            new_exploration_journal = chain_result.get('exploration_journal', '') if chain_result else ''
+            return validated_data, 0.0, 0, ai_input_prompt, new_exploration_journal
             
         except ValidationError as e:
             # Clear prepared image on error

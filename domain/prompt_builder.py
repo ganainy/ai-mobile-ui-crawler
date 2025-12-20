@@ -12,6 +12,8 @@ from typing import Any, Dict, List, Optional
 
 from langchain_core.runnables import RunnableLambda
 from domain.prompts import JSON_OUTPUT_SCHEMA, get_available_actions
+from utils.utils import parse_json_robust, repair_json_string
+from config.numeric_constants import EXPLORATION_JOURNAL_MAX_LENGTH_DEFAULT
 
 logger = logging.getLogger(__name__)
 
@@ -31,20 +33,19 @@ class ActionDecisionChain:
             result = self.chain.invoke(context)
             # If result is a string, try to parse as JSON
             if isinstance(result, str):
-                try:
-                    return json.loads(result)
-                except json.JSONDecodeError:
-                    # Try to extract JSON from text if wrapped
-                    json_match = re.search(r'\{[^{}]*\}', result, re.DOTALL)
-                    if json_match:
-                        return json.loads(json_match.group())
-                    from config.numeric_constants import RESULT_TRUNCATION_LENGTH
-                    logger.warning(f"Could not parse JSON from chain result: {result[:RESULT_TRUNCATION_LENGTH]}")
-                    return {}
+                return self.parse_json(result)
             return result if isinstance(result, dict) else {}
         except Exception as e:
             logger.error(f"Error running ActionDecisionChain: {e}", exc_info=True)
             return {}
+
+    def parse_json(self, text: str) -> Dict[str, Any]:
+        """Robust JSON parsing with fallback and repair."""
+        result = parse_json_robust(text)
+        if not result:
+            from config.numeric_constants import RESULT_TRUNCATION_LENGTH
+            logger.warning(f"Could not parse JSON from result: {text[:RESULT_TRUNCATION_LENGTH]}")
+        return result
 
 
 class PromptBuilder:
@@ -83,10 +84,14 @@ class PromptBuilder:
         action_list_str = "\n".join([f"- {action}: {desc}" for action, desc in available_actions.items()])
         json_output_guidance = json.dumps(JSON_OUTPUT_SCHEMA, indent=2)
         
+        # Get journal max length from config or use default
+        journal_max_length = self.cfg.get('EXPLORATION_JOURNAL_MAX_LENGTH', EXPLORATION_JOURNAL_MAX_LENGTH_DEFAULT)
+        
         # Create formatted prompt string
         formatted_prompt = prompt_template.format(
             json_schema=json_output_guidance,
-            action_list=action_list_str
+            action_list=action_list_str,
+            journal_max_length=journal_max_length
         )
         
         # Log static prompt parts once
@@ -101,15 +106,12 @@ class PromptBuilder:
         def parse_json_output(llm_output: str) -> Dict[str, Any]:
             """Parse JSON from LLM output."""
             try:
-                return json.loads(llm_output)
-            except json.JSONDecodeError:
-                json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', llm_output, re.DOTALL)
-                if json_match:
-                    return json.loads(json_match.group(1))
-                json_match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', llm_output, re.DOTALL)
-                if json_match:
-                    return json.loads(json_match.group())
-                logger.warning(f"Could not parse JSON from LLM output: {llm_output[:200]}")
+                result = parse_json_robust(llm_output)
+                if not result:
+                    logger.warning(f"Could not parse JSON from LLM output: {llm_output[:200]}")
+                return result
+            except Exception as e:
+                logger.error(f"Error in parse_json_output: {e}")
                 return {}
         
         # Create chain: format prompt -> LLM -> parse JSON
@@ -139,10 +141,14 @@ class PromptBuilder:
             action_list_str = "\n".join([f"- {action}: {desc}" for action, desc in available_actions.items()])
             json_output_guidance = json.dumps(JSON_OUTPUT_SCHEMA, indent=2)
             
+            # Get journal max length from config or use default
+            journal_max_length = self.cfg.get('EXPLORATION_JOURNAL_MAX_LENGTH', EXPLORATION_JOURNAL_MAX_LENGTH_DEFAULT)
+            
             try:
                 formatted_prompt = prompt_template.format(
                     json_schema=json_output_guidance,
-                    action_list=action_list_str
+                    action_list=action_list_str,
+                    journal_max_length=journal_max_length
                 )
             except Exception as e:
                 # Fallback if specific keys are missing in custom template
@@ -203,129 +209,62 @@ class PromptBuilder:
             
             forbidden_text = ""
             if forbidden_actions:
-                forbidden_lines = ["\n🚫 FORBIDDEN ACTIONS - DO NOT REPEAT THESE:"]
+                forbidden_lines = ["FORBIDDEN (these kept you here):"]
                 for action in forbidden_actions:
                     forbidden_lines.append(f"  - {action}")
                 forbidden_text = "\n".join(forbidden_lines)
             
-            navigation_hints = """
-Look for these navigation elements in the XML or Visual Elements (HIGHEST PRIORITY):
-- Bottom navigation tabs: tv_home, tv_assortment, tv_cart, tv_account, tv_erx, or any element with "tv_" prefix in bottom navigation area
-- Navigation buttons: Any element with "nav", "menu", "tab", "bar" in resource-id
-- Back buttons: Elements with "back", "arrow", "up" in resource-id or content-desc, or use the "back" action
-- Menu items: Elements that clearly lead to different app sections
-- Tab indicators: Elements that switch between different views/screens
-"""
-            
             stuck_warning = f"""
-⚠️ CRITICAL: STUCK DETECTION - {stuck_reason}
-
-You are stuck in a loop on the same screen. You MUST break out of this loop immediately.
-
+** STUCK: {stuck_reason} **
+You must escape this screen. DO NOT repeat actions that kept you here.
 {forbidden_text}
 
-PRIORITY ORDER FOR YOUR NEXT ACTION (choose one):
-1. 🎯 NAVIGATION ACTIONS (HIGHEST PRIORITY) - Use bottom navigation or menu items:
-   - Click on navigation tabs (tv_home, tv_assortment, tv_cart, tv_account, etc.)
-   - These will take you to DIFFERENT screens and break the loop
-   {navigation_hints}
+ESCAPE OPTIONS:
+1. Use "back" action to return to previous screen
+2. Click navigation elements: skipButton, ctaButton, toolbarBackIcon, nav tabs
+3. Scroll only if you haven't scrolled yet
 
-2. ⬅️ BACK BUTTON (HIGH PRIORITY):
-   - Use the "back" action to exit this screen
-   - This will return you to a previous screen
-
-3. 📜 SCROLL ACTIONS (MEDIUM PRIORITY):
-   - Only if scrolling reveals NEW navigation elements you haven't tried
-   - Do NOT scroll if you've already scrolled on this screen
-
-4. 🚫 DO NOT:
-   - Repeat any of the forbidden actions listed above
-   - Click buttons you've already clicked on this screen
-   - Try variations of actions you've already attempted
-   - Stay on this screen - you MUST navigate away
-
-YOUR TASK: Choose an action that will take you to a DIFFERENT screen.
-In your reasoning, explicitly state: "I am navigating away from this screen to break the loop by..."
+State in reasoning: "I am escaping by..."
 """
             prompt_parts.append(stuck_warning)
             dynamic_parts.append(stuck_warning)
         
-        # Format action history
-        if context.get("action_history"):
-            action_history = context['action_history']
-            if action_history:
-                history_lines = ["\n\nRecent Actions:"]
-                for step in action_history[-10:]:
-                    step_num = step.get('step_number', '?')
-                    action_desc = step.get('action_description', 'unknown action')
-                    success = step.get('execution_success', False)
-                    error_msg = step.get('error_message')
-                    from_screen_id = step.get('from_screen_id')
-                    to_screen_id = step.get('to_screen_id')
-                    
-                    status = "SUCCESS" if success else "FAILED"
-                    details = []
-                    if to_screen_id:
-                        if from_screen_id == to_screen_id:
-                            details.append("stayed on same screen")
-                        else:
-                            details.append(f"navigated to screen #{to_screen_id}")
-                    elif success:
-                        details.append("no navigation occurred")
-                    if error_msg:
-                        details.append(f"error: {error_msg}")
-                    
-                    detail_str = f" ({', '.join(details)})" if details else ""
-                    history_lines.append(f"- Step {step_num}: {action_desc} → {status}{detail_str}")
-                
-                actions_part = "\n".join(history_lines)
-                prompt_parts.append(actions_part)
-                dynamic_parts.append(actions_part)
+        # Add exploration journal
+        exploration_journal = context.get("exploration_journal", "")
+        if exploration_journal:
+            journal_part = f"\n\nExploration Journal (your action history):\n{exploration_journal}"
+            prompt_parts.append(journal_part)
+            dynamic_parts.append(journal_part)
+        else:
+            # First step - no journal yet
+            journal_hint = "\n\nExploration Journal: Empty (first action - describe initial screen state)"
+            prompt_parts.append(journal_hint)
+            dynamic_parts.append(journal_hint)
         
-        # Format visited screens
-        if context.get("visited_screens"):
-            visited_screens = context['visited_screens']
-            if visited_screens:
-                screens_lines = ["\n\nVisited Screens (this run):"]
-                for screen in visited_screens[:15]:
-                    screen_id = screen.get('screen_id', '?')
-                    activity = screen.get('activity_name', 'UnknownActivity')
-                    visit_count = screen.get('visit_count', 0)
-                    screens_lines.append(f"- Screen #{screen_id} ({activity}): visited {visit_count} time{'s' if visit_count != 1 else ''}")
-                
-                screens_part = "\n".join(screens_lines)
-                prompt_parts.append(screens_part)
-                dynamic_parts.append(screens_part)
-        
-        # Format current screen actions
-        if context.get("current_screen_actions") and len(context['current_screen_actions']) > 0:
-            current_screen_actions = context['current_screen_actions']
+        # Add actions already tried on current screen (lightweight, always shown)
+        current_screen_actions = context.get("current_screen_actions", [])
+        if current_screen_actions:
             current_screen_id = context.get('current_screen_id')
-            actions_lines = [f"\n\nActions already tried on this screen (Screen #{current_screen_id}):"]
-            for action in current_screen_actions:
+            actions_tried_lines = [f"\n\nActions Tried on This Screen (#{current_screen_id}):"]
+            for action in current_screen_actions[-8:]:  # Last 8 actions on this screen
                 action_desc = action.get('action_description', 'unknown action')
                 success = action.get('execution_success', False)
-                error_msg = action.get('error_message')
                 to_screen_id = action.get('to_screen_id')
                 
-                status = "SUCCESS" if success else "FAILED"
-                details = []
-                if to_screen_id:
-                    if to_screen_id == current_screen_id:
-                        details.append("stayed on same screen")
+                if success:
+                    if to_screen_id and to_screen_id != current_screen_id:
+                        result = f"-> screen #{to_screen_id}"
                     else:
-                        details.append(f"navigated to screen #{to_screen_id}")
-                elif success:
-                    details.append("no navigation occurred")
-                if error_msg:
-                    details.append(f"error: {error_msg}")
+                        result = "-> stayed (ineffective)"
+                else:
+                    result = "-> FAILED"
                 
-                detail_str = f" ({', '.join(details)})" if details else ""
-                actions_lines.append(f"- {action_desc} → {status}{detail_str}")
+                actions_tried_lines.append(f"  - {action_desc} {result}")
             
-            current_actions_part = "\n".join(actions_lines)
-            prompt_parts.append(current_actions_part)
-            dynamic_parts.append(current_actions_part)
+            actions_tried_lines.append("Choose something NOT in this list.")
+            actions_tried_part = "\n".join(actions_tried_lines)
+            prompt_parts.append(actions_tried_part)
+            dynamic_parts.append(actions_tried_part)
         
         if context.get("last_action_feedback"):
             feedback_part = f"\n\nLast action feedback: {context['last_action_feedback']}"
