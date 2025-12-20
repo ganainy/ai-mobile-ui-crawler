@@ -46,9 +46,15 @@ class ReportManager:
             return False
 
         # Prepare output
-        reports_dir = Path(self.config.get("PDF_REPORT_DIR", ""))
-        if not reports_dir:
-            reports_dir = resolved_session_dir / "reports"
+        reports_dir_str = self.config.get("PDF_REPORT_DIR", "")
+        if reports_dir_str and "{session_dir}" in reports_dir_str:
+            reports_dir_str = reports_dir_str.replace("{session_dir}", str(resolved_session_dir))
+            
+        if reports_dir_str:
+             reports_dir = Path(reports_dir_str)
+        else:
+             reports_dir = resolved_session_dir / "reports"
+             
         reports_dir.mkdir(parents=True, exist_ok=True)
 
         pdf_path = str(reports_dir / f"{app_package}_analysis.pdf")
@@ -60,13 +66,15 @@ class ReportManager:
                 output_data_dir=output_data_dir,
                 app_package_for_run=app_package,
             )
-            success = analyzer.analyze_run_to_pdf(run_id, pdf_path)
+            result = analyzer.analyze_run_to_pdf(run_id, pdf_path)
             
-            if success:
+            if result.get("success", False):
                 self.log_callback(f"✅ Report generated: {pdf_path}", "green")
+                return True
             else:
-                self.log_callback("Error: Failed to generate report.", "red")
-            return success
+                error_msg = result.get("error", "Failed to generate report.")
+                self.log_callback(f"Error: {error_msg}", "red")
+                return False
         finally:
             self.busy_callback(False)
 
@@ -81,23 +89,36 @@ class ReportManager:
         try:
             candidates = []
             output_dir = Path(output_data_dir)
-            for sd in output_dir.iterdir():
+            
+            # Check if sessions are in a 'sessions' subdirectory (common structure)
+            sessions_dir = output_dir / "sessions"
+            if sessions_dir.exists() and sessions_dir.is_dir():
+                search_dir = sessions_dir
+            else:
+                search_dir = output_dir
+
+            # Sanitize app package for matching (dots often replaced by underscores)
+            sanitized_package = app_package.replace('.', '_')
+            
+            for sd in search_dir.iterdir():
                 if sd.is_dir() and "_" in sd.name:
-                    parts = sd.name.split("_")
-                    if len(parts) >= 2 and parts[1] == app_package:
+                    # Robust matching: check if sanitized package name is in the directory name
+                    # strict splitting is brittle due to device IDs and extra underscores
+                    if sanitized_package in sd.name:
                         candidates.append(sd)
             
             if not candidates:
-                self.log_callback(f"Error: No session directories found for app '{app_package}'.", "red")
+                self.log_callback(f"Error: No session directories found for app '{app_package}' in {search_dir}.", "red")
                 return None, None
                 
             candidates.sort(key=lambda p: p.name, reverse=True)
             resolved_session_dir = candidates[0]
             db_dir = resolved_session_dir / "database"
-            found_dbs = list(db_dir.glob("*_crawl_data.db")) if db_dir.exists() else []
+            # Check for any .db file
+            found_dbs = list(db_dir.glob("*.db")) if db_dir.exists() else []
             
             if not found_dbs:
-                self.log_callback("Error: No database file found.", "red")
+                self.log_callback(f"Error: No database file found in {db_dir}.", "red")
                 return None, None
                 
             return found_dbs[0], resolved_session_dir

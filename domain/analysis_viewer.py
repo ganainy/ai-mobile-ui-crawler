@@ -199,43 +199,87 @@ class RunAnalyzer:
             
         return metrics
 
-    def _generate_summary_table_html(self, metrics: Dict[str, Any]) -> str:
-        """Generates an HTML table from the metrics dictionary."""
-        
-        html = """
-        <div class="summary-table-container">
-            <h2>Run Summary Metrics</h2>
+    def _generate_error_summary_html(self, steps: List[sqlite3.Row]) -> str:
+        """Generates an HTML table for failed steps."""
+        failed_steps = [s for s in steps if not s['execution_success']]
+        if not failed_steps:
+            return ""
+            
+        html_parts = ["""
+        <div class="summary-section error-section">
+            <h2 style="color: #dc3545; border-bottom-color: #dc3545;">⚠️ Issues Found</h2>
             <table class="summary-table">
-                <tr><th colspan="2">General</th></tr>
-                <tr><td>Total Duration</td><td>{Total Duration}</td></tr>
-                <tr><td>Final Status</td><td>{Final Status}</td></tr>
-                <tr><td>Total Steps</td><td>{Total Steps}</td></tr>
-                
-                <tr><th colspan="2">Coverage</th></tr>
-                <tr><td>Unique Screens Discovered</td><td>{Unique Screens Discovered}</td></tr>
-                <tr><td>Unique Transitions</td><td>{Unique Transitions}</td></tr>
-                <tr><td>Activity Coverage</td><td>{Activity Coverage}</td></tr>
-                <tr><td>Action Distribution</td><td>{Action Distribution}</td></tr>
-                
-                <tr><th colspan="2">Efficiency</th></tr>
-                <tr><td>Steps per New Screen</td><td>{Steps per New Screen}</td></tr>
-                <tr><td>Avg. AI Response Time</td><td>{Avg AI Response Time}</td></tr>
-                <tr><td>Avg. Element Find Time</td><td>{Avg Element Find Time}</td></tr>
-                <tr><td>Total Token Usage</td><td>{Total Token Usage}</td></tr>
-                
-                <tr><th colspan="2">Robustness</th></tr>
-                <tr><td>Action Success Rate</td><td>{Action Success Rate}</td></tr>
-                <tr><td>Execution Failures</td><td>{Execution Failures}</td></tr>
-                <tr><td>Stuck Steps (No-Op)</td><td>{Stuck Steps (No-Op)}</td></tr>
-            </table>
+                <thead>
+                    <tr>
+                        <th style="width: 10%">Step</th>
+                        <th style="width: 20%">Action</th>
+                        <th style="width: 70%">Error Message</th>
+                    </tr>
+                </thead>
+                <tbody>
+        """]
+        
+        for step in failed_steps:
+            action_desc = escape(step['action_description'] or 'N/A')
+            error_msg = escape(step['error_message'] or 'Unknown error')
+            html_parts.append(f"""
+                <tr>
+                    <td style="text-align: center; font-weight: bold;">{step['step_number']}</td>
+                    <td>{action_desc}</td>
+                    <td style="color: #dc3545;">{error_msg}</td>
+                </tr>
+            """)
+            
+        html_parts.append("</tbody></table></div>")
+        return "".join(html_parts)
+
+    def _generate_summary_table_html(self, metrics: Dict[str, Any]) -> str:
+        """Generates a modern HTML summary section."""
+        
+        # Helper for metrics rows
+        def metric_row(label, value):
+             return f"<tr><td>{label}</td><td style='text-align: right; font-weight: 600;'>{value}</td></tr>"
+
+        html = f"""
+        <div class="summary-container">
+            <!-- General Info Card -->
+            <div class="card">
+                <div class="card-header">General Information</div>
+                <div class="card-body">
+                    <table class="metrics-table">
+                         {metric_row('Total Duration', metrics.get('Total Duration', 'N/A'))}
+                         {metric_row('Total Steps', metrics.get('Total Steps', 'N/A'))}
+                         {metric_row('Final Status', metrics.get('Final Status', 'N/A'))}
+                    </table>
+                </div>
+            </div>
+            
+            <!-- Coverage Card -->
+            <div class="card">
+                <div class="card-header">Coverage</div>
+                <div class="card-body">
+                    <table class="metrics-table">
+                         {metric_row('Screens Discovered', metrics.get('Unique Screens Discovered', 'N/A'))}
+                         {metric_row('Unique Transitions', metrics.get('Unique Transitions', 'N/A'))}
+                         {metric_row('Activity Coverage', metrics.get('Activity Coverage', 'N/A'))}
+                    </table>
+                </div>
+            </div>
+            
+            <!-- Efficiency & Robustness Card -->
+            <div class="card">
+                 <div class="card-header">Performance & Health</div>
+                 <div class="card-body">
+                    <table class="metrics-table">
+                         {metric_row('Avg AI Response', metrics.get('Avg AI Response Time', 'N/A'))}
+                         {metric_row('Success Rate', metrics.get('Action Success Rate', 'N/A'))}
+                         {metric_row('Execution Failures', metrics.get('Execution Failures', '0'))}
+                    </table>
+                 </div>
+            </div>
         </div>
         """
-        
-        return html.format(**{k: metrics.get(k, 'N/A') for k in [
-            'Total Duration', 'Final Status', 'Total Steps', 'Unique Screens Discovered',
-            'Unique Transitions', 'Activity Coverage', 'Action Distribution', 'Steps per New Screen',
-            'Avg AI Response Time', 'Avg Element Find Time', 'Total Token Usage', 'Action Success Rate', 'Execution Failures', 'Stuck Steps (No-Op)'
-        ]})
+        return html
 
     def _fetch_run_and_steps_data(self, run_id: int) -> Tuple[Optional[sqlite3.Row], Optional[List[sqlite3.Row]]]:
         if not self.conn:
@@ -291,19 +335,82 @@ class RunAnalyzer:
             logger.error(f"Error encoding image {image_path} to base64: {e}", exc_info=True)
             return None
 
+    def _clean_and_format_json(self, json_str: Optional[str]) -> str:
+        """Cleans, formats, and syntax-highlights JSON string."""
+        if not json_str:
+            return ""
+            
+        # 1. Clean Markdown
+        clean_str = json_str.strip()
+        if clean_str.startswith("```json"): clean_str = clean_str[7:]
+        if clean_str.startswith("```"): clean_str = clean_str[3:]
+        if clean_str.endswith("```"): clean_str = clean_str[:-3]
+        clean_str = clean_str.strip()
+        
+        try:
+            # 2. Parse
+            data = json.loads(clean_str)
+            
+            # 3. Pretty Print
+            pretty = json.dumps(data, indent=2)
+            
+            # 4. Colorize (Simple Regex-free approach for safety)
+            # We escape everything first, then wrap known structures
+            lines = pretty.split('\n')
+            colored_lines = []
+            
+            for line in lines:
+                # Basic heuristic highlighting
+                escaped_line = escape(line)
+                
+                # Highlight Keys: "key":
+                if '"' in escaped_line and ':' in escaped_line:
+                    # Very naive but robust enough for simple JSON: color the part before the first colon
+                    parts = escaped_line.split(':', 1)
+                    key_part = parts[0]
+                    val_part = parts[1]
+                    
+                    # Color key in Blue
+                    # Note: key_part includes spaces/indentation, we want to color the "key"
+                    if '"' in key_part:
+                        key_part = key_part.replace('"', '<span style="color: #2980b9;">"').replace('"', '"</span>', 1) # Close spans manually is tricky with replace
+                        # Simpler: just wrap the whole key string
+                        key_start = key_part.find('"')
+                        key_end = key_part.rfind('"')
+                        if key_start != -1 and key_end != -1:
+                           key_text = key_part[key_start:key_end+1]
+                           colored_key = f'<span style="color: #2980b9;">{key_text}</span>'
+                           key_part = key_part[:key_start] + colored_key + key_part[key_end+1:]
+                           
+                    # Color String Values in Green
+                    if '"' in val_part:
+                        # Find the string value
+                        v_start = val_part.find('"')
+                        v_end = val_part.rfind('"')
+                        if v_start != -1 and v_end != -1 and v_end > v_start:
+                             val_text = val_part[v_start:v_end+1]
+                             colored_val = f'<span style="color: #27ae60;">{val_text}</span>'
+                             val_part = val_part[:v_start] + colored_val + val_part[v_end+1:]
+                    
+                    # Color null/true/false in Orange
+                    for kw in ['null', 'true', 'false']:
+                        if kw in val_part:
+                            val_part = val_part.replace(kw, f'<span style="color: #d35400; font-weight: bold;">{kw}</span>')
+
+                    escaped_line = key_part + ':' + val_part
+                    
+                colored_lines.append(escaped_line)
+                
+            final_html = "\n".join(colored_lines)
+            return f"<pre>{final_html}</pre>"
+            
+        except json.JSONDecodeError:
+            # Fallback for invalid JSON
+            return f"<pre>{escape(json_str)}</pre>"
+
     def analyze_run_to_pdf(self, run_id: int, pdf_filepath: str) -> Dict[str, Any]:
         """
         Generate PDF report for a run.
-        
-        Args:
-            run_id: The ID of the run to analyze
-            pdf_filepath: Path where the PDF should be saved
-            
-        Returns:
-            Dictionary containing:
-            - success: bool indicating if operation was successful
-            - pdf_path: path to generated PDF (if successful)
-            - error: optional error message
         """
         result = {
             "success": False,
@@ -327,9 +434,17 @@ class RunAnalyzer:
             return result
 
         steps = steps or []
-
         metrics_data = self._calculate_summary_metrics(run_id, run_data, steps)
+        
+        # Determine max response time for bar charts
+        max_response_time = 1.0
+        if steps:
+            times = [s['ai_response_time_ms'] for s in steps if s['ai_response_time_ms'] is not None]
+            if times:
+                max_response_time = max(times) or 1.0
+
         summary_table_html = self._generate_summary_table_html(metrics_data)
+        error_summary_html = self._generate_error_summary_html(steps)
         
         html_parts = ["""
         <!DOCTYPE html>
@@ -340,128 +455,210 @@ class RunAnalyzer:
             <style>
                 @page { 
                     size: a4 portrait; 
-                    margin: 0.6in; 
+                    margin: 0.5in; 
                 }
-                body { font-family: Helvetica, Arial, sans-serif; margin: 0; font-size: 9pt; line-height: 1.25; }
-                h1 { font-size: 16pt; text-align: center; margin-top:0; margin-bottom: 12px; } 
-                h2 { font-size: 12pt; margin-top: 18px; border-bottom: 1px solid #ccc; padding-bottom: 2px; margin-bottom: 8px;} 
-                h3 { font-size: 11pt; margin-top: 10px; margin-bottom: 6px; color: #222; background-color: #e9e9e9; padding: 4px 6px; border-radius: 3px;}
-                h4 { font-size: 9.5pt; margin-top: 8px; margin-bottom: 3px; color: #333; font-weight: bold; border-bottom: 1px dotted #ddd; padding-bottom: 2px;} 
+                body { font-family: 'Helvetica', 'Arial', sans-serif; margin: 0; font-size: 9pt; line-height: 1.4; color: #333; }
                 
-                .summary-table-container { page-break-after: always; }
-                .summary-table { border-collapse: collapse; width: 100%; margin-bottom: 20px; font-size: 8.5pt; }
-                .summary-table th { background-color: #e9e9e9; text-align: left; padding: 6px; border: 1px solid #ccc; }
-                .summary-table td { padding: 5px; border: 1px solid #ddd; }
-                .summary-table td:first-child { font-weight: bold; width: 40%; }
+                h1 { font-size: 18pt; text-align: center; color: #2c3e50; margin-bottom: 20px; border-bottom: 2px solid #3498db; padding-bottom: 10px; } 
+                h2 { font-size: 14pt; color: #2c3e50; margin-top: 25px; margin-bottom: 15px; border-bottom: 1px solid #eee; padding-bottom: 5px; } 
+                h3 { font-size: 11pt; margin-top: 0; margin-bottom: 10px; color: #fff; background-color: #34495e; padding: 6px 10px; border-radius: 4px 4px 0 0; }
+                h4 { font-size: 8pt; text-transform: uppercase; letter-spacing: 0.5px; color: #7f8c8d; margin-top: 10px; margin-bottom: 4px; border-bottom: none; }
                 
-                p.feature-item { margin: 4px 0 6px 5px; } 
-                strong.feature-title { font-weight: bold; color: #111; display: block; margin-bottom: 1px;} 
-                
+                /* Summary Cards */
+                .summary-container { display: -pdf-flex-box; -pdf-justify-content: space-between; margin-bottom: 20px; }
+                .card { background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 5px; padding: 0; width: 32%; display: inline-block; vertical-align: top; margin-right: 1%; }
+                .card-header { background: #e9ecef; padding: 5px 10px; font-weight: bold; color: #495057; font-size: 8.5pt; border-bottom: 1px solid #dee2e6; }
+                .card-body { padding: 8px; }
+                .metrics-table { width: 100%; font-size: 8pt; }
+                .metrics-table td { padding: 2px 0; }
+
+                /* Error Table */
+                .summary-table { width: 100%; border-collapse: collapse; font-size: 8.5pt; margin-bottom: 20px; }
+                .summary-table th { background: #f8f9fa; text-align: left; padding: 8px; border-bottom: 2px solid #dee2e6; color: #495057; font-weight: 600; }
+                .summary-table td { padding: 8px; border-bottom: 1px solid #dee2e6; vertical-align: top; }
+
+                /* Step Container */
                 .step-container { 
-                    margin-bottom: 12px; 
+                    margin-bottom: 15px; 
+                    border: 1px solid #e0e0e0; 
+                    border-radius: 4px;
+                    background-color: #fff;
+                    page-break-inside: avoid;
+                    box-shadow: 1px 1px 3px rgba(0,0,0,0.05);
+                }
+                
+                .step-content { padding: 10px; display: -pdf-flex-box; -pdf-flex-direction: row; }
+                .step-info { width: 55%; padding-right: 15px; display: inline-block; vertical-align: top; }
+                .step-visuals { width: 40%; display: inline-block; vertical-align: top; }
+                
+                /* Features */
+                .feature-row { margin-bottom: 4px; font-size: 8.5pt; }
+                .feature-label { font-weight: bold; color: #555; font-size: 8pt; display: inline-block; width: 80px; }
+                
+                /* Badges */
+                .badge { padding: 2px 6px; border-radius: 10px; font-size: 7.5pt; font-weight: bold; color: #fff; display: inline-block; }
+                .badge-success { background-color: #28a745; }
+                .badge-failure { background-color: #dc3545; }
+                .badge-action { background-color: #17a2b8; }
+                
+                /* Code / Pre */
+                pre { 
+                    background-color: #f4f6f7; 
+                    border: 1px solid #dcdde1; 
+                    border-radius: 3px; 
                     padding: 8px; 
-                    border: 1px solid #c8c8c8; 
-                    background-color: #fcfcfc;
-                    page-break-inside: avoid !important;
+                    font-family: 'Courier New', Courier, monospace; 
+                    font-size: 7.5pt; 
+                    color: #2c3e50; 
+                    white-space: pre-wrap; 
+                    word-wrap: break-word;
+                    overflow: hidden;
+                    margin-top: 2px;
                 }
-                .step-text-content { margin-bottom: 10px; }
-                .step-screenshots-container { 
-                    display: -pdf-flex-box; 
-                    -pdf-flex-direction: row; 
-                    -pdf-justify-content: space-around; 
-                    gap: 8px; 
-                    margin-top: 8px;
-                    border-top: 1px solid #eee;
-                    padding-top: 8px;
+                
+                /* Screenshots Table Layout */
+                .screenshots-table { width: 100%; border-collapse: collapse; margin-top: 5px; }
+                .screenshots-table td { vertical-align: middle; text-align: center; padding: 2px; }
+                .screenshot-cell { width: 45%; }
+                .arrow-cell { width: 10%; font-size: 20pt; color: #bdc3c7; }
+                
+                .screenshot { 
+                    width: auto;
+                    max-width: 98%; 
+                    height: auto; 
+                    max-height: 220px;
+                    border: 1px solid #ddd; 
+                    background: #fff;
+                    box-shadow: 2px 2px 4px rgba(0,0,0,0.1);
                 }
-                .step-screenshots-container > div { -pdf-flex: 1; text-align: center; padding: 0 4px; }
-                .step-screenshots-container img.screenshot { max-width: 95%; max-height: 240px; width: auto; height: auto; border: 1px solid #bbb; margin-top: 2px; margin-bottom: 4px; display: inline-block; }
-                .screenshot-warning { color: red; font-size: 7pt; }
-                pre { white-space: pre-wrap; word-wrap: break-word; background-color: #f0f0f0; border: 1px solid #ccc; padding: 5px; font-size: 7.5pt; max-height: 100px; overflow: hidden; margin-left: 5px; margin-bottom: 5px; }
-                hr { border: 0; border-top: 1px solid #ddd; margin: 12px 0; } 
-                .to-screen-section-na { margin-left: 5px; font-style: italic; }
+                .screenshot-label { font-size: 7pt; color: #7f8c8d; margin-top: 3px; display: block; font-weight: bold; }
+
+                /* Bar Chart (HTML CSS) */
+                .bar-container { background-color: #f1f1f1; height: 6px; width: 100px; border-radius: 3px; display: inline-block; vertical-align: middle; margin-left: 5px; }
+                .bar-fill { height: 100%; border-radius: 3px; background-color: #3498db; }
+                
             </style>
         </head>
         <body>
         """]
 
+        # Header with App Name and Date
+        run_date = "N/A"
+        if run_data['start_time']:
+             try:
+                run_date = datetime.fromisoformat(run_data['start_time']).strftime("%Y-%m-%d %H:%M")
+             except: pass
+             
+        html_parts.append(f"""
+        <h1>Analysis Report: {escape(str(run_data['app_package']))}</h1>
+        <p style="text-align: center; color: #777; margin-top: -15px; margin-bottom: 25px;">
+            Run ID: {run_id} &bull; Date: {run_date}
+        </p>
+        """)
+
         html_parts.append(summary_table_html)
-        html_parts.append(f"<h1>Run Analysis Report - Run ID: {run_id} (App: {escape(str(run_data['app_package']))})</h1>")
+        html_parts.append(error_summary_html)
         
         if not steps:
-            html_parts.append("<p>No steps found for this run.</p>")
+            html_parts.append("<div class='step-container'><div class='step-content'><p>No steps found for this run.</p></div></div>")
         else:
-            html_parts.append("<h2>Step Details</h2>")
-            for i, step in enumerate(steps):
-                html_parts.append(f"<div class='step-container'><h3>Step {step['step_number']} (Log ID: {step['step_log_id']})</h3>")
+            html_parts.append("<h2>Execution Timeline</h2>")
+            for step in steps:
+                step_num = step['step_number']
                 
-                html_parts.append("<div class='step-text-content'>")
-
-                html_parts.append(f"<h4>FROM SCREEN</h4>")
-                html_parts.append(f"<p class='feature-item'><strong class='feature-title'>Activity:</strong>{escape(step['from_activity_name'] or 'N/A')}</p>")
-
-                html_parts.append(f"<h4>AI INPUT PROMPT</h4>")
-                if 'ai_input_prompt' in step.keys() and step['ai_input_prompt']:
-                    # Truncate very long prompts for display
-                    prompt_text = step['ai_input_prompt']
-                    if len(prompt_text) > 2000:
-                        prompt_text = prompt_text[:2000] + "\n\n... (truncated, full prompt available in database)"
-                    html_parts.append(f"<pre style='max-height: 200px; overflow: auto;'>{escape(prompt_text)}</pre>")
+                # --- Prepare Step Data ---
+                action_desc = escape(step['action_description'] or 'N/A')
+                from_activity = escape(step['from_activity_name'] or 'Unknown')
+                
+                # Status Badge
+                if step['execution_success']:
+                    status_badge = "<span class='badge badge-success'>SUCCESS</span>"
                 else:
-                    html_parts.append(f"<p class='feature-item'><em>AI input prompt not available</em></p>")
+                    status_badge = "<span class='badge badge-failure'>FAILED</span>"
 
-                html_parts.append(f"<h4>AI OUTPUT</h4>")
-                ai_sugg_text_html, ai_reas_text_html, ai_response_time_html = "N/A", "N/A", ""
+                # AI Time Bar Chart
+                ai_time_html = ""
+                if step['ai_response_time_ms']:
+                    sec = step['ai_response_time_ms'] / 1000.0
+                    pct = min(100, int((step['ai_response_time_ms'] / max_response_time) * 100))
+                    bar_color = "#3498db"
+                    if pct > 80: bar_color = "#e67e22" # Orange for slow
+                    ai_time_html = f"""
+                    <div class='feature-row'>
+                        <span class='feature-label'>AI Time:</span> {sec:.2f}s
+                        <div class='bar-container'><div class='bar-fill' style='width: {pct}%; background-color: {bar_color};'></div></div>
+                    </div>
+                    """
                 
-                if 'ai_response_time_ms' in step.keys() and step['ai_response_time_ms'] is not None:
-                    ai_response_time_html = f"<p class='feature-item'><strong class='feature-title'>AI Decision Time:</strong>{step['ai_response_time_ms']/1000:.2f} seconds</p>"
-                
-                if 'element_find_time_ms' in step.keys() and step['element_find_time_ms'] is not None:
-                    element_find_time_html = f"<p class='feature-item'><strong class='feature-title'>Element Find Time:</strong>{step['element_find_time_ms']/1000:.2f} seconds</p>"
-                    ai_response_time_html += element_find_time_html
+                # AI Suggestion parsing
+                ai_sugg_html = self._clean_and_format_json(step['ai_suggestion_json'])
 
-                if step['ai_suggestion_json']:
-                    try:
-                        sugg_data = json.loads(step['ai_suggestion_json'])
-                        act_src_dict = sugg_data.get('action_to_perform') or sugg_data
-                        if act_src_dict and isinstance(act_src_dict, dict):
-                            act_t = act_src_dict.get('action', 'N/A')
-                            tgt_id = act_src_dict.get('target_identifier', 'N/A')
-                            in_txt = act_src_dict.get('input_text')
-                            rsng = act_src_dict.get('reasoning', "N/A")
-                            ai_reas_text_html = escape(rsng)
-                            ai_sugg_text_html = f"Action: {escape(act_t)}"
-                            if tgt_id != 'N/A': ai_sugg_text_html += f" on '{escape(str(tgt_id))}'"
-                            if in_txt: ai_sugg_text_html += f" | Input: '{escape(in_txt)}'"
-                    except (json.JSONDecodeError, AttributeError):
-                        ai_sugg_text_html = f"Error parsing JSON: {escape(step['ai_suggestion_json'])}"
-                html_parts.append(f"<p class='feature-item'><strong class='feature-title'>Suggested:</strong>{ai_sugg_text_html}</p>")
-                html_parts.append(ai_response_time_html)
-                html_parts.append(f"<p class='feature-item'><strong class='feature-title'>Reasoning:</strong></p><pre>{ai_reas_text_html}</pre>")
-                
-                html_parts.append(f"<h4>CRAWLER ACTION EXECUTED</h4>")
-                html_parts.append(f"<p class='feature-item'><strong class='feature-title'>High-Level:</strong>{escape(step['action_description'] or 'N/A')}</p>")
-                
-                status_color = "#28a745" if step['execution_success'] else "#dc3545"
-                html_parts.append(f"<p class='feature-item'><strong class='feature-title'>Execution Status:</strong><span style='color: {status_color}; font-weight: bold;'>{'Success' if step['execution_success'] else 'Failed'}</span></p>")
-                
+                # Error Message if any
+                error_html = ""
                 if not step['execution_success'] and step['error_message']:
-                    html_parts.append(f"<p class='feature-item'><strong class='feature-title'>Error Message:</strong><span style='color: #dc3545;'>{escape(step['error_message'])}</span></p>")
-                
-                html_parts.append("</div>")
+                    error_html = f"""
+                    <div style='margin-top: 8px; padding: 5px; background: #fff5f5; border-left: 3px solid #dc3545; color: #dc3545; font-size: 8pt;'>
+                        <strong>Error:</strong> {escape(step['error_message'])}
+                    </div>
+                    """
 
-                html_parts.append("<div class='step-screenshots-container'>")
-                if full_from_ss_path := self._get_screenshot_full_path(step['from_screenshot_path']):
-                    if base64_image := self._image_to_base64(full_from_ss_path):
-                        html_parts.append(f"<div><p><strong>FROM Screen:</strong></p><img src='{base64_image}' class='screenshot'></div>")
+                # Screenshots Table Construction
+                screenshots_html = ""
+                img_from = self._get_screenshot_full_path(step['from_screenshot_path'])
+                img_to = self._get_screenshot_full_path(step['to_screenshot_path'])
                 
-                if step['to_screen_id'] is not None:
-                    if full_to_ss_path := self._get_screenshot_full_path(step['to_screenshot_path']):
-                        if base64_image_to := self._image_to_base64(full_to_ss_path):
-                            html_parts.append(f"<div><p><strong>TO Screen:</strong></p><img src='{base64_image_to}' class='screenshot'></div>")
+                b64_from = self._image_to_base64(img_from) if img_from else None
+                b64_to = self._image_to_base64(img_to) if img_to else None
+                
+                if b64_from or b64_to:
+                    # Use a table for reliable side-by-side layout in PDF
+                    row_content = ""
+                    
+                    if b64_from:
+                        row_content += f"""
+                        <td class='screenshot-cell'>
+                            <img src='{b64_from}' class='screenshot'><br>
+                            <span class='screenshot-label'>FROM: {from_activity}</span>
+                        </td>
+                        """
+                    else:
+                        row_content += "<td class='screenshot-cell'></td>"
+                        
+                    if b64_from and b64_to:
+                        row_content += "<td class='arrow-cell'>&rarr;</td>"
+                    elif b64_to: # If only TO exists, add empty arrow cell for spacing? No, just skip.
+                        pass
 
-                html_parts.append("</div></div>")
-                if i < len(steps) - 1: html_parts.append("<hr>")
+                    if b64_to:
+                        row_content += f"""
+                        <td class='screenshot-cell'>
+                            <img src='{b64_to}' class='screenshot'><br>
+                            <span class='screenshot-label'>TO: {escape(step['to_activity_name'] or 'Unknown')}</span>
+                        </td>
+                        """
+                    else:
+                        row_content += "<td class='screenshot-cell'></td>"
+                        
+                    screenshots_html = f"<table class='screenshots-table'><tr>{row_content}</tr></table>"
+
+                # Step HTML Construction
+                html_parts.append(f"""
+                <div class='step-container'>
+                    <h3>Step {step_num} {status_badge}</h3>
+                    <div class='step-content'>
+                        <div class='step-info'>
+                            <div class='feature-row'><span class='feature-label'>Action:</span> {action_desc}</div>
+                            {ai_time_html}
+                            <h4 style="margin-top: 10px;">AI Reasoning & Input</h4>
+                            {ai_sugg_html}
+                            {error_html}
+                        </div>
+                        <div class='step-visuals'>
+                             {screenshots_html}
+                        </div>
+                    </div>
+                </div>
+                """)
         
         html_parts.append("</body></html>")
         full_html = "".join(html_parts)
