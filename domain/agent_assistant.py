@@ -40,6 +40,7 @@ from config.numeric_constants import (
     AI_LOG_FILENAME,
 )
 from config.urls import ServiceURLs
+from config.context_constants import ContextSource
 from domain.prompts import JSON_OUTPUT_SCHEMA, get_available_actions, ACTION_DECISION_SYSTEM_PROMPT, build_action_decision_prompt
 
 # Update AgentAssistant to initialize AppiumDriver with a valid Config instance
@@ -100,12 +101,10 @@ class AgentAssistant:
         self.cfg = app_config
         self.response_cache: Dict[str, Tuple[Dict[str, Any], float, int]] = {}
         self.ui_callback = ui_callback  # Callback for UI updates
-        logging.debug("AI response cache initialized.")
 
 
         # Determine which AI provider to use
         self.ai_provider = self.cfg.get('AI_PROVIDER', DEFAULT_AI_PROVIDER).lower()
-        logging.debug(f"Using AI provider: {self.ai_provider}")
 
         # Adapter provider override (for routing purposes without changing UI label)
         self._adapter_provider_override: Optional[str] = None
@@ -181,12 +180,10 @@ class AgentAssistant:
                 'initialized_at': now
             }
         )
-        logging.debug(f"Session initialized: {self.session}")
 
     def _init_langchain_components(self):
         """Initialize LangChain components for orchestration."""
         try:
-            logging.debug("Initializing LangChain components for AI orchestration")
 
             # Create the LLM wrapper
             wrapper = LangChainWrapper(
@@ -213,7 +210,6 @@ class AgentAssistant:
             # Initialize memory checkpointer for cross-request context
             self.langchain_memory = MemorySaver()
 
-            logging.debug("LangChain components initialized successfully")
 
         except Exception as e:
             logging.error(f"Failed to initialize LangChain components: {e}", exc_info=True)
@@ -275,9 +271,6 @@ class AgentAssistant:
             # Initialize the model adapter
             self.model_adapter.initialize(model_config, safety_settings)
             
-            logging.debug(f"AI Assistant initialized with model alias: {self.model_alias} (actual: {self.actual_model_name})")
-            logging.debug(f"Model description: {model_config.get('description', 'N/A')}")
-            logging.debug(f"Model provider label: {self.ai_provider} | adapter: {adapter_provider}")
 
         except Exception as e:
             logging.error(f"Failed to initialize AI model: {e}", exc_info=True)
@@ -370,7 +363,6 @@ class AgentAssistant:
                     fh_readable.setLevel(logging.INFO)
                     fh_readable.setFormatter(logging.Formatter('%(message)s'))
                     logger.addHandler(fh_readable)
-                    logging.debug(f"AI interaction readable logger initialized at: {readable_path}")
                 except OSError as e:
                     logging.error(f"Could not create AI interactions readable log file: {e}")
                     if not logger.handlers:
@@ -380,7 +372,6 @@ class AgentAssistant:
                 # Use NullHandler for now to avoid creating directories
                 if not logger.handlers:
                     logger.addHandler(logging.NullHandler())
-                logging.debug("AI interaction logger delayed - waiting for device initialization")
         else:
             logging.warning("Log directory not available, AI interaction readable log will not be saved.")
             if not logger.handlers:
@@ -424,11 +415,6 @@ class AgentAssistant:
             crop_top_pct = float(self.cfg.get('IMAGE_CROP_TOP_PERCENT', IMAGE_CROP_TOP_PCT_DEFAULT) or 0.0)
             crop_bottom_pct = float(self.cfg.get('IMAGE_CROP_BOTTOM_PERCENT', IMAGE_CROP_BOTTOM_PCT_DEFAULT) or 0.0)
             
-            logging.debug(
-                f"Image preprocessing settings -> provider: {ai_provider}, max_width: {max_width}, "
-                f"quality: {quality}, format: {image_format}, crop_bars: {crop_bars}, "
-                f"top_pct: {crop_top_pct}, bottom_pct: {crop_bottom_pct}"
-            )
 
             # Optional: crop status bar and bottom nav/keyboard areas before resizing
             if crop_bars and (crop_top_pct > 0 or crop_bottom_pct > 0):
@@ -441,7 +427,6 @@ class AgentAssistant:
                     lower = max(upper + 1, h - crop_bottom_px)
                     if lower > upper:
                         img = img.crop((0, upper, img.width, lower))
-                        logging.debug(f"Cropped bars: top {crop_top_px}px, bottom {crop_bottom_px}px -> new size {img.size}")
                 except Exception as crop_err:
                     logging.warning(f"Failed to crop bars: {crop_err}")
             
@@ -450,7 +435,6 @@ class AgentAssistant:
                 scale = max_width / img.width
                 new_height = int(img.height * scale)
                 img = img.resize((max_width, new_height), Image.Resampling.LANCZOS)
-                logging.debug(f"Resized screenshot from {img.size} to fit max width {max_width}px")
             
             # Convert to RGB if necessary (for JPEG compatibility and better compression)
             if img.mode in ('RGBA', 'LA', 'P'):
@@ -462,7 +446,6 @@ class AgentAssistant:
                     img = background
                 else:
                     img = img.convert('RGB')
-                logging.debug("Converted image to RGB format for optimal compression")
             
             # Apply sharpening to maintain text clarity after compression
             from PIL import ImageFilter
@@ -487,12 +470,8 @@ class AgentAssistant:
                     img.save(compressed_buffer, format=image_format, optimize=True)
                 compressed_size = compressed_buffer.tell()
                 compression_ratio = original_size / compressed_size if compressed_size > 0 else 1
-                logging.debug(
-                    f"Preprocessed image size estimate: {original_size} -> {compressed_size} bytes "
-                    f"({compression_ratio:.1f}x). Final encoding will be done by adapter."
-                )
             except Exception as est_err:
-                logging.debug(f"Could not estimate compressed size: {est_err}")
+                pass
             
             return img
             
@@ -509,7 +488,8 @@ class AgentAssistant:
                                    current_composite_hash: str = "", 
                                    last_action_feedback: Optional[str] = None,
                                    is_stuck: bool = False,
-                                   stuck_reason: Optional[str] = None) -> Optional[Tuple[Dict[str, Any], float, int, Optional[str]]]:
+                                   stuck_reason: Optional[str] = None,
+                                   ocr_results: Optional[List[Dict[str, Any]]] = None) -> Optional[Tuple[Dict[str, Any], float, int, Optional[str]]]:
         """Get the next action using LangChain decision chain.
         
         Args:
@@ -524,15 +504,22 @@ class AgentAssistant:
             last_action_feedback: Feedback from last action execution
             is_stuck: Whether the crawler is detected to be stuck on the same screen
             stuck_reason: Reason why the crawler is considered stuck
+            ocr_results: List of OCR detected elements (text, bounds, confidence)
             
         Returns:
             Tuple of (action_data dict, confidence float, token_count int, ai_input_prompt str) or None on error
         """
         try:
+            # Determine which context sources to use based on config
+            context_source = self.cfg.CONTEXT_SOURCE or ["xml"]
+            
+            # Log the used context sources so the user can verify
+            
             # Prepare context for the chain
             context = {
                 "screenshot_bytes": screenshot_bytes,
-                "xml_context": xml_context or "",
+                "xml_context": None, # Will be set later if enabled
+                "ocr_context": ocr_results if ContextSource.OCR in context_source else None,
                 "action_history": action_history or [],
                 "visited_screens": visited_screens or [],
                 "current_screen_actions": current_screen_actions or [],
@@ -567,7 +554,7 @@ class AgentAssistant:
             # Clean and simplify XML before sending to AI to remove unnecessary attributes
             # Original XML is unlimited, simplified XML is limited to 15000 chars
             xml_string_simplified = xml_string_raw
-            if xml_string_raw:
+            if xml_string_raw and "xml" in context_source:
                 try:
                     from config.numeric_constants import XML_SNIPPET_MAX_LEN_DEFAULT
                     xml_string_simplified = simplify_xml_for_ai(
@@ -576,13 +563,16 @@ class AgentAssistant:
                         provider=self.ai_provider,
                         prune_noninteractive=True
                     )
-                    logging.debug(f"XML simplified: {len(xml_string_raw)} -> {len(xml_string_simplified)} chars (provider: {self.ai_provider})")
                 except Exception as e:
                     logging.warning(f"⚠️ XML simplification failed, using original: {e}")
                     xml_string_simplified = xml_string_raw
             
             # Update context with simplified XML (format_prompt_with_context will use this)
-            context['xml_context'] = xml_string_simplified
+            if "xml" in context_source:
+                context['xml_context'] = xml_string_simplified
+            else:
+                context['xml_context'] = None
+                
             context['_full_xml_context'] = xml_string_raw  # Store original for reference
             
             # Prepare image if ENABLE_IMAGE_CONTEXT is enabled
@@ -592,9 +582,9 @@ class AgentAssistant:
             
             # Log image context status
             if enable_image_context:
-                logging.info(f"🖼️  IMAGE CONTEXT: Enabled (ENABLE_IMAGE_CONTEXT=True)")
+                pass
             else:
-                logging.info(f"🖼️  IMAGE CONTEXT: Disabled (ENABLE_IMAGE_CONTEXT=False)")
+                pass
             
             if enable_image_context and screenshot_bytes:
                 try:
@@ -608,43 +598,23 @@ class AgentAssistant:
                             prepared_image = self._prepare_image_part(screenshot_bytes)
                             if prepared_image:
                                 self._current_prepared_image = prepared_image
-                                logging.debug(f"🖼️  IMAGE CONTEXT: Prepared screenshot (size: {prepared_image.size[0]}x{prepared_image.size[1]}) - will be sent to AI model")
-                            else:
-                                logging.debug(f"🖼️  IMAGE CONTEXT: Image preparation returned None - image will NOT be sent")
+                                pass
                         else:
-                            logging.debug(f"🖼️  IMAGE CONTEXT: Model '{model_name}' does not support image context - image will NOT be sent")
+                            pass
                     else:
-                        logging.debug(f"🖼️  IMAGE CONTEXT: Could not get provider strategy for {self.ai_provider} - image will NOT be sent")
+                        pass
                 except Exception as e:
-                    logging.debug(f"🖼️  IMAGE CONTEXT: Error preparing image: {e} - image will NOT be sent", exc_info=True)
+                    pass
             elif enable_image_context and not screenshot_bytes:
-                logging.debug(f"🖼️  IMAGE CONTEXT: Enabled but no screenshot bytes available - image will NOT be sent")
+                pass
             
             # Log the decision request context
             if self.ai_interaction_readable_logger:
                 timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                self.ai_interaction_readable_logger.info("=" * 80)
-                self.ai_interaction_readable_logger.info(f"DECISION REQUEST - {timestamp}")
-                self.ai_interaction_readable_logger.info("=" * 80)
                 if is_stuck:
-                    self.ai_interaction_readable_logger.info(f"⚠️ STUCK DETECTED: {stuck_reason}")
-                    self.ai_interaction_readable_logger.info("=" * 80)
-                self.ai_interaction_readable_logger.info(f"Action history entries: {len(action_history) if action_history else 0}")
-                self.ai_interaction_readable_logger.info(f"Visited screens: {len(visited_screens) if visited_screens else 0}")
-                self.ai_interaction_readable_logger.info(f"Current screen actions: {len(current_screen_actions) if current_screen_actions else 0}")
-                self.ai_interaction_readable_logger.info(f"Current screen ID: {current_screen_id}")
-                self.ai_interaction_readable_logger.info(f"Screen visit count: {current_screen_visit_count}")
-                self.ai_interaction_readable_logger.info(f"Last action feedback: {last_action_feedback}")
-                self.ai_interaction_readable_logger.info(f"XML context length (original): {len(xml_string_raw) if xml_string_raw else 0} chars")
-                self.ai_interaction_readable_logger.info(f"XML context length (simplified): {len(xml_string_simplified) if xml_string_simplified else 0} chars")
-                self.ai_interaction_readable_logger.info("")
+                    pass
                 
                 # Log the simplified XML context that will be sent to AI
-                self.ai_interaction_readable_logger.info("=" * 80)
-                self.ai_interaction_readable_logger.info(f"FULL XML CONTEXT SENT TO AI (SIMPLIFIED) - {timestamp}")
-                self.ai_interaction_readable_logger.info("=" * 80)
-                self.ai_interaction_readable_logger.info(xml_string_simplified if xml_string_simplified else "(empty)")
-                self.ai_interaction_readable_logger.info("")
 
             # Run the decision chain
             try:
@@ -654,17 +624,15 @@ class AgentAssistant:
                 self._current_prepared_image = None
             
             # Extract the AI input prompt from context (stored by format_prompt_with_context)
-            ai_input_prompt = context.get('_full_ai_input_prompt', None)
+            ai_input_prompt = {
+                'full_prompt': context.get('_full_ai_input_prompt', ''),
+                'static_part': context.get('_static_prompt_part', ''),
+                'dynamic_part': context.get('_dynamic_prompt_parts', '')
+            }
             
             # Log the parsed result
             if self.ai_interaction_readable_logger:
                 timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                self.ai_interaction_readable_logger.info("=" * 80)
-                self.ai_interaction_readable_logger.info(f"PARSED RESULT - {timestamp}")
-                self.ai_interaction_readable_logger.info("=" * 80)
-                self.ai_interaction_readable_logger.info(json.dumps(chain_result, indent=2) if chain_result else "None")
-                self.ai_interaction_readable_logger.info("")
-                self.ai_interaction_readable_logger.info("")
             
             # Validate and clean the result
             if not chain_result:
@@ -673,6 +641,30 @@ class AgentAssistant:
             
             validated_data = self._validate_and_clean_action_data(chain_result)
             
+            # Post-processing: Resolve OCR IDs to coordinates if needed
+            if validated_data:
+                target_id = validated_data.get("target_identifier")
+                # Determine which context sources were used
+                context_source = self.cfg.CONTEXT_SOURCE or ["xml"]
+                
+                if target_id and str(target_id).startswith("ocr_") and ContextSource.OCR in context_source and ocr_results:
+                    try:
+                        # Extract index from "ocr_X"
+                        idx = int(str(target_id).split("_")[1])
+                        if 0 <= idx < len(ocr_results):
+                            item = ocr_results[idx]
+                            bounds = item.get('bounds') # [x_min, y_min, x_max, y_max]
+                            
+                            if bounds and len(bounds) == 4:
+                                # Convert to bbox expected by tap method
+                                bbox = {
+                                    "top_left": [bounds[0], bounds[1]],
+                                    "bottom_right": [bounds[2], bounds[3]]
+                                }
+                                validated_data["target_bounding_box"] = bbox
+                    except (ValueError, IndexError) as e:
+                        logging.warning(f"Failed to resolve OCR target {target_id}: {e}")
+
             # Return with metadata (confidence and token count are placeholders for now)
             # Include the AI input prompt for database storage
             return validated_data, 0.0, 0, ai_input_prompt
@@ -682,24 +674,14 @@ class AgentAssistant:
             self._current_prepared_image = None
             logging.error(f"Validation error in action data: {e}")
             if self.ai_interaction_readable_logger:
-                self.ai_interaction_readable_logger.info("=" * 80)
-                self.ai_interaction_readable_logger.info(f"VALIDATION ERROR - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-                self.ai_interaction_readable_logger.info("=" * 80)
-                self.ai_interaction_readable_logger.info(f"Error: {str(e)}")
-                self.ai_interaction_readable_logger.info("")
-                self.ai_interaction_readable_logger.info("")
+                pass
             return None
         except Exception as e:
             # Clear prepared image on error
             self._current_prepared_image = None
             logging.error(f"Error getting next action from LangChain: {e}", exc_info=True)
             if self.ai_interaction_readable_logger:
-                self.ai_interaction_readable_logger.info("=" * 80)
-                self.ai_interaction_readable_logger.info(f"ERROR - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-                self.ai_interaction_readable_logger.info("=" * 80)
-                self.ai_interaction_readable_logger.info(f"Error: {str(e)}")
-                self.ai_interaction_readable_logger.info("")
-                self.ai_interaction_readable_logger.info("")
+                pass
             return None
 
 

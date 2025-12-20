@@ -53,9 +53,6 @@ class SubprocessBackend(ProcessBackend):
         try:
             # Log what we're about to start
             cmd = [plan.python_executable] + PYTHON_EXEC_ARGS + [plan.script_path]
-            self.logger.info(f"Starting subprocess: {' '.join(cmd)}")
-            self.logger.debug(f"Working directory: {plan.working_directory}")
-            self.logger.debug(f"Environment CRAWLER_MODE: {plan.environment.get('CRAWLER_MODE', 'NOT SET')}")
             
             self.process = subprocess.Popen(
                 cmd,
@@ -83,7 +80,6 @@ class SubprocessBackend(ProcessBackend):
                 self._log_process_failure(return_code, error_output)
                 return False
             
-            self.logger.info(f"Started subprocess with PID {self.process.pid}")
             return True
             
         except Exception as e:
@@ -118,7 +114,6 @@ class SubprocessBackend(ProcessBackend):
                     pass
             except (ValueError, OSError) as e:
                 # Process already finished or pipe closed - try alternative method
-                self.logger.debug(f"communicate() failed: {e}, trying alternative read method")
                 error_output = self._read_output_alternative()
         except Exception as e:
             self.logger.warning(f"Error reading subprocess output: {e}")
@@ -174,7 +169,7 @@ class SubprocessBackend(ProcessBackend):
                     pass
         except Exception as e:
             # Catch all other exceptions (but not KeyboardInterrupt/SystemExit)
-            self.logger.debug(f"Alternative read method failed: {e}")
+            pass
         
         return "\n".join(output_lines)
     
@@ -212,12 +207,10 @@ class SubprocessBackend(ProcessBackend):
             # Wait a bit for graceful termination
             try:
                 self.process.wait(timeout=SUBPROCESS_GRACEFUL_TIMEOUT_SEC)
-                self.logger.debug("Subprocess terminated gracefully")
             except subprocess.TimeoutExpired:
                 # Force kill if it doesn't terminate gracefully
                 self.process.kill()
                 self.process.wait()
-                self.logger.debug("Subprocess killed forcefully")
             
             return True
             
@@ -253,23 +246,20 @@ class SubprocessBackend(ProcessBackend):
             return
         
         pid = self.process.pid
-        self.logger.debug(f"Output monitoring thread started for PID {pid}, reading lines...")
         try:
             for line in iter(self.process.stdout.readline, ""):
                 if not line:  # EOF
-                    self.logger.info("Subprocess output stream closed (EOF)")
                     # Check return code
                     if self.process.poll() is not None:
                         return_code = self.process.returncode
                         if return_code != 0:
                             self.logger.error(f"Subprocess (PID {pid}) exited with non-zero code: {return_code}")
                         else:
-                            self.logger.info(f"Subprocess (PID {pid}) exited with code: {return_code}")
+                            pass
                     break
                 line = line.rstrip()
                 if line:
                     # Log the output for debugging
-                    self.logger.debug(f"Subprocess output: {line}")
                     # Also print to stderr so it's visible in the parent process
                     # Use try/except to avoid errors during shutdown
                     try:
@@ -287,13 +277,12 @@ class SubprocessBackend(ProcessBackend):
             # Wait for process to finish (if not already done)
             try:
                 rc = self.process.wait(timeout=0.1)
-                self.logger.info(f"Subprocess (PID {pid}) exited with code {rc}.")
             except subprocess.TimeoutExpired:
                 # Process still running, that's fine
                 pass
             except Exception as wait_error:
                 # Process may have already finished
-                self.logger.debug(f"Error waiting for process: {wait_error}")
+                pass
             
         except Exception as e:
             self.logger.error(f"Error monitoring subprocess (PID {pid}): {e}")
@@ -356,7 +345,6 @@ class QtProcessBackend(ProcessBackend):
             self.process.start(plan.python_executable, PYTHON_EXEC_ARGS + [plan.script_path])
             
             if self.process.waitForStarted(QT_START_TIMEOUT_MS):  # Wait up to 5 seconds for start
-                self.logger.debug(f"Started QProcess with PID {self.process.processId()}")
                 return True
             else:
                 self.logger.error("QProcess failed to start")
@@ -377,12 +365,11 @@ class QtProcessBackend(ProcessBackend):
             
             # Wait a bit for graceful termination
             if self.process.waitForFinished(QT_GRACEFUL_FINISH_TIMEOUT_MS):
-                self.logger.debug("QProcess terminated gracefully")
+                pass
             else:
                 # Force kill if it doesn't terminate gracefully
                 self.process.kill()
                 self.process.waitForFinished(QT_KILL_FINISH_TIMEOUT_MS)
-                self.logger.debug("QProcess killed forcefully")
             
             # Clean up signal connections
             self._cleanup_signal_connections()

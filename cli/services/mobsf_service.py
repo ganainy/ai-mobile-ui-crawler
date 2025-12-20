@@ -97,11 +97,10 @@ class MobSFService:
             mobsf_manager = self._get_mobsf_manager()
             
             # Run complete scan
-            self.logger.info(f"Starting MobSF analysis for package: {package_name}")
             success, result = mobsf_manager.perform_complete_scan(package_name)
             
             if success:
-                self.logger.info("MobSF analysis completed successfully")
+                pass
             else:
                 self.logger.error(f"MobSF analysis failed: {result.get('error', 'Unknown error')}")
             

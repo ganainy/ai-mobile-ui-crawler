@@ -110,7 +110,6 @@ class Crawler:
             session = CrawlerSession(self.config)
             session.start()
             self.storage.save_session(session)
-            logger.info(f"Started crawler session {session.session_id} with config {self.config.name}")
             
             return session
         except Exception as e:
@@ -139,7 +138,6 @@ class Crawler:
             session = self.get_status(session_id)
             session.stop()
             self.storage.save_session(session)
-            logger.info(f"Stopped crawler session {session_id}")
             return session
         except Exception as e:
             logger.error(f"Failed to stop session {session_id}: {e}")

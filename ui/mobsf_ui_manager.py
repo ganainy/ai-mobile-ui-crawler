@@ -50,29 +50,15 @@ class MobSFUIManager(QObject):
             response = requests.get(test_url, headers=headers, timeout=10)
             if response.status_code == 200:
                 self.main_controller.log_message("MobSF connection successful!", 'green')
-                self.main_controller.log_message(f"Server response: {response.json()}", 'blue')
-                # Play success sound
-                if hasattr(self.main_controller, '_audio_alert'):
-                    self.main_controller._audio_alert('finish')
+                logging.info(f"MobSF server response: {response.json()}")
             else:
                 self.main_controller.log_message(f"MobSF connection failed with status code: {response.status_code}", 'red')
                 self.main_controller.log_message(f"Response: {response.text}", 'red')
-                # Play error sound
-                if hasattr(self.main_controller, '_audio_alert'):
-                    self.main_controller._audio_alert('error')
         except requests.RequestException as e:
             self.main_controller.log_message(f"MobSF connection error: {e}", 'red')
-            # Play error sound
-            if hasattr(self.main_controller, '_audio_alert'):
-                self.main_controller._audio_alert('error')
 
-        self.main_controller.log_message(f"\nAPI URL used: {test_url}", 'blue')
-        self.main_controller.log_message("Important Tips:", 'blue')
-        self.main_controller.log_message("1. Make sure MobSF server is running.", 'blue')
-        self.main_controller.log_message("2. Verify the API URL format - should be 'http://<host>:<port>/api/v1'.", 'blue')
-        self.main_controller.log_message("3. Ensure you're using the correct API key from your MobSF instance.", 'blue')
-        self.main_controller.log_message("4. Check the MobSF API documentation for valid endpoints.", 'blue')
-        self.main_controller.log_message("5. You can find your API key in the MobSF web interface under 'Settings'.", 'blue')
+        logging.debug(f"MobSF API URL used: {test_url}")
+        # Redundant tips removed from UI log for cleaner interface
 
 
 # Import here to avoid circular imports

@@ -72,12 +72,10 @@ class AllowedPackagesService:
             
             packages = self.get_all()
             if package_name in packages:
-                self.logger.info(f"Package {package_name} already in allowed list")
                 return True  # Already exists, consider it a success
             
             packages.append(package_name)
             if self.persistence.save_packages(packages):
-                self.logger.info(f"Added package: {package_name}")
                 return True
             return False
             
@@ -105,7 +103,6 @@ class AllowedPackagesService:
             
             packages.remove(package_name)
             if self.persistence.save_packages(packages):
-                self.logger.info(f"Removed package: {package_name}")
                 return True
             return False
             
@@ -149,7 +146,6 @@ class AllowedPackagesService:
             idx = packages.index(old_package_name)
             packages[idx] = new_package_name
             if self.persistence.save_packages(packages):
-                self.logger.info(f"Updated package: {old_package_name} -> {new_package_name}")
                 return True
             return False
             
@@ -166,7 +162,6 @@ class AllowedPackagesService:
         """
         try:
             if self.persistence.save_packages([]):
-                self.logger.info("Cleared all allowed packages")
                 return True
             return False
         except Exception as e:
@@ -207,7 +202,6 @@ class AllowedPackagesService:
                     validated_packages.append(pkg)
             
             if self.persistence.save_packages(validated_packages):
-                self.logger.info(f"Set allowed packages to {len(validated_packages)} items")
                 return True
             return False
             

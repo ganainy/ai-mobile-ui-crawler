@@ -67,16 +67,14 @@ class OpenRouterProvider(ProviderStrategy):
                     ttl_seconds = 24 * 3600
                     ts = int(data.get("timestamp") or 0)
                     if ts and (int(time.time()) - ts) > ttl_seconds:
-                        logger.info("OpenRouter model cache older than 24h; queuing background refresh.")
                         # Start background refresh but don't wait
                         self.refresh_models(None, wait_for_completion=False)
                 except Exception as e:
-                    logger.debug(f"TTL check failed: {e}")
+                    pass
                 return models if models else None
             
             return None
         except Exception as e:
-            logger.debug(f"Failed to read OpenRouter cache: {e}")
             return None
     
     def _save_models_to_cache(self, models: List[Dict[str, Any]]) -> None:
@@ -97,7 +95,6 @@ class OpenRouterProvider(ProviderStrategy):
             }
             with open(cache_path, "w", encoding="utf-8") as f:
                 json.dump(payload, f, ensure_ascii=False, indent=2)
-            logger.info(f"OpenRouter cache saved with schema v1; models: {len(models)}")
         except Exception as e:
             logger.error(f"Failed to save OpenRouter cache: {e}", exc_info=True)
             import traceback
@@ -181,7 +178,6 @@ class OpenRouterProvider(ProviderStrategy):
             models = data.get("data", [])
             
             if not models:
-                logger.info("No models received from OpenRouter API")
                 return []
             
             # Normalize all models
@@ -194,7 +190,6 @@ class OpenRouterProvider(ProviderStrategy):
                     logger.warning(f"Failed to normalize model {model}: {e}")
                     continue
             
-            logger.info(f"Fetched {len(normalized_models)} OpenRouter models")
             return normalized_models
             
         except requests.exceptions.RequestException as e:
@@ -429,7 +424,6 @@ class OpenRouterProvider(ProviderStrategy):
             
             return None
         except Exception as e:
-            logger.debug(f"Failed to lookup model meta: {e}")
             return None
     
     def refresh_models(self, config: Optional['Config'], wait_for_completion: bool = False) -> Tuple[bool, Optional[str]]:

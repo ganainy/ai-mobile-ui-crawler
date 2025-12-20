@@ -38,7 +38,6 @@ class RunAnalyzer:
         try:
             self.conn = sqlite3.connect(self.db_path)
             self.conn.row_factory = sqlite3.Row 
-            logger.info(f"Successfully connected to database: {self.db_path}")
         except sqlite3.Error as e:
             logger.error(f"Error connecting to database {self.db_path}: {e}")
             self.conn = None
@@ -47,7 +46,6 @@ class RunAnalyzer:
     def _close_db_connection(self):
         if self.conn:
             self.conn.close()
-            logger.info(f"Database connection closed: {self.db_path}")
             self.conn = None
 
     def list_runs(self) -> Dict[str, Any]:
@@ -112,19 +110,16 @@ class RunAnalyzer:
                 if self.output_data_dir and self.app_package_for_run:
                     potential_path_rel = os.path.join(self.output_data_dir, "screenshots", f"crawl_screenshots_{self.app_package_for_run}", os.path.basename(db_screenshot_path))
                     if os.path.exists(potential_path_rel):
-                        logger.info(f"Resolved misconfigured absolute path '{db_screenshot_path}' to '{potential_path_rel}' relative to output dir.")
                         return os.path.abspath(potential_path_rel)
                 return None
 
         if self.output_data_dir and self.app_package_for_run:
             potential_path = os.path.join(self.output_data_dir, "screenshots", f"crawl_screenshots_{self.app_package_for_run}", os.path.basename(db_screenshot_path))
             if os.path.exists(potential_path):
-                 logger.debug(f"Resolved relative path '{db_screenshot_path}' to '{potential_path}'")
                  return os.path.abspath(potential_path)
             else:
                 potential_path_flat = os.path.join(self.output_data_dir, "screenshots", db_screenshot_path)
                 if os.path.exists(potential_path_flat):
-                    logger.debug(f"Resolved relative path '{db_screenshot_path}' to '{potential_path_flat}' (flat structure).")
                     return os.path.abspath(potential_path_flat)
 
         logger.warning(f"Screenshot path '{db_screenshot_path}' could not be reliably resolved to an existing absolute path. PDF generation might fail for this image.")
@@ -262,7 +257,6 @@ class RunAnalyzer:
 
         if not self.app_package_for_run and run_data['app_package']:
             self.app_package_for_run = run_data['app_package']
-            logger.info(f"Set app_package_for_run to '{self.app_package_for_run}' from run data for run ID {run_id}.")
         
         query = """
         SELECT sl.*,
@@ -328,7 +322,6 @@ class RunAnalyzer:
 
         if not run_data:
             error_msg = f"Run ID {run_id} not found. PDF will not be generated."
-            logger.info(error_msg)
             result["error"] = error_msg
             self._close_db_connection()
             return result
@@ -482,7 +475,6 @@ class RunAnalyzer:
                     
                     # Check if the status object was created and if it has a non-zero error code
                     if pisa_status and not pisa_status.err: # type: ignore
-                        logger.info(f"Successfully generated PDF report: {pdf_filepath}")
                         result["success"] = True
                         result["pdf_path"] = pdf_filepath
                     else:
@@ -503,7 +495,6 @@ class RunAnalyzer:
             try:
                 with open(html_debug_filepath, "w", encoding="utf-8") as f_html:
                     f_html.write(full_html)
-                logger.info(f"Saved HTML content for debugging to: {html_debug_filepath}")
             except Exception as e_debug:
                 logger.error(f"Failed to save debug HTML file: {e_debug}")
         finally:
@@ -538,7 +529,6 @@ class RunAnalyzer:
 
         if not run_data:
             error_msg = f"Run ID {run_id} not found. No summary available."
-            logger.info(error_msg)
             result["error"] = error_msg
             self._close_db_connection()
             return result

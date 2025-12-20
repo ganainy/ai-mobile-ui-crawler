@@ -69,17 +69,15 @@ class LangChainWrapper:
             # Log the AI input (prompt)
             if self.logit_interaction_logger:
                 timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                self.logit_interaction_logger.info("=" * 80)
-                self.logit_interaction_logger.info(f"AI INPUT - {timestamp}")
-                self.logit_interaction_logger.info("=" * 80)
                 
                 if "Current screen XML:" in prompt_text:
                     dynamic_start = prompt_text.find("Current screen XML:")
                     dynamic_part = prompt_text[dynamic_start:]
-                    self.logit_interaction_logger.info(dynamic_part)
                 else:
-                    self.logit_interaction_logger.info(prompt_text)
-                self.logit_interaction_logger.info("")
+                    pass
+            
+            # Log a summary of the AI input to console
+            prompt_preview = prompt_text[:500] + "..." if len(prompt_text) > 500 else prompt_text
 
             # Determine if we should include image context
             prepared_image = None
@@ -93,42 +91,57 @@ class LangChainWrapper:
                         if provider_strategy.supports_image_context(self.cfg, self.model_name):
                             prepared_image = self.get_current_image()
                             if prepared_image:
-                                logger.info(f"🖼️  SENDING IMAGE TO AI: Yes (size: {prepared_image.size[0]}x{prepared_image.size[1]})")
+                                pass
                             else:
                                 logger.warning(f"🖼️  SENDING IMAGE TO AI: No (prepared image is None)")
                         else:
-                            logger.info(f"🖼️  SENDING IMAGE TO AI: No (model '{self.model_name}' does not support image context)")
+                            pass
                 except Exception as e:
+                    pass
                     logger.warning(f"🖼️  SENDING IMAGE TO AI: No (error checking support: {e})", exc_info=True)
 
             try:
-                response_text, metadata = self.model_adapter.generate_response(
-                    prompt=prompt_text,
-                    image=prepared_image,
-                    image_format=self.cfg.get('IMAGE_FORMAT', None),
-                    image_quality=self.cfg.get('IMAGE_QUALITY', None)
-                )
+                # Start background thread to log progress while waiting for AI
+                import threading
+                import sys
+                start_time = time.time()
+                stop_logging = False
+                
+                def log_ai_progress():
+                    while not stop_logging:
+                        elapsed = time.time() - start_time
+                        # Use carriage return to overwrite same line (no newline)
+                        print(f"\rAI thinking... {elapsed:.1f}s   ", end='', flush=True)
+                        time.sleep(5)  # Update every 5 seconds
+                
+                log_thread = threading.Thread(target=log_ai_progress)
+                log_thread.daemon = True
+                log_thread.start()
+                
+                try:
+                    response_text, metadata = self.model_adapter.generate_response(
+                        prompt=prompt_text,
+                        image=prepared_image,
+                        image_format=self.cfg.get('IMAGE_FORMAT', None),
+                        image_quality=self.cfg.get('IMAGE_QUALITY', None)
+                    )
+                finally:
+                    stop_logging = True
+                    log_thread.join(timeout=1.0)
+                
+                elapsed_total = time.time() - start_time
+                # Clear the progress line and print final result
+                print(f"\rAI response received in {elapsed_total:.2f}s   ", flush=True)
                 
                 # Log the AI response
                 if self.logit_interaction_logger:
                     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    self.logit_interaction_logger.info("=" * 80)
-                    self.logit_interaction_logger.info(f"AI RESPONSE - {timestamp}")
-                    self.logit_interaction_logger.info("=" * 80)
-                    self.logit_interaction_logger.info(response_text)
-                    self.logit_interaction_logger.info("")
-                    self.logit_interaction_logger.info("")
                 
                 return response_text
             except Exception as e:
                 logger.error(f"Error in LangChain LLM wrapper: {e}")
                 if self.logit_interaction_logger:
                     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    self.logit_interaction_logger.info("=" * 80)
-                    self.logit_interaction_logger.info(f"AI ERROR - {timestamp}")
-                    self.logit_interaction_logger.info("=" * 80)
-                    self.logit_interaction_logger.info(f"Error: {str(e)}")
-                    self.logit_interaction_logger.info("")
                 return ""
 
         return RunnableLambda(_llm_call)

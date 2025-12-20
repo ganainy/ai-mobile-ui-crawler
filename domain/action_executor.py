@@ -42,14 +42,60 @@ class ActionExecutor:
         return self.driver.tap(target_id, bbox)
     
     def _execute_input_action(self, action_data: Dict[str, Any]) -> bool:
-        """Execute input action with proper argument handling."""
+        """Execute input action with proper argument handling.
+        
+        For OCR-based targets (with bounding box), this will:
+        1. First tap on the bounding box to focus the input field
+        2. Then send keys using Appium's keyboard input
+        """
         target_id = action_data.get("target_identifier")
+        bbox = action_data.get("target_bounding_box")
         input_text = action_data.get("input_text")
-        if not target_id:
-            logger.error("Cannot execute input: No target identifier provided")
+        
+        if not target_id and not bbox:
+            logger.error("Cannot execute input: No target identifier or bounding box provided")
             return False
         if input_text is None:
             input_text = ""  # Empty string for clear operations
+        
+        # If we have a bounding box (OCR-based target), use tap + keyboard input
+        if bbox:
+            # First tap to focus the input field
+            tap_success = self.driver.tap(target_id, bbox)
+            if not tap_success:
+                logger.error("Failed to tap on input field (bbox)")
+                return False
+            
+            # Small delay to allow keyboard to appear
+            import time
+            time.sleep(0.5)
+            
+            # Send keys using Appium's keyboard (doesn't require element ID)
+            try:
+                driver = self.driver.helper.get_driver() if self.driver.helper else None
+                if driver:
+                    driver.execute_script('mobile: type', {'text': input_text})
+                    return True
+                else:
+                    logger.error("Driver not available for keyboard input")
+                    return False
+            except Exception as e:
+                logger.error(f"Failed to send keys via mobile: type: {e}")
+                # Fallback: try using action API to send keys
+                try:
+                    from selenium.webdriver.common.action_chains import ActionChains
+                    from selenium.webdriver.common.keys import Keys
+                    driver = self.driver.helper.get_driver() if self.driver.helper else None
+                    if driver:
+                        actions = ActionChains(driver)
+                        actions.send_keys(input_text)
+                        actions.perform()
+                        return True
+                except Exception as e2:
+                    logger.error(f"Fallback keyboard input also failed: {e2}")
+                    return False
+        
+        # Standard input using element ID
         return self.driver.input_text(target_id, input_text)
     
     def _execute_long_press_action(self, action_data: Dict[str, Any]) -> bool:
@@ -114,7 +160,6 @@ class ActionExecutor:
             else:
                 # Default to down
                 direction = "down"
-                logger.debug("No direction specified for flick, defaulting to 'down'")
         
         return self.driver.flick(direction.lower())
     
@@ -168,7 +213,6 @@ class ActionExecutor:
                 return "scroll_down"
             else:
                 # Default to scroll_down (most common)
-                logger.debug(f"Generic 'scroll' action mapped to 'scroll_down' (default)")
                 return "scroll_down"
         
         elif action_type == "swipe":
@@ -179,7 +223,6 @@ class ActionExecutor:
                 return "swipe_right"
             else:
                 # Default to swipe_left (common for navigation)
-                logger.debug(f"Generic 'swipe' action mapped to 'swipe_left' (default)")
                 return "swipe_left"
         
         # Return original if no mapping found

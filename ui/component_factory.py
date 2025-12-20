@@ -205,7 +205,7 @@ class ComponentFactory:
             try:
                 actions_service = config_handler._get_actions_service()
             except Exception as e:
-                logging.debug(f"Could not get actions service for widget: {e}")
+                pass
         
         config_widgets["CRAWLER_AVAILABLE_ACTIONS"] = AvailableActionsWidget(
             actions_service=actions_service,
@@ -273,18 +273,24 @@ class ComponentFactory:
         group = QGroupBox("Image Preprocessing")
         form = QFormLayout(group)
 
-        # Enable Image Context checkbox - placed at the top as the main control
-        config_widgets["ENABLE_IMAGE_CONTEXT"] = QCheckBox()
-        label_enable_image_context = QLabel("Enable Image Context: ")
-        # Use enhanced tooltip that explains the relationship with other options
-        enhanced_tooltip = (
-            "Enable sending screenshots to the AI for visual analysis. "
-            "Disable for text-only analysis using XML only. "
-            "The options below only apply when this option is enabled."
-        )
-        label_enable_image_context.setToolTip(enhanced_tooltip)
-        config_widgets["ENABLE_IMAGE_CONTEXT"].setToolTip(enhanced_tooltip)
+        # Context Source Selection - replacing single "Enable Image Context"
+        # We now allow selecting multiple sources: XML, OCR, Image
+        
+        # XML Source
+        config_widgets["CONTEXT_SOURCE_XML"] = QCheckBox("XML")
+        config_widgets["CONTEXT_SOURCE_XML"].setToolTip("Include generic XML hierarchy in the AI context.")
+        
+        # OCR Source
+        config_widgets["CONTEXT_SOURCE_OCR"] = QCheckBox("OCR")
+        config_widgets["CONTEXT_SOURCE_OCR"].setToolTip("Include OCR-detected text and visual elements in the AI context. Enabling this automatically enables OCR processing.")
+        
+        # Image Source
+        config_widgets["CONTEXT_SOURCE_IMAGE"] = QCheckBox("Image")
+        config_widgets["CONTEXT_SOURCE_IMAGE"].setToolTip("Include screenshots in the AI context (for multimodal models).")
 
+        label_context_sources = QLabel("Context Sources:")
+        label_context_sources.setToolTip("Select which information sources to provide to the AI model.")
+        
         # Warning label (used when auto-disabled by provider capabilities)
         config_widgets["IMAGE_CONTEXT_WARNING"] = QLabel("⚠️ Auto-disabled")
         config_widgets["IMAGE_CONTEXT_WARNING"].setStyleSheet(
@@ -292,13 +298,16 @@ class ComponentFactory:
         )
         config_widgets["IMAGE_CONTEXT_WARNING"].setVisible(False)
 
-        # Horizontal layout for checkbox and warning
-        image_context_layout = QHBoxLayout()
-        image_context_layout.addWidget(label_enable_image_context)
-        image_context_layout.addWidget(config_widgets["ENABLE_IMAGE_CONTEXT"])
-        image_context_layout.addWidget(config_widgets["IMAGE_CONTEXT_WARNING"])
-        image_context_layout.addStretch()
-        form.addRow(image_context_layout)
+        # Horizontal layout for checkboxes
+        context_sources_layout = QHBoxLayout()
+        context_sources_layout.addWidget(label_context_sources)
+        context_sources_layout.addWidget(config_widgets["CONTEXT_SOURCE_XML"])
+        context_sources_layout.addWidget(config_widgets["CONTEXT_SOURCE_OCR"])
+        context_sources_layout.addWidget(config_widgets["CONTEXT_SOURCE_IMAGE"])
+        context_sources_layout.addWidget(config_widgets["IMAGE_CONTEXT_WARNING"])
+        context_sources_layout.addStretch()
+        
+        form.addRow(context_sources_layout)
 
         # Store references to preprocessing option widgets and labels for visibility control
         preprocessing_widgets = []
@@ -798,7 +807,6 @@ class ComponentFactory:
             config_handler.config, "ENABLE_MOBSF_ANALYSIS", False
         )
         config_widgets["ENABLE_MOBSF_ANALYSIS"].setChecked(is_mobsf_enabled)
-        logging.debug(f"Setting initial MobSF checkbox state: {is_mobsf_enabled}")
 
         # API URL field
         from config.urls import ServiceURLs
@@ -822,11 +830,9 @@ class ComponentFactory:
         main_controller = config_handler.main_controller
         main_controller.test_mobsf_conn_btn = QPushButton("Test MobSF Connection")
         mobsf_layout.addRow(main_controller.test_mobsf_conn_btn)
-        logging.debug("Created test_mobsf_conn_btn directly on main_controller")
 
         main_controller.run_mobsf_analysis_btn = QPushButton("Run MobSF Analysis")
         mobsf_layout.addRow(main_controller.run_mobsf_analysis_btn)
-        logging.debug("Created run_mobsf_analysis_btn directly on main_controller")
 
         # Set initial visibility and button states based on checkbox
         # Hide/show fields and buttons based on checkbox state

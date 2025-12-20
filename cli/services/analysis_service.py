@@ -251,9 +251,6 @@ class AnalysisService:
             pdf_output_name
         ))
         
-        self.logger.debug(
-            f"Generating PDF for Target: {target[CKeys.KEY_APP_PACKAGE]}, Run ID: {actual_run_id}, Output: {final_pdf_path}"
-        )
         
         try:
             analyzer = RunAnalyzer(
@@ -352,9 +349,6 @@ class AnalysisService:
             
             if latest_run_row and latest_run_row[0] is not None:
                 actual_run_id = latest_run_row[0]
-                self.logger.debug(
-                    CMsg.MSG_USING_RUN_ID_LATEST.format(run_id=actual_run_id)
-                )
             else:
                 # Fallback: get any run_id
                 cursor_temp.execute(SQL_SELECT_ANY_RUN_ID)
@@ -415,7 +409,6 @@ class AnalysisService:
             
             # If parsing failed or no db_path, try to find database file directly
             if not db_path:
-                self.logger.debug(f"Could not get db_path from parsing, trying direct search for: {session_dir}")
                 # Look for database files in common locations
                 db_candidates = []
                 # Check database subdirectory
@@ -424,21 +417,18 @@ class AnalysisService:
                     db_candidates.extend(db_dir.glob("*_crawl_data.db"))
                 # If no database found, we can't use this session
                 if not db_candidates:
-                    self.logger.debug(f"No database file found in {session_dir}")
                     continue
                 # Use the first database file found
                 db_path = str(db_candidates[0])
                 
             db_path_obj = Path(db_path)
             if not db_path_obj.exists():
-                self.logger.debug(f"Database file does not exist: {db_path} (for session: {session_dir})")
                 continue
             
             # Use modification time of the session directory
             try:
                 mtime = os.path.getmtime(session_dir)
                 candidates.append((mtime, str(session_dir), db_path))
-                self.logger.debug(f"Found valid session: {session_dir} with db: {db_path}")
             except OSError as e:
                 self.logger.warning(f"Could not get mtime for {session_dir}: {e}")
                 continue
@@ -456,6 +446,5 @@ class AnalysisService:
         # Sort by modification time (descending) and return the latest
         candidates.sort(key=lambda x: x[0], reverse=True)
         _, session_dir, db_path = candidates[0]
-        self.logger.info(f"Selected latest session: {session_dir} (mtime: {candidates[0][0]})")
         return (session_dir, db_path)
     

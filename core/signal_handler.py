@@ -43,7 +43,6 @@ def setup_cli_signal_handler(
         if orchestrator:
             try:
                 if hasattr(orchestrator, '_is_running') and orchestrator._is_running:
-                    logger.info("Stopping crawler...")
                     orchestrator.stop_crawler()
                     crawler_stopped = True
             except Exception as e:
@@ -51,15 +50,13 @@ def setup_cli_signal_handler(
         elif crawler_service and hasattr(crawler_service, 'stop_crawler'):
             try:
                 # The stop_crawler method handles the case where crawler is not running
-                logger.info("Attempting to stop crawler...")
                 if crawler_service.stop_crawler():
                     crawler_stopped = True
             except Exception as e:
                 logger.error(f"Error stopping crawler via service: {e}")
         
         if crawler_stopped:
-            logger.info("Crawler stopped successfully.")
-        
+            pass
         # Print user-friendly message
         print("\n[INFO] Operation interrupted by user (Ctrl+C)")
         
@@ -70,5 +67,4 @@ def setup_cli_signal_handler(
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
     
-    logger.debug("Signal handlers registered for SIGINT and SIGTERM")
 

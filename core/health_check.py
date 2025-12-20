@@ -406,7 +406,7 @@ class ValidationService:
                 if status_data.get(KEYS.JSON_KEY_READY, False) or status_data.get(KEYS.JSON_KEY_VALUE, {}).get(KEYS.JSON_KEY_READY, False):
                     return True
         except Exception as e:
-            self.logger.debug(f"Appium server check failed: {e}")
+            pass
         return False
     
     def _check_mobsf_server(self) -> bool:
@@ -417,7 +417,7 @@ class ValidationService:
             if response.status_code == KEYS.HTTP_CODE_OK:
                 return True
         except Exception as e:
-            self.logger.debug(f"MobSF server check failed: {e}")
+            pass
         return False
     
     def _check_ollama_service(self) -> bool:
@@ -427,12 +427,11 @@ class ValidationService:
         try:
             response = requests.get(f"{ollama_url}{KEYS.OLLAMA_TAGS_PATH}", timeout=OLLAMA_API_TIMEOUT)
             if response.status_code == KEYS.HTTP_CODE_OK:
-                self.logger.debug("Ollama service detected via HTTP API")
                 return True
         except requests.RequestException as e:
-            self.logger.debug(f"Ollama HTTP API check failed: {e}")
+            pass
         except Exception as e:
-            self.logger.debug(f"Unexpected error during Ollama HTTP check: {e}")
+            pass
         
         # Fallback to subprocess check
         try:
@@ -442,12 +441,10 @@ class ValidationService:
                 capture_output=True
             )
             if result.returncode == 0:
-                self.logger.debug("Ollama service detected via subprocess")
                 return True
         except Exception as e:
-            self.logger.debug(f"Ollama subprocess check failed: {e}")
+            pass
         
-        self.logger.debug("Ollama service not detected")
         return False
     
     def _check_ai_provider(self) -> Tuple[List[str], List[str]]:

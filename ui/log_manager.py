@@ -32,7 +32,6 @@ class LogManager(QObject):
 
         app = QApplication.instance()
         if app and app.thread() != QThread.currentThread():
-            logging.debug(f"LOG (from thread): {message}")
             return
 
         level_map = {

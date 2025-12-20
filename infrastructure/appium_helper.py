@@ -253,7 +253,6 @@ class AppiumHelper:
                 return True
             except Exception as click_error:
                 last_error = click_error
-                logger.debug('Standard click failed, trying W3C Actions')
             
             # Method 2: W3C Actions API (delegated center and tap)
             try:
@@ -263,7 +262,6 @@ class AppiumHelper:
                 return True
             except Exception as w3c_error:
                 last_error = w3c_error
-                logger.debug('W3C Actions failed, trying mobile command')
             
             # Method 3: Mobile tap command
             try:
@@ -311,7 +309,7 @@ class AppiumHelper:
             try:
                 element.click()
             except Exception:
-                logger.debug('Failed to click element before sending keys, continuing...')
+                pass
             
             # Clear element if requested (re-find to avoid stale reference)
             if clear_first:
@@ -319,7 +317,7 @@ class AppiumHelper:
                     element = self.find_element(selector, strategy)
                     element.clear()
                 except Exception:
-                    logger.debug('Failed to clear element value, continuing...')
+                    pass
             
             # Re-find element right before send_keys to ensure fresh reference
             # This prevents StaleElementReferenceException
@@ -378,10 +376,6 @@ class AppiumHelper:
         if len(self.action_history) > 100:
             self.action_history = self.action_history[-100:]
         
-        logger.debug(
-            f'Action recorded: {action} on {target}, success={success}, '
-            f'duration={duration*1000:.0f}ms'
-        )
     
     def get_action_history(self) -> List[ActionHistory]:
         """
@@ -515,7 +509,6 @@ class AppiumHelper:
             
             return None
         except Exception as error:
-            logger.debug(f'Failed to get current package: {error}')
             return None
     
     def get_current_activity(self) -> Optional[str]:
@@ -561,7 +554,6 @@ class AppiumHelper:
             
             return None
         except Exception as error:
-            logger.debug(f'Failed to get current activity: {error}')
             return None
     
     def start_activity(
@@ -609,12 +601,10 @@ class AppiumHelper:
             # Construct activity component for ADB
             activity_component = f'{app_package}/{full_activity}'
             
-            logger.info(f'Attempting to start activity: {activity_component}')
             
             # Method 1: Try Appium's start_activity method (recommended)
             try:
                 self.driver.start_activity(app_package, app_activity)
-                logger.info(f'Started activity using Appium method: {app_package}/{app_activity}')
             except Exception as appium_error:
                 logger.warning(f'Appium start_activity failed: {appium_error}, trying ADB fallback...')
                 
@@ -634,7 +624,6 @@ class AppiumHelper:
                         adb_cmd.extend(['-s', device_udid])
                     adb_cmd.extend(['shell', 'am', 'start', '-W', '-n', activity_component])
                     
-                    logger.debug(f'Executing ADB command: {" ".join(adb_cmd)}')
                     result = subprocess.run(
                         adb_cmd,
                         capture_output=True,
@@ -643,7 +632,7 @@ class AppiumHelper:
                     )
                     
                     if result.returncode == 0:
-                        logger.info(f'Started activity using ADB: {activity_component}')
+                        pass
                     else:
                         logger.error(f'ADB command failed: {result.stderr}')
                         # Try one more fallback with mobile: shell
@@ -661,21 +650,18 @@ class AppiumHelper:
                                 'args': ['start', '-W', '-n', activity_component]
                             }
                         )
-                        logger.info(f'Started activity using mobile: shell: {activity_component}')
                     except Exception as shell_error:
                         logger.error(f'All methods failed to start activity: {shell_error}')
                         return False
             
             # Wait for app to load
             if wait_after_launch > 0:
-                logger.debug(f'Waiting {wait_after_launch}ms for app to fully load...')
                 time.sleep(wait_after_launch / 1000.0)
             
             # Verify the app actually launched
             try:
                 current_package = self.get_current_package()
                 if current_package == app_package:
-                    logger.info(f'Verified app launched successfully: {app_package}')
                     return True
                 else:
                     logger.warning(
@@ -708,10 +694,8 @@ class AppiumHelper:
         
         try:
             self.driver.activate_app(app_package)
-            logger.info(f'Activated app: {app_package}')
             return True
         except Exception as error:
-            logger.debug(f'activateApp failed: {error}')
             return False
     
     def get_target_package(self) -> Optional[str]:
@@ -747,12 +731,10 @@ class AppiumHelper:
         
         # Skip check if no target package is set (not configured)
         if not self.target_package:
-            logger.debug('No target package set, skipping app context check')
             return True
         
         platform = self._get_current_platform()
         if platform != 'android':
-            logger.debug('App context check skipped for non-Android platform')
             return True
         
         # Get current package with retry
@@ -777,9 +759,6 @@ class AppiumHelper:
                     time.sleep(2.0)
                     context_after_relaunch = self.get_current_package()
                     if context_after_relaunch == self.target_package:
-                        logger.info(
-                            'Recovery successful: Relaunched target application after unknown context'
-                        )
                         self.consecutive_context_failures = 0
                         return True
             logger.error('Failed to recover context even after relaunch from unknown state')
@@ -789,13 +768,8 @@ class AppiumHelper:
         # Build allowed packages set
         allowed_packages_set = {self.target_package, *self.allowed_external_packages}
         
-        logger.debug(
-            f'Current app context: {current_package}. '
-            f'Allowed: {", ".join(allowed_packages_set)}'
-        )
         
         if current_package in allowed_packages_set:
-            logger.debug(f'App context OK (In \'{current_package}\')')
             self.consecutive_context_failures = 0
             return True
         
@@ -814,19 +788,15 @@ class AppiumHelper:
             return False
         
         # Attempt recovery: press back button first
-        logger.info('Attempting recovery: Pressing back button...')
         try:
             self.driver.back()
             time.sleep(1.0)
         except Exception as error:
-            logger.debug(f'Failed to press back button during recovery: {error}')
+            pass
         
         # Check if back button worked
         context_after_back = self.get_current_package()
         if context_after_back and context_after_back in allowed_packages_set:
-            logger.info(
-                'Recovery successful: Returned to target/allowed package after back press'
-            )
             self.consecutive_context_failures = 0
             return True
         
@@ -841,7 +811,6 @@ class AppiumHelper:
                 time.sleep(2.0)
                 context_after_relaunch = self.get_current_package()
                 if context_after_relaunch and context_after_relaunch in allowed_packages_set:
-                    logger.info('Recovery successful: Relaunched target application')
                     self.consecutive_context_failures = 0
                     return True
         elif self.target_package:
@@ -850,7 +819,6 @@ class AppiumHelper:
                 time.sleep(2.0)
                 context_after_activate = self.get_current_package()
                 if context_after_activate and context_after_activate in allowed_packages_set:
-                    logger.info('Recovery successful: Activated target application')
                     self.consecutive_context_failures = 0
                     return True
         

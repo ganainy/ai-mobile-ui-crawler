@@ -131,7 +131,6 @@ class Configuration:
                 f"platform must be one of {self.VALID_PLATFORMS}, got '{platform}'"
             )
 
-        logger.debug(f"Configuration '{self.name}' validated successfully")
 
     def update_settings(self, new_settings: Dict[str, Any]) -> None:
         """

@@ -41,7 +41,6 @@ class AppiumDriver:
         self.helper: Optional[AppiumHelper] = None
         self._session_initialized = False
         self._session_info: Optional[Dict[str, Any]] = None
-        logger.debug("AppiumDriver initialized.")
     
     def disconnect(self):
         """Disconnect Appium helper and close session."""
@@ -59,7 +58,6 @@ class AppiumDriver:
                 logger.warning(f"Error during disconnect: {e}")
             finally:
                 self.helper = None
-        logger.debug("AppiumDriver disconnected.")
     
     def _ensure_helper(self) -> bool:
         """Ensure AppiumHelper is initialized."""
@@ -146,15 +144,14 @@ class AppiumDriver:
             if hasattr(self.cfg, '_path_manager'):
                 # Set device info in path manager (this will invalidate cached session path)
                 self.cfg._path_manager.set_device_info(udid=selected_device.id, name=selected_device.name)
-                logger.debug(f"Set device info in path manager: UDID={selected_device.id}, Name={selected_device.name}")
                 
                 # Get the session path (it will be generated with the correct device info)
                 session_path = self.cfg._path_manager.get_session_path(force_regenerate=False)
                 if session_path:
-                    logger.debug(f"Session path: {session_path}")
+                    pass
                 else:
                     # Path not created yet, this is OK - it will be created when needed
-                    logger.debug("Session path not created yet (device info may not be set)")
+                    pass
             
             # Build capabilities for Android
             capabilities = build_android_capabilities(
@@ -209,8 +206,6 @@ class AppiumDriver:
                 'udid': selected_device.id,
             }
             
-            logger.debug(f"[OK] Appium session initialized: {session_state.session_id}")
-            logger.debug(f"Session data: {self._session_info}")
             return True
             
         except AppiumError as e:
@@ -292,17 +287,37 @@ class AppiumDriver:
             return False
         
         try:
-
+            # Prioritize bbox if provided (e.g. for OCR or visual targets)
+            if bbox:
+                top_left = bbox.get('top_left')
+                bottom_right = bbox.get('bottom_right')
+                
+                if top_left and bottom_right:
+                    try:
+                        x = int((top_left[0] + bottom_right[0]) / 2)
+                        y = int((top_left[1] + bottom_right[1]) / 2)
+                        
+                        # Appium tap takes a list of tuples: [(x, y)]
+                        # Use helper.driver to access the underlying Selenium/Appium driver
+                        if self.helper and self.helper.driver:
+                            self.helper.driver.tap([(x, y)])
+                            return True
+                        else:
+                            logger.error("Helper or driver not initialized for coordinate tap")
+                            return False
+                    except Exception as e:
+                        logger.error(f"Error tapping coordinates: {e}")
+                        # Fallback to identifier if coordinates fail
             
-            # Only use element lookup
+            # Use element lookup
             if target_identifier:
                 return self.helper.tap_element(target_identifier, strategy='id')
             
-            logger.error("tap() called without target_identifier")
+            logger.error("tap() called without valid bbox or target_identifier")
             return False
             
         except Exception as e:
-            logger.error(f"Error during tap: {e}")
+            logger.error(f"Error during tap: {e}", exc_info=True)
             return False
     
     def input_text(self, target_identifier: str, text: str) -> bool:
@@ -358,7 +373,6 @@ class AppiumDriver:
                 self.helper.gesture_handler.perform_w3c_swipe(
                     start_x, start_y, end_x, end_y, duration_sec=0.8
                 )
-                logger.debug(f"Scrolled {direction} from ({start_x}, {start_y}) to ({end_x}, {end_y})")
                 return True
             
             return False
@@ -389,7 +403,6 @@ class AppiumDriver:
             # Perform long press using specialized GestureHandler
             if self.helper.gesture_handler:
                 self.helper.gesture_handler.perform_w3c_long_press(x, y, duration)
-                logger.debug(f"Long pressed element {target_identifier} for {duration}ms")
                 return True
             
             return False
@@ -408,7 +421,6 @@ class AppiumDriver:
             driver = self.helper.get_driver()
             if driver:
                 driver.back()
-                logger.debug("[OK] Back press succeeded")
                 return True
             return False
         except Exception as e:
@@ -425,7 +437,6 @@ class AppiumDriver:
             if driver:
                 # Use Appium's press_keycode for Android HOME key (3)
                 driver.press_keycode(3)
-                logger.debug("Home button pressed")
                 return True
             return False
         except Exception as e:
@@ -468,20 +479,17 @@ class AppiumDriver:
                 return False
             
             driver.start_recording_screen(**kwargs)
-            logger.info("Started video recording.")
             return True
             
         except Exception as e:
             error_str = str(e)
             # This is a benign error - Appium tries to stop a non-existent recording before starting
             if "No such process" in error_str or "screenrecord" in error_str:
-                logger.debug(f"Benign video recording init (no prior recording): {error_str[:100]}")
                 # Try starting again - sometimes it works on second attempt
                 try:
                     driver = self.helper.get_driver()
                     if driver:
                         driver.start_recording_screen(**kwargs)
-                        logger.info("Started video recording.")
                         return True
                 except Exception:
                     pass
@@ -508,7 +516,6 @@ class AppiumDriver:
                 return None
             
             video_data = driver.stop_recording_screen()
-            logger.info("Stopped video recording.")
             return video_data
             
         except Exception as e:
@@ -537,7 +544,6 @@ class AppiumDriver:
             with open(file_path, "wb") as f:
                 f.write(base64.b64decode(video_data))
             
-            logger.info(f"Video saved to: {file_path}")
             return True
         except Exception as e:
             logger.error(f"Failed to save video to {file_path}: {e}", exc_info=True)
@@ -580,7 +586,6 @@ class AppiumDriver:
             driver = self.helper.get_driver()
             if driver:
                 driver.terminate_app(package_name)
-                logger.debug(f"Terminated app: {package_name}")
                 return True
             return False
         except Exception as e:
@@ -596,7 +601,6 @@ class AppiumDriver:
             driver = self.helper.get_driver()
             if driver:
                 driver.launch_app()
-                logger.debug("App launched")
                 return True
             return False
         except Exception as e:
@@ -627,7 +631,7 @@ class AppiumDriver:
             wait_ms = int(wait_after_launch * 1000)
             success = self.helper.start_activity(app_package, app_activity, wait_ms)
             if success:
-                logger.debug(f"Successfully started activity: {app_package}/{app_activity}")
+                pass
             return success
         except Exception as e:
             logger.error(f"Error starting activity: {e}")
@@ -663,7 +667,6 @@ class AppiumDriver:
             # Perform double tap using specialized GestureHandler (delegated)
             if self.helper.gesture_handler:
                 self.helper.gesture_handler.perform_w3c_double_tap(x, y)
-                logger.debug(f"Double tapped at coordinates ({x}, {y})")
                 return True
             
             return False
@@ -691,13 +694,11 @@ class AppiumDriver:
             # Try element.clear() first
             try:
                 element.clear()
-                logger.debug(f"Cleared text from element {target_identifier}")
                 return True
             except Exception:
                 # Fallback: send empty string
                 try:
                     element.send_keys("")
-                    logger.debug(f"Cleared text from element {target_identifier} (using send_keys)")
                     return True
                 except Exception as e:
                     logger.error(f"Failed to clear text from element {target_identifier}: {e}")
@@ -773,7 +774,6 @@ class AppiumDriver:
                 self.helper.gesture_handler.perform_w3c_swipe(
                     start_x, start_y, end_x, end_y, duration_sec=0.2
                 )
-                logger.debug(f"Flicked {direction} from ({start_x}, {start_y}) to ({end_x}, {end_y})")
                 return True
             
             return False
@@ -796,7 +796,6 @@ class AppiumDriver:
             driver = self.helper.get_driver()
             if driver:
                 driver.reset()
-                logger.debug("App reset to initial state")
                 return True
             return False
         except Exception as e:
@@ -806,3 +805,23 @@ class AppiumDriver:
     def press_back_button(self) -> bool:
         """Press back button (alias for press_back)."""
         return self.press_back()
+    
+    def hide_keyboard(self) -> bool:
+        """
+        Hide the on-screen keyboard if it's visible.
+        
+        Returns:
+            True if keyboard was hidden or wasn't visible, False on error
+        """
+        if not self._ensure_helper():
+            return False
+        
+        try:
+            driver = self.helper.get_driver()
+            if driver:
+                driver.hide_keyboard()
+                return True
+            return False
+        except Exception as e:
+            # Keyboard might not be present, which is fine
+            return True  # Return True since keyboard being absent is not an error

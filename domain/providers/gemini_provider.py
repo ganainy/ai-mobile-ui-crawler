@@ -66,7 +66,6 @@ class GeminiProvider(ProviderStrategy):
             
             return None
         except Exception as e:
-            logger.debug(f"Failed to read Gemini cache: {e}")
             return None
     
     def _save_models_to_cache(self, models: List[Dict[str, Any]]) -> None:
@@ -87,7 +86,6 @@ class GeminiProvider(ProviderStrategy):
             }
             with open(cache_path, "w", encoding="utf-8") as f:
                 json.dump(payload, f, ensure_ascii=False, indent=2)
-            logger.info(f"Gemini cache saved with schema v1; models: {len(models)}")
         except Exception as e:
             logger.error(f"Failed to save Gemini cache: {e}", exc_info=True)
             import traceback
@@ -196,7 +194,6 @@ class GeminiProvider(ProviderStrategy):
             models_list = data.get("models", [])
             
             if not models_list:
-                logger.info("No Gemini models found in API response")
                 return []
             
             # Normalize all models
@@ -209,7 +206,6 @@ class GeminiProvider(ProviderStrategy):
                     logger.warning(f"Failed to normalize model {model_data}: {e}")
                     continue
             
-            logger.info(f"Fetched {len(normalized_models)} Gemini models")
             return normalized_models
             
         except requests.exceptions.RequestException as e:
@@ -373,7 +369,6 @@ class GeminiProvider(ProviderStrategy):
             
             return None
         except Exception as e:
-            logger.debug(f"Failed to lookup model meta: {e}")
             return None
     
     def refresh_models(self, config: 'Config', wait_for_completion: bool = False) -> Tuple[bool, Optional[str]]:

@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
 
 # Import constants
 from ui.constants import UI_MODE_CONFIG_KEY
+from config.context_constants import ContextSource
 
 
 class ConfigManager(QObject):
@@ -58,7 +59,6 @@ class ConfigManager(QObject):
         # Debounce timers for prompt fields (save after user stops typing)
         self._prompt_save_timers: Dict[str, QTimer] = {}
     # self.user_config = {}  # Removed: not needed
-    logging.debug("ConfigManager initialized with new Config interface (SQLite-backed)")
     
     def _apply_defaults_from_config_to_widgets(self):
         """Apply default values from the config module to UI widgets."""
@@ -73,7 +73,6 @@ class ConfigManager(QObject):
                 logging.warning(f"Config key '{key}' not found in config.")
                 continue
             if value is None:
-                logging.debug(f"Config key '{key}' has None value.")
                 continue
                 
             try:
@@ -236,25 +235,9 @@ class ConfigManager(QObject):
         # Provide user feedback
         if saved_count > 0:
             if is_api_key_save:
-                # Play success sound
-                if hasattr(self.main_controller, '_audio_alert'):
-                    self.main_controller._audio_alert('finish')
-                    
-                self.main_controller.log_message(
-                    f"Configuration saved (including API keys).", 
-                    'green'
-                )
-                
                 # Reload agent if API keys changed
                 if hasattr(self.main_controller, 'agent_manager'):
-                    logging.info("Reloading agent after API key update...")
                     self.main_controller.agent_manager.init_agent()
-                    self.main_controller.log_message("Agent re-initialized with new keys.", "green")
-            else:
-                self.main_controller.log_message("Configuration auto-saved.", 'green')
-                # Play success sound for auto-save
-                if hasattr(self.main_controller, '_audio_alert'):
-                    self.main_controller._audio_alert('finish')
 
     def _is_api_key(self, key: str) -> bool:
         """
@@ -277,7 +260,6 @@ class ConfigManager(QObject):
     @Slot()
     def reset_settings(self) -> None:
         """Reset persisted configuration to defaults via CLI command."""
-        logging.info("Reset Settings button clicked - method called")
         self.main_controller.log_message("Reset Settings button clicked...", 'blue')
         
         # Get parent widget - main_controller is a QMainWindow, so it can be used directly
@@ -390,33 +372,26 @@ class ConfigManager(QObject):
             settings_to_reset = []
 
         if not confirmed:
-            logging.info("Reset Settings cancelled by user")
             self.main_controller.log_message("Reset Settings cancelled.", 'orange')
             return
 
         # Log what will be reset
         if settings_to_reset:
-            logging.info(f"Resetting {len(settings_to_reset)} settings to defaults")
             self.main_controller.log_message(f"Resetting {len(settings_to_reset)} settings to defaults...", 'blue')
             for item in settings_to_reset[:10]:  # Log first 10
                 log_msg = f"  {item['key']}: {item['current']} → {item['default']}"
-                logging.info(log_msg)
                 self.main_controller.log_message(log_msg, 'blue')
             if len(settings_to_reset) > 10:
                 self.main_controller.log_message(f"  ... and {len(settings_to_reset) - 10} more", 'blue')
         
-        logging.info("User confirmed reset - proceeding with CLI command")
         self.main_controller.log_message("Executing reset via CLI...", 'blue')
         
         try:
             # Find project root and run_cli.py path
             from utils.paths import find_project_root
-            logging.debug(f"Finding project root from BASE_DIR: {self.config.BASE_DIR}")
             project_root = find_project_root(Path(self.config.BASE_DIR))
             run_cli_path = project_root / "run_cli.py"
             
-            logging.info(f"Project root: {project_root}")
-            logging.info(f"run_cli.py path: {run_cli_path}")
             self.main_controller.log_message(f"Using CLI: {run_cli_path}", 'blue')
             
             if not run_cli_path.exists():
@@ -428,7 +403,6 @@ class ConfigManager(QObject):
             # Execute CLI command: python run_cli.py config reset --yes
             python_exe = sys.executable
             cmd = [python_exe, str(run_cli_path), "config", "reset", "--yes"]
-            logging.info(f"Executing CLI command: {' '.join(cmd)}")
             self.main_controller.log_message(f"Executing: python run_cli.py config reset --yes", 'blue')
             
             result = subprocess.run(
@@ -439,9 +413,7 @@ class ConfigManager(QObject):
                 cwd=str(project_root)
             )
             
-            logging.info(f"CLI command completed with return code: {result.returncode}")
             if result.stdout:
-                logging.info(f"CLI stdout: {result.stdout}")
                 self.main_controller.log_message(f"CLI output: {result.stdout.strip()}", 'blue')
             if result.stderr:
                 logging.warning(f"CLI stderr: {result.stderr}")
@@ -455,7 +427,6 @@ class ConfigManager(QObject):
                 raise RuntimeError(full_error)
             
             # Reload configuration after reset
-            logging.info("Reloading configuration after reset")
             self.main_controller.log_message("Reloading configuration...", 'blue')
             
             # Force reload all configuration
@@ -464,7 +435,6 @@ class ConfigManager(QObject):
             # Force reload actions widget
             try:
                 if 'CRAWLER_AVAILABLE_ACTIONS' in self.main_controller.config_widgets:
-                    logging.info("Reloading actions widget after reset")
                     self._load_actions_from_service()
                     # Force widget update
                     actions_widget = self.main_controller.config_widgets['CRAWLER_AVAILABLE_ACTIONS']
@@ -478,7 +448,6 @@ class ConfigManager(QObject):
             # Force reload prompts widget
             try:
                 if 'CRAWLER_ACTION_DECISION_PROMPT' in self.main_controller.config_widgets:
-                    logging.info("Reloading prompts widget after reset")
                     self._load_prompts_from_service()
                     # Force widget update
                     prompt_widget = self.main_controller.config_widgets['CRAWLER_ACTION_DECISION_PROMPT']
@@ -492,7 +461,6 @@ class ConfigManager(QObject):
             # Force reload allowed packages widget
             try:
                 if 'ALLOWED_EXTERNAL_PACKAGES_WIDGET' in self.main_controller.config_widgets:
-                    logging.info("Reloading allowed packages widget after reset")
                     packages_widget = self.main_controller.config_widgets['ALLOWED_EXTERNAL_PACKAGES_WIDGET']
                     from ui.allowed_packages_widget import AllowedPackagesWidget
                     if isinstance(packages_widget, AllowedPackagesWidget):
@@ -509,7 +477,6 @@ class ConfigManager(QObject):
             # Force reload focus areas widget
             if hasattr(self, 'focus_areas_widget') and self.focus_areas_widget:
                 try:
-                    logging.info("Reloading focus areas widget after reset")
                     self.focus_areas_widget.reload_focus_areas()
                     if hasattr(self.focus_areas_widget, 'update'):
                         self.focus_areas_widget.update()
@@ -529,16 +496,11 @@ class ConfigManager(QObject):
             
             # Show summary of what was reset
             success_msg = "Configuration reset to defaults successfully!"
-            logging.info(success_msg)
             self.main_controller.log_message(success_msg, 'green')
-            # Play success sound
-            if hasattr(self.main_controller, '_audio_alert'):
-                self.main_controller._audio_alert('finish')
             
             # Log summary of reset
             if settings_to_reset:
                 summary_msg = f"\nReset Summary: {len(settings_to_reset)} settings restored to defaults"
-                logging.info(summary_msg)
                 self.main_controller.log_message(summary_msg, 'green')
                 
                 # Show key settings that were reset
@@ -549,7 +511,6 @@ class ConfigManager(QObject):
                 ]]
                 if key_settings:
                     key_msg = f"Key settings reset: {', '.join(key_settings)}"
-                    logging.info(key_msg)
                     self.main_controller.log_message(key_msg, 'green')
             
             self.main_controller.log_message("Also reset: Focus Areas, Crawler Actions, Crawler Prompts, Allowed Packages", 'green')
@@ -608,6 +569,26 @@ class ConfigManager(QObject):
         for key, widget in self.main_controller.config_widgets.items():
             if key in ['IMAGE_CONTEXT_WARNING', 'ALLOWED_EXTERNAL_PACKAGES_WIDGET']:
                 continue
+            
+            # Handle Context Source Checkboxes specially
+            if key.startswith('CONTEXT_SOURCE_'):
+                source_type = key.replace('CONTEXT_SOURCE_', '').lower() # xml, ocr, image
+                context_source = self.config.get('CONTEXT_SOURCE', ['xml'])
+                if isinstance(context_source, str):
+                    try:
+                        context_source = json.loads(context_source)
+                    except:
+                        context_source = [s.strip() for s in context_source.split(',')]
+                
+                # Default to False
+                is_checked = source_type in context_source
+                if isinstance(widget, QCheckBox):
+                    widget.blockSignals(True)
+                    widget.setChecked(is_checked)
+                    widget.blockSignals(False)
+                    loaded_any = True
+                continue
+
             # Skip service-managed keys - they're loaded separately
             if key in ['CRAWLER_AVAILABLE_ACTIONS', 'CRAWLER_ACTION_DECISION_PROMPT']:
                 continue
@@ -624,9 +605,9 @@ class ConfigManager(QObject):
                         widget.setChecked(bool(value))
                         widget.blockSignals(False)
                         if key == 'ENABLE_MOBSF_ANALYSIS':
-                            logging.debug(f"Set ENABLE_MOBSF_ANALYSIS checkbox to: {bool(value)}")
+                            pass
                         elif key == 'OPENROUTER_SHOW_FREE_ONLY':
-                            logging.debug(f"Set OPENROUTER_SHOW_FREE_ONLY checkbox to: {bool(value)}")
+                            pass
                     except (ValueError, TypeError) as e:
                         logging.warning(f"Error loading config for '{key}': {e}")
                 continue
@@ -726,8 +707,17 @@ class ConfigManager(QObject):
         
         # Update image preprocessing visibility based on ENABLE_IMAGE_CONTEXT state
         if 'ENABLE_IMAGE_CONTEXT' in self.main_controller.config_widgets:
-            enable_image_context = self.config.get('ENABLE_IMAGE_CONTEXT', False)
-            self._update_image_preprocessing_visibility(bool(enable_image_context))
+             # This key is kept for backward compatibility reference, but UI visibility 
+             # is now driven by CONTEXT_SOURCE including 'image'
+             context_source = self.config.get('CONTEXT_SOURCE', ['xml'])
+             if isinstance(context_source, str):
+                 try:
+                     context_source = json.loads(context_source)
+                 except:
+                     context_source = [s.strip() for s in context_source.split(',')]
+             
+             enable_image_context = 'image' in context_source
+             self._update_image_preprocessing_visibility(enable_image_context)
         
         if loaded_any:
             self.main_controller.log_message("Configuration loaded from SQLite successfully.", 'green')
@@ -739,7 +729,6 @@ class ConfigManager(QObject):
         """Handle the MobSF enabled checkbox state change."""
         try:
             is_enabled = bool(state)
-            logging.debug(f"MobSF enabled state changed: {is_enabled}")
             
             # Update visibility and enabled state of API URL field and label
             if 'MOBSF_API_URL' in self.main_controller.config_widgets:
@@ -802,6 +791,55 @@ class ConfigManager(QObject):
                 self.save_config()
         except Exception as e:
             logging.error(f"Error handling health app selection: {e}")
+
+    @Slot(int)
+    def _on_context_source_changed(self, state: int):
+        """Handle changes to any of the Context Source checkboxes."""
+        try:
+            # Reconstruct the CONTEXT_SOURCE list
+            new_sources = []
+            
+            # Check XML
+            if 'CONTEXT_SOURCE_XML' in self.main_controller.config_widgets:
+                if self.main_controller.config_widgets['CONTEXT_SOURCE_XML'].isChecked():
+                    new_sources.append(ContextSource.XML)
+            
+            # Check OCR
+            if 'CONTEXT_SOURCE_OCR' in self.main_controller.config_widgets:
+                if self.main_controller.config_widgets['CONTEXT_SOURCE_OCR'].isChecked():
+                    new_sources.append(ContextSource.OCR)
+            
+            # Check Image
+            if 'CONTEXT_SOURCE_IMAGE' in self.main_controller.config_widgets:
+                if self.main_controller.config_widgets['CONTEXT_SOURCE_IMAGE'].isChecked():
+                    new_sources.append(ContextSource.IMAGE)
+            
+            # Ensure at least one source is selected? (Optional, but safer for backend)
+            # if not new_sources: new_sources = ['xml'] # Force XML if nothing selected?
+            
+            # Update main config list
+            self.config.set('CONTEXT_SOURCE', new_sources)
+            
+            # Sync legacy ENABLE_IMAGE_CONTEXT flag
+            # Note: OCR is enabled by adding ContextSource.OCR to CONTEXT_SOURCE (no separate ENABLE_OCR flag)
+            enable_image = ContextSource.IMAGE in new_sources
+            self.config.set('ENABLE_IMAGE_CONTEXT', enable_image)
+            
+            # Update UI visibility
+            self._update_image_preprocessing_visibility(enable_image)
+            
+            # Trigger full save (or just these keys)
+            # We already called set(), which triggers save if using the right mechanism, 
+            # but here we used config.set() which updates internal dict. 
+            # We should call save_config to persist.
+            
+            # Manually trigger save for these specific keys to ensure UI feedback
+            # Saving CONTEXT_SOURCE handles the list. 
+            # Boolean flags are synced for backward compatibility.
+            self.save_config(key='CONTEXT_SOURCE') 
+            
+        except Exception as e:
+            logging.error(f"Error handling context source change: {e}", exc_info=True)
     
     def connect_widgets_for_auto_save(self):
         """Connect all config widgets to auto-save on change."""
@@ -835,16 +873,15 @@ class ConfigManager(QObject):
                         if hasattr(self.main_controller, 'health_app_scanner') and self.main_controller.health_app_scanner:
                             # Cache-first behavior: on toggle, try to use cached file first, otherwise rescan
                             widget.stateChanged.connect(lambda *args: self.main_controller.health_app_scanner.on_filter_toggle_state_changed())
-                            logging.debug("Connected USE_AI_FILTER_FOR_TARGET_APP_DISCOVERY checkbox to cache-first load-or-scan.")
                     except Exception as e:
                         logging.warning(f"Could not connect AI filter checkbox to rescan: {e}")
                 # If Enable Image Context checkbox changes, update visibility of preprocessing options
                 elif key == 'ENABLE_IMAGE_CONTEXT':
-                    def update_preprocessing_visibility(state: int):
-                        enabled = bool(state)
-                        self._update_image_preprocessing_visibility(enabled)
-                    widget.stateChanged.connect(update_preprocessing_visibility)
-                    logging.debug("Connected ENABLE_IMAGE_CONTEXT checkbox to update preprocessing visibility.")
+                    # Legacy handling, normally not used if UI replaced
+                   pass
+                elif key.startswith('CONTEXT_SOURCE_'):
+                     # Connect context source checkboxes to special handler
+                     widget.stateChanged.connect(self._on_context_source_changed)
             elif isinstance(widget, QComboBox):
                 widget.currentIndexChanged.connect(save_lambda)
             elif isinstance(widget, QTextEdit):
@@ -862,7 +899,6 @@ class ConfigManager(QObject):
                 else:
                     # Other QTextEdit widgets - omit auto-save to avoid excessive saving
                     pass
-        logging.debug("Connected widgets for auto-saving.")
     
     def _update_image_preprocessing_visibility(self, enabled: bool):
         """
@@ -951,7 +987,7 @@ class ConfigManager(QObject):
                     template=template
                 )
                 if success:
-                    logging.debug(f"Updated prompt '{prompt_name}' from UI")
+                    pass
                 else:
                     logging.error(f"Failed to update prompt '{prompt_name}': {message}")
                     self.main_controller.log_message(
@@ -964,7 +1000,7 @@ class ConfigManager(QObject):
                     template
                 )
                 if success:
-                    logging.debug(f"Added prompt '{prompt_name}' from UI")
+                    pass
                 else:
                     logging.error(f"Failed to add prompt '{prompt_name}': {message}")
                     self.main_controller.log_message(
@@ -1080,7 +1116,6 @@ class ConfigManager(QObject):
                     editable_part = full_prompt[:fixed_start].strip()
                     # If we extracted something, return it (and migrate it)
                     if editable_part:
-                        logging.info("Migrating prompt: extracting editable part from full prompt")
                         return editable_part
                 break
         
@@ -1125,7 +1160,6 @@ class ConfigManager(QObject):
                         widget.setPlainText(editable_part)
                         # If migration happened, save the extracted part back to database
                         if editable_part != prompt_text:
-                            logging.info("Migrating ACTION_DECISION_PROMPT: removing fixed part")
                             self._save_prompt_from_ui('ACTION_DECISION_PROMPT', editable_part)
         except Exception as e:
             logging.error(f"Failed to load prompts from service: {e}")

@@ -65,14 +65,12 @@ def detect_android_devices() -> List[DeviceInfo]:
     devices: List[DeviceInfo] = []
     
     try:
-        logger.debug('Detecting Android devices...')
         stdout, stderr, return_code = _run_command(['adb', 'devices', '-l'])
         
         if stderr:
             logger.warning(f'Android device detection stderr: {stderr}')
         
         if return_code != 0:
-            logger.debug('adb command failed, Android devices may not be available')
             return devices
         
         lines = stdout.strip().split('\n')
@@ -101,7 +99,6 @@ def detect_android_devices() -> List[DeviceInfo]:
             
             # Skip other offline/unavailable devices
             if device_state != 'device':
-                logger.debug(f'Skipping device {device_id} with state: {device_state}')
                 continue
             
             # Extract device properties
@@ -122,7 +119,7 @@ def detect_android_devices() -> List[DeviceInfo]:
                 if api_return == 0 and api_stdout.strip():
                     api_level = int(api_stdout.strip())
             except (ValueError, Exception) as e:
-                logger.debug(f'Failed to get API level for device {device_id}: {e}')
+                pass
             
             try:
                 # Get Android version
@@ -132,7 +129,7 @@ def detect_android_devices() -> List[DeviceInfo]:
                 if version_return == 0 and version_stdout.strip():
                     version = version_stdout.strip()
             except Exception as e:
-                logger.debug(f'Failed to get Android version for device {device_id}: {e}')
+                pass
             
             # Determine device type
             device_type: DeviceType = 'emulator' if device_id.startswith('emulator-') else 'device'
@@ -165,7 +162,6 @@ def detect_all_devices() -> List[DeviceInfo]:
     # Sort by name
     android_devices.sort(key=lambda d: d.name)
     
-    logger.debug(f'Total devices found: {len(android_devices)} Android')
     
     return android_devices
 
@@ -231,7 +227,6 @@ def select_best_device(
         
         found_device = find_device_by_name(candidate_devices, device_name)
         if found_device:
-            logger.debug(f'Selected device by name: {found_device.name} ({found_device.platform})')
             return found_device
         
         logger.warning(f"Device with name containing '{device_name}' not found")
@@ -241,7 +236,6 @@ def select_best_device(
         platform_devices = find_devices_by_platform(devices, platform)
         if platform_devices:
             selected_device = platform_devices[0]
-            logger.debug(f'Selected {platform} device: {selected_device.name}')
             return selected_device
         
         logger.warning(f'No {platform} devices found')
@@ -249,7 +243,6 @@ def select_best_device(
     # Auto-select first available device
     selected_device = devices[0]
     if selected_device:
-        logger.debug(f'Auto-selected device: {selected_device.name} ({selected_device.platform})')
         return selected_device
     
     return None

@@ -46,7 +46,6 @@ class CrawlerService:
             # Set up orchestrator and backend
             self.backend = create_process_backend()
             self.orchestrator = CrawlerOrchestrator(self.context.config, self.backend)
-            self.logger.info("Crawler service initialized")
             return True
         except Exception as e:
             self.logger.error(f"Failed to initialize crawler service: {e}")
@@ -71,7 +70,6 @@ class CrawlerService:
             if feature_flags:
                 for flag_name, flag_value in feature_flags.items():
                     self.context.config.set(flag_name, flag_value)
-                    self.logger.info(f"Applied feature flag override: {flag_name} = {flag_value}")
             
             # Initialize if needed
             if not self._initialize_if_needed():
@@ -84,11 +82,9 @@ class CrawlerService:
             # Run in main thread to avoid SQLite threading issues
             if success and generate_pdf_after_run:
                 # Wait for crawler to complete, then run post-run tasks in main thread
-                self.logger.info("Waiting for crawler to complete...")
                 while self.backend.is_process_running():
                     time.sleep(2)  # Check every 2 seconds
                 
-                self.logger.info("Crawler completed. Running post-run tasks...")
                 
                 # Get analysis service
                 analysis_service = self.context.services.get("analysis")
@@ -108,17 +104,15 @@ class CrawlerService:
                         if session_info:
                             break
                         if attempt < max_attempts - 1:
-                            self.logger.debug(f"Attempt {attempt + 1}/{max_attempts}: Session directory not found yet, retrying in {min(attempt + 1, 5)}s...")
-                    
+                            pass
+
                     if not session_info:
                         self.logger.error("Could not find latest session directory for post-run tasks after retries. The database file may not have been created yet, or the session may not have written any data.")
                     else:
                         session_dir, db_path = session_info
-                        self.logger.info(f"Found latest session: {session_dir}")
                         
                         # Run PDF generation if requested
                         if generate_pdf_after_run:
-                            self.logger.info("Generating PDF report...")
                             # Parse session directory to get target info
                             from utils.paths import SessionPathManager
                             target_info = SessionPathManager.parse_session_dir(Path(session_dir), self.context.config)
@@ -126,7 +120,6 @@ class CrawlerService:
                                 pdf_success, pdf_result = analysis_service.generate_analysis_pdf(target_info)
                                 if pdf_success:
                                     pdf_path = pdf_result.get("pdf_path", "Unknown")
-                                    self.logger.info(f"PDF generation completed successfully. PDF saved to: {pdf_path}")
                                 else:
                                     error = pdf_result.get("error", "Unknown error")
                                     self.logger.error(f"PDF generation failed: {error}")
@@ -237,7 +230,6 @@ class CrawlerService:
     
     def cleanup(self):
         """Clean up any resources before shutdown."""
-        self.logger.info("Cleaning up crawler service...")
         try:
             # Save references since we'll be clearing them
             orchestrator = self.orchestrator
@@ -259,6 +251,5 @@ class CrawlerService:
             self.orchestrator = None
             self.backend = None
                 
-            self.logger.info("Crawler service cleanup complete")
         except Exception as e:
             self.logger.error(f"Error during crawler service cleanup: {e}")

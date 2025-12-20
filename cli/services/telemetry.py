@@ -37,7 +37,6 @@ class TelemetryService:
         self.events.append(event)
         
         # Also log to standard logging
-        logging.info(f"[{event_type.upper()}] {message}")
     
     def log_command_start(self, command_name: str, args: Dict[str, Any]) -> None:
         """

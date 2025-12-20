@@ -146,7 +146,6 @@ class LoggerManager:
                 
                 logger.addHandler(ui_handler)
                 self.handlers.append(ui_handler)
-                logging.debug("UIColoredLogHandler added to existing logger configuration")
 
     def setup_logging(self, log_level_str: str, log_file: Optional[str] = None) -> logging.Logger:
         if log_level_str is None:
@@ -292,7 +291,7 @@ def simplify_xml_for_ai(xml_string: str, max_len: int, provider: str = "gemini",
     from config.numeric_constants import XML_ORIGINAL_LEN_LOG_THRESHOLD
     original_len = len(xml_string)
     if original_len > XML_ORIGINAL_LEN_LOG_THRESHOLD:
-        logging.debug(f"Original XML length: {original_len} (provider: {provider})")
+        pass
 
     # Get provider capabilities from config
     from config.app_config import AI_PROVIDER_CAPABILITIES
@@ -321,7 +320,7 @@ def simplify_xml_for_ai(xml_string: str, max_len: int, provider: str = "gemini",
     very_tight_mode = effective_max_len <= XML_VERY_TIGHT_MODE_THRESHOLD
     
     if effective_max_len != max_len:
-        logging.debug(f"Applied {provider}-specific XML limit: {effective_max_len} (from configured {max_len})")
+        pass
 
     possible_parse_errors = (std_etree.ParseError,)
     if USING_LXML and lxml_etree:
@@ -454,7 +453,7 @@ def simplify_xml_for_ai(xml_string: str, max_len: int, provider: str = "gemini",
                         # If removal fails, skip silently
                         pass
             except Exception as e:
-                logging.debug(f"XML pruning skipped due to error: {e}")
+                pass
 
         if USING_LXML and lxml_etree:
             xml_bytes = lxml_etree.tostring(root)
@@ -478,7 +477,7 @@ def simplify_xml_for_ai(xml_string: str, max_len: int, provider: str = "gemini",
 
         final_len = len(simplified_xml)
         if original_len > 200:
-            logging.debug(f"Simplified XML length: {final_len} (from {original_len}) for {provider}")
+            pass
         return simplified_xml
 
     except possible_parse_errors + (ValueError, TypeError) as e:
@@ -524,7 +523,6 @@ def filter_xml_by_allowed_packages(xml_string: str, target_package: str, allowed
         for elem in nodes_to_remove:
             parent = parent_map.get(elem)
             if parent is not None:
-                logging.debug(f"Filtering out XML element with package: '{elem.get('package')}'")
                 parent.remove(elem)
 
         if USING_LXML and lxml_etree:
@@ -731,8 +729,6 @@ if __name__ == '__main__':
     # Basic test for LoggerManager
     test_logger_manager = LoggerManager()
     test_logger = test_logger_manager.setup_logging(log_level_str='DEBUG', log_file='test_utils.log')
-    test_logger.info("This is an info message from utils.py test.")
-    test_logger.debug("This is a debug message from utils.py test.")
     print("Check test_utils.log for output.")
 
     # Clean up test log file

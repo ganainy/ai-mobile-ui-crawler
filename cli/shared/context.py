@@ -99,7 +99,6 @@ class ApplicationContext:
         
         # Find project root using marker files
         api_dir = find_project_root(Path(__file__).resolve().parent)
-        logging.debug(f"API directory: {api_dir}")
         
         try:
             # Use provided config or create a new one
@@ -138,7 +137,6 @@ class ApplicationContext:
             log_file=str(log_file_path)
         )
         
-        logging.debug(f"Application Logging Initialized. Level: {self._log_level}. File: '{log_file_path}'")
     
     @property
     def config(self) -> 'Config':

@@ -48,9 +48,6 @@ class GeminiService:
                 wait_for_completion=wait_for_completion
             )
             if success and cache_path:
-                self.logger.info(
-                    MSG.SUCCESS_GEMINI_MODELS_REFRESHED.format(cache_path=cache_path)
-                )
                 return True, cache_path, None
             elif not success:
                 error_msg = "Failed to refresh Gemini models cache"

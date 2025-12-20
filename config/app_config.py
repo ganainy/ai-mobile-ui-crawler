@@ -246,7 +246,6 @@ class Config:
             # Ensure .env file exists (create if it doesn't)
             if not env_file_path.exists():
                 env_file_path.touch()
-                logging.info(f"Created .env file at {env_file_path}")
             
             # Load existing .env file to preserve other variables (although set_key handles this)
             # We don't strictly need load_dotenv here for set_key to work, but it's good practice
@@ -258,11 +257,9 @@ class Config:
             # Only save non-empty values
             if value and value.strip():
                 set_key(str(env_file_path), normalized_key, value.strip())
-                logging.debug(f"Saved {normalized_key} to .env file")
             else:
                 # If value is empty, remove the key from .env (set to empty string)
                 set_key(str(env_file_path), normalized_key, "")
-                logging.debug(f"Removed {normalized_key} from .env file (empty value)")
                 
         except Exception as e:
             logging.error(f"Failed to save secret {key} to .env file: {e}")
@@ -425,6 +422,23 @@ class Config:
         from config.urls import ServiceURLs
         return self.get("CONFIG_OLLAMA_BASE_URL", ServiceURLs.OLLAMA)
 
+    @property
+    def OCR_ENGINE(self):
+        return self.get("OCR_ENGINE")
+
+    @property
+    def CONTEXT_SOURCE(self):
+        val = self.get("CONTEXT_SOURCE")
+        if isinstance(val, str):
+            import json
+            try:
+                # Handle stored JSON string list
+                return json.loads(val)
+            except:
+                # Fallback for comma-separated string
+                return [s.strip() for s in val.split(',')]
+        return val
+
     def update_setting_and_save(self, key: str, value: Any, callback: Optional[Callable] = None) -> None:
         """Persist the provided value and optionally invoke a callback."""
         try:
@@ -440,7 +454,6 @@ class Config:
 
     def reset_settings(self) -> None:
         """Reset persisted configuration to module defaults."""
-        logging.info("Resetting configuration to defaults")
         try:
             self._user_store.reset_preferences(self._default_snapshot)
             # Also reset ALLOWED_EXTERNAL_PACKAGES (it's a list, not in _default_snapshot)
@@ -586,7 +599,6 @@ class Config:
             True if successful, False otherwise
         """
         try:
-            logging.debug(f"Setting config: {key} = '{value_str}'")
 
             # Try smarter parsing for complex types
             parsed_value = self._parse_value(key, value_str)
@@ -638,17 +650,14 @@ class Config:
                 if looks_like_json or origin_type in (list, dict):
                     try:
                         parsed_value = json.loads(value_str)
-                        logging.debug(f"Parsed JSON for {key}: type={type(parsed_value)}")
                     except Exception:
                         # Fall back to raw string if JSON parsing fails
-                        logging.debug(f"JSON parsing failed for {key}, using string value")
                         parsed_value = value_str
                 else:
                     # Try to parse as basic types
                     parsed_value = self._parse_basic_type(value_str, target_hint)
             
         except Exception as e:
-            logging.debug(f"Error parsing value for {key}: {e}, using string")
             parsed_value = value_str
         
         return parsed_value
@@ -788,6 +797,10 @@ from config.numeric_constants import (
     CACHE_MAX_SCREENS,
 )
 USE_AI_FILTER_FOR_TARGET_APP_DISCOVERY = True
+# OCR Settings - OCR is enabled by adding ContextSource.OCR to CONTEXT_SOURCE
+from config.context_constants import ContextSource
+OCR_ENGINE = "easyocr"
+CONTEXT_SOURCE = ContextSource.default()  # Default: [xml, image]. Add OCR to enable OCR processing
 # AI Safety Settings for Gemini - Less restrictive configuration
 # Set to BLOCK_NONE for all categories to allow all content through
 # Categories: HARM_CATEGORY_HARASSMENT, HARM_CATEGORY_HATE_SPEECH, 

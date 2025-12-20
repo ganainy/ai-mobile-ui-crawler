@@ -250,7 +250,6 @@ class AllowedPackagesWidget(QWidget):
                 self._remove_package_item(package_name)
                 self._update_count_label()
                 self.packages_changed.emit(self.get_packages())
-                logging.info(f"Removed package: {package_name}")
             else:
                 QMessageBox.warning(self, "Error", f"Failed to remove package: {package_name}")
     
@@ -259,7 +258,6 @@ class AllowedPackagesWidget(QWidget):
         self.package_enabled[package_name] = enabled
         self._update_count_label()
         self.packages_changed.emit(self.get_packages())
-        logging.debug(f"Package {package_name} {'enabled' if enabled else 'disabled'}")
     
     def _on_add_clicked(self):
         """Handle add button click."""
@@ -272,7 +270,6 @@ class AllowedPackagesWidget(QWidget):
                     self._add_package_item(package_name, enabled=True)
                     self._update_count_label()
                     self.packages_changed.emit(self.get_packages())
-                    logging.info(f"Added package: {package_name}")
                 else:
                     QMessageBox.warning(self, "Error", f"Failed to add package: {package_name}")
     

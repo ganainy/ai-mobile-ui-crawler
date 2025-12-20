@@ -32,14 +32,12 @@ class Storage:
         Initialize storage with database path.
         """
         self.db_path = db_path
-        logger.info(f"Initializing storage with database path: {self.db_path}")
         self._init_db()
 
     def _init_db(self) -> None:
         """
         Initialize database tables.
         """
-        logger.debug("Initializing database tables")
         try:
             with sqlite3.connect(self.db_path) as conn:
                 # Create configurations table
@@ -68,7 +66,6 @@ class Storage:
                     )
                 """)
 
-            logger.info("Database tables initialized successfully")
         except sqlite3.Error as e:
             logger.error(f"Failed to initialize database: {e}")
             raise
@@ -77,7 +74,6 @@ class Storage:
         """
         Save configuration to database.
         """
-        logger.debug(f"Saving configuration: {config.config_id}")
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cols = ', '.join(self.COLS_CONFIG)
@@ -91,7 +87,6 @@ class Storage:
                     config.updated_at.isoformat(),
                     config.is_default
                 ))
-            logger.info(f"Configuration saved successfully: {config.config_id}")
         except sqlite3.Error as e:
             logger.error(f"Failed to save configuration {config.config_id}: {e}")
             raise
@@ -100,7 +95,6 @@ class Storage:
         """
         Retrieve configuration by ID.
         """
-        logger.debug(f"Retrieving configuration: {config_id}")
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cols = ', '.join(self.COLS_CONFIG)
@@ -117,7 +111,6 @@ class Storage:
                         "is_default": bool(row[5]),
                     }
                     config = Configuration.from_dict(config_data)
-                    logger.info(f"Configuration retrieved successfully: {config_id}")
                     return config
                 else:
                     logger.warning(f"Configuration not found: {config_id}")
@@ -130,7 +123,6 @@ class Storage:
         """
         Save crawler session to database.
         """
-        logger.debug(f"Saving session: {session.session_id}")
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cols = ', '.join(self.COLS_SESSION)
@@ -145,7 +137,6 @@ class Storage:
                     session.end_time.isoformat() if session.end_time else None,
                     session.error_message
                 ))
-            logger.info(f"Session saved successfully: {session.session_id} (status: {session.status})")
         except sqlite3.Error as e:
             logger.error(f"Failed to save session {session.session_id}: {e}")
             raise
@@ -154,7 +145,6 @@ class Storage:
         """
         Retrieve crawler session by ID.
         """
-        logger.debug(f"Retrieving session: {session_id}")
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cols = ', '.join(self.COLS_SESSION)
@@ -174,7 +164,6 @@ class Storage:
                     session.end_time = datetime.fromisoformat(row[5]) if row[5] else None
                     session.error_message = row[6]
                     
-                    logger.info(f"Session retrieved successfully: {session_id} (status: {session.status})")
                     return session
                 else:
                     logger.warning(f"Session not found: {session_id}")
@@ -189,6 +178,5 @@ class Storage:
         
         Note: Currently returns empty list as parsed data functionality is not yet implemented.
         """
-        logger.debug(f"Retrieving session results for: {session_id}")
         # TODO: Implement when parsed data functionality is added
         return []

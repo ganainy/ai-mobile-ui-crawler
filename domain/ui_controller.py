@@ -5,7 +5,7 @@ import os
 import re
 import subprocess
 import sys
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 
 from PySide6.QtCore import QProcess, Qt, QThread, QTimer, Signal, QUrl
@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
     QTextEdit,
     QVBoxLayout,
     QWidget,
+    QSplitter,
 )
 
 try:
@@ -36,7 +37,6 @@ try:
 except Exception:
     RunAnalyzer = None
     XHTML2PDF_AVAILABLE = False
-from ui.audio_manager import AudioManager
 from ui.log_manager import LogManager
 from ui.device_manager import DeviceManager
 from ui.report_manager import ReportManager
@@ -78,11 +78,14 @@ class CrawlerControllerWindow(QMainWindow):
         self.start_btn = None
         self.stop_btn = None
         self.log_output = None
-        self.action_history = None
+        self.ai_input_log = None  # New AI Input log
+        self.ai_output_log = None # New AI Output log
         self.screenshot_label = None
         self.clear_logs_btn = None
         self.current_health_app_list_file = None
         self.health_apps_data = None
+        self.ai_history = []  # Stores list of dicts: {'label': str, 'input': str, 'output': str}
+        self.ai_history_dropdown = None
 
         self._ensure_output_directories_exist()
 
@@ -104,7 +107,6 @@ class CrawlerControllerWindow(QMainWindow):
         self.mobsf_ui_manager = MobSFUIManager(self)
         
         # New specialized delegation managers
-        self.audio_manager = AudioManager(self)
         self.agent_manager = AgentManager(self.config, self.log_message)
         
         # Create central widget and main layout
@@ -119,8 +121,9 @@ class CrawlerControllerWindow(QMainWindow):
         self._setup_ui(main_layout)
         
         # Initialize Log, Device and Report managers after UI setup
+        # Initialize Log, Device and Report managers after UI setup
         self.log_manager = LogManager(
-            self.log_output, self.action_history, self.status_label, 
+            self.log_output, None, self.status_label, 
             self.step_label, self.progress_bar, self
         )
         self.device_manager = DeviceManager(
@@ -177,11 +180,9 @@ class CrawlerControllerWindow(QMainWindow):
             stored_mode = self.config.get(UI_MODE_CONFIG_KEY)
             if stored_mode:
                 initial_mode = stored_mode
-                logging.debug(f"Setting initial UI mode from SQLite config store: {initial_mode}")
         except Exception as e:
             logging.warning(f"Error retrieving {UI_MODE_CONFIG_KEY} from config store: {e}")
 
-        logging.debug(f"Initial UI mode determined as: {initial_mode}")
 
         # Set the dropdown to the initial mode
         mode_index = self.config_manager.ui_mode_dropdown.findText(initial_mode)
@@ -344,7 +345,7 @@ class CrawlerControllerWindow(QMainWindow):
                 current_provider = self.config_widgets["AI_PROVIDER"].currentText()
                 self.ui_state_handler._update_model_types(current_provider)
             except Exception as e:
-                logging.debug(f"Failed to apply free-only filter: {e}")
+                pass
 
         self.config_widgets["OPENROUTER_SHOW_FREE_ONLY"].stateChanged.connect(
             _on_free_only_changed
@@ -373,7 +374,11 @@ class CrawlerControllerWindow(QMainWindow):
         # Main content area: Logs on left (2/3), Screenshot + Action History stacked on right (1/3)
         content_layout = QHBoxLayout()
 
-        # Logs section - takes 2/3 of width and most of vertical space
+        # Logs section - takes 2/3 of width
+        # We will use a Vertical Splitter to divide Logs (top) from AI Trace (bottom)
+        center_splitter = QSplitter(Qt.Orientation.Vertical)
+        
+        # --- Top: Logs ---
         log_group = QGroupBox("Logs")
         log_layout = QVBoxLayout(log_group)
 
@@ -390,6 +395,82 @@ class CrawlerControllerWindow(QMainWindow):
 
         log_layout.addLayout(log_header_layout)
         log_layout.addWidget(self.log_output)
+        
+        # --- AI Trace (Input/Output) Definition ---
+        ai_trace_group = QGroupBox("AI Interaction Inspector")
+        ai_trace_layout = QVBoxLayout(ai_trace_group)
+        
+        # Dropdown for history selection
+        history_layout = QHBoxLayout()
+        history_label = QLabel("Interaction History:")
+        self.ai_history_dropdown = QComboBox()
+        self.ai_history_dropdown.setToolTip("Select previous AI interactions to view their details")
+        self.ai_history_dropdown.currentIndexChanged.connect(self._on_ai_history_selected)
+        
+        history_layout.addWidget(history_label)
+        history_layout.addWidget(self.ai_history_dropdown, 1) # Give it stretch factor
+        self.ai_history_dropdown.setMinimumWidth(350) # Ensure it's wide enough
+        history_layout.addStretch()
+        
+        ai_trace_layout.addLayout(history_layout)
+        
+
+        ai_splitter = QSplitter(Qt.Orientation.Horizontal)
+        
+        # AI Input Panel
+        ai_input_container = QWidget()
+        ai_input_layout = QVBoxLayout(ai_input_container)
+        ai_input_layout.setContentsMargins(0, 0, 0, 0)
+        ai_input_label = QLabel("AI Input (Prompt/Context)")
+        self.ai_input_log = QTextEdit()
+        self.ai_input_log.setReadOnly(True)
+        self.ai_input_log.setStyleSheet("""
+            background-color: #2b2b2b;
+            color: #a9b7c6;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 11px;
+        """)
+        ai_input_layout.addWidget(ai_input_label)
+        ai_input_layout.addWidget(self.ai_input_log)
+        
+        # AI Output Panel
+        ai_output_container = QWidget()
+        ai_output_layout = QVBoxLayout(ai_output_container)
+        ai_output_layout.setContentsMargins(0, 0, 0, 0)
+        ai_output_label = QLabel("AI Output (Response)")
+        self.ai_output_log = QTextEdit()
+        self.ai_output_log.setReadOnly(True)
+        self.ai_output_log.setStyleSheet("""
+            background-color: #2b2b2b;
+            color: #a9b7c6;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 11px;
+        """)
+        ai_output_layout.addWidget(ai_output_label)
+        ai_output_layout.addWidget(self.ai_output_log)
+        
+        # Add to horizontal splitter
+        ai_splitter.addWidget(ai_input_container)
+        ai_splitter.addWidget(ai_output_container)
+        
+        # Set stretch factors for horizontal splitter (50/50)
+        ai_splitter.setStretchFactor(0, 1)
+        ai_splitter.setStretchFactor(1, 1)
+        
+        ai_trace_layout.addWidget(ai_splitter)
+
+        # --- Add Widgets to Vertical Splitter ---
+        # Add AI Trace to vertical splitter (Top, 2/3 height)
+        center_splitter.addWidget(ai_trace_group)
+        
+        # Add Logs to vertical splitter (Bottom, 1/3 height)
+        center_splitter.addWidget(log_group)
+        
+        # Set initial sizes for vertical splitter
+        center_splitter.setStretchFactor(0, 2)
+        center_splitter.setStretchFactor(1, 1)
+        
+
 
         # Right side: Screenshot and Action History stacked vertically
         right_side_layout = QVBoxLayout()
@@ -410,41 +491,14 @@ class CrawlerControllerWindow(QMainWindow):
         """)
         screenshot_layout.addWidget(self.screenshot_label)
 
-        # Action history (bottom right) - small, square or slightly taller
-        action_history_group = QGroupBox("Action History")
-        action_history_layout = QVBoxLayout(action_history_group)
-        self.action_history = QTextEdit()
-        self.action_history.setReadOnly(True)
-        try:
-            from ui.strings import ACTION_HISTORY_PLACEHOLDER
-            self.action_history.setPlaceholderText(ACTION_HISTORY_PLACEHOLDER)
-        except Exception:
-            pass
-        self.action_history.setStyleSheet("""
-            background-color: #333333; 
-            color: #FFFFFF; 
-            font-size: 11px; 
-            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-            border: 1px solid #555555;
-        """)
-        try:
-            from PySide6.QtWidgets import QTextEdit as _QTextEdit
-            self.action_history.setLineWrapMode(_QTextEdit.LineWrapMode.WidgetWidth)
-        except Exception:
-            pass
-        # Action history - small size
-        self.action_history.setMinimumHeight(150)
-        self.action_history.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
-        )
-        action_history_layout.addWidget(self.action_history)
+        # Action history section removed as requested
+        # right_side_layout.addWidget(action_history_group, 1)
 
-        # Add screenshot and action history to right side layout
-        right_side_layout.addWidget(screenshot_group, 2)  # Screenshot gets more space
-        right_side_layout.addWidget(action_history_group, 1)  # Action history gets less space
+        # Add screenshot to right side layout (taking full height now)
+        right_side_layout.addWidget(screenshot_group, 1)
 
-        # Add logs (left, 2/3) and right side (1/3) to content layout
-        content_layout.addWidget(log_group, 2)  # Logs take 2/3 of width
+        # Add center splitter (left, 2/3) and right side (1/3) to content layout
+        content_layout.addWidget(center_splitter, 2)  # Logs/Trace take 2/3 of width
         content_layout.addLayout(right_side_layout, 1)  # Right side takes 1/3 of width
 
         # Add content layout to main layout
@@ -460,7 +514,7 @@ class CrawlerControllerWindow(QMainWindow):
         if hasattr(self, "log_output") and self.log_output:
             self.log_output.append(log_message)
         else:
-            logging.debug(log_message)
+            pass
 
         # Busy overlay dialog (initialized lazily)
         self._busy_dialog = None
@@ -495,7 +549,7 @@ class CrawlerControllerWindow(QMainWindow):
             self._busy_dialog.activateWindow()
             QApplication.processEvents()
         except Exception as e:
-            logging.debug(f"Failed to show busy overlay: {e}")
+            pass
 
     def hide_busy(self) -> None:
         """Hide the busy overlay if visible.
@@ -511,13 +565,8 @@ class CrawlerControllerWindow(QMainWindow):
                     self._busy_dialog.hide()
                 QApplication.processEvents()
         except Exception as e:
-            logging.debug(f"Failed to hide busy overlay: {e}")
+            pass
 
-    def _audio_alert(self, kind: str = "finish") -> None:
-        """Play an audible alert (delegated)."""
-        self.audio_manager.play_alert(kind)
-
-    # _cleanup_media_player removed as it's now handled by AudioManager
 
     def _create_tooltips(self) -> Dict[str, str]:
         """Create tooltips for UI elements."""
@@ -545,16 +594,9 @@ class CrawlerControllerWindow(QMainWindow):
 
             # Connect the refresh apps button - now using self.refresh_apps_btn which has the correct reference
             if self.refresh_apps_btn and hasattr(self.refresh_apps_btn, "clicked"):
-                logging.debug(
-                    "Connecting refresh_apps_btn.clicked to trigger_scan_for_health_apps"
-                )
-                self.log_message("DEBUG: Connecting refresh button signal", "blue")
                 try:
                     self.refresh_apps_btn.clicked.connect(
                         self.health_app_scanner.trigger_scan_for_health_apps
-                    )
-                    self.log_message(
-                        "DEBUG: Button signal connected successfully", "green"
                     )
                 except Exception as button_ex:
                     self.log_message(
@@ -601,10 +643,141 @@ class CrawlerControllerWindow(QMainWindow):
 
     @slot()
     def clear_logs(self):
-        """Clears the log output."""
+        """Clears the log output and AI trace logs."""
         if self.log_output:
             self.log_output.clear()
-            self.log_message("Logs cleared.", "green")
+        
+        if self.ai_input_log:
+            self.ai_input_log.clear()
+            self.ai_input_log.setPlaceholderText("Waiting for AI Input...")
+            
+        if self.ai_output_log:
+            self.ai_output_log.clear()
+            self.ai_output_log.setPlaceholderText("Waiting for AI Output/Response...")
+            
+        # Clear history
+        self.ai_history = []
+        if self.ai_history_dropdown:
+            self.ai_history_dropdown.clear()
+            
+        self.log_message("Logs and AI Trace cleared.", "green")
+
+    def update_ai_input(self, content: Union[str, Dict[str, str]]):
+        """Update the AI Input log and create a new history entry.
+        
+        Args:
+            content: The text (str) or structured data (dict) to display.
+        """
+        # Create new history entry
+        step_num = len(self.ai_history) + 1
+        new_entry = {
+            'label': f"Interaction #{step_num}",
+            'input': content, # Store whatever we got (dict or str)
+            'output': ""  # Output will arrive later
+        }
+        self.ai_history.append(new_entry)
+        
+        # Update dropdown
+        if self.ai_history_dropdown:
+            self.ai_history_dropdown.blockSignals(True)
+            self.ai_history_dropdown.addItem(new_entry['label'])
+            self.ai_history_dropdown.setCurrentIndex(len(self.ai_history) - 1)
+            self.ai_history_dropdown.blockSignals(False)
+            
+        # Update view
+        self._display_ai_input(content)
+            
+        if self.ai_output_log:
+            self.ai_output_log.clear()
+
+    def _display_ai_input(self, content: Union[str, Dict[str, str]]):
+        """Helper to render AI input with proper formatting."""
+        if not self.ai_input_log:
+            return
+
+        if isinstance(content, dict) and 'static_part' in content and 'dynamic_part' in content:
+            # Structured content - use HTML for coloring
+            static_part = content['static_part']
+            dynamic_part = content['dynamic_part']
+            
+            # Escape HTML characters
+            import html
+            static_html = html.escape(static_part).replace('\n', '<br>')
+            dynamic_html = html.escape(dynamic_part).replace('\n', '<br>')
+            
+            # Construct HTML: Static in gray, Dynamic in default/white
+            html_content = f"""
+            <div style="font-family: 'Consolas', 'Monaco', monospace; white-space: pre-wrap;">
+                <span style="color: #666666;">{static_html}</span>
+                <br><br>
+                <span style="color: #a9b7c6; font-weight: bold;">{dynamic_html}</span>
+            </div>
+            """
+            self.ai_input_log.setHtml(html_content)
+        else:
+            # Legacy string content
+            text_content = content if isinstance(content, str) else str(content)
+            self.ai_input_log.setText(text_content)
+            
+        # Reset cursor
+        cursor = self.ai_input_log.textCursor()
+        cursor.movePosition(cursor.MoveOperation.Start)
+        self.ai_input_log.setTextCursor(cursor)
+
+    def update_ai_output(self, content: str):
+        """Update the AI Output log for the latest interaction.
+        
+        Args:
+            content: The text/JSON to display in the AI Output section.
+        """
+        if not self.ai_history:
+            # Received output without input? Create a placeholder entry
+             self.ai_history.append({
+                'label': "Interaction #1 (Output Only)",
+                'input': "(No input recorded)",
+                'output': content
+            })
+             if self.ai_history_dropdown:
+                self.ai_history_dropdown.blockSignals(True)
+                self.ai_history_dropdown.addItem(self.ai_history[-1]['label'])
+                self.ai_history_dropdown.setCurrentIndex(0)
+                self.ai_history_dropdown.blockSignals(False)
+        else:
+            # Update the latest entry
+            self.ai_history[-1]['output'] = content
+
+        # Check if we are currently viewing the latest item
+        is_latest_selected = True
+        if self.ai_history_dropdown:
+             current_idx = self.ai_history_dropdown.currentIndex()
+             if current_idx != len(self.ai_history) - 1:
+                 is_latest_selected = False
+        
+        # Only update view if we are looking at the latest item
+        if is_latest_selected:
+            if self.ai_output_log:
+                self.ai_output_log.setText(content)
+                cursor = self.ai_output_log.textCursor()
+                cursor.movePosition(cursor.MoveOperation.Start)
+                self.ai_output_log.setTextCursor(cursor)
+
+    @slot(int)
+    def _on_ai_history_selected(self, index: int):
+        """Handle selection from history dropdown."""
+        if index < 0 or index >= len(self.ai_history):
+            return
+            
+        entry = self.ai_history[index]
+        
+        if self.ai_input_log:
+            self._display_ai_input(entry['input'])
+            
+        if self.ai_output_log:
+            self.ai_output_log.setText(entry['output'])
+            # Reset cursor
+            cursor = self.ai_output_log.textCursor()
+            cursor.movePosition(cursor.MoveOperation.Start)
+            self.ai_output_log.setTextCursor(cursor)
 
     def _attempt_load_cached_health_apps(self):
         """Tries to load health apps from the cached file path if it exists."""
@@ -620,9 +793,6 @@ class CrawlerControllerWindow(QMainWindow):
                     self.current_health_app_list_file = abs_path
 
                 if os.path.exists(self.current_health_app_list_file):
-                    self.log_message(
-                        f"Attempting to load cached health apps from: {self.current_health_app_list_file}"
-                    )
                     self.health_app_scanner._load_health_apps_from_file(
                         self.current_health_app_list_file
                     )
@@ -707,7 +877,6 @@ class CrawlerControllerWindow(QMainWindow):
                 self.setWindowIcon(app_icon)
                 # Set application icon (used by Windows taskbar)
                 QApplication.setWindowIcon(app_icon)
-                logging.debug("Application icon set successfully")
             else:
                 logging.warning("Failed to get application icon")
         except Exception as e:
@@ -774,9 +943,6 @@ class CrawlerControllerWindow(QMainWindow):
                             self.config.update_setting_and_save(
                                 setting_name, rel_path
                             )
-                            logging.debug(
-                                f"Updated {setting_name} to use relative path: {rel_path}"
-                            )
                     except ValueError:
                         # Different drives, can't make relative
                         pass
@@ -792,7 +958,7 @@ class CrawlerControllerWindow(QMainWindow):
             self.log_manager.log_message(message, color)
         else:
             # Fallback for early logs during init
-            logging.info(f"UI Log (pre-init): {message}")
+            pass
 
     def log_action_with_focus(self, action_data: Dict[str, Any]):
         """Log action with focus area (delegated)."""
@@ -895,10 +1061,7 @@ class CrawlerControllerWindow(QMainWindow):
     @slot()
     def generate_report(self):
         """Generate a PDF report (delegated)."""
-        if self.report_manager.generate_report():
-            self._audio_alert('finish')
-        else:
-            self._audio_alert('error')
+        self.report_manager.generate_report()
 
     # _get_connected_devices removed as it's now handled by DeviceManager/DeviceDetection
 

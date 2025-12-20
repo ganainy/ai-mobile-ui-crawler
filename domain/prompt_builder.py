@@ -92,13 +92,6 @@ class PromptBuilder:
         # Log static prompt parts once
         if ai_interaction_readable_logger and not self._static_prompt_logged:
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            ai_interaction_readable_logger.info("=" * 80)
-            ai_interaction_readable_logger.info(f"AI PROMPT CONFIGURATION - {timestamp}")
-            ai_interaction_readable_logger.info("=" * 80)
-            ai_interaction_readable_logger.info(formatted_prompt)
-            ai_interaction_readable_logger.info("")
-            ai_interaction_readable_logger.info("(Note: The above JSON schema and available actions are static and will not be repeated in subsequent logs)")
-            ai_interaction_readable_logger.info("")
             self._static_prompt_logged = True
         
         def format_prompt_with_context(context: Dict[str, Any]) -> str:
@@ -110,6 +103,7 @@ class PromptBuilder:
             dynamic_parts = []
             
             # Add context information
+            xml_included = False
             if context.get("xml_context"):
                 xml_string = context['xml_context']
                 if not isinstance(xml_string, str):
@@ -118,6 +112,26 @@ class PromptBuilder:
                 xml_part = f"\n\nCurrent screen XML:\n{xml_string}"
                 prompt_parts.append(xml_part)
                 dynamic_parts.append(xml_part)
+                xml_included = True
+
+            # Add OCR context if available
+            if context.get("ocr_context"):
+                ocr_items = context['ocr_context']
+                if ocr_items:
+                    ocr_lines = ["\n\nVisual Elements (OCR detected):"]
+                    ocr_lines.append("IMPORTANT: When using these elements, you MUST use the 'ocr_X' ID (e.g., 'ocr_0', 'ocr_5') as your target_identifier. Do NOT invent element names.")
+                    ocr_lines.append("")
+                    for idx, item in enumerate(ocr_items):
+                        text = item.get('text', '').strip()
+                        # Assign a temporary ID based on index
+                        elem_id = f"ocr_{idx}"
+                        # Include bounds as a hint, though LLM should rely on ID
+                        bounds = item.get('bounds')
+                        ocr_lines.append(f"- ID: {elem_id} | Text: \"{text}\" | Bounds: {bounds}")
+                    
+                    ocr_part = "\n".join(ocr_lines)
+                    prompt_parts.append(ocr_part)
+                    dynamic_parts.append(ocr_part)
             
             # Add stuck detection warning if applicable
             if context.get("is_stuck"):
@@ -142,7 +156,7 @@ class PromptBuilder:
                     forbidden_text = "\n".join(forbidden_lines)
                 
                 navigation_hints = """
-Look for these navigation elements in the XML (HIGHEST PRIORITY):
+Look for these navigation elements in the XML or Visual Elements (HIGHEST PRIORITY):
 - Bottom navigation tabs: tv_home, tv_assortment, tv_cart, tv_account, tv_erx, or any element with "tv_" prefix in bottom navigation area
 - Navigation buttons: Any element with "nav", "menu", "tab", "bar" in resource-id
 - Back buttons: Elements with "back", "arrow", "up" in resource-id or content-desc, or use the "back" action
@@ -276,6 +290,7 @@ In your reasoning, explicitly state: "I am navigating away from this screen to b
             
             # Store dynamic parts in context for logging
             context['_dynamic_prompt_parts'] = "\n".join(dynamic_parts)
+            context['_static_prompt_part'] = formatted_prompt
             
             # Store the full prompt in context for database storage
             full_prompt = "\n".join(prompt_parts)

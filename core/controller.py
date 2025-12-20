@@ -76,7 +76,6 @@ class FlagController:
         """Create a shutdown flag to signal the crawler to stop."""
         try:
             Path(self.shutdown_flag_path).write_text(self.SHUTDOWN_FLAG_CONTENT)
-            self.logger.debug(f"Created shutdown flag: {self.shutdown_flag_path}")
             return True
         except Exception as e:
             self.logger.error(f"Failed to create shutdown flag: {e}")
@@ -86,7 +85,6 @@ class FlagController:
         """Create a pause flag to signal the crawler to pause."""
         try:
             Path(self.pause_flag_path).write_text(self.PAUSE_FLAG_CONTENT)
-            self.logger.debug(f"Created pause flag: {self.pause_flag_path}")
             return True
         except Exception as e:
             self.logger.error(f"Failed to create pause flag: {e}")
@@ -97,7 +95,6 @@ class FlagController:
         try:
             if Path(self.pause_flag_path).exists():
                 Path(self.pause_flag_path).unlink()
-                self.logger.debug(f"Removed pause flag: {self.pause_flag_path}")
             return True
         except Exception as e:
             self.logger.error(f"Failed to remove pause flag: {e}")
@@ -108,7 +105,6 @@ class FlagController:
         try:
             if Path(self.shutdown_flag_path).exists():
                 Path(self.shutdown_flag_path).unlink()
-                self.logger.debug(f"Removed shutdown flag: {self.shutdown_flag_path}")
             return True
         except Exception as e:
             self.logger.error(f"Failed to remove shutdown flag: {e}")
@@ -267,7 +263,6 @@ class CrawlerOrchestrator:
         try:
             session_timestamp = self.config._path_manager.get_timestamp()
             env["CRAWLER_SESSION_TIMESTAMP"] = session_timestamp
-            self.logger.debug(f"Passing session timestamp to crawler: {session_timestamp}")
         except Exception as e:
             self.logger.error(f"Could not get session timestamp to pass to crawler: {e}")
         
@@ -303,7 +298,17 @@ class CrawlerOrchestrator:
         plan.validation_messages = messages
         
         if not is_valid:
-            self.logger.warning(f"Crawler validation failed: {messages}")
+            # Sanitize messages for Windows console logging (remove emojis/unicode)
+            sanitized_messages = []
+            for msg in messages:
+                try:
+                    # Try to encode/decode to ascii to strip non-ascii chars
+                    sanitized_msg = msg.encode('ascii', 'ignore').decode('ascii')
+                    sanitized_messages.append(sanitized_msg)
+                except Exception:
+                    sanitized_messages.append(str(msg))
+            
+            self.logger.warning(f"Crawler validation failed: {sanitized_messages}")
     
     def start_crawler(self) -> bool:
         """Start the crawler process."""
@@ -325,7 +330,6 @@ class CrawlerOrchestrator:
         os.makedirs(os.path.dirname(plan.log_file_path), exist_ok=True)
         
         # Start the process
-        self.logger.info(f"Starting crawler with: {plan.python_executable} {plan.script_path}")
         success = self.backend.start_process(plan)
         
         if success:
@@ -339,7 +343,6 @@ class CrawlerOrchestrator:
                     # Ensure directory exists
                     pid_path.parent.mkdir(parents=True, exist_ok=True)
                     pid_path.write_text(str(pid))
-                    self.logger.debug(f"Wrote PID {pid} to {plan.pid_file_path}")
                 except Exception as e:
                     self.logger.error(f"Failed to write PID file: {e}")
             
@@ -372,7 +375,6 @@ class CrawlerOrchestrator:
             if self._current_plan and os.path.exists(self._current_plan.pid_file_path):
                 try:
                     os.remove(self._current_plan.pid_file_path)
-                    self.logger.debug(f"Removed PID file: {self._current_plan.pid_file_path}")
                 except Exception as e:
                     self.logger.error(f"Failed to remove PID file: {e}")
         else:

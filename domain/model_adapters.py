@@ -105,8 +105,8 @@ class GeminiAdapter(ModelAdapter):
         
         # Log if normalization occurred
         if normalized != model_name:
-            logging.debug(f"Normalized Gemini model name: '{model_name}' -> '{normalized}'")
-        
+            pass
+
         return normalized
     
     def initialize(self, model_config: Dict[str, Any], safety_settings: Optional[Dict] = None) -> None:
@@ -249,7 +249,6 @@ class GeminiAdapter(ModelAdapter):
                 safety_settings=converted_safety_settings
             )
             
-            logging.debug(f"Gemini model initialized: {self.original_model_name} (normalized: {self.model_name})")
             
         except Exception as e:
             logging.error(f"Failed to initialize Gemini model: {e}", exc_info=True)
@@ -351,7 +350,6 @@ class OpenRouterAdapter(ModelAdapter):
             # Store generation parameters
             self.generation_params = model_config.get('generation_config', {})
             
-            logging.debug(f"OpenRouter model initialized: {self.model_name}")
             
         except ImportError:
             error_msg = "OpenAI Python SDK not installed. Run: pip install openai"
@@ -417,7 +415,6 @@ class OpenRouterAdapter(ModelAdapter):
                 # If total estimated size > limit, skip image to prevent payload errors
                 if total_estimated_size > payload_max_bytes:
                     logging.warning(f"Estimated payload size ({total_estimated_size} bytes) too large for OpenRouter (limit: {payload_max_bytes}). Skipping image context.")
-                    logging.debug(f"Prompt size: {estimated_prompt_size}, Image size: {estimated_image_size} -> {estimated_base64_size} (base64)")
                 else:
                     import base64
                     image_b64 = base64.b64encode(image_bytes).decode('utf-8')
@@ -427,7 +424,6 @@ class OpenRouterAdapter(ModelAdapter):
                         "type": "image_url",
                         "image_url": {"url": f"data:image/{image_format.lower()};base64,{image_b64}"}
                     })
-                    logging.debug(f"Added compressed image to OpenRouter payload ({image_format}, {image_quality}% quality, base64 size: {len(image_b64)} chars)")
             
             # Add text prompt
             user_message["content"].append({
@@ -451,11 +447,10 @@ class OpenRouterAdapter(ModelAdapter):
                 payload_max_kb = capabilities.get('payload_max_size_kb', 150)
                 warning_threshold = int(payload_max_kb * 0.9) * 1024
                 
-                logging.debug(f"OpenRouter payload size: {payload_size} bytes")
                 if payload_size > warning_threshold:
                     logging.warning(f"OpenRouter payload size ({payload_size} bytes) approaching limit ({payload_max_kb}KB). Consider reducing XML_SNIPPET_MAX_LEN.")
             except Exception as size_calc_error:
-                logging.debug(f"Could not calculate payload size: {size_calc_error}")
+                pass
             
             # Generate response via OpenAI-compatible API
             def _create_completion(model_name: str):
@@ -553,8 +548,8 @@ class OllamaAdapter(ModelAdapter):
             
         # Log the extraction
         if name_to_process != model_name:
-            logging.debug(f"Extracted model name '{name_to_process}' from display name '{model_name}'")
-            
+            pass
+
         return name_to_process
     
     def _check_vision_support(self, model_name: str) -> bool:
@@ -600,15 +595,13 @@ class OllamaAdapter(ModelAdapter):
             # Test connection to Ollama
             try:
                 ollama.list()
-                logging.debug(f"Ollama connection successful. Using model: {self.model_name}")
                 if self.vision_supported:
-                    logging.debug(f"Model {self.model_name} supports vision capabilities")
+                    pass
                 else:
-                    logging.debug(f"Model {self.model_name} is text-only")
+                    pass
             except Exception as conn_error:
                 logging.warning(f"Could not verify Ollama connection: {conn_error}. Make sure Ollama is running.")
             
-            logging.debug(f"Ollama model initialized: {self.model_name}")
             
         except ImportError:
             error_msg = "Ollama Python SDK not installed. Run: pip install ollama"
@@ -666,13 +659,12 @@ class OllamaAdapter(ModelAdapter):
                         )
                     raise ValueError(error_msg)
                 else:
-                    logging.debug(f"✅ Verified model '{self.model_name}' is available in Ollama")
+                    pass
             except ValueError:
                 # Re-raise ValueError (model not found) without modification
                 raise
             except Exception as list_error:
                 # If we can't list models, store available_model_names as empty for later error handling
-                logging.debug(f"Could not verify model availability: {list_error}")
                 available_model_names = []
             
             # Prepare messages and images
@@ -689,7 +681,6 @@ class OllamaAdapter(ModelAdapter):
                     # The Ollama SDK supports passing PIL images directly in some versions
                     # If not supported, we'll use the raw image data
                     images.append(image)
-                    logging.debug(f"Added image to Ollama request (format: {image.format}, size: {image.size})")
                 except Exception as img_error:
                     logging.error(f"Error processing image for Ollama: {img_error}", exc_info=True)
                     raise ValueError(f"Failed to process image for Ollama: {img_error}")
@@ -706,7 +697,6 @@ class OllamaAdapter(ModelAdapter):
             
             # Use different API based on whether model supports vision
             if supports_vision and images:
-                logging.debug(f"Using Ollama vision API with {len(images)} images")
                 
                 try:
                     # Using chat method with images in the message as shown in Ollama docs
@@ -772,7 +762,6 @@ class OllamaAdapter(ModelAdapter):
                         logging.error(f"Ollama chat API call failed: {chat_error}")
                         raise ValueError(f"Ollama API error: {chat_error}")
             else:
-                logging.debug("Using Ollama chat API (text-only)")
                 try:
                     # Use chat API for text-only models
                     response = ollama.chat(

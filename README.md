@@ -14,6 +14,9 @@ An automated Android app testing tool powered by pluggable AI model adapters (Ge
 ## Features
 
 - **AI-Powered Exploration** - Multiple provider support (Gemini, Ollama, OpenRouter)
+- **OCR-Based Element Detection** - Detects text elements not accessible via standard accessibility APIs
+- **AI Interaction Inspector** - Real-time visibility into AI prompts and responses with color-coded display
+- **Enhanced Action History** - Human-readable descriptions of actions for better AI context
 - **Intelligent State Management** - Visual and structural hashing for unique screen identification
 - **Loop Detection** - Prevents repetitive patterns
 - **Traffic Capture** - Optional network monitoring via PCAPdroid during crawl (saves .pcap files)
@@ -64,12 +67,16 @@ The system uses Appium-Python-Client for direct mobile device interaction. No ex
 - **`run_ui.py`** - GUI entry point
 - **`cli/main.py`** - CLI command orchestration
 - **`core/crawler.py`** - Main crawling logic and state transitions
+- **`core/crawl_logger.py`** - Enhanced logging with human-readable action history
 - **`domain/agent_assistant.py`** - Main AI orchestration (lean container)
 - **`domain/action_executor.py`** - Device interaction logic and action dispatching
 - **`domain/prompt_builder.py`** - Dynamic prompt construction and JSON output parsing
 - **`domain/langchain_wrapper.py`** - LangChain model adapters and multimodal context
 - **`domain/model_adapters.py`** - Unified AI provider integration
+- **`domain/ui_controller.py`** - UI management including AI Interaction Inspector
+- **`config/context_constants.py`** - Centralized prompt configuration constants
 - **`infrastructure/appium_helper.py`** - Core Appium session management
+- **`infrastructure/ocr_service.py`** - OCR-based element detection service
 - **`infrastructure/device_detection.py`** - Device/emulator detection
 - **`infrastructure/capability_builder.py`** - W3C capability building
 - **`domain/screen_state_manager.py`** - State tracking and transitions

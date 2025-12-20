@@ -198,20 +198,14 @@ class HealthAppScanner(QObject):
             logging.error(msg)
 
             # Additional debug information
-            self.main_controller.log_message(
-                f"DEBUG: Current directory: {os.getcwd()}", "red"
-            )
-            self.main_controller.log_message(
-                f"DEBUG: API directory: {self.api_dir}", "red"
-            )
+            # Additional debug information handled by internal logging
+            pass
 
             # Try to find the script in other locations
             for root, dirs, files in os.walk(self.api_dir):
                 if "find_app_info.py" in files:
                     found_path = os.path.join(root, "find_app_info.py")
-                    self.main_controller.log_message(
-                        f"DEBUG: Found script at: {found_path}", "green"
-                    )
+                    logging.info(f"Found script at: {found_path}")
 
             return
 
@@ -220,17 +214,8 @@ class HealthAppScanner(QObject):
             # First check if ADB is in PATH
             adb_path = shutil.which("adb")
             if not adb_path:
-                self.main_controller.log_message(
-                    "Error: ADB not found in PATH. Please ensure ADB is installed and in your PATH.",
-                    "red",
-                )
-                self.main_controller.app_scan_status_label.setText(
-                    "App Scan: ADB not found in PATH!"
-                )
+                self.main_controller.app_scan_status_label.setText("App Scan: ADB not found!")
                 return
-
-            self.main_controller.log_message(f"Found ADB at: {adb_path}", "green")
-
             # Now check the ADB version
             result = subprocess.run(
                 ["adb", "version"], capture_output=True, text=True, timeout=10
@@ -249,9 +234,7 @@ class HealthAppScanner(QObject):
                 )
                 return
 
-            self.main_controller.log_message(
-                f"ADB version: {result.stdout.strip()}", "green"
-            )
+            self.main_controller.app_scan_status_label.setText("App Scan: Checking devices...")
 
             # Check if any devices are connected
             devices_result = subprocess.run(
@@ -449,9 +432,6 @@ class HealthAppScanner(QObject):
             self.main_controller.app_scan_status_label.setText(
                 f"App Scan: Failed (code {exit_code})"
             )
-            # Play error sound
-            if hasattr(self.main_controller, '_audio_alert'):
-                self.main_controller._audio_alert('error')
             return
 
         try:
@@ -717,9 +697,6 @@ class HealthAppScanner(QObject):
                             app for app in raw_apps 
                             if isinstance(app, dict) and app.get("is_health_app") is True
                         ]
-                        self.main_controller.log_message(
-                            f"Filter enabled: Showing {len(self.health_apps_data)} health apps (filtered from {len(raw_apps)} total)", "green"
-                        )
                         if len(self.health_apps_data) == 0:
                             self.main_controller.log_message(
                                 "No health apps found. All apps have is_health_app=False or null. Try unchecking the filter to see all apps.", "orange"
@@ -779,9 +756,6 @@ class HealthAppScanner(QObject):
                 self.main_controller.app_scan_status_label.setText(
                     f"App Scan: Found {len(self.health_apps_data)} apps"
                 )
-                # Play success sound
-                if hasattr(self.main_controller, '_audio_alert'):
-                    self.main_controller._audio_alert('finish')
             else:
                 # Look for any cached device-specific file as a last resort
                 app_info_dir = os.path.join(
@@ -837,9 +811,6 @@ class HealthAppScanner(QObject):
                             self.main_controller.app_scan_status_label.setText(
                                 f"App Scan: Found {len(self.health_apps_data)} apps"
                             )
-                            # Play success sound
-                            if hasattr(self.main_controller, '_audio_alert'):
-                                self.main_controller._audio_alert('finish')
                             return
                     except Exception as cached_error:
                         self.main_controller.log_message(
@@ -870,9 +841,6 @@ class HealthAppScanner(QObject):
                     self.main_controller.app_scan_status_label.setText(
                         "App Scan: Device/ADB Error"
                     )
-                    # Play error sound
-                    if hasattr(self.main_controller, '_audio_alert'):
-                        self.main_controller._audio_alert('error')
                 else:
                     self.main_controller.log_message(
                         "Could not find valid health app data in scan output.", "red"
@@ -887,18 +855,12 @@ class HealthAppScanner(QObject):
                     self.main_controller.app_scan_status_label.setText(
                         "App Scan: Error parsing results"
                     )
-                    # Play error sound
-                    if hasattr(self.main_controller, '_audio_alert'):
-                        self.main_controller._audio_alert('error')
         except Exception as e:
             self.main_controller.log_message(
                 f"Unexpected error processing app scan results: {e}", "red"
             )
             logging.error(f"Exception in _on_find_apps_finished: {e}", exc_info=True)
             self.main_controller.app_scan_status_label.setText("App Scan: Error")
-            # Play error sound
-            if hasattr(self.main_controller, '_audio_alert'):
-                self.main_controller._audio_alert('error')
 
     def _load_health_apps_from_file(self, file_path: str, filter_health_only: Optional[bool] = None):
         """Load apps data from a JSON file (unified format only).
@@ -918,10 +880,6 @@ class HealthAppScanner(QObject):
                 )
                 return
 
-            self.main_controller.log_message(
-                f"Attempting to load apps from: {file_path}", "blue"
-            )
-
             # Determine filter state - use parameter if provided, otherwise check config
             if filter_health_only is None:
                 filter_health_only = bool(
@@ -940,17 +898,8 @@ class HealthAppScanner(QObject):
                 # Get all apps from the unified list
                 raw_apps = data["apps"]
                 
-                # Log raw data info
-                self.main_controller.log_message(
-                    f"Raw apps list has {len(raw_apps)} items", "blue"
-                )
-                
-                # Check first item type for debugging
                 if raw_apps and len(raw_apps) > 0:
                     first_item_type = type(raw_apps[0]).__name__
-                    self.main_controller.log_message(
-                        f"First item type: {first_item_type}", "blue"
-                    )
                     if not isinstance(raw_apps[0], dict):
                         self.main_controller.log_message(
                             f"WARNING: First item is not a dict! Value: {str(raw_apps[0])[:100]}", "orange"
@@ -970,9 +919,6 @@ class HealthAppScanner(QObject):
                         app for app in raw_apps 
                         if isinstance(app, dict) and app.get("is_health_app") is True
                     ]
-                    self.main_controller.log_message(
-                        f"Filter enabled: Showing {len(self.health_apps_data)} health apps (filtered from {len(raw_apps)} total)", "green"
-                    )
                     if len(self.health_apps_data) == 0:
                         self.main_controller.log_message(
                             "No health apps found. All apps have is_health_app=False or null. Try unchecking the filter to see all apps.", "orange"
@@ -1163,10 +1109,6 @@ class HealthAppScanner(QObject):
                 "Select target app...", None
             )  # Default item
 
-            self.main_controller.log_message(
-                f"Starting dropdown population with {len(self.health_apps_data)} apps", "blue"
-            )
-
             # Try to restore last selected app if it exists
             last_selected_app = getattr(self.main_controller, "last_selected_app", {})
             # Ensure last_selected_app is a dictionary - it might be None, string, or other type
@@ -1235,11 +1177,6 @@ class HealthAppScanner(QObject):
                         f"Error restoring last selected app: {e}",
                         "orange"
                     )
-            
-            self.main_controller.log_message(
-                f"Dropdown population complete: {valid_items_count} valid items, {invalid_items_count} skipped",
-                "green"
-            )
         except Exception as e:
             import traceback
             self.main_controller.log_message(
@@ -1254,13 +1191,4 @@ class HealthAppScanner(QObject):
             self.main_controller.log_message(
                 f"  health_apps_data length: {len(self.health_apps_data) if isinstance(self.health_apps_data, (list, dict)) else 'N/A'}", "red"
             )
-            if isinstance(self.health_apps_data, list) and len(self.health_apps_data) > 0:
-                self.main_controller.log_message(
-                    f"  First item type: {type(self.health_apps_data[0])}", "red"
-                )
-                self.main_controller.log_message(
-                    f"  First item value: {str(self.health_apps_data[0])[:100]}", "red"
-                )
-            self.main_controller.log_message(
-                f"  Stack trace:\n{traceback.format_exc()}", "red"
-            )
+         

@@ -109,13 +109,7 @@ class CrawlerManager(QObject):
         """Handle action callback from orchestrator."""
         self.last_action = action
         self.action_updated.emit(action)
-        self.main_controller.action_history.append(f"{action}")
-        try:
-            sb = self.main_controller.action_history.verticalScrollBar()
-            if sb:
-                sb.setValue(sb.maximum())
-        except Exception:
-            pass
+        # Action history UI update removed as requested
     
     def _on_screenshot_callback(self, screenshot_path: str):
         """Handle screenshot callback from orchestrator."""
@@ -140,7 +134,6 @@ class CrawlerManager(QObject):
     
     def _on_end_callback(self, end_status: str):
         """Handle end callback from orchestrator."""
-        # Log the status but don't play audio here - let handle_process_finished handle it
         # This callback is just for logging purposes, not for determining completion
         self.main_controller.log_message(f"Final status: {end_status}", "blue")
     
@@ -244,8 +237,7 @@ class CrawlerManager(QObject):
     @Slot()
     def perform_pre_crawl_validation(self):
         """Perform pre-crawl validation checks asynchronously."""
-        self.main_controller.log_message("🔍 Performing pre-crawl validation checks...", 'blue')
-        self.main_controller.log_message("⏳ Checking services (this may take a few seconds)...", 'blue')
+        self.main_controller.log_message("⏳ Validating services and requirements...", 'blue')
         
         # Show loading overlay
         self.main_controller.show_busy("Validating services and requirements...")
@@ -277,19 +269,12 @@ class CrawlerManager(QObject):
             self.main_controller.log_message("", 'white')  # Empty line
             self.main_controller.log_message("⚠️ Some requirements are not met.", 'orange')
             self.main_controller.log_message("💡 You can still start the crawler, but it may fail if services are not available.", 'blue')
-            # Play error sound for blocking issues
-            if hasattr(self.main_controller, '_audio_alert'):
-                self.main_controller._audio_alert('error')
         elif warnings:
             self.main_controller.log_message("", 'white')  # Empty line
             self.main_controller.log_message("✅ Core requirements met. Warnings shown above.", 'green')
-            # Play success sound (warnings are non-blocking)
-            if hasattr(self.main_controller, '_audio_alert'):
-                self.main_controller._audio_alert('finish')
         else:
-            # No issues at all - play success sound
-            if hasattr(self.main_controller, '_audio_alert'):
-                self.main_controller._audio_alert('finish')
+            # No issues at all
+            pass
 
         # Show detailed status
         self._display_validation_details(status_details)
@@ -302,15 +287,11 @@ class CrawlerManager(QObject):
         
         self.main_controller.log_message(f"❌ Validation error: {error_message}", 'red')
         logging.error(f"Validation error: {error_message}")
-        # Play error sound
-        if hasattr(self.main_controller, '_audio_alert'):
-            self.main_controller._audio_alert('error')
     
     def _display_validation_details(self, status_details: Dict[str, Any]):
         """Display detailed validation status."""
         try:
-            self.main_controller.log_message("🔍 Pre-Crawl Validation Details:", 'blue')
-            self.main_controller.log_message("=" * 50, 'blue')
+            self.main_controller.log_message("🔍 Validation Results:", 'blue')
             
             for service_name, details in status_details.items():
                 if service_name in ['mobsf', 'mcp']:
@@ -332,8 +313,6 @@ class CrawlerManager(QObject):
                 if service_name == 'api_keys' and details.get('issues'):
                     for issue in details['issues']:
                         self.main_controller.log_message(f"   {issue}", 'orange')
-            
-            self.main_controller.log_message("=" * 50, 'blue')
             
             # Count blocking issues (required services that are not running)
             blocking_issues = sum(1 for details in status_details.values() 
@@ -401,7 +380,6 @@ class CrawlerManager(QObject):
             output_dir = self.config.get('OUTPUT_DATA_DIR', 'output_data')
             if output_dir and not os.path.exists(output_dir):
                 os.makedirs(output_dir, exist_ok=True)
-                self.main_controller.log_message(f"Created output directory: {output_dir}", 'blue')
         except Exception as e:
             self.main_controller.log_message(f"ERROR: Failed to prepare output directories: {e}", 'red')
             return
@@ -409,7 +387,6 @@ class CrawlerManager(QObject):
         if self._shutdown_flag_file_path and os.path.exists(self._shutdown_flag_file_path):
             try:
                 os.remove(self._shutdown_flag_file_path)
-                self.main_controller.log_message("Removed existing shutdown flag.", 'blue')
             except Exception as e:
                 self.main_controller.log_message(
                     f"Warning: Could not remove existing shutdown flag: {e}", 'orange'
@@ -418,7 +395,7 @@ class CrawlerManager(QObject):
         if hasattr(self.main_controller, 'log_output'):
             self.main_controller.log_message("Starting crawler...", 'blue')
         else:
-            logging.debug("Starting crawler...")
+            pass
 
         if not self.crawler_process or self.crawler_process.state() == QProcess.ProcessState.NotRunning:
             # Configure and start the process
@@ -435,7 +412,7 @@ class CrawlerManager(QObject):
             
             # Update UI
             self.main_controller.step_label.setText("Step: 0")
-            self.main_controller.action_history.clear()
+            # Action history clear removed
             self.main_controller.status_label.setText("Status: Starting...")
             self.main_controller.progress_bar.setValue(0)
             self.main_controller.start_btn.setEnabled(False)
@@ -514,14 +491,7 @@ class CrawlerManager(QObject):
                     cmd_args.append("--enable-mobsf-analysis")
                 if enable_video_recording:
                     cmd_args.append("--enable-video-recording")
-                cmd_str = f"{python_exe} -m {module_to_run} crawler start"
-                if enable_traffic_capture:
-                    cmd_str += " --enable-traffic-capture"
-                if enable_mobsf_analysis:
-                    cmd_str += " --enable-mobsf-analysis"
-                if enable_video_recording:
-                    cmd_str += " --enable-video-recording"
-                self.main_controller.log_message(f"Starting crawler with: {cmd_str}", 'blue')
+                # Command constructed based on user selected options
                 # Start Python in unbuffered mode to stream stdout in real-time
                 # Add 'crawler start' command to launch the crawler
                 self.crawler_process.start(python_exe, cmd_args)
@@ -533,14 +503,7 @@ class CrawlerManager(QObject):
                     cmd_args.append("--enable-mobsf-analysis")
                 if enable_video_recording:
                     cmd_args.append("--enable-video-recording")
-                cmd_str = f"{python_exe} {script_to_run} crawler start"
-                if enable_traffic_capture:
-                    cmd_str += " --enable-traffic-capture"
-                if enable_mobsf_analysis:
-                    cmd_str += " --enable-mobsf-analysis"
-                if enable_video_recording:
-                    cmd_str += " --enable-video-recording"
-                self.main_controller.log_message(f"Starting crawler with: {cmd_str}", 'blue')
+                # Command constructed based on user selected options
                 # Run the script directly if module import is not available
                 # Add 'crawler start' command to launch the crawler
                 self.crawler_process.start(python_exe, cmd_args)
@@ -561,27 +524,12 @@ class CrawlerManager(QObject):
             self.main_controller.log_message("Stopping crawler...", 'blue')
             self.main_controller.status_label.setText("Status: Stopping...")
             
-            # DIAGNOSTIC: Check if shutdown flag path exists
-            self.main_controller.log_message(f"DIAGNOSTIC: Shutdown flag path: {self._shutdown_flag_file_path}", 'blue')
-            if os.path.exists(self._shutdown_flag_file_path):
-                self.main_controller.log_message("DIAGNOSTIC: Shutdown flag already exists!", 'orange')
-            
-            # Create shutdown flag for graceful termination
             try:
                 with open(self._shutdown_flag_file_path, 'w') as f:
                     f.write("shutdown requested")
-                self.main_controller.log_message("Created shutdown flag. Waiting for crawler to exit...", 'blue')
-                self.main_controller.log_message(f"DIAGNOSTIC: Shutdown flag created at: {self._shutdown_flag_file_path}", 'blue')
-                
-                # DIAGNOSTIC: Verify flag was created
-                if os.path.exists(self._shutdown_flag_file_path):
-                    self.main_controller.log_message("DIAGNOSTIC: Shutdown flag verified to exist", 'green')
-                else:
-                    self.main_controller.log_message("DIAGNOSTIC: ERROR - Shutdown flag not found after creation!", 'red')
                 
                 # Start a timer to force termination if graceful shutdown takes too long
                 self.shutdown_timer.start(10000)  # 10 seconds timeout
-                self.main_controller.log_message("DIAGNOSTIC: Started 10-second shutdown timer", 'blue')
             except Exception as e:
                 self.main_controller.log_message(f"Error creating shutdown flag: {e}", 'red')
                 # Fallback to termination
@@ -593,20 +541,9 @@ class CrawlerManager(QObject):
     @Slot()
     def force_stop_crawler_on_timeout(self) -> None:
         """Force stop the crawler process if it doesn't respond to graceful shutdown."""
-        self.main_controller.log_message("DIAGNOSTIC: Shutdown timeout triggered - checking process state", 'orange')
         if self.crawler_process and self.crawler_process.state() == QProcess.ProcessState.Running:
             self.main_controller.log_message("Crawler did not exit gracefully. Forcing termination...", 'red')
-            self.main_controller.log_message(f"DIAGNOSTIC: Process PID: {self.crawler_process.processId()}", 'orange')
-            self.main_controller.log_message(f"DIAGNOSTIC: Process state: {self.crawler_process.state()}", 'orange')
-            
-            # DIAGNOSTIC: Check if shutdown flag still exists
-            if os.path.exists(self._shutdown_flag_file_path):
-                self.main_controller.log_message("DIAGNOSTIC: Shutdown flag still exists - crawler not checking it!", 'red')
-            else:
-                self.main_controller.log_message("DIAGNOSTIC: Shutdown flag was removed - crawler ignoring it!", 'red')
-            
             self.crawler_process.kill()
-            self.main_controller.log_message("DIAGNOSTIC: Sent kill signal to process", 'red')
         else:
             self.main_controller.log_message("Crawler process already exited.", 'green')
     
@@ -629,7 +566,7 @@ class CrawlerManager(QObject):
         if hasattr(self.main_controller, 'log_output'):
             self.main_controller.log_message(f"Crawler process {status_text}", 'blue')
         else:
-            logging.debug(f"Crawler process {status_text}")
+            pass
         
         if hasattr(self.main_controller, 'status_label'):
             self.main_controller.status_label.setText(final_msg)
@@ -646,8 +583,6 @@ class CrawlerManager(QObject):
                 self.main_controller.generate_report_btn.setEnabled(True)
         except Exception:
             pass
-
-        # Play audio alert based on exit status and exit code
         # This is the primary mechanism for detecting crawler completion
         try:
             if hasattr(self.main_controller, '_audio_alert'):
@@ -707,11 +642,8 @@ class CrawlerManager(QObject):
         self.main_controller.status_label.setText(f"Status: Error ({error_name})")
         self.main_controller.progress_bar.setRange(0, 100)
         self.main_controller.progress_bar.setValue(0)
-
-        # Play audio alert on error (double beep)
         try:
-            if hasattr(self.main_controller, '_audio_alert'):
-                self.main_controller._audio_alert('error')
+            pass
         except Exception:
             pass
     
@@ -734,7 +666,7 @@ class CrawlerManager(QObject):
                     continue
                 
                 # Skip UI control messages (handled separately below)
-                if any(line.startswith(p) for p in ['UI_STEP:', 'UI_ACTION:', 'UI_SCREENSHOT:', 'UI_STATUS:', 'UI_FOCUS:', 'UI_END:']):
+                if any(line.startswith(p) for p in ['UI_STEP:', 'UI_ACTION:', 'UI_SCREENSHOT:', 'UI_STATUS:', 'UI_FOCUS:', 'UI_END:', 'UI_AI_PROMPT:']):
                     continue
                 
                 # Skip tracebacks and stack traces (remaining sources of clutter)
@@ -786,13 +718,7 @@ class CrawlerManager(QObject):
                 action_text = action_text.strip()
                 if action_text:
                     self.last_action = action_text
-                    self.main_controller.action_history.append(f"{action_text}")
-                    try:
-                        sb = self.main_controller.action_history.verticalScrollBar()
-                        if sb:
-                            sb.setValue(sb.maximum())
-                    except Exception:
-                        pass
+                    # Action history update removed
             
             # Check for UI_SCREENSHOT_PREFIX:path (use last match if multiple found)
             screenshot_matches = re.findall(r'UI_SCREENSHOT:(.*?)(?:\n|$)', output)
@@ -817,6 +743,46 @@ class CrawlerManager(QObject):
                 final_status = end_match.group(1).strip()
                 # Log final status line for visibility
                 self.main_controller.log_message(f"Final status: {final_status}", 'blue')
+            
+            # Check for UI_AI_PROMPT output lines (show complete AI input prompt)
+            ai_prompt_match = re.search(r'UI_AI_PROMPT:(.*)', output, re.DOTALL)
+            if ai_prompt_match:
+                try:
+                    ai_prompt_str = ai_prompt_match.group(1).strip()
+                    # Split the prompt at the first newline to avoid capturing other UI messages
+                    # that may come after in the same output batch
+                    if '\nUI_' in ai_prompt_str:
+                        ai_prompt_str = ai_prompt_str.split('\nUI_')[0].strip()
+                    
+                    if ai_prompt_str and hasattr(self.main_controller, 'update_ai_input'):
+                        # Try to parse as JSON first (new format)
+                        import json
+                        try:
+                            prompt_data = json.loads(ai_prompt_str)
+                            self.main_controller.update_ai_input(prompt_data)
+                        except json.JSONDecodeError:
+                            # Fallback to string (legacy format)
+                            self.main_controller.update_ai_input(ai_prompt_str)
+                        # AI prompt is shown in inspector only, no main log entry needed
+                except Exception as e:
+                    self.main_controller.log_message(f"Error displaying AI prompt: {e}", 'red')
+                    logging.error(f"Error displaying AI prompt: {e}")
+
+            # Check for UI_AI_RESPONSE output lines (show complete AI output response)
+            ai_response_match = re.search(r'UI_AI_RESPONSE:(.*)', output, re.DOTALL)
+            if ai_response_match:
+                try:
+                    ai_response = ai_response_match.group(1).strip()
+                    # Split at first newline to avoid capturing other UI messages
+                    if '\nUI_' in ai_response:
+                        ai_response = ai_response.split('\nUI_')[0].strip()
+                    
+                    if ai_response and hasattr(self.main_controller, 'update_ai_output'):
+                        self.main_controller.update_ai_output(ai_response)
+                        # AI response is shown in inspector only, no main log entry needed
+                except Exception as e:
+                    self.main_controller.log_message(f"Error displaying AI response: {e}", 'red')
+                    logging.error(f"Error displaying AI response: {e}")
                 
             # Check for UI_FOCUS output lines
             focus_match = re.search(r'UI_FOCUS:(.*?)($|\n)', output)

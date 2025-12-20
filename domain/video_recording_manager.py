@@ -39,10 +39,8 @@ class VideoRecordingManager:
             for cfg_key in required_configs:
                 if self.cfg.get(cfg_key) is None:
                     raise ValueError(f"VideoRecordingManager: Required config '{cfg_key}' not found or is None.")
-            logging.debug("VideoRecordingManager initialized and enabled.")
         else:
-            logging.debug("VideoRecordingManager initialized but video recording is DISABLED in config.")
-    
+            pass
     def is_recording(self) -> bool:
         """Returns whether recording is currently active."""
         return self._is_recording
@@ -58,7 +56,6 @@ class VideoRecordingManager:
             True if recording started successfully, False otherwise
         """
         if not self.video_recording_enabled:
-            logging.debug("Video recording disabled by config, not starting.")
             return False
         
         if self._is_recording:
@@ -92,16 +89,12 @@ class VideoRecordingManager:
             self.video_file_path = os.path.join(video_output_dir, video_filename)
             
             # Start recording using Appium's built-in method (no device_path or options needed)
-            logging.debug(f"Starting video recording for app: {target_app_package}")
-            logging.debug(f"Video will be saved to: {self.video_file_path}")
             
             success = self.driver.start_video_recording()
             
             if success:
                 self._is_recording = True
-                logging.debug("Video recording started successfully")
             else:
-                logging.debug("Video recording did not start (this may be benign)")
                 self.video_file_path = None
             
             return success
@@ -119,7 +112,6 @@ class VideoRecordingManager:
             Path to saved video file, or None on error
         """
         if not self.video_recording_enabled:
-            logging.debug("Video recording not enabled, skipping stop/save.")
             return None
         
         if not self._is_recording:
@@ -127,7 +119,6 @@ class VideoRecordingManager:
             return None
         
         try:
-            logging.debug("Stopping video recording...")
             
             # Stop recording and get video data (base64 string)
             video_data = self.driver.stop_video_recording()
@@ -148,7 +139,6 @@ class VideoRecordingManager:
             if success and os.path.exists(self.video_file_path):
                 file_size = os.path.getsize(self.video_file_path)
                 if file_size > 0:
-                    logging.debug(f"Video recording saved successfully: {os.path.abspath(self.video_file_path)} (size: {file_size} bytes)")
                     saved_path = os.path.abspath(self.video_file_path)
                     self.video_file_path = None  # Reset after successful save
                     return saved_path

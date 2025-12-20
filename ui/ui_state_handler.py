@@ -114,11 +114,6 @@ class UIStateHandler:
         # Ensure the config.UI_MODE attribute is updated
         if hasattr(self.config_handler.config, "UI_MODE"):
             self.config_handler.config.UI_MODE = mode
-        logging.debug(f"UI mode switched to and saved: {mode}")
-        logging.debug(
-            f"Config file location: {self.config_handler.config.USER_CONFIG_FILE_PATH}"
-        )
-        self.main_controller.log_message(f"Switched to {mode} mode", "blue")
 
     def _configure_image_context_for_provider(
         self, strategy, config, capabilities, model_dropdown, no_selection_label
@@ -139,7 +134,7 @@ class UIStateHandler:
             try:
                 self._update_image_preprocessing_visibility(False)
             except Exception as e:
-                logging.debug(f"Could not update preprocessing visibility: {e}")
+                pass
         else:
             # Enable image context - provider supports it
             from ui.strings import IMAGE_CONTEXT_ENABLED_TOOLTIP
@@ -155,7 +150,7 @@ class UIStateHandler:
             try:
                 self._update_image_preprocessing_visibility(current_checked)
             except Exception as e:
-                logging.debug(f"Could not update preprocessing visibility: {e}")
+                pass
             
             # For OpenRouter, handle model-specific image support
             if strategy.provider == AIProvider.OPENROUTER:
@@ -185,7 +180,7 @@ class UIStateHandler:
                     try:
                         self._update_image_preprocessing_visibility(False)
                     except Exception as e:
-                        logging.debug(f"Could not update preprocessing visibility: {e}")
+                        pass
                     return
                 
                 # Check model-specific image support
@@ -201,7 +196,7 @@ class UIStateHandler:
                     try:
                         self._update_image_preprocessing_visibility(True)
                     except Exception as e:
-                        logging.debug(f"Could not update preprocessing visibility: {e}")
+                        pass
                 else:
                     self.config_widgets["ENABLE_IMAGE_CONTEXT"].setEnabled(False)
                     self.config_widgets["ENABLE_IMAGE_CONTEXT"].setChecked(False)
@@ -217,7 +212,7 @@ class UIStateHandler:
                     try:
                         self._update_image_preprocessing_visibility(False)
                     except Exception as e:
-                        logging.debug(f"Could not update preprocessing visibility: {e}")
+                        pass
                 
                 # Show/hide non-free warning
                 try:
@@ -227,9 +222,9 @@ class UIStateHandler:
                             is_free = provider.is_model_free(name)
                             self.config_widgets["OPENROUTER_NON_FREE_WARNING"].setVisible(not is_free)
                 except Exception as e:
-                    logging.debug(f"Error toggling non-free warning: {e}")
+                    pass
             except Exception as e:
-                logging.debug(f"Error toggling image context on model change: {e}")
+                pass
         
         model_dropdown.currentTextChanged.connect(_on_openrouter_model_changed)
 
@@ -347,8 +342,7 @@ class UIStateHandler:
                             widget.log_message(warning_msg, "orange")
                             break
             except Exception as e:
-                logging.debug(f"Could not show UI warning: {e}")
-
+                pass
         except Exception as e:
             logging.error(f"Error adding image context warning: {e}")
 
@@ -409,7 +403,6 @@ class UIStateHandler:
                         source = "Downloaded from API"
                         final_message = f"{current_provider_name} models refreshed successfully. Found {model_count} models. {source}"
                     except Exception as e:
-                        logging.debug(f"Could not count models: {e}")
                         source = "Downloaded from API"
                         final_message = f"{current_provider_name} models refreshed successfully. {source}"
                     

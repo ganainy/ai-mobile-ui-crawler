@@ -48,9 +48,6 @@ class OllamaService:
                 wait_for_completion=wait_for_completion
             )
             if success and cache_path:
-                self.logger.info(
-                    MSG.SUCCESS_OLLAMA_MODELS_REFRESHED.format(cache_path=cache_path)
-                )
                 return True, cache_path, None
             elif not success:
                 error_msg = "Failed to refresh Ollama models cache"
@@ -159,7 +156,6 @@ class OllamaService:
                 self.context.config.set(K.CONFIG_AI_PROVIDER, AIProvider.OLLAMA.value)
                 # Save the model ID
                 self.context.config.set(K.CONFIG_DEFAULT_MODEL_TYPE, model_id)
-                self.logger.info(f"Selected Ollama model '{model_id}' saved to config")
             except Exception as e:
                 self.logger.warning(f"Failed to save model selection to config: {e}")
                 # Continue anyway - selection still works for this session

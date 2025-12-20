@@ -68,7 +68,6 @@ def create_pid_file(pid_file_path: str, pid: int) -> bool:
         pid_file = Path(pid_file_path)
         pid_file.parent.mkdir(parents=True, exist_ok=True)
         pid_file.write_text(str(pid))
-        logging.debug(PID_FILE_CREATED.format(path=pid_file_path, pid=pid))
         return True
     except Exception as e:
         logging.error(FAILED_TO_CREATE_PID_FILE.format(path=pid_file_path, error=e))
@@ -110,7 +109,6 @@ def remove_pid_file(pid_file_path: str) -> bool:
         pid_file = Path(pid_file_path)
         if pid_file.exists():
             pid_file.unlink()
-            logging.debug(PID_FILE_REMOVED.format(path=pid_file_path))
         return True
     except Exception as e:
         logging.error(FAILED_TO_REMOVE_PID_FILE.format(path=pid_file_path, error=e))
@@ -142,7 +140,6 @@ def cleanup_pid_file_if_matches(pid_file_path: str, pid_to_check: Optional[int])
 
         if should_remove:
             pid_file.unlink()
-            logging.debug(REMOVED_PID_FILE.format(path=pid_file, pid=pid_in_file))
 
     except (ValueError, OSError, Exception) as e:
         logging.warning(ERROR_DURING_PID_CLEANUP.format(path=pid_file, error=e))
@@ -166,7 +163,6 @@ def create_flag_file(flag_file_path: str, content: str = "flag") -> bool:
         flag_file = Path(flag_file_path)
         flag_file.parent.mkdir(parents=True, exist_ok=True)
         flag_file.write_text(content)
-        logging.debug(FLAG_FILE_CREATED.format(path=flag_file_path))
         return True
     except Exception as e:
         logging.error(FAILED_TO_CREATE_FLAG_FILE.format(path=flag_file_path, error=e))
@@ -186,7 +182,6 @@ def remove_flag_file(flag_file_path: str) -> bool:
         flag_file = Path(flag_file_path)
         if flag_file.exists():
             flag_file.unlink()
-            logging.debug(FLAG_FILE_REMOVED.format(path=flag_file_path))
         return True
     except Exception as e:
         logging.error(FAILED_TO_REMOVE_FLAG_FILE.format(path=flag_file_path, error=e))
@@ -295,7 +290,6 @@ def start_daemon_process(
                 daemon=True
             ).start()
 
-        logging.debug(STARTED_DAEMON_PROCESS.format(pid=process.pid, command=' '.join(command)))
         return process
 
     except Exception as e:
@@ -321,7 +315,6 @@ def _monitor_output(process: subprocess.Popen, callback: Callable[[str], None]) 
 
         # Wait for process to complete
         return_code = process.wait()
-        logging.debug(PROCESS_EXITED.format(pid=pid, code=return_code))
 
     except Exception as e:
         logging.error(ERROR_MONITORING_PROCESS.format(pid=pid, error=e))

@@ -41,7 +41,6 @@ class GUICrawlerInterface:
         # Store initial config data for later initialization
         self._initial_config_data = config_data
 
-        logger.info("GUI Crawler Interface initialized")
 
     def initialize_core(self) -> bool:
         """
@@ -69,7 +68,6 @@ class GUICrawlerInterface:
             # Initialize crawler
             self.crawler = Crawler(self.config)
 
-            logger.info("Core modules initialized successfully for GUI interface")
             return True
 
         except ConfigurationError as e:
@@ -95,7 +93,6 @@ class GUICrawlerInterface:
             session_id = self.current_session.session_id
 
             # GUI-specific session start notification
-            logger.info(f"Started crawler session: {session_id}")
 
             return session_id
 
@@ -163,7 +160,6 @@ class GUICrawlerInterface:
 
             stopped_session = self.crawler.stop_session(target_session_id)
 
-            logger.info(f"Stopped crawler session: {target_session_id}")
 
             return True
 
@@ -213,7 +209,6 @@ class GUICrawlerInterface:
 
         try:
             self.storage.save_configuration(self.config)
-            logger.info(f"Configuration saved: {self.config.config_id}")
             return True
 
         except Exception as e:
@@ -241,7 +236,6 @@ class GUICrawlerInterface:
                 # Reinitialize crawler with new config
                 if self.config:
                     self.crawler = Crawler(self.config)
-                logger.info(f"Configuration loaded: {config_id}")
                 return True
             else:
                 logger.warning(f"Configuration not found: {config_id}")
@@ -262,7 +256,6 @@ class GUICrawlerInterface:
         except Exception as e:
             logger.warning(f"Error during cleanup: {e}")
 
-        logger.info("GUI Crawler Interface cleaned up")
 
 
     # --- Focus Area CRUD GUI methods ---
@@ -279,7 +272,6 @@ class GUICrawlerInterface:
             if success:
                 areas = service.get_focus_areas()
                 result = next((a for a in areas if a.get('name') == name), {})
-                logger.info(f"Focus area added: {result}")
                 return result
             else:
                 logger.error(f"Failed to add focus area: {msg}")
@@ -293,7 +285,6 @@ class GUICrawlerInterface:
             service = self._get_focus_service()
             success, msg = service.remove_focus_area(str(id))
             if success:
-                logger.info(f"Focus area removed: {id}")
                 return True
             else:
                 logger.error(f"Failed to remove focus area: {msg}")
@@ -309,7 +300,6 @@ class GUICrawlerInterface:
             if success:
                 areas = service.get_focus_areas()
                 result = next((a for a in areas if a.get('id') == id), {})
-                logger.info(f"Focus area updated: {result}")
                 return result
             else:
                 logger.error(f"Failed to update focus area: {msg}")
@@ -322,7 +312,6 @@ class GUICrawlerInterface:
         try:
             service = self._get_focus_service()
             result = service.get_focus_areas()
-            logger.info(f"Focus areas: {result}")
             return result
         except Exception as e:
             logger.error(f"Failed to list focus areas: {e}")

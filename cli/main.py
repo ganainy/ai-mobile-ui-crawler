@@ -87,7 +87,6 @@ def run(args: Optional[List[str]] = None) -> int:
             return 1
             
     except KeyboardInterrupt:
-        logging.debug("CLI operation interrupted by user.")
         return 130
     except Exception as e:
         logging.critical(f"Unexpected CLI error: {e}", exc_info=True)
@@ -120,11 +119,9 @@ def _register_commands(registry: CommandRegistry) -> None:
             services_check
         )
 
-        logging.debug("Registering standalone commands...")
         # Register standalone commands
         registry.add_standalone_command(services_check.PrecheckCommand())
 
-        logging.debug("Registering command groups...")
         # Register command groups
         config_group = settings.ConfigCommandGroup()
         device_group = device.DeviceCommandGroup()
@@ -155,7 +152,6 @@ def _register_commands(registry: CommandRegistry) -> None:
         registry.add_group(actions_group)
         registry.add_group(prompts_group)
 
-        logging.debug(f"Registered {len(registry.groups)} groups and {len(registry.standalone_commands)} standalone commands.")
 
     except ImportError as e:
         logging.error(f"Failed to import command modules: {e}")

@@ -58,11 +58,6 @@ class SessionManager:
         start_time = time.time()
         
         try:
-            logger.debug(
-                f'Initializing Appium session: platform={capabilities.get("platformName")}, '
-                f'automationName={capabilities.get("appium:automationName")}, '
-                f'deviceName={capabilities.get("appium:deviceName")}'
-            )
             
             parsed_url = urlparse(appium_url)
             server_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
@@ -110,7 +105,6 @@ class SessionManager:
             self.apply_performance_settings()
             
             duration = (time.time() - start_time) * 1000
-            logger.debug(f'Appium session initialized: sessionId={self.driver.session_id}, duration={duration:.0f}ms')
             
             return self.driver
             
@@ -127,7 +121,6 @@ class SessionManager:
             return
             
         try:
-            logger.debug("Applying performance settings to driver...")
             settings = {
                 "waitForIdleTimeout": 0,
                 "snapshotMaxDepth": 50,
@@ -136,7 +129,6 @@ class SessionManager:
                 "shouldTerminateApp": False
             }
             self.driver.update_settings(settings)
-            logger.debug("✓ Performance settings applied.")
         except Exception as e:
             logger.warning(f"Could not apply performance settings: {e}")
 
@@ -168,7 +160,6 @@ class SessionManager:
         
         for attempt in range(1, self.max_retries + 1):
             try:
-                logger.info(f'Session recovery attempt {attempt}/{self.max_retries}')
                 
                 if self.driver:
                     try:
@@ -187,7 +178,6 @@ class SessionManager:
                     }
                 )
                 
-                logger.info('Session recovery successful')
                 return True
                 
             except Exception as error:
@@ -204,7 +194,6 @@ class SessionManager:
             try:
                 session_id = self.driver.session_id
                 self.driver.quit()
-                logger.info(f'Session closed: {session_id}')
             except Exception as error:
                 logger.error(f'Error closing session: {error}')
             finally:

@@ -69,4 +69,4 @@ class AgentManager:
                         pass
                     logger.removeHandler(handler)
         except Exception as e:
-            logging.debug(f"Error cleaning up agent logger: {e}")
+            pass

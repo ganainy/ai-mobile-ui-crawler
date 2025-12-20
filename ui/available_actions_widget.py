@@ -100,7 +100,7 @@ class AvailableActionsWidget(QWidget):
             # Store description for potential auto-creation
             self.action_descriptions[action_name] = action_description
             if action_id is None:
-                logging.debug(f"Action '{action_name}' loaded without ID - will need to create in DB when toggling")
+                pass
             
             # Create checkbox with action name and description
             checkbox = QCheckBox()
@@ -175,9 +175,9 @@ class AvailableActionsWidget(QWidget):
             )
             
             if success:
-                logging.debug(f"Action '{action_name}' {'enabled' if enabled else 'disabled'}")
                 # No need to reload - checkbox state is already correct and database is updated
                 # Reloading would reset scroll position unnecessarily
+                pass
             else:
                 logging.error(f"Failed to update action '{action_name}': {message}")
                 # Revert checkbox state on failure

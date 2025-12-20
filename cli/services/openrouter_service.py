@@ -45,9 +45,7 @@ class OpenRouterService:
                 wait_for_completion=wait_for_completion
             )
             if success and cache_path:
-                self.logger.info(
-                    MSG.SUCCESS_OPENROUTER_MODELS_REFRESHED.format(cache_path=cache_path)
-                )
+                pass
             else:
                 self.logger.error(MSG.ERR_OPENROUTER_REFRESH_FAILED)
             return success, cache_path

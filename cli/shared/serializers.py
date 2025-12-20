@@ -26,7 +26,6 @@ class JSONSerializer:
             with open(file_path, "r", encoding="utf-8") as f:
                 return json.load(f)
         except FileNotFoundError:
-            logging.debug(f"File not found: {file_path}")
             return None
         except json.JSONDecodeError as e:
             logging.error(f"JSON decode error in {file_path}: {e}")

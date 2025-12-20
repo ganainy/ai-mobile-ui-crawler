@@ -67,7 +67,6 @@ class OllamaProvider(ProviderStrategy):
             
             return None
         except Exception as e:
-            logger.debug(f"Failed to read Ollama cache: {e}")
             return None
     
     def _save_models_to_cache(self, models: List[Dict[str, Any]]) -> None:
@@ -88,7 +87,6 @@ class OllamaProvider(ProviderStrategy):
             }
             with open(cache_path, "w", encoding="utf-8") as f:
                 json.dump(payload, f, ensure_ascii=False, indent=2)
-            logger.info(f"Ollama cache saved with schema v1; models: {len(models)}")
         except Exception as e:
             logger.error(f"Failed to save Ollama cache: {e}", exc_info=True)
             import traceback
@@ -112,7 +110,6 @@ class OllamaProvider(ProviderStrategy):
         try:
             import ollama
         except ImportError:
-            logger.debug("Ollama SDK not available for metadata inspection")
             return None
         
         try:
@@ -124,7 +121,6 @@ class OllamaProvider(ProviderStrategy):
             try:
                 # Use show() method to get model information
                 if not hasattr(ollama, 'show'):
-                    logger.debug("Ollama SDK does not expose show() method")
                     return None
                 response = ollama.show(model_name)
                 
@@ -155,9 +151,9 @@ class OllamaProvider(ProviderStrategy):
                     return True
                     
             except AttributeError:
-                logger.debug(f"Ollama SDK show()/inspect() methods not available for {model_name}")
+                pass
             except Exception as e:
-                logger.debug(f"Error inspecting SDK metadata for {model_name}: {e}")
+                pass
             finally:
                 # Restore original OLLAMA_HOST
                 if base_url:
@@ -168,7 +164,6 @@ class OllamaProvider(ProviderStrategy):
             
             return None
         except Exception as e:
-            logger.debug(f"Failed to check vision via SDK metadata for {model_name}: {e}")
             return None
     
     def _check_vision_via_cli(self, model_name: str, base_url: Optional[str] = None) -> Optional[bool]:
@@ -200,7 +195,6 @@ class OllamaProvider(ProviderStrategy):
             )
             
             if result.returncode != 0:
-                logger.debug(f"`ollama show {model_name}` failed with exit code {result.returncode}")
                 return None
             
             output = result.stdout.lower()
@@ -215,19 +209,15 @@ class OllamaProvider(ProviderStrategy):
             
             for indicator in vision_indicators:
                 if indicator in output:
-                    logger.debug(f"Vision support detected for {model_name} via CLI (found '{indicator}')")
                     return True
             
             return None
             
         except subprocess.TimeoutExpired:
-            logger.debug(f"`ollama show {model_name}` timed out")
             return None
         except FileNotFoundError:
-            logger.debug("`ollama` CLI command not found in PATH")
             return None
         except Exception as e:
-            logger.debug(f"Error checking vision via CLI for {model_name}: {e}")
             return None
     
     def _check_vision_via_patterns(self, model_name: str) -> bool:
@@ -294,20 +284,17 @@ class OllamaProvider(ProviderStrategy):
         if use_metadata:
             result = self._check_vision_via_sdk_metadata(model_name, base_url)
             if result is not None:
-                logger.debug(f"Vision detection for {model_name} via SDK metadata: {result}")
                 return result
         
         # Tier 2: Try CLI command inspection
         if use_cli:
             result = self._check_vision_via_cli(model_name, base_url)
             if result is not None:
-                logger.debug(f"Vision detection for {model_name} via CLI: {result}")
                 return result
         
         # Tier 3: Fallback to pattern matching
         if use_patterns:
             result = self._check_vision_via_patterns(model_name)
-            logger.debug(f"Vision detection for {model_name} via patterns: {result}")
             return result
         
         return False
@@ -412,7 +399,6 @@ class OllamaProvider(ProviderStrategy):
                 return []
             
             if not models_list:
-                logger.info("No Ollama models found")
                 return []
             
             # Normalize all models
@@ -425,7 +411,6 @@ class OllamaProvider(ProviderStrategy):
                     logger.warning(f"Failed to normalize model {model_info}: {e}")
                     continue
             
-            logger.info(f"Fetched {len(normalized_models)} Ollama models")
             return normalized_models
             
         except ConnectionError as e:
@@ -575,7 +560,6 @@ class OllamaProvider(ProviderStrategy):
             
             return None
         except Exception as e:
-            logger.debug(f"Failed to lookup model meta: {e}")
             return None
     
     def refresh_models(self, config: 'Config', wait_for_completion: bool = False) -> Tuple[bool, Optional[str]]:

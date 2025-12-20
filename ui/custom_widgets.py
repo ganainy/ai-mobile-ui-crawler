@@ -239,10 +239,8 @@ class BusyDialog(QDialog):
                 enabled_count = enable_all_widgets(self._parent_widget)
                 if enabled_count > 0:
                     import logging
-                    logging.debug(f"Re-enabled {enabled_count} widgets when closing dialog")
             except Exception as e:
                 import logging
-                logging.debug(f"Error in widget re-enabling: {e}")
         
         # Also try the stored list method as backup
         self._enable_parent_widgets()
@@ -405,7 +403,6 @@ class BusyDialog(QDialog):
         except Exception as e:
             # Silently fail if there's an issue
             import logging
-            logging.debug(f"Error disabling widgets: {e}")
     
     def _enable_parent_widgets(self):
         """Re-enable all widgets that were disabled."""
@@ -421,7 +418,6 @@ class BusyDialog(QDialog):
                         enabled_count += 1
                 except Exception as e:
                     import logging
-                    logging.debug(f"Error enabling widget: {e}")
             
             # If we didn't enable any widgets from the list, try to find and enable all disabled widgets
             # This is a fallback in case the list wasn't populated correctly
@@ -454,15 +450,12 @@ class BusyDialog(QDialog):
                     fallback_count = find_and_enable_widgets(self._parent_widget)
                     if fallback_count > 0:
                         import logging
-                        logging.debug(f"Fallback: Enabled {fallback_count} widgets that were disabled")
                 except Exception as e:
                     import logging
-                    logging.debug(f"Error in fallback widget enabling: {e}")
             
             self._disabled_widgets.clear()
         except Exception as e:
             import logging
-            logging.debug(f"Error enabling widgets: {e}")
             # Even if there's an error, clear the list to prevent stuck state
             self._disabled_widgets.clear()
             # Try fallback one more time

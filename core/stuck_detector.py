@@ -35,7 +35,6 @@ class StuckDetector:
             if last_success and last_to_screen is not None and last_from_screen is not None:
                 if last_to_screen != last_from_screen:
                     last_action_navigated_away = True
-                    logger.debug(f"Last action navigated from Screen #{last_from_screen} to Screen #{last_to_screen} - not stuck")
         
         # Only check for stuck if we didn't just navigate away AND we're on a known screen
         if not last_action_navigated_away and from_screen_id is not None and current_screen_actions:

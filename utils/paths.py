@@ -83,12 +83,10 @@ class SessionPathManager:
         self._timestamp: str = os.environ.get("CRAWLER_SESSION_TIMESTAMP")
         if self._timestamp:
             logger = logging.getLogger(__name__)
-            logger.debug(f"Using inherited session timestamp: {self._timestamp}")
         else:
             # If not, generate a new one (for standalone runs)
             self._timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M")
             logger = logging.getLogger(__name__)
-            logger.debug(f"Generated new session timestamp: {self._timestamp}")
         self._device_udid: Optional[str] = None
         self._device_name: Optional[str] = None
         # Try to detect device info early to avoid "unknown_device" paths
@@ -123,7 +121,6 @@ class SessionPathManager:
                 self._device_udid = device_udid
                 self._device_name = device_name
                 logger = logging.getLogger(__name__)
-                logger.debug(f"Using device info from config: UDID={device_udid}, Name={device_name}")
                 return
             
             # Try to detect device early using device detection
@@ -136,16 +133,13 @@ class SessionPathManager:
                         self._device_udid = selected_device.id
                         self._device_name = selected_device.name
                         logger = logging.getLogger(__name__)
-                        logger.debug(f"Early device detection successful: UDID={selected_device.id}, Name={selected_device.name}")
                         return
             except Exception as e:
                 # Device detection failed - this is OK, device info will be set later
                 logger = logging.getLogger(__name__)
-                logger.debug(f"Early device detection failed (this is OK): {e}")
         except Exception as e:
             # Any error is OK - device info will be set later
             logger = logging.getLogger(__name__)
-            logger.debug(f"Error in early device detection (this is OK): {e}")
 
     def set_device_info(self, udid: Optional[str] = None, name: Optional[str] = None) -> None:
         """Set device information and invalidate cached session path.
@@ -159,7 +153,6 @@ class SessionPathManager:
         # Check the cached path first
         if self._session_path and self._session_path.exists():
             logger = logging.getLogger(__name__)
-            logger.debug(f"Session directory already exists at {self._session_path}. Cannot change device info. Ignoring.")
             return
         
         # Also check if a directory exists for the CURRENT device/app/timestamp combination
@@ -174,7 +167,6 @@ class SessionPathManager:
                 potential_path = Path(base_dir) / "sessions" / f"{current_device_id}_{app_package_safe}_{self._timestamp}"
                 if potential_path.exists():
                     logger = logging.getLogger(__name__)
-                    logger.debug(f"Session directory already exists at {potential_path}. Cannot change device info. Ignoring.")
                     # Update cached path to the existing one
                     self._session_path = potential_path.resolve()
                     return
@@ -231,7 +223,6 @@ class SessionPathManager:
             # Don't create a path yet - wait for device info to be set
             # This prevents directories from being created with "unknown_device"
             logger = logging.getLogger(__name__)
-            logger.debug("Device info not available yet, deferring session path creation. Set device info first.")
             # Return None to indicate device info is not available yet
             # Components should check if device info is available before creating directories
             return None
@@ -242,7 +233,6 @@ class SessionPathManager:
             # Check if directory already exists - if so, don't regenerate
             if self._session_path.exists():
                 logger = logging.getLogger(__name__)
-                logger.debug(f"Session directory already exists at {self._session_path}, not regenerating path")
                 return self._session_path
             
             # Extract device ID from existing path to check if it needs updating
@@ -252,7 +242,6 @@ class SessionPathManager:
                 # But only if directory doesn't exist
                 self._session_path = None
                 logger = logging.getLogger(__name__)
-                logger.info(f"Regenerating session path with device ID: {current_device_id} (was: unknown_device)")
         elif force_regenerate:
             # Force regeneration requested - but check if directory exists first
             if self._session_path and self._session_path.exists():
@@ -262,7 +251,6 @@ class SessionPathManager:
             # Force regeneration requested
             self._session_path = None
             logger = logging.getLogger(__name__)
-            logger.debug(f"Force regenerating session path with device ID: {current_device_id}")
         
         if self._session_path and not force_regenerate:
             return self._session_path

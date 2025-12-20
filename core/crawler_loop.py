@@ -48,7 +48,6 @@ class CrawlerLoop:
             config: Configuration object
         """
         try:
-            logger.debug("CrawlerLoop.__init__ starting...")
             self.config = config
             
             self.agent_assistant: Optional[AgentAssistant] = None
@@ -68,24 +67,20 @@ class CrawlerLoop:
             self.crawl_logger: Optional[CrawlLogger] = None
             
             # Set up flag controller
-            logger.debug("Setting up flag controller...")
             shutdown_flag_path = config.get('SHUTDOWN_FLAG_PATH') or os.path.join(
                 config.BASE_DIR or '.', DEFAULT_SHUTDOWN_FLAG
             )
             pause_flag_path = config.get('PAUSE_FLAG_PATH') or os.path.join(
                 config.BASE_DIR or '.', DEFAULT_PAUSE_FLAG
             )
-            logger.debug(f"Flag paths: shutdown={shutdown_flag_path}, pause={pause_flag_path}")
             
             self.flag_controller = FlagController(shutdown_flag_path, pause_flag_path)
-            logger.debug("Flag controller created")
             
             # Wait time between actions
             wait_after_action = config.get('WAIT_AFTER_ACTION')
             if wait_after_action is None:
                 raise ValueError("WAIT_AFTER_ACTION must be set in configuration")
             self.wait_after_action = float(wait_after_action)
-            logger.debug("CrawlerLoop.__init__ completed")
         except SystemExit as e:
             print(f"SystemExit in CrawlerLoop.__init__: {e}", file=sys.stderr, flush=True)
             raise
@@ -103,22 +98,17 @@ class CrawlerLoop:
             True if initialization successful, False otherwise
         """
         try:
-            logger.debug("Initializing crawler loop...")
             
             # Initialize AgentAssistant
-            logger.debug("Creating AgentAssistant...")
             self.agent_assistant = AgentAssistant(self.config)
-            logger.debug("AgentAssistant created successfully")
             
             # Ensure driver is connected
-            logger.debug("Connecting to MCP driver...")
             if not self.agent_assistant._ensure_driver_connected():
                 error_msg = "Failed to connect driver - check MCP server is running"
                 logger.error(error_msg)
                 print(f"STATUS: {error_msg}", flush=True)
                 return False
             
-            logger.debug("Driver connected successfully")
             
             # Now that device is initialized, set up file logging if it was delayed
             # This ensures the log directory is created with the correct device name
@@ -158,7 +148,6 @@ class CrawlerLoop:
                             file_handler = logging.FileHandler(log_file, encoding='utf-8')
                             file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
                             root_logger.addHandler(file_handler)
-                            logger.debug(f"File logging initialized at: {log_file}")
                     except Exception as e:
                         logger.warning(f"Could not set up delayed file logging: {e}")
             
@@ -167,27 +156,22 @@ class CrawlerLoop:
             if self.agent_assistant and hasattr(self.agent_assistant, '_setup_ai_interaction_logger'):
                 try:
                     self.agent_assistant._setup_ai_interaction_logger(force_recreate=True)
-                    logger.debug("AI interaction logger recreated with updated session path")
                 except Exception as e:
                     logger.warning(f"Could not recreate AI interaction logger: {e}")
             
             # Initialize AppContextManager for app context checking
-            logger.debug("Initializing AppContextManager...")
             self.app_context_manager = AppContextManager(
                 self.agent_assistant.tools.driver,
                 self.config
             )
-            logger.debug("AppContextManager initialized successfully")
             
             # Initialize TrafficCaptureManager if traffic capture is enabled
             if self.config.get('ENABLE_TRAFFIC_CAPTURE', False):
                 try:
-                    logger.debug("Initializing TrafficCaptureManager...")
                     self.traffic_capture_manager = TrafficCaptureManager(
                         self.agent_assistant.tools.driver,
                         self.config
                     )
-                    logger.debug("TrafficCaptureManager initialized successfully")
                 except Exception as e:
                     logger.warning(f"Failed to initialize TrafficCaptureManager: {e}. Traffic capture will be disabled.")
                     self.traffic_capture_manager = None
@@ -195,18 +179,15 @@ class CrawlerLoop:
             # Initialize VideoRecordingManager if video recording is enabled
             if self.config.get('ENABLE_VIDEO_RECORDING', False):
                 try:
-                    logger.debug("Initializing VideoRecordingManager...")
                     self.video_recording_manager = VideoRecordingManager(
                         self.agent_assistant.tools.driver,
                         self.config
                     )
-                    logger.debug("VideoRecordingManager initialized successfully")
                 except Exception as e:
                     logger.warning(f"Failed to initialize VideoRecordingManager: {e}. Video recording will be disabled.")
                     self.video_recording_manager = None
             
             # Launch the app at the start of crawl loop
-            logger.debug("Launching app at crawl loop start...")
             if self.app_context_manager:
                 if not self.app_context_manager.launch_and_verify_app():
                     logger.warning("Failed to launch app at start, but continuing...")
@@ -218,13 +199,11 @@ class CrawlerLoop:
             # IMPORTANT: This must be done AFTER all managers are initialized and device name is resolved
             # to ensure the database is created in the correct session directory (not unknown_device)
             try:
-                logger.debug("Initializing database and ensuring file exists...")
                 from infrastructure.database import DatabaseManager
                 
                 # Ensure the database path is resolved (not a template string)
                 # The DB_NAME property uses path_manager.get_db_path() which resolves the template
                 db_path = self.config.DB_NAME
-                logger.debug(f"Resolved database path: {db_path}")
                 
                 # Verify the path is resolved (not a template)
                 if '{' in db_path or '}' in db_path:
@@ -247,7 +226,6 @@ class CrawlerLoop:
                 # connect() will call _create_tables() automatically
                 self.db_manager = db_manager
                 if self.db_manager.connect():
-                    logger.debug("Database connection successful, tables created.")
                     
                     # Initialize ScreenStateManager
                     from domain.screen_state_manager import ScreenStateManager
@@ -256,12 +234,10 @@ class CrawlerLoop:
                         self.agent_assistant.tools.driver,
                         self.config
                     )
-                    logger.debug("ScreenStateManager initialized successfully.")
                     
                     # Initialize specialized components after DB and Screen state are ready
                     self.context_builder = CrawlContextBuilder(self.db_manager, self.config)
                     self.crawl_logger = CrawlLogger(self.db_manager, self.config)
-                    logger.debug("Modularized crawler components initialized.")
                     
                     # Get or create run_id
                     app_package = self.config.get('APP_PACKAGE')
@@ -275,7 +251,6 @@ class CrawlerLoop:
                                 app_package,
                                 app_activity
                             )
-                            logger.info(f"Initialized run ID: {self.current_run_id} for {app_package}")
                         else:
                             logger.warning("Failed to get or create run_id")
                     
@@ -284,7 +259,7 @@ class CrawlerLoop:
                     
                     # Final verification
                     if os.path.exists(db_path):
-                        logger.info(f"Database file successfully created on init: {db_path}")
+                        pass
                     else:
                         logger.error(f"Database file STILL missing after init: {db_path}")
                 else:
@@ -295,7 +270,6 @@ class CrawlerLoop:
                 logger.error(f"Could not initialize database: {e}. Post-run tasks will likely fail.", exc_info=True)
             
             # Note: App launch verification is now handled by the MCP server during session initialization
-            logger.debug("Crawler loop initialized successfully")
             return True
             
         except Exception as e:
@@ -335,7 +309,6 @@ class CrawlerLoop:
         try:
             # 1. Check for shutdown and pause
             if self.check_shutdown_flag():
-                logger.info("Shutdown flag detected, stopping crawler")
                 return False
             self.wait_while_paused()
             if self.check_shutdown_flag():
@@ -360,6 +333,16 @@ class CrawlerLoop:
                 logger.error("Failed to get current screen state")
                 return True
             
+            # Save and define UI screenshot immediately to ensure UI is up to date (live view)
+            if candidate_screen.screenshot_path and candidate_screen.screenshot_bytes:
+                try:
+                    os.makedirs(os.path.dirname(candidate_screen.screenshot_path), exist_ok=True)
+                    with open(candidate_screen.screenshot_path, "wb") as f:
+                        f.write(candidate_screen.screenshot_bytes)
+                    print(f"UI_SCREENSHOT:{candidate_screen.screenshot_path}", flush=True)
+                except Exception as e:
+                    logger.warning(f"Failed to save UI screenshot: {e}")
+            
             # 5. Process and record state
             final_screen, visit_info = self.screen_state_manager.process_and_record_state(
                 candidate_screen, self.current_run_id, self.step_count, increment_visit_count=False
@@ -369,9 +352,7 @@ class CrawlerLoop:
             current_screen_visit_count = visit_info.get("visit_count_this_run", 0)
             self.current_screen_visit_count = current_screen_visit_count
             
-            # Signal UI to update screenshot
-            if final_screen.screenshot_path and os.path.exists(final_screen.screenshot_path):
-                print(f"UI_SCREENSHOT:{final_screen.screenshot_path}", flush=True)
+            # UI_SCREENSHOT print removed (handled above with fresh candidate)
             
             # 6. Build context for AI
             action_history, visited_screens, current_screen_actions = self.context_builder.get_crawl_context(
@@ -402,7 +383,8 @@ class CrawlerLoop:
                 current_composite_hash=self.current_composite_hash,
                 last_action_feedback=self.last_action_feedback,
                 is_stuck=is_stuck,
-                stuck_reason=stuck_reason if is_stuck else None
+                stuck_reason=stuck_reason if is_stuck else None,
+                ocr_results=candidate_screen.ocr_results if candidate_screen else None
             )
             ai_decision_time = time.time() - ai_decision_start
             
@@ -416,27 +398,44 @@ class CrawlerLoop:
                 return True
             
             action_data, confidence, token_count, ai_input_prompt = action_result
-            action_str = self.crawl_logger.log_ai_decision(action_data, ai_decision_time)
+            # Pass OCR results so action descriptions use actual text instead of opaque IDs
+            ocr_results = candidate_screen.ocr_results if candidate_screen else None
+            action_str = self.crawl_logger.log_ai_decision(action_data, ai_decision_time, ai_input_prompt, ocr_results)
             
             # 10. Execute action
             element_find_start = time.time()
             success = self.agent_assistant.execute_action(action_data)
             element_find_time_ms = (time.time() - element_find_start) * 1000.0
             
-            # 11. Process landing screen
+            # Wait for action to settle before capturing the result
+            time.sleep(self.wait_after_action)
+            
+            # 11. Capture post-action screenshot immediately for UI (regardless of success)
+            # This ensures the UI shows the current device state right after action execution
             to_screen_id = None
-            if success:
-                # Get new screen representation to identify landing screen
+            try:
                 landing_candidate = self.screen_state_manager.get_current_screen_representation(
                     self.current_run_id, self.step_count
                 )
                 if landing_candidate:
-                    final_landing, _ = self.screen_state_manager.process_and_record_state(
-                        landing_candidate, self.current_run_id, self.step_count, increment_visit_count=True
-                    )
-                    to_screen_id = final_landing.id
-                    if final_landing.screenshot_path and os.path.exists(final_landing.screenshot_path):
-                        print(f"UI_SCREENSHOT:{final_landing.screenshot_path}", flush=True)
+                    # Save and send screenshot to UI immediately
+                    if landing_candidate.screenshot_path and landing_candidate.screenshot_bytes:
+                        try:
+                            os.makedirs(os.path.dirname(landing_candidate.screenshot_path), exist_ok=True)
+                            with open(landing_candidate.screenshot_path, "wb") as f:
+                                f.write(landing_candidate.screenshot_bytes)
+                            print(f"UI_SCREENSHOT:{landing_candidate.screenshot_path}", flush=True)
+                        except Exception as e:
+                            logger.warning(f"Failed to save UI screenshot (post-action): {e}")
+                    
+                    # Process and record the landing screen
+                    if success:
+                        final_landing, _ = self.screen_state_manager.process_and_record_state(
+                            landing_candidate, self.current_run_id, self.step_count, increment_visit_count=True
+                        )
+                        to_screen_id = final_landing.id
+            except Exception as e:
+                logger.warning(f"Failed to capture post-action screenshot: {e}")
             
             # 12. Final logging and feedback
             self.crawl_logger.log_step_to_db(
@@ -446,7 +445,6 @@ class CrawlerLoop:
             )
             
             self.last_action_feedback = "Action executed successfully" if success else "Action execution failed"
-            time.sleep(self.wait_after_action)
             return True
             
         except Exception as e:
@@ -486,7 +484,6 @@ class CrawlerLoop:
             # Start traffic capture if enabled
             if self.traffic_capture_manager:
                 try:
-                    logger.debug("Starting traffic capture...")
                     # Get run_id from step_count (will be 0 initially, but that's okay)
                     run_id = getattr(self, '_run_id', 0)
                     # Use asyncio.run to handle async call
@@ -494,36 +491,32 @@ class CrawlerLoop:
                         run_id=run_id,
                         step_num=0
                     ))
-                    logger.debug("Traffic capture started successfully")
                 except Exception as e:
                     logger.error(f"Failed to start traffic capture: {e}", exc_info=True)
             
             # Start video recording if enabled
             if self.video_recording_manager:
                 try:
-                    logger.debug("Starting video recording...")
                     run_id = getattr(self, '_run_id', 0)
                     success = self.video_recording_manager.start_recording(
                         run_id=run_id,
                         step_num=0
                     )
                     if success:
-                        logger.debug("Video recording started successfully")
+                        pass
                     else:
-                        logger.debug("Video recording did not start (this may be benign)")
+                        pass
                 except Exception as e:
-                    logger.debug(f"Video recording init issue (may be benign): {e}")
+                    pass
             
             # Main loop
             while True:
                 # Check for shutdown
                 if self.check_shutdown_flag():
-                    logger.info("Shutdown requested")
                     break
                 
                 # Check max steps
                 if max_steps and self.step_count >= max_steps:
-                    logger.info(f"Reached max steps limit: {max_steps}")
                     break
                 
                 # Run a step
@@ -537,7 +530,6 @@ class CrawlerLoop:
                     from datetime import datetime
                     end_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     self.db_manager.update_run_status(self.current_run_id, "COMPLETED", end_time)
-                    logger.debug(f"Updated run {self.current_run_id} status to COMPLETED")
                 except Exception as e:
                     logger.error(f"Error updating run status: {e}")
             
@@ -545,16 +537,13 @@ class CrawlerLoop:
             if self.db_manager:
                 try:
                     self.db_manager.close()
-                    logger.debug("Database connection closed")
                 except Exception as e:
                     logger.warning(f"Error closing database: {e}")
             
             # Cleanup
-            logger.info("Crawler loop completed")
             print("STATUS: Crawler completed")
             
         except KeyboardInterrupt:
-            logger.info("Crawler interrupted by user")
             # Update run status to INTERRUPTED
             if self.db_manager and self.current_run_id:
                 try:
@@ -589,14 +578,13 @@ class CrawlerLoop:
             # Stop traffic capture if it was started
             if self.traffic_capture_manager and self.traffic_capture_manager.is_capturing():
                 try:
-                    logger.debug("Stopping traffic capture...")
                     run_id = getattr(self, '_run_id', 0)
                     pcap_path = asyncio.run(self.traffic_capture_manager.stop_capture_and_pull_async(
                         run_id=run_id,
                         step_num=self.step_count
                     ))
                     if pcap_path:
-                        logger.debug(f"Traffic capture saved to: {pcap_path}")
+                        pass
                     else:
                         logger.warning("Traffic capture stopped but file was not saved")
                 except Exception as e:
@@ -605,10 +593,9 @@ class CrawlerLoop:
             # Stop video recording if it was started
             if self.video_recording_manager and self.video_recording_manager.is_recording():
                 try:
-                    logger.debug("Stopping video recording...")
                     video_path = self.video_recording_manager.stop_recording_and_save()
                     if video_path:
-                        logger.debug(f"Video recording saved to: {video_path}")
+                        pass
                     else:
                         logger.warning("Video recording stopped but file was not saved")
                 except Exception as e:
@@ -620,19 +607,17 @@ class CrawlerLoop:
             # Explicitly check for True boolean or "true" string
             if mobsf_enabled is True or str(mobsf_enabled).lower() == 'true':
                 try:
-                    logger.info("Starting automatic MobSF analysis...")
                     from infrastructure.mobsf_manager import MobSFManager
                     package_name = self.config.get('APP_PACKAGE')
                     if package_name:
                         mobsf_manager = MobSFManager(self.config)
                         success, result = mobsf_manager.perform_complete_scan(package_name)
                         if success:
-                            logger.info("MobSF analysis completed successfully")
                             if isinstance(result, dict):
                                 if result.get('pdf_report'):
-                                    logger.info(f"MobSF PDF Report: {result['pdf_report']}")
+                                    pass
                                 if result.get('json_report'):
-                                    logger.info(f"MobSF JSON Report: {result['json_report']}")
+                                    pass
                         else:
                             error_msg = result.get('error', 'Unknown error') if isinstance(result, dict) else str(result)
                             logger.error(f"MobSF analysis failed: {error_msg}")
@@ -646,9 +631,7 @@ class CrawlerLoop:
                 try:
                     target_pkg = self.config.get('APP_PACKAGE')
                     if target_pkg and self.agent_assistant and self.agent_assistant.tools.driver:
-                        logger.debug(f"Terminating app {target_pkg} at crawl loop end...")
                         self.agent_assistant.tools.driver.terminate_app(target_pkg)
-                        logger.info(f"App {target_pkg} terminated successfully")
                 except Exception as e:
                     logger.warning(f"Error terminating app at crawl loop end: {e}")
             
@@ -682,16 +665,28 @@ def run_crawler_loop(config: Optional[Config] = None):
         if config is None:
             config = Config()
         
-        logger.debug("CRAWLER_MODE detected, starting crawler loop...")
         
         # Set up logging - always log to stdout so parent process can see it
         # Also try to log to file if LOG_DIR is available
-        # Wrap stdout with UTF-8 encoding to handle Unicode characters on Windows
+        # Wrap stdout/stderr with UTF-8 encoding to handle Unicode characters on Windows
         try:
-            stdout_wrapper = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
-            handlers = [logging.StreamHandler(stdout_wrapper)]
-        except Exception:
+            # Configure stdout/stderr to use UTF-8
+            if hasattr(sys.stdout, 'reconfigure'):
+                sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+                sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+                output_stream = sys.stdout
+            else:
+                # Fallback for systems/environments where reconfigure isn't available
+                stdout_wrapper = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+                sys.stdout = stdout_wrapper
+                stderr_wrapper = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+                sys.stderr = stderr_wrapper
+                output_stream = stdout_wrapper
+            
+            handlers = [logging.StreamHandler(output_stream)]
+        except Exception as e:
             # Fallback to regular stdout if wrapping fails
+            print(f"Warning: Failed to set UTF-8 encoding for stdout: {e}", file=sys.stderr)
             handlers = [logging.StreamHandler(sys.stdout)]
         
         # Use the property which automatically resolves the template
@@ -787,10 +782,8 @@ def run_crawler_loop(config: Optional[Config] = None):
         # Create and run crawler loop - use minimal logging to avoid daemon thread issues
         try:
             # Use direct print to stderr instead of logger to avoid threading issues
-            logger.debug("About to create CrawlerLoop...")
             
             # Create crawler loop
-            logger.debug("Calling CrawlerLoop(config)...")
             
             # Try to create the crawler loop with explicit error handling
             try:
@@ -803,7 +796,6 @@ def run_crawler_loop(config: Optional[Config] = None):
                 time.sleep(1.0)
                 raise
             
-            logger.debug("CrawlerLoop created successfully")
         except SystemExit as e:
             print(f"SystemExit caught in CrawlerLoop creation: {e}", file=sys.stderr, flush=True)
             # Give threads time to finish

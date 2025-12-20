@@ -80,7 +80,6 @@ class AppScanService:
                     with open(existing_cache, "r", encoding="utf-8") as f:
                         data = json.load(f)
                     if isinstance(data, dict) and JSON_KEY_APPS in data and isinstance(data[JSON_KEY_APPS], list):
-                        self.logger.info(f"Using existing cache file: {existing_cache}")
                         # Update config with existing cache file
                         self.context.config.set(CONFIG_CURRENT_HEALTH_APP_LIST_FILE, existing_cache)
                         # Return path and AI filtering status from cache
@@ -91,9 +90,8 @@ class AppScanService:
                     # Fall through to generate new cache
         
         # Perform new scan (either forced or no valid cache found)
-        self.logger.debug(DEBUG_STARTING_ALL_APPS_SCAN)
         if force_rescan:
-            self.logger.info("Force rescan requested, generating new cache...")
+            pass
         
         try:
             output_path, result_data = generate_app_info_cache()
@@ -102,7 +100,6 @@ class AppScanService:
                 self.logger.error(ERR_ALL_APPS_SCAN_NO_CACHE)
                 return False, None
                 
-            self.logger.info(f"Cache file generated at: {output_path}")
             
             # Update config with health app list file (use absolute path)
             abs_output_path = os.path.abspath(output_path)
@@ -175,11 +172,9 @@ class AppScanService:
             import glob
             candidates = glob.glob(pattern)
             if not candidates:
-                self.logger.debug(DEBUG_NO_CACHE_FILES_FOUND.format(pattern=pattern))
                 return None
 
             latest = max(candidates, key=lambda p: os.path.getmtime(p))
-            self.logger.debug(DEBUG_RESOLVED_LATEST_CACHE_FILE.format(app_type="unified", latest=latest))
             return latest
 
         except Exception as e:
@@ -273,7 +268,6 @@ class AppScanService:
             success, all_apps, error = self.get_all_cached_apps()
             if success and all_apps:
                 apps = all_apps
-                self.logger.debug("No health apps found, using all apps for selection")
             else:
                 self.logger.error(ERR_NO_HEALTH_APPS_LOADED)
                 return False, None

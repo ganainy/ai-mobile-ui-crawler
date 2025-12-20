@@ -43,7 +43,6 @@ class CLICrawlerInterface:
         self.storage: Optional[Storage] = None
         self.current_session: Optional[CrawlerSession] = None
 
-        logger.info("CLI Crawler Interface initialized")
 
     def initialize_core(self) -> bool:
         """
@@ -65,16 +64,13 @@ class CLICrawlerInterface:
                 name="CLI Crawler Config",
                 settings=settings
             )
-            logger.info("Core configuration validated")
 
             # Initialize storage
             storage_path = self.config_data.get("storage_path", "crawler.db")
             self.storage = Storage(storage_path)
-            logger.info(f"Core storage initialized at {storage_path}")
 
             # Initialize crawler
             self.crawler = Crawler(self.config)
-            logger.info("Core crawler initialized")
 
             return True
 
@@ -97,20 +93,16 @@ class CLICrawlerInterface:
             return None
 
         try:
-            logger.debug("DIAGNOSTIC: About to call crawler.start_session()")
             self.current_session = self.crawler.start_session()
             session_id = self.current_session.session_id
-            logger.debug(f"DIAGNOSTIC: Session created with ID: {session_id}, status: {self.current_session.status}")
 
             # FIX: Transition session to "running" state immediately after creation
             self.current_session.start()
             self.crawler.storage.save_session(self.current_session)
-            logger.info(f"FIX: Session {session_id} transitioned to 'running' state")
 
             # Log session start for CLI user
             print(f"UI_STATUS: Crawler session started: {session_id}")
             print(f"UI_STEP: 1")
-            logger.info(f"Started crawler session: {session_id}")
             
             # TODO: Replace simulation with actual crawling implementation
             import threading
@@ -119,7 +111,6 @@ class CLICrawlerInterface:
             def simulate_crawling():
                 """Simulate crawling activity since real implementation is missing."""
                 try:
-                    logger.info("FIX: Starting simulated crawling activity")
                     print("UI_STATUS: Starting crawling simulation...")
                     
                     # Simulate some steps
@@ -127,15 +118,12 @@ class CLICrawlerInterface:
                         time.sleep(2)  # Simulate work
                         print(f"UI_STEP: {step}")
                         print(f"UI_ACTION: Simulated action {step}")
-                        logger.info(f"FIX: Simulated step {step}")
                     
                     # Complete the session
-                    logger.info("FIX: Completing simulated crawling")
                     print("UI_STATUS: Crawling simulation completed")
                     
                     self.current_session.complete()
                     self.crawler.storage.save_session(self.current_session)
-                    logger.info(f"FIX: Session {session_id} marked as completed")
                     
                 except Exception as e:
                     logger.error(f"FIX: Error in crawling simulation: {e}")
@@ -147,7 +135,6 @@ class CLICrawlerInterface:
             # Start crawling in background thread
             crawling_thread = threading.Thread(target=simulate_crawling, daemon=True)
             crawling_thread.start()
-            logger.info("FIX: Started crawling simulation thread")
 
             return session_id
 
@@ -223,7 +210,6 @@ class CLICrawlerInterface:
             # CLI-specific output
             print(f"UI_STATUS: Session {stopped_session.session_id} stopped")
             print("UI_END: Crawler session completed")
-            logger.info(f"Stopped crawler session: {target_session_id}")
 
             return True
 
@@ -278,7 +264,6 @@ class CLICrawlerInterface:
 
         try:
             self.storage.save_configuration(self.config)
-            logger.info(f"Configuration saved: {self.config.config_id}")
             print(f"UI_STATUS: Configuration saved")
             return True
 
@@ -308,7 +293,6 @@ class CLICrawlerInterface:
                 # Reinitialize crawler with new config
                 if self.config:
                     self.crawler = Crawler(self.config)
-                logger.info(f"Configuration loaded: {config_id}")
                 print(f"UI_STATUS: Configuration loaded: {config_id}")
                 return True
             else:
@@ -332,7 +316,6 @@ class CLICrawlerInterface:
         except Exception as e:
             logger.warning(f"Error during cleanup: {e}")
 
-        logger.info("CLI Crawler Interface cleaned up")
 
 
     # --- Focus Area CRUD CLI methods ---

@@ -45,7 +45,6 @@ class MobSFManager:
         
         # self.scan_results_dir = os.path.join(session_dir, 'mobsf_scan_results')
         # os.makedirs(self.scan_results_dir, exist_ok=True)
-        logging.debug(f"MobSFManager initialized with API URL: {self.api_url}")
 
     @property
     def scan_results_dir(self) -> str:
@@ -164,7 +163,6 @@ class MobSFManager:
             return None
         
         try:
-            logging.debug(f"Extracting APK for package {package_name} from connected device")
             
             # Get the path of the APK on the device
             path_cmd = ["adb", "shell", "pm", "path", package_name]
@@ -198,7 +196,6 @@ class MobSFManager:
                 logging.error("Could not find a valid APK path from 'pm path' output.")
                 return None
             
-            logging.debug(f"Found base APK path: {base_apk_path}")
 
             # --- MODIFIED PATH RESOLUTION ---
             # Resolve the path *now*, not in __init__
@@ -243,7 +240,6 @@ class MobSFManager:
             # --- END MODIFIED BLOCK ---
             
             # Pull the APK from the device
-            logging.debug(f"Pulling APK from {base_apk_path} to {local_apk}")
             pull_cmd = ["adb", "pull", base_apk_path, local_apk]
             pull_result = subprocess.run(pull_cmd, capture_output=True, text=True, encoding='utf-8')
             
@@ -251,7 +247,6 @@ class MobSFManager:
                 logging.error(f"Failed to pull APK: {pull_result.stderr}")
                 return None
             
-            logging.debug(f"Successfully extracted APK to {local_apk}")
             return local_apk
             
         except Exception as e:
@@ -273,7 +268,6 @@ class MobSFManager:
             return False, {"error": "APK file not found"}
         
         try:
-            logging.debug(f"Uploading APK {apk_path} to MobSF")
             with open(apk_path, 'rb') as apk_file:
                 files = {'file': (os.path.basename(apk_path), apk_file, 'application/octet-stream')}
                 return self._make_api_request('upload', 'POST', files=files)
@@ -296,7 +290,6 @@ class MobSFManager:
             'hash': file_hash,
             're_scan': 1 if rescan else 0
         }
-        logging.debug(f"Starting scan for file hash: {file_hash}")
         return self._make_api_request('scan', 'POST', data=data)
 
     def get_scan_logs(self, file_hash: str) -> Tuple[bool, Dict[str, Any]]:
@@ -363,7 +356,6 @@ class MobSFManager:
         try:
             with open(output_path, 'wb') as pdf_file:
                 pdf_file.write(pdf_content)
-            logging.debug(f"PDF report saved to: {output_path}")
             return output_path
         except Exception as e:
             logging.error(f"Error saving PDF report: {str(e)}")
@@ -394,7 +386,6 @@ class MobSFManager:
         try:
             with open(output_path, 'w', encoding='utf-8') as json_file:
                 json.dump(report, json_file, indent=4)
-            logging.debug(f"JSON report saved to: {output_path}")
             return output_path
         except Exception as e:
             logging.error(f"Error saving JSON report: {str(e)}")
@@ -434,7 +425,7 @@ class MobSFManager:
             if log_callback:
                 log_callback(message, color)
             else:
-                logging.info(message)
+                pass
         
         # Double-check that MobSF is enabled before proceeding
         # (This is the check I mentioned - it is correct in your original file)
@@ -556,5 +547,4 @@ class MobSFManager:
             _log(f"Security Score: {score_value}", 'green')
         
         _log("MobSF analysis completed successfully!", 'green')
-        logging.debug(f"Completed MobSF scan for {package_name}")
         return True, summary

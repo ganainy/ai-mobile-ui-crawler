@@ -52,10 +52,6 @@ def build_w3c_capabilities(
     # Validate required capabilities
     validate_capabilities(merged_caps)
     
-    logger.debug(
-        f'Built W3C capabilities for {platform} device {device.name}: '
-        f'{list(merged_caps.keys())}'
-    )
     
     return merged_caps
 
@@ -86,10 +82,6 @@ def format_capabilities_for_w3c(capabilities: AppiumCapabilities) -> Dict[str, A
     # Handle firstMatch for compatibility
     w3c_caps['firstMatch'] = [{}]
     
-    logger.debug(
-        f'Formatted capabilities for W3C protocol: '
-        f'{list(w3c_caps["alwaysMatch"].keys())}'
-    )
     
     return w3c_caps
 
@@ -217,7 +209,6 @@ def validate_capabilities(capabilities: AppiumCapabilities) -> None:
                 f"Recommended automationName for Android is 'UiAutomator2', got '{automation_name}'"
             )
     
-    logger.debug('Capabilities validation passed')
 
 
 def merge_capabilities(
@@ -325,5 +316,4 @@ def log_capabilities(capabilities: AppiumCapabilities, title: str = 'Capabilitie
         else:
             readable[key] = value
     
-    logger.info(f'{title}: {readable}')
 

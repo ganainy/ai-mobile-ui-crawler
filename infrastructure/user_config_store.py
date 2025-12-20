@@ -45,7 +45,6 @@ class UserConfigStore:
             self._conn_thread_ident = current_thread_id
             # Enable WAL mode for better concurrency and thread safety
             self._conn.execute("PRAGMA journal_mode=WAL;")
-            logging.debug(f"Created database connection (created in thread {current_thread_id})")
             return self._conn
         except sqlite3.Error as e:
             logging.error(f"🔴 Failed to create database connection in thread {current_thread_id}: {e}", exc_info=True)
@@ -143,7 +142,6 @@ class UserConfigStore:
                 )
             try:
                 self._conn.close()
-                logging.debug(f"Database connection closed (Closed by thread: {current_thread_id}, Owned by: {self._conn_thread_ident})")
             except Exception as e:
                 logging.error(f"Error closing database connection in thread {current_thread_id}: {e}", exc_info=True)
             finally:
@@ -215,15 +213,12 @@ class UserConfigStore:
             defaults: Dictionary of all default values from module constants
         """
         if not self.is_first_launch():
-            logging.debug("Not first launch, skipping default initialization")
             return
         
         simple_defaults = self._filter_simple_defaults(defaults)
         if not simple_defaults:
-            logging.debug("No simple defaults to initialize")
             return
         
-        logging.info(f"First launch detected. Initializing {len(simple_defaults)} simple default values in SQLite")
         self.initialize_defaults(simple_defaults)
 
     def initialize_defaults(self, defaults: Dict[str, Any]) -> None:
@@ -267,19 +262,19 @@ class UserConfigStore:
             try:
                 conn.execute("DELETE FROM focus_areas")
             except sqlite3.OperationalError:
-                logging.debug("focus_areas table missing during reset; skipping deletion")
+                pass
             
             # Clear crawler actions (if table exists)
             try:
                 conn.execute("DELETE FROM crawler_actions")
             except sqlite3.OperationalError:
-                logging.debug("crawler_actions table missing during reset; skipping deletion")
+                pass
             
             # Clear crawler prompts (if table exists)
             try:
                 conn.execute("DELETE FROM crawler_prompts")
             except sqlite3.OperationalError:
-                logging.debug("crawler_prompts table missing during reset; skipping deletion")
+                pass
             
             conn.commit()
         except sqlite3.Error as exc:
@@ -497,7 +492,6 @@ class UserConfigStore:
         
         # Only initialize if table is empty (first launch)
         if count == 0:
-            logging.info(f"Initializing {len(default_actions)} default actions in database...")
             from datetime import datetime
             now = datetime.now().isoformat()
             
@@ -507,15 +501,13 @@ class UserConfigStore:
                         INSERT INTO crawler_actions (name, description, created_at, updated_at, enabled, sort_order)
                         VALUES (?, ?, ?, ?, ?, ?)
                     """, (name, description, now, now, True, 0))
-                    logging.debug(f"Initialized default action: {name}")
                 except sqlite3.IntegrityError:
                     # Action already exists (shouldn't happen on first launch, but handle gracefully)
-                    logging.debug(f"Action '{name}' already exists, skipping")
+                    pass
                 except Exception as e:
                     logging.error(f"Failed to initialize action '{name}': {e}")
             
             conn.commit()
-            logging.info("Default actions initialization complete")
     
     def get_crawler_actions_full(self) -> List[Dict[str, Any]]:
         """Get all crawler actions with full model (enabled and disabled).
@@ -900,19 +892,16 @@ class UserConfigStore:
                     "ACTION_DECISION_PROMPT": prompts.ACTION_DECISION_SYSTEM_PROMPT,
                 }
                 
-                logging.info(f"Initializing {len(default_prompts)} default prompts in database...")
                 
                 for name, template in default_prompts.items():
                     try:
                         self.add_crawler_prompt_full(name, template)
-                        logging.debug(f"Initialized default prompt: {name}")
                     except sqlite3.IntegrityError:
                         # Prompt already exists (shouldn't happen on first launch, but handle gracefully)
-                        logging.debug(f"Prompt '{name}' already exists, skipping")
+                        pass
                     except Exception as e:
                         logging.error(f"Failed to initialize prompt '{name}': {e}")
                 
-                logging.info("Default prompts initialization complete")
             except ImportError as e:
                 logging.error(f"Failed to import domain.prompts: {e}")
             except Exception as e:
@@ -942,21 +931,18 @@ class UserConfigStore:
                     "related to user data handling, storage, or sharing."
                 )
                 
-                logging.info("Initializing default focus area in database...")
                 
                 try:
                     self.add_focus_area_full(
                         name=default_name,
                         description=default_description
                     )
-                    logging.info(f"Initialized default focus area: {default_name}")
                 except sqlite3.IntegrityError:
                     # Focus area already exists (shouldn't happen on first launch, but handle gracefully)
-                    logging.debug(f"Focus area '{default_name}' already exists, skipping")
+                    pass
                 except Exception as e:
                     logging.error(f"Failed to initialize default focus area: {e}")
                 
-                logging.info("Default focus area initialization complete")
             except Exception as e:
                 logging.error(f"Failed to initialize default focus areas: {e}")
     

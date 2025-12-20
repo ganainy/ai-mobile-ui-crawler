@@ -71,6 +71,10 @@ ACTION_DECISION_FIXED_PART = """
 Use the following JSON schema to structure your output:
 {json_schema}
 
+IMPORTANT: For target_identifier, you MUST use:
+- If OCR context is provided: Use the exact "ocr_X" IDs listed (e.g., "ocr_0", "ocr_5"). Do NOT invent element names.
+- If XML context is provided: Use the resource-id or unique identifier from the XML.
+
 Available actions:
 {action_list}
 """

@@ -39,7 +39,6 @@ class DatabaseManager:
                 try:
                     # Check if the connection is still alive and usable
                     self.conn.execute("SELECT 1").fetchone()
-                    logging.debug(f"Database connection is active for current thread {current_thread_id}.")
                     return True
                 except sqlite3.Error as e:
                     logging.warning(f"⚠️ Existing database connection for thread {current_thread_id} is not usable ({e}). Reconnecting.")
@@ -65,7 +64,6 @@ class DatabaseManager:
             db_dir = os.path.dirname(self.db_path)
             if db_dir and not os.path.exists(db_dir):
                 os.makedirs(db_dir, exist_ok=True)
-                logging.debug(f"Created database directory: {db_dir}")
 
             connect_timeout_seconds = float(self.cfg.get('DB_CONNECT_TIMEOUT'))
             busy_timeout_ms = int(self.cfg.get('DB_BUSY_TIMEOUT'))
@@ -83,7 +81,6 @@ class DatabaseManager:
                 self.close() # This will also clear _conn_thread_ident
                 return False
 
-            logging.debug(f"Successfully connected to database and verified tables: {self.db_path} (Thread ID: {self._conn_thread_ident})")
             return True
         except sqlite3.Error as e:
             logging.error(f"SQLite error connecting to database {self.db_path} in thread {current_thread_id}: {e}", exc_info=True)
@@ -108,15 +105,13 @@ class DatabaseManager:
             # Regardless of which thread is calling close, try to close it.
             try:
                 self.conn.close()
-                logging.debug(f"Database connection closed: {self.db_path} (Closed by thread: {current_thread_id}, Owned by: {self._conn_thread_ident})")
             except Exception as e: # Catch generic Exception as sqlite3.Error might not cover all scenarios if conn is weird
                 logging.error(f"Error closing database connection in thread {current_thread_id}: {e}", exc_info=True)
             finally:
                 self.conn = None
                 self._conn_thread_ident = None # Clear ownership on close
         else:
-            logging.debug(f"Attempted to close an already non-existent database connection (Thread ID: {current_thread_id}).")
-
+            pass
 
     def _execute_sql(self, sql: str, params: tuple = (), fetch_one: bool = False,
                      fetch_all: bool = False, commit: bool = True) -> Any:
@@ -124,7 +119,6 @@ class DatabaseManager:
         # Ensure connection is valid for the current thread.
         # self.connect() will handle creating/validating the connection for current_thread_id.
         if not self.conn or self._conn_thread_ident != current_thread_id:
-            logging.debug(f"_execute_sql in thread {current_thread_id}: Connection is None or owned by another thread ({self._conn_thread_ident}). Re-evaluating connection.")
             if not self.connect(): # connect() now ensures conn is for current_thread_id or fails
                 logging.error(f"🔴 Failed to establish/validate DB connection for thread {current_thread_id} from _execute_sql.")
                 if fetch_all: return []
@@ -248,25 +242,23 @@ class DatabaseManager:
                     self._execute_sql("ALTER TABLE steps_log ADD COLUMN ai_input_prompt TEXT;", commit=True)
                 except sqlite3.Error as e:
                     # Column might have been added by another thread, ignore
-                    logging.debug(f"Column ai_input_prompt already exists or could not be added: {e}")
+                    pass
             else:
-                logging.debug("Column ai_input_prompt already exists, skipping ALTER TABLE")
-            
+                pass            
             if "element_find_time_ms" not in existing_columns:
                 try:
                     self._execute_sql("ALTER TABLE steps_log ADD COLUMN element_find_time_ms REAL;", commit=True)
                 except sqlite3.Error as e:
                     # Column might have been added by another thread, ignore
-                    logging.debug(f"Column element_find_time_ms already exists or could not be added: {e}")
+                    pass
             else:
-                logging.debug("Column element_find_time_ms already exists, skipping ALTER TABLE")
+                pass
             self._execute_sql(f"CREATE INDEX IF NOT EXISTS idx_steps_log_run_step ON steps_log(run_id, step_number);", commit=True)
             self._execute_sql(f"CREATE INDEX IF NOT EXISTS idx_steps_log_from_screen ON steps_log(from_screen_id);", commit=True)
             self._execute_sql(sql_create_transitions_simplified, commit=True)
             self._execute_sql(f"CREATE INDEX IF NOT EXISTS idx_transitions_from_screen_id ON {self.TRANSITIONS_TABLE}(from_screen_id);", commit=True)
             self._execute_sql(sql_create_run_meta, commit=True)
             self._execute_sql(f"CREATE INDEX IF NOT EXISTS idx_run_meta_run_id ON run_meta(run_id);", commit=True)
-            logging.debug("Database tables created/verified successfully.")
             return True
         except Exception as e:
             logging.error(f"🔴 Failed to create one or more database tables or indexes: {e}", exc_info=True)
@@ -277,13 +269,11 @@ class DatabaseManager:
         result = self._execute_sql(sql_find_started, (app_package,), fetch_one=True, commit=False)
         if result and result[0] is not None:
             run_id = result[0]
-            logging.debug(f"Continuing existing 'STARTED' run ID: {run_id} for {app_package}")
             return run_id
 
         sql_insert_run = "INSERT INTO runs (app_package, start_activity) VALUES (?, ?)"
         run_id = self._execute_sql(sql_insert_run, (app_package, start_activity), commit=True)
         if run_id is not None:
-            logging.debug(f"Created new run ID: {run_id} for {app_package}")
             return run_id
         else:
             logging.error(f"🔴 Failed to create new run entry for {app_package}")
@@ -529,7 +519,6 @@ class DatabaseManager:
             self._execute_sql(f"DELETE FROM sqlite_sequence WHERE name='{self.SCREENS_TABLE}';", commit=True)
             self._execute_sql(f"DELETE FROM sqlite_sequence WHERE name='{self.TRANSITIONS_TABLE}';", commit=True)
             self._execute_sql(f"DELETE FROM sqlite_sequence WHERE name='steps_log';", commit=True)
-            logging.debug("Screens, Transitions, and Steps Log tables cleared successfully.")
             return True
         except Exception as e:
             logging.error(f"🔴 Failed to clear tables for fresh run: {e}", exc_info=True)

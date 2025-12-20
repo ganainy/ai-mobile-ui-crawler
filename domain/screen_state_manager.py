@@ -14,6 +14,8 @@ except ImportError:
 
 # Import your main Config class
 from config.app_config import Config
+from config.context_constants import ContextSource
+from infrastructure.ocr_service import OCRService
 
 if TYPE_CHECKING:
     from infrastructure.appium_driver import AppiumDriver
@@ -30,7 +32,8 @@ class ScreenRepresentation:
                  xml_content: Optional[str] = None,
                  screenshot_bytes: Optional[bytes] = None,
                  first_seen_run_id: Optional[int] = None,
-                 first_seen_step_number: Optional[int] = None):
+                 first_seen_step_number: Optional[int] = None,
+                 ocr_results: Optional[List[Dict[str, Any]]] = None):
         self.id = screen_id
         self.composite_hash = composite_hash
         self.xml_hash = xml_hash
@@ -42,11 +45,14 @@ class ScreenRepresentation:
         self.screenshot_bytes = screenshot_bytes
         self.first_seen_run_id = first_seen_run_id
         self.first_seen_step_number = first_seen_step_number
+        self.ocr_results = ocr_results
         self.xml_root_for_mapping: Optional[Any] = None
 
     def __repr__(self):
+        ocr_count = len(self.ocr_results) if self.ocr_results else 0
         return (f"Screen(id={self.id}, hash='{self.composite_hash[:12]}...', "
-                f"activity='{self.activity_name}', path='{os.path.basename(self.screenshot_path) if self.screenshot_path else 'N/A'}')")
+                f"activity='{self.activity_name}', path='{os.path.basename(self.screenshot_path) if self.screenshot_path else 'N/A'}', "
+                f"ocr_items={ocr_count})")
 
 class ScreenStateManager:
     """
@@ -80,7 +86,10 @@ class ScreenStateManager:
         self.current_run_visit_counts: Dict[str, int] = {}
         self.current_run_action_history: Dict[str, List[str]] = {}
         self._next_screen_db_id_counter: int = 1
-        logging.debug("ScreenStateManager initialized.")
+        
+        # Initialize OCR Service
+        self.ocr_service = OCRService()
+        
 
     def initialize_for_run(self, run_id: int, app_package: str, start_activity: str):
         self.current_run_id = run_id
@@ -91,7 +100,6 @@ class ScreenStateManager:
         self.current_run_latest_step_number = 0 # Reset for the run
 
         self._load_all_known_screens_from_db()
-        logging.debug(f"ScreenStateManager initialized for Run ID: {run_id}. Known screens: {len(self.known_screens_cache)}. Visit counts/history reset for this run. Latest step set to 0.")
 
     def _load_all_known_screens_from_db(self):
         self.known_screens_cache.clear()
@@ -125,6 +133,8 @@ class ScreenStateManager:
                     activity_name=activity_name, xml_content=xml_content,
                     first_seen_run_id=first_seen_run_id,
                     first_seen_step_number=first_seen_step_number
+                    # Note: We are not currently loading OCR results from DB as they are not persisted in the screen table
+                    # They will be regenerated or loaded from a separate table if implemented in future
                 )
                 self.known_screens_cache[screen.composite_hash] = screen
                 if screen.id > max_db_id:
@@ -133,19 +143,31 @@ class ScreenStateManager:
                 logging.error(f"Error processing screen row {row_index} from DB: {row_data}. Error: {e}", exc_info=True)
 
         self._next_screen_db_id_counter = max_db_id + 1
-        logging.debug(f"Loaded {len(self.known_screens_cache)} known screens. Next screen DB ID: {self._next_screen_db_id_counter}")
 
 
-    def _get_current_raw_state_from_driver(self) -> Optional[Tuple[bytes, str, str, str]]:
+    def _get_current_raw_state_from_driver(self) -> Optional[Tuple[bytes, str, str, str, Optional[List[Dict]]]]:
         stability_wait = float(self.cfg.STABILITY_WAIT) # type: ignore
         if stability_wait > 0: time.sleep(stability_wait)
         try:
+            # Hide keyboard before taking screenshot for OCR to avoid detecting keyboard keys
+            if ContextSource.OCR in (self.cfg.CONTEXT_SOURCE or []):
+                try:
+                    self.driver.hide_keyboard()
+                except Exception as kb_err:
+                    pass
+            
             screenshot_bytes = self.driver.get_screenshot_bytes()
             page_source = self.driver.get_page_source() or ""
             current_package = self.driver.get_current_package() or "UnknownPackage"
             current_activity = self.driver.get_current_activity() or "UnknownActivity"
+            
+            # OCR Extraction
+            ocr_results = None
+            if ContextSource.OCR in (self.cfg.CONTEXT_SOURCE or []) and screenshot_bytes:
+                ocr_results = self.ocr_service.extract_text_from_bytes(screenshot_bytes)
+
             if not screenshot_bytes: logging.error("Failed to get screenshot (None)."); return None
-            return screenshot_bytes, page_source, current_package, current_activity
+            return screenshot_bytes, page_source, current_package, current_activity, ocr_results
         except Exception as e:
             logging.error(f"Exception getting current raw state from driver: {e}", exc_info=True)
             return None
@@ -157,7 +179,7 @@ class ScreenStateManager:
         raw_state = self._get_current_raw_state_from_driver()
         if not raw_state: return None
 
-        screenshot_bytes, xml_str, pkg, act = raw_state
+        screenshot_bytes, xml_str, pkg, act, ocr_results = raw_state
         xml_hash = utils.calculate_xml_hash(xml_str)
         visual_hash = utils.calculate_visual_hash(screenshot_bytes)
         composite_hash = self._get_composite_hash(xml_hash, visual_hash)
@@ -171,7 +193,8 @@ class ScreenStateManager:
         return ScreenRepresentation(
             screen_id=temp_id, composite_hash=composite_hash, xml_hash=xml_hash, visual_hash=visual_hash,
             screenshot_path=ss_path, activity_name=act, xml_content=xml_str,
-            screenshot_bytes=screenshot_bytes, first_seen_run_id=run_id, first_seen_step_number=step_number
+            screenshot_bytes=screenshot_bytes, first_seen_run_id=run_id, first_seen_step_number=step_number,
+            ocr_results=ocr_results
         )
 
     def process_and_record_state(self, candidate_screen: ScreenRepresentation, run_id: int, step_number: int, increment_visit_count: bool = True) -> Tuple[ScreenRepresentation, Dict[str, Any]]:
@@ -180,7 +203,6 @@ class ScreenStateManager:
 
         if candidate_screen.composite_hash in self.known_screens_cache:
             final_screen_to_use = self.known_screens_cache[candidate_screen.composite_hash]
-            logging.debug(f"Exact screen match found in cache: ID {final_screen_to_use.id} (Hash: {final_screen_to_use.composite_hash})")
         else:
             found_similar_screen = None
             similarity_threshold = int(self.cfg.get('VISUAL_SIMILARITY_THRESHOLD')) # type: ignore
@@ -189,7 +211,6 @@ class ScreenStateManager:
                     if candidate_screen.visual_hash not in ["no_image", "hash_error"] and existing_screen.visual_hash not in ["no_image", "hash_error"]:
                         dist = utils.visual_hash_distance(candidate_screen.visual_hash, existing_screen.visual_hash)
                         if dist <= similarity_threshold:
-                            logging.debug(f"Screen visually similar (dist={dist}<={similarity_threshold}) to existing Screen ID {existing_screen.id}. Using existing state.")
                             found_similar_screen = existing_screen
                             break
 
@@ -208,7 +229,6 @@ class ScreenStateManager:
                         # Ensure the screenshots directory exists
                         os.makedirs(screenshots_dir, exist_ok=True)
                         with open(candidate_screen.screenshot_path, "wb") as f: f.write(candidate_screen.screenshot_bytes)
-                        logging.debug(f"Saved new screen screenshot: {candidate_screen.screenshot_path}")
                     else: raise IOError("Screenshot bytes missing for new screen.")
                 except Exception as e:
                     logging.error(f"Failed to save screenshot {candidate_screen.screenshot_path}: {e}", exc_info=True)
@@ -228,7 +248,6 @@ class ScreenStateManager:
 
                 self.known_screens_cache[candidate_screen.composite_hash] = candidate_screen
                 self._next_screen_db_id_counter = max(self._next_screen_db_id_counter, candidate_screen.id + 1)
-                logging.debug(f"Recorded new screen to DB & cache: ID {candidate_screen.id} (Hash: {candidate_screen.composite_hash})")
                 final_screen_to_use = candidate_screen
 
         if not final_screen_to_use:
@@ -261,7 +280,6 @@ class ScreenStateManager:
             "visit_count_this_run": visit_count_for_info,
             "previous_actions_on_this_state": historical_actions
         }
-        logging.debug(f"Processed state for hash {hash_for_visit_count}: ID {final_screen_to_use.id}, NewSystemDiscovery={is_new_discovery_for_system}, RunVisits={visit_info['visit_count_this_run']}")
         return final_screen_to_use, visit_info
 
     def record_action_taken_from_screen(self, from_screen_composite_hash: str, action_description: str):
@@ -269,7 +287,6 @@ class ScreenStateManager:
             self.current_run_action_history[from_screen_composite_hash] = []
         if action_description not in self.current_run_action_history[from_screen_composite_hash]:
             self.current_run_action_history[from_screen_composite_hash].append(action_description)
-        logging.debug(f"Recorded action '{action_description}' for screen hash '{from_screen_composite_hash}' in current run history.")
 
     def get_action_history_for_run(self, screen_composite_hash: str) -> List[str]:
         return self.current_run_action_history.get(screen_composite_hash, [])
