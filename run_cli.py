@@ -7,18 +7,33 @@ from cli import run
 from config.app_config import Config
 
 def main():
-    # Check if running in crawler mode (via environment variable or flag)
-    crawler_mode = os.environ.get("CRAWLER_MODE") == "1" or "--crawler-run" in sys.argv
+    # Check if running in crawler mode (via flag)
+    # The crawler process is started with --crawler-run by the orchestrator
+    crawler_mode = "--crawler-run" in sys.argv
     
     if crawler_mode:
-        # Remove the flag from argv if present
+        # Extract timestamp if present - simple parsing since we haven't set up argparse yet
+        # for this mode (to avoid conflicts with subcommands)
+        session_timestamp = None
+        if "--timestamp" in sys.argv:
+            try:
+                ts_index = sys.argv.index("--timestamp") + 1
+                if ts_index < len(sys.argv):
+                    session_timestamp = sys.argv[ts_index]
+                    # Remove from argv so it doesn't confuse other parsers
+                    sys.argv.pop(ts_index)
+                    sys.argv.pop(ts_index - 1)
+            except ValueError:
+                pass
+                
+        # Remove the crawler mode flag from argv
         if "--crawler-run" in sys.argv:
             sys.argv.remove("--crawler-run")
         
         # Run crawler loop directly
         # Note: run_crawler_loop handles its own exceptions
         from core.crawler_loop import run_crawler_loop
-        config = Config()
+        config = Config(session_timestamp=session_timestamp)
         run_crawler_loop(config)
         return
     
@@ -35,7 +50,7 @@ def main():
     config = Config()
 
     # Set provider if given
-    provider = args.provider or os.environ.get("AI_PROVIDER") or config.get("AI_PROVIDER")
+    provider = args.provider or config.get("AI_PROVIDER")
     
     # Only prompt for provider if no subcommand is being run and it's not a help request
     if not provider and not unknown and not args.help:

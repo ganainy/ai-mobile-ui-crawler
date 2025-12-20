@@ -49,6 +49,7 @@ class CrawlerLaunchPlan:
     
     # Optional fields with defaults
     environment: Dict[str, str] = field(default_factory=dict)
+    arguments: List[str] = field(default_factory=list)
     validation_passed: bool = True
     validation_messages: List[str] = field(default_factory=list)
     
@@ -156,7 +157,7 @@ class OutputParser:
         'action': 'UI_ACTION:',
         'screenshot': 'UI_SCREENSHOT:',
         'status': 'UI_STATUS:',
-        'focus': 'UI_FOCUS:',
+
         'end': 'UI_END:',
     }
     
@@ -255,14 +256,13 @@ class CrawlerOrchestrator:
         # Prepare environment
         env = os.environ.copy()
         env["PYTHONPATH"] = project_root + os.pathsep + env.get("PYTHONPATH", "")
-        # Set crawler mode flag
-        env["CRAWLER_MODE"] = "1"
         
         # Get the timestamp from the orchestrator's path manager
         # This ensures the timestamp is generated ONCE by the parent process
+        cmd_args = ["--crawler-run"]
         try:
             session_timestamp = self.config._path_manager.get_timestamp()
-            env["CRAWLER_SESSION_TIMESTAMP"] = session_timestamp
+            cmd_args.extend(["--timestamp", session_timestamp])
         except Exception as e:
             self.logger.error(f"Could not get session timestamp to pass to crawler: {e}")
         
@@ -272,6 +272,7 @@ class CrawlerOrchestrator:
             script_path=main_script,
             working_directory=project_root,
             environment=env,
+            arguments=cmd_args,
             app_package=self.config.get('APP_PACKAGE', ''),
             app_activity=self.config.get('APP_ACTIVITY', ''),
             output_data_dir=output_data_dir,

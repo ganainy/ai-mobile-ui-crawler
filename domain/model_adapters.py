@@ -150,7 +150,7 @@ class GeminiAdapter(ModelAdapter):
                         USE_SAFETY_SETTING_CLASS = False
 
             # Set API key
-            os.environ["GOOGLE_API_KEY"] = self.api_key
+            genai.configure(api_key=self.api_key)
             
             # Create generation config
             generation_config_dict = model_config.get('generation_config', {})
@@ -581,10 +581,11 @@ class OllamaAdapter(ModelAdapter):
             # Try to import ollama
             import ollama
 
-            # Set the base URL if provided
+            # Initialize client
             if self.base_url:
-                # Set the base URL using environment variable (Ollama SDK method)
-                os.environ['OLLAMA_HOST'] = self.base_url
+                self.client = ollama.Client(host=self.base_url)
+            else:
+                self.client = ollama.Client()
             
             # Store generation parameters
             self.generation_params = model_config.get('generation_config', {})
@@ -594,7 +595,7 @@ class OllamaAdapter(ModelAdapter):
             
             # Test connection to Ollama
             try:
-                ollama.list()
+                self.client.list()
                 if self.vision_supported:
                     pass
                 else:
@@ -626,7 +627,7 @@ class OllamaAdapter(ModelAdapter):
             # Check if model is available before attempting to use it
             available_model_names = []
             try:
-                available_models = ollama.list()
+                available_models = self.client.list()
                 
                 # Process Ollama API response format
                 for model_obj in available_models.models:
@@ -701,7 +702,7 @@ class OllamaAdapter(ModelAdapter):
                 try:
                     # Using chat method with images in the message as shown in Ollama docs
                     # https://ollama.com/blog/vision-models
-                    response = ollama.chat(
+                    response = self.client.chat(
                         model=self.model_name,
                         messages=[
                             {
@@ -728,7 +729,7 @@ class OllamaAdapter(ModelAdapter):
                         # Get available models if we don't have them yet
                         if not available_model_names:
                             try:
-                                available_models = ollama.list()
+                                available_models = self.client.list()
                                 for model_obj in available_models.models:
                                     if hasattr(model_obj, 'model'):
                                         model_name = model_obj.model
@@ -764,7 +765,7 @@ class OllamaAdapter(ModelAdapter):
             else:
                 try:
                     # Use chat API for text-only models
-                    response = ollama.chat(
+                    response = self.client.chat(
                         model=self.model_name,
                         messages=messages,
                         options={
@@ -785,7 +786,7 @@ class OllamaAdapter(ModelAdapter):
                         # Get available models if we don't have them yet
                         if not available_model_names:
                             try:
-                                available_models = ollama.list()
+                                available_models = self.client.list()
                                 for model_obj in available_models.models:
                                     if hasattr(model_obj, 'model'):
                                         model_name = model_obj.model

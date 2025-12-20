@@ -598,12 +598,7 @@ class CrawlerControllerWindow(QMainWindow):
             if hasattr(actions_widget, 'actionsChanged'):
                 actions_widget.actionsChanged.connect(self._trigger_preview_update)
                 
-        # 3. Focus Areas
-        if hasattr(self, 'focus_areas_widget') and self.focus_areas_widget:
-             if hasattr(self.focus_areas_widget, 'focus_areas_changed'):
-                self.focus_areas_widget.focus_areas_changed.connect(
-                    lambda _: self._trigger_preview_update()
-                )
+
 
     def _trigger_preview_update(self):
         """Trigger a debounced preview update."""
@@ -628,27 +623,11 @@ class CrawlerControllerWindow(QMainWindow):
                 if hasattr(actions_widget, 'get_enabled_actions'):
                     available_actions = actions_widget.get_enabled_actions()
             
-            # 3. Focus Areas
-            focus_areas = []
-            if hasattr(self, 'focus_areas_widget') and self.focus_areas_widget:
-                if hasattr(self.focus_areas_widget, 'get_enabled_focus_areas'):
-                    # Convert FocusArea objects to dicts if needed, or pass as is 
-                    # PromptBuilder handles objects or dicts for focus areas
-                    focus_areas = [
-                        {
-                            'name': fa.name,
-                            'description': fa.description,
-                            'prompt_modifier': fa.prompt_modifier,
-                            'enabled': fa.enabled,
-                            'priority': fa.priority
-                        } 
-                        for fa in self.focus_areas_widget.get_enabled_focus_areas()
-                    ]
+
 
             # Construct Mock Context
             mock_context = {
                 'available_actions': available_actions,
-                'focus_areas': focus_areas,
                 'xml_context': "<!-- XML Context Placeholder (Live Preview) -->\n<root>\n  <node text='Example App UI' />\n</root>",
                 'ocr_context': [
                     {'text': 'Example Button', 'bounds': '[100,200][300,400]'},
@@ -1075,10 +1054,6 @@ class CrawlerControllerWindow(QMainWindow):
             # Fallback for early logs during init
             pass
 
-    def log_action_with_focus(self, action_data: Dict[str, Any]):
-        """Log action with focus area (delegated)."""
-        step_num = getattr(self.crawler_manager, "step_count", 0)
-        self.log_manager.log_action_with_focus(action_data, step_num)
 
     def update_screenshot(self, file_path: str) -> None:
         """Update the screenshot displayed in the UI."""

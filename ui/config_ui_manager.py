@@ -43,8 +43,7 @@ class ConfigManager(QObject):
     ui_mode_dropdown: QComboBox
     ui_groups: Dict[str, QGroupBox]
     scroll_content: QWidget
-    focus_areas_widget: Optional[Any] = None
-    
+
     def __init__(self, config, main_controller):
         """
         Initialize the configuration manager.
@@ -300,14 +299,7 @@ class ConfigManager(QObject):
                 
                 reset_details += "\nAlso reset:\n"
                 reset_details += "• ALLOWED_EXTERNAL_PACKAGES (to default list)\n"
-                reset_details += "• Focus Areas (all cleared)\n"
-                reset_details += "• Crawler Actions (to defaults)\n"
-                reset_details += "• Crawler Prompts (to defaults)\n"
-            else:
-                reset_details = "All settings are already at default values.\n\n"
-                reset_details += "This will still reset:\n"
-                reset_details += "• ALLOWED_EXTERNAL_PACKAGES\n"
-                reset_details += "• Focus Areas\n"
+                reset_details += "• Allowed External Packages\n"
                 reset_details += "• Crawler Actions\n"
                 reset_details += "• Crawler Prompts\n"
             
@@ -474,19 +466,7 @@ class ConfigManager(QObject):
             except Exception as e:
                 logging.exception(f"Failed to reload allowed packages widget: {e}")
             
-            # Force reload focus areas widget
-            if hasattr(self, 'focus_areas_widget') and self.focus_areas_widget:
-                try:
-                    self.focus_areas_widget.reload_focus_areas()
-                    if hasattr(self.focus_areas_widget, 'update'):
-                        self.focus_areas_widget.update()
-                    if hasattr(self.focus_areas_widget, 'repaint'):
-                        self.focus_areas_widget.repaint()
-                except Exception:
-                    logging.exception("Failed to reload focus areas after reset; clearing locally.")
-                    self.focus_areas_widget.focus_areas = []
-                    self.focus_areas_widget.create_focus_items()
-            
+
             # Force update all other widgets
             try:
                 from PySide6.QtWidgets import QApplication
@@ -513,7 +493,7 @@ class ConfigManager(QObject):
                     key_msg = f"Key settings reset: {', '.join(key_settings)}"
                     self.main_controller.log_message(key_msg, 'green')
             
-            self.main_controller.log_message("Also reset: Focus Areas, Crawler Actions, Crawler Prompts, Allowed Packages", 'green')
+            self.main_controller.log_message("Also reset: Crawler Actions, Crawler Prompts, Allowed Packages", 'green')
             
         except Exception as exc:
             error_msg = f"Failed to reset configuration: {exc}"
@@ -900,6 +880,13 @@ class ConfigManager(QObject):
                 else:
                     # Other QTextEdit widgets - omit auto-save to avoid excessive saving
                     pass
+            elif key == 'RESET_ACTION_DECISION_PROMPT_BTN':
+                from PySide6.QtWidgets import QPushButton
+                if isinstance(widget, QPushButton):
+                    widget.clicked.connect(lambda: self._reset_prompt_to_default(
+                        'CRAWLER_ACTION_DECISION_PROMPT', 
+                        'ACTION_DECISION_PROMPT'
+                    ))
     
     def _update_image_preprocessing_visibility(self, enabled: bool):
         """
@@ -1164,4 +1151,46 @@ class ConfigManager(QObject):
                             self._save_prompt_from_ui('ACTION_DECISION_PROMPT', editable_part)
         except Exception as e:
             logging.error(f"Failed to load prompts from service: {e}")
+
+    def _reset_prompt_to_default(self, widget_key: str, prompt_name: str):
+        """Reset a prompt to its original code-defined default.
+        
+        Args:
+            widget_key: Key in config_widgets (e.g., 'CRAWLER_ACTION_DECISION_PROMPT')
+            prompt_name: Name in database (e.g., 'ACTION_DECISION_PROMPT')
+        """
+        try:
+            from domain import prompts
+            
+            # Get the code default
+            default_template = ""
+            if prompt_name == 'ACTION_DECISION_PROMPT':
+                default_template = prompts.ACTION_DECISION_SYSTEM_PROMPT
+            else:
+                return # Unknown prompt name
+                
+            # Ask for confirmation
+            reply = QMessageBox.question(
+                self.main_controller,
+                "Reset Prompt",
+                f"Are you sure you want to reset the '{prompt_name}' to its default value?\n\nThis will overwrite your current custom prompt.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            
+            if reply == QMessageBox.StandardButton.Yes:
+                # Update UI
+                if widget_key in self.main_controller.config_widgets:
+                    widget = self.main_controller.config_widgets[widget_key]
+                    if isinstance(widget, QTextEdit):
+                        widget.setPlainText(default_template)
+                        
+                        # Save to DB immediately (bypass debounce)
+                        self._save_prompt_from_ui(prompt_name, default_template)
+                        self.main_controller.log_message(f"Prompt '{prompt_name}' reset to default.", 'green')
+                        
+        except Exception as e:
+            logging.error(f"Error resetting prompt to default: {e}", exc_info=True)
+            self.main_controller.log_message(f"Failed to reset prompt: {e}", 'red')
+
     

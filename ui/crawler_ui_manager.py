@@ -101,7 +101,7 @@ class CrawlerManager(QObject):
         self.orchestrator.register_callback('action', self._on_action_callback)
         self.orchestrator.register_callback('screenshot', self._on_screenshot_callback)
         self.orchestrator.register_callback('status', self._on_status_callback)
-        self.orchestrator.register_callback('focus', self._on_focus_callback)
+
         self.orchestrator.register_callback('end', self._on_end_callback)
         self.orchestrator.register_callback('log', self._on_log_callback)
     
@@ -129,15 +129,6 @@ class CrawlerManager(QObject):
         """Handle status callback from orchestrator."""
         self.main_controller.status_label.setText(f"Status: {status}")
     
-    def _on_focus_callback(self, focus_data: str):
-        """Handle focus callback from orchestrator."""
-        try:
-            import json
-            focus_data_dict = json.loads(focus_data)
-            self.main_controller.log_action_with_focus(focus_data_dict)
-        except Exception as e:
-            self.main_controller.log_message(f"Error parsing focus data: {e}", "red")
-            logging.error(f"Error parsing focus data: {e}")
     
     def _on_end_callback(self, end_status: str):
         """Handle end callback from orchestrator."""
@@ -657,8 +648,14 @@ class CrawlerManager(QObject):
                 logging.error(f"Error killing process: {e}")
         
         self.crawler_process = None
-        self.main_controller.start_btn.setEnabled(True)
-        self.main_controller.stop_btn.setEnabled(False)
+        
+        # Reset unified button state
+        self.main_controller.start_stop_btn.setEnabled(True)
+        self.main_controller.start_stop_btn.setText("Start Crawler")
+        self.main_controller.start_stop_btn.setProperty("running", False)
+        # Force style update
+        self.main_controller.start_stop_btn.style().unpolish(self.main_controller.start_stop_btn)
+        self.main_controller.start_stop_btn.style().polish(self.main_controller.start_stop_btn)
         self.main_controller.status_label.setText(f"Status: Error ({error_name})")
         self.main_controller.progress_bar.setRange(0, 100)
         self.main_controller.progress_bar.setValue(0)
@@ -686,7 +683,7 @@ class CrawlerManager(QObject):
                     continue
                 
                 # Skip UI control messages (handled separately below)
-                if any(line.startswith(p) for p in ['UI_STEP:', 'UI_ACTION:', 'UI_SCREENSHOT:', 'UI_STATUS:', 'UI_FOCUS:', 'UI_END:', 'UI_AI_PROMPT:']):
+                if any(line.startswith(p) for p in ['UI_STEP:', 'UI_ACTION:', 'UI_SCREENSHOT:', 'UI_STATUS:', 'UI_END:', 'UI_AI_PROMPT:']):
                     continue
                 
                 # Skip tracebacks and stack traces (remaining sources of clutter)
@@ -804,20 +801,6 @@ class CrawlerManager(QObject):
                     self.main_controller.log_message(f"Error displaying AI response: {e}", 'red')
                     logging.error(f"Error displaying AI response: {e}")
                 
-            # Check for UI_FOCUS output lines
-            focus_match = re.search(r'UI_FOCUS:(.*?)($|\n)', output)
-            if focus_match:
-                try:
-                    focus_data_str = focus_match.group(1).strip()
-                    # Parse the focus data as JSON for robustness
-                    import json
-                    focus_data = json.loads(focus_data_str)
-                    
-                    # Log the focus attribution
-                    self.main_controller.log_action_with_focus(focus_data)
-                except Exception as e:
-                    self.main_controller.log_message(f"Error parsing focus data: {e}", 'red')
-                    logging.error(f"Error parsing focus data: {e}")
         except Exception as e:
             self.main_controller.log_message(f"Error processing crawler output: {e}", 'red')
             logging.error(f"Error processing crawler output: {e}")

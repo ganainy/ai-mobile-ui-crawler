@@ -40,9 +40,7 @@ class LogManager(QObject):
             "green": ("[[SUCCESS]]", "#2ECC40"),
             "blue": ("[[INFO]]", "#0074D9"),
             "gray": ("[[DEBUG]]", "#AAAAAA"),
-            "magenta": ("[[FOCUS]]", "#F012BE"),
-            "cyan": ("[[FOCUS]]", "#7FDBFF"),
-            "yellow": ("[[FOCUS]]", "#FFDC00"),
+
         }
 
         log_level, hex_color = level_map.get(color.lower(), ("", "#FFFFFF"))
@@ -61,56 +59,7 @@ class LogManager(QObject):
         except Exception as e:
             logging.error(f"Error updating log output: {e}")
 
-    def log_action_with_focus(self, action_data: Dict[str, Any], step_count: Optional[int] = None):
-        """Log action with focus area attribution."""
-        action_type = action_data.get("action", "unknown")
-        reasoning = action_data.get("reasoning", "No reasoning provided")
-        focus_ids = action_data.get("focus_ids", [])
-        focus_names = action_data.get("focus_names", [])
 
-        # Format display
-        if focus_names:
-            focus_text = f" [Focus: {', '.join(focus_names)}]"
-        elif focus_ids:
-            focus_text = f" [Focus IDs: {', '.join(focus_ids)}]"
-        else:
-            focus_text = " [No focus influence specified]"
-
-        # Determine prefix and color
-        prefix, color = self._get_action_visuals(action_type, focus_ids)
-
-        log_message = f"{prefix}Action: {action_type}{focus_text}\nReasoning: {reasoning}"
-        
-        # Log to main output
-        self.log_message(log_message, color)
-
-        # Update action history
-        self._update_action_history(action_data, action_type, reasoning, step_count)
-
-    def _get_action_visuals(self, action_type: str, focus_ids: List[str]) -> tuple:
-        """Determine prefix emoji and color for an action."""
-        if focus_ids:
-            if any(fid in ["privacy_policy", "data_rights", "data_collection"] for fid in focus_ids):
-                return "🔐 ", "magenta"
-            elif any(fid in ["security_features", "account_privacy"] for fid in focus_ids):
-                return "🔒 ", "cyan"
-            elif any(fid in ["third_party", "advertising_tracking", "network_requests"] for fid in focus_ids):
-                return "👁️ ", "orange"
-            elif any(fid in ["location_tracking", "permissions"] for fid in focus_ids):
-                return "📍 ", "yellow"
-            else:
-                return "🔍 ", "green"
-        else:
-            visual_map = {
-                "click": ("👆 ", "blue"),
-                "input": ("⌨️ ", "cyan"),
-                "scroll_down": ("📜 ", "gray"),
-                "scroll_up": ("📜 ", "gray"),
-                "swipe_left": ("👈 ", "gray"),
-                "swipe_right": ("👉 ", "gray"),
-                "back": ("⬅️ ", "orange"),
-            }
-            return visual_map.get(action_type, ("⚡ ", "white"))
 
     def _update_action_history(self, action_data: Dict[str, Any], action_type: str, reasoning: str, step_count: Optional[int]):
         """Append structured entry to action history."""

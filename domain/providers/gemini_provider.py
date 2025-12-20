@@ -173,13 +173,13 @@ class GeminiProvider(ProviderStrategy):
             except Exception:
                 pass
             
-            # Try environment variable
             if not api_key:
-                api_key = os.environ.get("GEMINI_API_KEY")
+                # API key must be in config
+                pass
         
         if not api_key:
             raise RuntimeError(
-                "GEMINI_API_KEY not found. Set it as an environment variable or in config."
+                "GEMINI_API_KEY not found in config."
             )
         
         try:
@@ -237,7 +237,7 @@ class GeminiProvider(ProviderStrategy):
         # If no cache, try to fetch fresh (if API key is available)
         if not models:
             try:
-                api_key = self.get_api_key(config) or os.environ.get("GEMINI_API_KEY")
+                api_key = self.get_api_key(config)
                 if api_key:
                     fetched_models = self._fetch_models(api_key)
                     if fetched_models:
@@ -268,8 +268,8 @@ class GeminiProvider(ProviderStrategy):
         if api_key:
             return api_key
         
-        # Fallback to environment variable
-        return os.environ.get("GEMINI_API_KEY")
+        # Config only
+        return None
     
     def check_dependencies(self) -> Tuple[bool, str]:
         """Check if Google Generative AI SDK is installed."""
@@ -307,7 +307,7 @@ class GeminiProvider(ProviderStrategy):
         # If refresh requested, fetch fresh models
         if refresh:
             try:
-                api_key = self.get_api_key(config) or os.environ.get("GEMINI_API_KEY")
+                api_key = self.get_api_key(config)
                 if api_key:
                     models = self._fetch_models(api_key)
                     if models:
@@ -324,7 +324,7 @@ class GeminiProvider(ProviderStrategy):
         # If no cache, try to fetch fresh
         if not models:
             try:
-                api_key = self.get_api_key(config) or os.environ.get("GEMINI_API_KEY")
+                api_key = self.get_api_key(config)
                 if api_key:
                     models = self._fetch_models(api_key)
                     if models:
@@ -382,7 +382,7 @@ class GeminiProvider(ProviderStrategy):
             Tuple of (success, cache_path) where cache_path is the path to the saved cache file
         """
         def refresh_logic():
-            api_key = self.get_api_key(config) or os.environ.get("GEMINI_API_KEY")
+            api_key = self.get_api_key(config)
             if not api_key:
                 raise RuntimeError("GEMINI_API_KEY not found for refresh")
             

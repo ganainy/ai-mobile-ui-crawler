@@ -16,7 +16,7 @@ This guide explains how to use the command-line interface (CLI) for the Appium T
   - [Configuration](#configuration)
   - [Actions](#actions)
   - [Prompts](#prompts)
-  - [Focus Areas (for privacy testing)](#focus-areas-for-privacy-testing)
+
   - [External Packages](#external-packages)
   - [Analysis and Reporting](#analysis-and-reporting)
 - [AI Model Management](#ai-model-management)
@@ -42,8 +42,8 @@ This guide explains how to use the command-line interface (CLI) for the Appium T
 - Node.js & npm (for Appium)
 - Appium installed with a compatible driver (e.g. uiautomator2)
 - Android SDK with ADB on PATH and ANDROID_HOME set (see [Installing Android SDK and ADB](#installing-android-sdk-and-adb))
-- API keys (set in environment or .env):
-  - `GEMINI_API_KEY`, `OPENROUTER_API_KEY`, `OLLAMA_BASE_URL` (for AI providers)
+- API keys (configured via CLI commands):
+  - `GEMINI_API_KEY`, `OPENROUTER_API_KEY` (for AI providers)
   - `MOBSF_API_KEY`, `PCAPDROID_API_KEY` (optional, for additional features)
 
 ### Virtual environment (required)
@@ -301,12 +301,12 @@ python run_cli.py precheck-services
    pip install -r requirements.txt
    ```
 
-2. **Configure environment** (.env file):
-   ```env
+2. **Configure API Keys** (if using cloud providers):
+   ```powershell
    # Required for AI providers (at least one)
-   GEMINI_API_KEY=your_key
-   OPENROUTER_API_KEY=your_key
-   OLLAMA_BASE_URL=http://localhost:11434
+   python run_cli.py config set-secret GEMINI_API_KEY "your_gemini_key"
+   python run_cli.py config set-secret OPENROUTER_API_KEY "your_openrouter_key"
+   python run_cli.py config set OLLAMA_BASE_URL "http://localhost:11434" # Default for Ollama
    
    # Optional: For static security analysis of Android apps
    # MobSF must be installed and running. See: https://github.com/MobSF/Mobile-Security-Framework-MobSF
@@ -400,16 +400,6 @@ python run_cli.py prompts edit "ACTION_DECISION_PROMPT" --template "Updated temp
 python run_cli.py prompts remove "ACTION_DECISION_PROMPT"                                     # Remove a prompt template
 ```
 
-### Focus Areas (for privacy testing)
-
-Focus areas help guide the crawler to prioritize exploring specific types of pages or content during crawling. This is particularly useful for privacy testing, where you want the crawler to actively seek out privacy-related pages (e.g., "Privacy Policy", "Settings", "Account Settings", "Data Usage") rather than just randomly exploring the app.
-
-```powershell
-python run_cli.py focus add "Privacy Policy" --description "Look for privacy policy pages" --priority 1  # Add a focus area
-python run_cli.py focus list                                 # List all configured focus areas
-python run_cli.py focus edit <id_or_name> --title "New Title" --description "Updated description"  # Edit a focus area
-python run_cli.py focus remove <id_or_name>                  # Remove a focus area by ID or name
-```
 
 ### External Packages
 ```powershell
@@ -570,13 +560,13 @@ python run_cli.py gemini show-model-details      # Show detailed info (vision su
 
 ### Configuration Issues
 - **AI provider not configured:** Select a model using provider-specific commands (e.g., `python run_cli.py gemini select-model 1`), which automatically sets the provider.
-- **Missing API keys:** Set environment variables: `GEMINI_API_KEY`, `OPENROUTER_API_KEY`, etc.
+- **Missing API keys:** Use `python run_cli.py config set-secret <KEY> <VALUE>` to set keys.
 - **Provider validation errors:** Use `--provider` (gemini/openrouter/ollama) and `--model` if needed
 
 ### AI Model Issues
 - **Ollama models not found:** Ensure Ollama service is running (`ollama serve`), then run `python run_cli.py ollama refresh-models`
-- **Ollama connection failed:** Check `OLLAMA_BASE_URL` environment variable (default: `http://localhost:11434`)
-- **OpenRouter models not loading:** Verify `OPENROUTER_API_KEY` is set, then run `python run_cli.py openrouter refresh-models --wait`
+- **Ollama connection failed:** Check `OLLAMA_BASE_URL` config (default: `http://localhost:11434`)
+- **OpenRouter models not loading:** Verify `OPENROUTER_API_KEY` is set via config, then run `python run_cli.py openrouter refresh-models --wait`
 - **Model selection not persisting:** Check that you're using `select-model` command, not just `--model` flag (flag is for one-off commands)
 - **Vision model not detected:** Run `python run_cli.py ollama show-model-details` or `python run_cli.py openrouter show-model-details` to verify vision support
 - **No models available:** For Ollama, ensure models are installed (`ollama pull <model-name>`). For OpenRouter, check API key and network connection

@@ -6,7 +6,7 @@ This module centralizes all service name strings used throughout the CLI
 to ensure consistency and make it easy to reference services across features.
 """
 
-# Database service - used for all database operations including focus areas, etc.
+# Database service - used for all database operations including user preferences, etc.
 DATABASE_SERVICE = "database"
 
 # Configuration service - used for managing user configuration

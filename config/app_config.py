@@ -43,39 +43,21 @@ from cli.constants.keys import CONFIG_OUTPUT_DATA_DIR
 # --- Refactored Centralized Configuration Class ---
 class Config:
     """
-    Central configuration class with simplified two-layer system:
-    - Secrets: Environment variables only (API keys, sensitive data)
-    - Everything else: SQLite only (int, str, bool, float values)
+    Central configuration class.
+    
+    All settings are stored in the SQLite database via UserConfigStore.
+    Environment variables are no longer used for configuration.
     
     On first launch, SQLite is populated with simple defaults from module constants.
-    Module defaults are only used for initial population, not as runtime fallback.
+    On first launch, SQLite is populated with simple defaults from module constants.
     """
-    def __init__(self, user_store: Optional[UserConfigStore] = None):
+    def __init__(self, user_store: Optional[UserConfigStore] = None, session_timestamp: Optional[str] = None):
         self._defaults = type('Defaults', (), {})()  # Empty defaults object as placeholder
         self._user_store = user_store or UserConfigStore()
-        self._env = os.environ
-        # Load .env file if it exists
-        try:
-            from dotenv import load_dotenv
-            dotenv_path = os.path.join(os.getcwd(), '.env')
-            load_dotenv(dotenv_path)
-            self._env = os.environ  # Refresh after loading
-        except ImportError:
-            logging.warning("python-dotenv not available, skipping .env loading")
-        except Exception as e:
-            logging.warning(f"Error loading .env: {e}")
-        self._secrets = {
-            "OPENROUTER_API_KEY", 
-            "GEMINI_API_KEY", 
-            "OLLAMA_BASE_URL", 
-            "MOBSF_API_KEY",
-            "TEST_EMAIL",
-            "TEST_PASSWORD",
-            "TEST_NAME",
-            "PCAPDROID_API_KEY"
-        }
+        # Environment variables are no longer loaded for config
+        
         self._init_paths()
-        self._path_manager = SessionPathManager(self)
+        self._path_manager = SessionPathManager(self, session_timestamp)
         # Collect default settings snapshot for to_dict() and reset_settings()
         self._default_snapshot = self._collect_default_settings()
         # Initialize SQLite with simple defaults on first launch
@@ -140,17 +122,8 @@ class Config:
             return template.replace(placeholder, output_dir)
         return template
 
-    def _is_secret(self, key: str) -> bool:
-        upper_key = key.upper()
-        if upper_key in self._secrets:
-            return True
-        return key == upper_key and upper_key.endswith("_KEY")
-
     def get(self, key: str, default: Any = None) -> Any:
-        """Get configuration value with simplified two-layer system.
-        
-        - If secret: check environment variables only
-        - If not secret: check SQLite only
+        """Get configuration value from SQLite.
         
         Args:
             key: Configuration key
@@ -159,18 +132,7 @@ class Config:
         Returns:
             Configuration value or default
         """
-        # Check if this is a secret (API keys, etc.)
-        if self._is_secret(key):
-            # Secrets: environment variables only
-            normalized_key = key.upper()
-            env_value = self._env.get(key)
-            if env_value is None and normalized_key != key:
-                env_value = self._env.get(normalized_key)
-            if env_value is not None:
-                return env_value
-            return default
-        
-        # Non-secrets: SQLite only
+        # SQLite only
         user_value = self._user_store.get(key)
         if user_value is not None and user_value != "":
             # Handle case where boolean values might be stored as strings
@@ -184,6 +146,8 @@ class Config:
                     elif value_lower in ('false', '0', 'no', 'off'):
                         return False
             return user_value
+            
+        # Try alternate case key
         normalized_key = key.upper()
         if normalized_key != key:
             alt_user_value = self._user_store.get(normalized_key)
@@ -204,66 +168,17 @@ class Config:
         """Return a snapshot of current configuration values suitable for display."""
         snapshot: Dict[str, Any] = {}
         for key in self._default_snapshot:
-            if self._is_secret(key):
-                continue
             snapshot[key] = self.get(key)
         return snapshot
 
     def set(self, key: str, value: Any) -> None:
-        if self._is_secret(key):
-            if value is None:
-                self._env.pop(key.upper(), None)
-                # Also remove from .env file
-                self._save_secret_to_env(key.upper(), "")
-            else:
-                str_value = str(value)
-                self._env[key.upper()] = str_value
-                # Save to .env file
-                self._save_secret_to_env(key.upper(), str_value)
-            return
-
-        self._user_store.set(key, value)
-
-    def _save_secret_to_env(self, key: str, value: str) -> None:
-        """
-        Save a secret to the .env file using python-dotenv.
+        """Set a configuration value in SQLite.
         
         Args:
-            key: Secret key name
-            value: Secret value
+            key: Configuration key
+            value: Value to set
         """
-        try:
-            from dotenv import set_key, load_dotenv
-        except ImportError:
-            logging.error("python-dotenv not available. Cannot save API keys to .env file.")
-            return
-        
-        try:
-            # Get project root directory
-            from utils.paths import find_project_root
-            project_root = find_project_root(Path(self.BASE_DIR))
-            env_file_path = project_root / '.env'
-            
-            # Ensure .env file exists (create if it doesn't)
-            if not env_file_path.exists():
-                env_file_path.touch()
-            
-            # Load existing .env file to preserve other variables (although set_key handles this)
-            # We don't strictly need load_dotenv here for set_key to work, but it's good practice
-            # to acknowledge the file exists.
-            
-            # Normalize key to uppercase
-            normalized_key = key.upper()
-            
-            # Only save non-empty values
-            if value and value.strip():
-                set_key(str(env_file_path), normalized_key, value.strip())
-            else:
-                # If value is empty, remove the key from .env (set to empty string)
-                set_key(str(env_file_path), normalized_key, "")
-                
-        except Exception as e:
-            logging.error(f"Failed to save secret {key} to .env file: {e}")
+        self._user_store.set(key, value)
 
     # Path-related properties delegated to SessionPathManager
     @property
@@ -354,18 +269,7 @@ class Config:
         """Path to the user config file (SQLite-backed config)."""
         return self._user_store.db_path
 
-    @property
-    def FOCUS_AREAS(self):
-        # Return focus areas from user store if present, else from defaults
-        focus_areas = self._user_store.get_focus_areas_full()
-        if focus_areas:
-            return [fa["name"] for fa in focus_areas if fa.get("enabled", True)]
 
-        stored_list = self.get("FOCUS_AREAS")
-        if isinstance(stored_list, list):
-            return stored_list
-
-        return []
     
     @property
     def CRAWLER_AVAILABLE_ACTIONS(self):

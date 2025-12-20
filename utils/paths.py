@@ -73,14 +73,14 @@ class SessionPathManager:
     This is the single source of truth for all session-related paths.
     """
 
-    def __init__(self, config: "Config"):
+    def __init__(self, config: "Config", session_timestamp: Optional[str] = None):
         self.config = config
         self._session_path: Optional[Path] = None
         self._app_package: Optional[str] = None
         self._app_package_safe: Optional[str] = None
         # Store session-specific state as instance variables instead of in config
         # Check if a timestamp was passed from the orchestrator
-        self._timestamp: str = os.environ.get("CRAWLER_SESSION_TIMESTAMP")
+        self._timestamp: str = session_timestamp
         if self._timestamp:
             logger = logging.getLogger(__name__)
         else:

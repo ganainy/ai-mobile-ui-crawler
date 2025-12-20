@@ -15,7 +15,6 @@ JSON_OUTPUT_SCHEMA = {
         },
         "input_text": {"type": ["string", "null"]},
         "reasoning": {"type": "string"},
-        "focus_influence": {"type": "array", "items": {"type": "string"}}
     },
     "required": ["action", "target_identifier", "reasoning"]
 }
@@ -64,7 +63,13 @@ AVAILABLE_ACTIONS = _DEFAULT_AVAILABLE_ACTIONS
 
 # Define prompt templates as string constants
 # Editable part - users can customize this in the UI
-ACTION_DECISION_SYSTEM_PROMPT = "You are an AI agent tasked with deciding the next action for mobile app testing."
+ACTION_DECISION_SYSTEM_PROMPT = """You are a meticulous AI testing agent. Your goal is to maximize the exploration coverage of the mobile application.
+Strategize your actions to:
+1. Prioritize interacting with elements you haven't touched before on this screen.
+2. Favor deep exploration by following new navigation paths (buttons, menu items, tabs) over repetitive actions.
+3. If you detect you are on a previously visited screen, look for missed interaction points or use different navigation branches to escape cycles.
+4. Use the provided XML and OCR context to identify all interactive components precisely.
+5. Provide clear reasoning for why your chosen action promotes further discovery of the app's features and states."""
 
 # Fixed part - automatically appended by code, not editable by users
 ACTION_DECISION_FIXED_PART = """

@@ -13,12 +13,16 @@ This guide explains how to use the Graphical User Interface (GUI) for the Appium
   - Ollama (for using local AI models)
   - MobSF (for static analysis of APKs) - See [official MobSF installation guide](https://github.com/MobSF/Mobile-Security-Framework-MobSF)
   - PCAPdroid (for traffic capture on device)
-- API keys / environment variables (set these in your environment or a .env file as needed):
-  - GEMINI_API_KEY (for Gemini provider)
-  - OPENROUTER_API_KEY (for OpenRouter provider)
-  - OLLAMA_BASE_URL (for Ollama; e.g. http://localhost:11434)
-  - MOBSF_API_KEY (if MobSF analysis is enabled)
-  - PCAPDROID_API_KEY (if PCAPdroid traffic capture is enabled)
+- API keys: Configure these in the "Settings" tab of the application.
+    - Gemini API Key (for Google models)
+    - OpenRouter Key (for OpenAI/Anthropic models)
+    - MobSF API Key (optional security scanning)
+
+## Quick Start
+
+1. Run `python run_ui.py` to launch the helper.
+2. Go to the **Settings** tab and enter your API keys.
+3. Select your desired AI Provider and Model.
 
 ## Installing ADB
 
@@ -55,9 +59,7 @@ python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-2. Configure environment (.env) with required API keys if applicable.
-
-3. **Start required services:**
+2. **Start required services:**
    - **Appium Server** (in a separate terminal):
      ```powershell
      npx appium -p 4723 --relaxed-security

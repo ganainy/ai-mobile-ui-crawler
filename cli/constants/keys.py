@@ -93,8 +93,7 @@ HANDLER = "handler"
 MODEL_ID = "id"
 MODEL_NAME = "name"
 MODEL_PRICING = "pricing"
-# === Focus command group ===
-FOCUS_SERVICE = "focus"
+
 TELEMETRY_SERVICE = "telemetry"
 # === Actions command group ===
 ACTIONS_SERVICE = "actions"
@@ -200,16 +199,6 @@ ADB_DEVICES_COMMAND = "devices"
 ADB_DEVICE_STATUS_SEPARATOR = "\tdevice"
 CONFIG_DEVICE_UDID = "DEVICE_UDID"
 
-# === Focus Area Dictionary Keys ===
-FOCUS_AREA_ID = "id"
-FOCUS_AREA_NAME = "name"
-FOCUS_AREA_TITLE = "title"
-FOCUS_AREA_DESCRIPTION = "description"
-FOCUS_AREA_PRIORITY = "priority"
-FOCUS_AREA_ENABLED = "enabled"
-
-# Focus area default values
-DEFAULT_FOCUS_PRIORITY = 999
 
 # === OpenRouter Service Constants ===
 # Config keys

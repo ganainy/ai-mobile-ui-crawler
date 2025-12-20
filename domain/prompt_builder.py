@@ -332,36 +332,7 @@ In your reasoning, explicitly state: "I am navigating away from this screen to b
             prompt_parts.append(feedback_part)
             dynamic_parts.append(feedback_part)
         
-        # Add Focus Areas (New)
-        if context.get("focus_areas"):
-            focus_areas = context['focus_areas']
-            if focus_areas:
-                # Sort by priority (low number = high priority)
-                try:
-                    sorted_focus = sorted(focus_areas, key=lambda x: x.get('priority', 999))
-                except Exception:
-                    # Fallback if sorting fails
-                    sorted_focus = focus_areas
-                    
-                focus_lines = ["\n\n🔒 PRIVACY FOCUS AREAS (PAY ATTENTION TO THESE):"]
-                focus_lines.append("The user is specifically interested in these privacy aspects. Prioritize exploring:")
-                
-                for fa in sorted_focus:
-                    if fa.get('enabled', True):
-                        name = fa.get('name', 'Unknown')
-                        desc = fa.get('description', '')
-                        modifier = fa.get('prompt_modifier', '')
-                        
-                        # Use modifier if available, otherwise name+desc
-                        if modifier:
-                            focus_lines.append(f"\n- {modifier}")
-                        else:
-                            focus_lines.append(f"\n- **{name}**: {desc}")
-                
-                focus_part = "\n".join(focus_lines)
-                prompt_parts.append(focus_part)
-                # Note: We add to dynamic parts too so it's logged/debuggable
-                dynamic_parts.append(focus_part)
+
         
         if context.get("current_screen_visit_count"):
             visit_count_part = f"\n\nScreen visit count: {context['current_screen_visit_count']}"

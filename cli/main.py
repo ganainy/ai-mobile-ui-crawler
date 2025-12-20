@@ -47,7 +47,7 @@ def run(args: Optional[List[str]] = None) -> int:
         from cli.services.app_scan_service import AppScanService
         from cli.services.crawler_service import CrawlerService
         from cli.services.device_service import DeviceService
-        from cli.services.focus_area_service import FocusAreaService
+
         from cli.services.mobsf_service import MobSFService
         from cli.services.openrouter_service import OpenRouterService
         from cli.services.ollama_service import OllamaService
@@ -60,7 +60,7 @@ def run(args: Optional[List[str]] = None) -> int:
         crawler_service = CrawlerService(context)
         context.services.register("crawler", crawler_service)
         context.services.register("analysis", AnalysisService(context))
-        context.services.register("focus", FocusAreaService(context))
+
         context.services.register("mobsf", MobSFService(context))
         context.services.register("openrouter", OpenRouterService(context))
         context.services.register("ollama", OllamaService(context))
@@ -110,7 +110,7 @@ def _register_commands(registry: CommandRegistry) -> None:
             crawler,
             crawler_prompts,
             device,
-            focus,
+
             gemini,
             mobsf,
             ollama,
@@ -127,7 +127,7 @@ def _register_commands(registry: CommandRegistry) -> None:
         device_group = device.DeviceCommandGroup()
         apps_group = apps.AppsCommandGroup()
         crawler_group = crawler.CrawlerCommandGroup()
-        focus_group = focus.FocusCommandGroup()
+
         gemini_group = gemini.GeminiCommandGroup()
         mobsf_group = mobsf.MobSFCommandGroup()
         ollama_group = ollama.OllamaCommandGroup()
@@ -142,7 +142,7 @@ def _register_commands(registry: CommandRegistry) -> None:
         registry.add_group(device_group)
         registry.add_group(apps_group)
         registry.add_group(crawler_group)
-        registry.add_group(focus_group)
+
         registry.add_group(gemini_group)
         registry.add_group(mobsf_group)
         registry.add_group(ollama_group)

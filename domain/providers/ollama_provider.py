@@ -113,16 +113,17 @@ class OllamaProvider(ProviderStrategy):
             return None
         
         try:
-            # Set base URL if provided
-            original_host = os.environ.get('OLLAMA_HOST')
+            # Initialize client
             if base_url:
-                os.environ['OLLAMA_HOST'] = base_url
+                client = ollama.Client(host=base_url)
+            else:
+                client = ollama.Client()
             
             try:
                 # Use show() method to get model information
-                if not hasattr(ollama, 'show'):
+                if not hasattr(client, 'show'):
                     return None
-                response = ollama.show(model_name)
+                response = client.show(model_name)
                 
                 if response is None:
                     return None
@@ -154,13 +155,6 @@ class OllamaProvider(ProviderStrategy):
                 pass
             except Exception as e:
                 pass
-            finally:
-                # Restore original OLLAMA_HOST
-                if base_url:
-                    if original_host:
-                        os.environ['OLLAMA_HOST'] = original_host
-                    elif 'OLLAMA_HOST' in os.environ:
-                        del os.environ['OLLAMA_HOST']
             
             return None
         except Exception as e:
@@ -378,13 +372,14 @@ class OllamaProvider(ProviderStrategy):
         except ImportError:
             raise ImportError("Ollama Python package not installed. Run: pip install ollama")
         
-        # Set base URL if provided
-        if base_url:
-            os.environ['OLLAMA_HOST'] = base_url
-        
         try:
+            if base_url:
+                client = ollama.Client(host=base_url)
+            else:
+                client = ollama.Client()
+
             # Fetch models from Ollama
-            response = ollama.list()
+            response = client.list()
             
             # Handle different response formats
             models_list = []

@@ -5,18 +5,17 @@ All package names can be overridden via environment variables with sensible defa
 This provides flexibility for different Android versions and device manufacturers.
 """
 
-import os
 from typing import List
 
 
 class PackageConstants:
-    """Centralized package name configuration with environment variable support."""
+    """Centralized package name configuration."""
     
     # PCAPdroid package for traffic capture
-    PCAPDROID_PACKAGE = os.getenv("PCAPDROID_PACKAGE", "com.emanuelef.remote_capture")
+    PCAPDROID_PACKAGE = "com.emanuelef.remote_capture"
     
     # System UI package (essential for navigation)
-    SYSTEM_UI_PACKAGE = os.getenv("SYSTEM_UI_PACKAGE", "com.android.systemui")
+    SYSTEM_UI_PACKAGE = "com.android.systemui"
     
     # Default allowed external packages (can be extended via config)
     DEFAULT_ALLOWED_EXTERNAL_PACKAGES = [

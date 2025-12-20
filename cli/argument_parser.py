@@ -28,14 +28,14 @@ def build_parser() -> argparse.ArgumentParser:
               traverser-cli crawler start
               traverser-cli crawler stop
               traverser-cli analysis list-targets
-              traverser-cli focus list
+
               traverser-cli openrouter list-models
               traverser-cli show-config
               traverser-cli set-config MAX_CRAWL_STEPS=50
 
             Examples (python entrypoint):
               python run_cli.py device list
-              python run_cli.py focus list
+
             """
         ),
     )

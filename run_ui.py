@@ -67,7 +67,7 @@ def main():
     config = Config()
 
     # Set provider if given
-    provider = args.provider or os.environ.get("AI_PROVIDER") or config.get("AI_PROVIDER")
+    provider = args.provider or config.get("AI_PROVIDER")
     if not provider:
         splash.show_message("Selecting AI provider...")
         app.processEvents()

@@ -61,7 +61,6 @@ class ActionData(BaseModel):
     target_bounding_box: Optional[Dict[str, Any]] = None
     input_text: Optional[str] = None
     reasoning: str
-    focus_influence: List[str]
 
     @validator("target_identifier")
     def clean_target_identifier(cls, value):

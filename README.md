@@ -22,7 +22,6 @@ An automated Android app testing tool powered by pluggable AI model adapters (Ge
 - **Traffic Capture** - Optional network monitoring via PCAPdroid during crawl (saves .pcap files)
 - **Video Recording** - Optional screen recording of entire crawl session (saves .mp4 files)
 - **MobSF Integration** - Optional automatic static security analysis after crawl completion
-- **Focus Areas** - Customizable privacy-focused testing targets
 - **Comprehensive Reporting** - PDF reports with crawl analysis
 
 ## AI Model Support
@@ -99,22 +98,14 @@ For GUI usage and interactive workflows see the GUI user guide:
 
 ## Configuration Management
 
-Simplified two-layer configuration system:
-- **Secrets (API keys)**: Environment variables only (never stored in SQLite)
-- **Everything else**: SQLite only (int, str, bool, float values)
+**Configuration Management:**
+All configuration, including API keys and model selection, is managed solely through the application's user interface or CLI. Data is stored securely in a local SQLite database (`config.db`).
 
-On first launch, simple type defaults are automatically populated into SQLite from module constants. Complex types (dict, list) are excluded and remain in code only.
+- **Settings UI**: Launch the UI (`python run_ui.py`) and navigate to the Settings tab to configure AI providers, API keys, and other options.
+- **CLI Configuration**: Use CLI commands to set configuration values if needed (see `docs/cli-user-guide.md`).
 
-**Environment Variables (.env):**
-```env
-GEMINI_API_KEY=your_gemini_key
-OPENROUTER_API_KEY=your_openrouter_key
-OLLAMA_BASE_URL=http://localhost:11434
-MOBSF_API_KEY=your_mobsf_key
-PCAPDROID_API_KEY=your_pcapdroid_key
-```
+**No `.env` file is required.**
 
-**Note:** All non-secret configuration values are stored in SQLite (`config.db`). Secrets are read from environment variables only and never persisted to disk.
 
 **System Variables:**
 ```

@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     from core.controller import CrawlerLaunchPlan, OutputParser, ProcessBackend
 
 # Module-level constants for Qt callback names
-QT_CALLBACK_NAMES = ('step', 'action', 'screenshot', 'status', 'focus', 'end', 'log')
+QT_CALLBACK_NAMES = ('step', 'action', 'screenshot', 'status', 'end', 'log')
 
 # Timeout constants (in seconds/milliseconds)
 SUBPROCESS_GRACEFUL_TIMEOUT_SEC = 5
@@ -52,7 +52,7 @@ class SubprocessBackend(ProcessBackend):
         """Start a process using subprocess."""
         try:
             # Log what we're about to start
-            cmd = [plan.python_executable] + PYTHON_EXEC_ARGS + [plan.script_path]
+            cmd = [plan.python_executable] + PYTHON_EXEC_ARGS + [plan.script_path] + plan.arguments
             
             self.process = subprocess.Popen(
                 cmd,
@@ -317,7 +317,7 @@ class QtProcessBackend(ProcessBackend):
             action_updated = Signal(str)
             screenshot_updated = Signal(str)
             status_updated = Signal(str)
-            focus_updated = Signal(str)
+
             end_updated = Signal(str)
             log_updated = Signal(str)
         
@@ -342,7 +342,7 @@ class QtProcessBackend(ProcessBackend):
             self.process.setWorkingDirectory(plan.working_directory)
             
             # Start the process
-            self.process.start(plan.python_executable, PYTHON_EXEC_ARGS + [plan.script_path])
+            self.process.start(plan.python_executable, PYTHON_EXEC_ARGS + [plan.script_path] + plan.arguments)
             
             if self.process.waitForStarted(QT_START_TIMEOUT_MS):  # Wait up to 5 seconds for start
                 return True

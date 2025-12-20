@@ -154,13 +154,13 @@ class OpenRouterProvider(ProviderStrategy):
             except Exception:
                 pass
             
-            # Try environment variable
             if not api_key:
-                api_key = os.environ.get("OPENROUTER_API_KEY")
+                # API key must be in config
+                pass
         
         if not api_key:
             raise RuntimeError(
-                "OPENROUTER_API_KEY not found. Set it as an environment variable or in config."
+                "OPENROUTER_API_KEY not found in config."
             )
         
         try:
@@ -333,8 +333,8 @@ class OpenRouterProvider(ProviderStrategy):
         if api_key:
             return api_key
         
-        # Fallback to environment variable
-        return os.environ.get("OPENROUTER_API_KEY")
+        # Config only
+        return None
     
     def check_dependencies(self) -> Tuple[bool, str]:
         """Check if OpenAI SDK is installed (used by OpenRouter)."""
@@ -442,7 +442,8 @@ class OpenRouterProvider(ProviderStrategy):
             if config:
                 api_key = self.get_api_key(config)
             if not api_key:
-                api_key = os.environ.get("OPENROUTER_API_KEY")
+                # API key must be in config
+                pass
             
             if not api_key:
                 raise RuntimeError("No OPENROUTER_API_KEY found for refresh")

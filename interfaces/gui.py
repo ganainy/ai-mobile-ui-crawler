@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional
 from core.crawler_config import Configuration, ConfigurationError
 from core.storage import Storage
 from core.crawler import Crawler, CrawlerSession
-from cli.services.focus_area_service import FocusAreaService
+
 from cli.shared.context import ApplicationContext
 from config.app_config import Config
 
@@ -258,64 +258,6 @@ class GUICrawlerInterface:
 
 
 
-    # --- Focus Area CRUD GUI methods ---
-    def _get_focus_service(self) -> FocusAreaService:
-        """Get a FocusAreaService instance."""
-        context = ApplicationContext()
-        context.config = Config()
-        return FocusAreaService(context)
-    
-    def gui_add_focus_area(self, name: str, description: str = ""):
-        try:
-            service = self._get_focus_service()
-            success, msg = service.add_focus_area(name, description)
-            if success:
-                areas = service.get_focus_areas()
-                result = next((a for a in areas if a.get('name') == name), {})
-                return result
-            else:
-                logger.error(f"Failed to add focus area: {msg}")
-                return None
-        except Exception as e:
-            logger.error(f"Failed to add focus area: {e}")
-            return None
-
-    def gui_remove_focus_area(self, id: int):
-        try:
-            service = self._get_focus_service()
-            success, msg = service.remove_focus_area(str(id))
-            if success:
-                return True
-            else:
-                logger.error(f"Failed to remove focus area: {msg}")
-                return False
-        except Exception as e:
-            logger.error(f"Failed to remove focus area: {e}")
-            return False
-
-    def gui_update_focus_area(self, id: int, name: Optional[str] = None, description: Optional[str] = None):
-        try:
-            service = self._get_focus_service()
-            success, msg = service.edit_focus_area(str(id), name, description)
-            if success:
-                areas = service.get_focus_areas()
-                result = next((a for a in areas if a.get('id') == id), {})
-                return result
-            else:
-                logger.error(f"Failed to update focus area: {msg}")
-                return None
-        except Exception as e:
-            logger.error(f"Failed to update focus area: {e}")
-            return None
-
-    def gui_list_focus_areas(self):
-        try:
-            service = self._get_focus_service()
-            result = service.get_focus_areas()
-            return result
-        except Exception as e:
-            logger.error(f"Failed to list focus areas: {e}")
-            return []
 
 
 # Convenience function for GUI usage

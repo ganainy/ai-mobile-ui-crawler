@@ -251,25 +251,6 @@ class TelemetryService:
             print(MSG.CONNECTED_DEVICE_ITEM.format(index=i+1, device=device))
         print(MSG.CONNECTED_DEVICES_FOOTER)
     
-    def print_focus_areas(self, areas: List[dict]) -> None:
-        """
-        Print a formatted list of focus areas.
-        
-        Args:
-            areas: List of focus area dictionaries from get_focus_areas()
-        """
-        if not areas:
-            print(MSG.UI_NO_FOCUS_AREAS_CONFIGURED)
-            return
-        
-        print(f"\n=== {MSG.UI_FOCUS_AREAS} ===")
-        for i, area in enumerate(areas):
-            # Create display_name from raw data
-            display_name = area.get(KEYS.FOCUS_AREA_TITLE) or area.get(KEYS.FOCUS_AREA_NAME) or f"Area {i+1}"
-            enabled = area.get(KEYS.FOCUS_AREA_ENABLED, True)
-            priority = area.get(KEYS.FOCUS_AREA_PRIORITY, i)
-            print(f"{i+1:2d}. {display_name} | enabled={enabled} | priority={priority}")
-        print("===================")
     
     def print_model_list(self, models: List[Dict[str, Any]]) -> None:
         """

@@ -107,7 +107,7 @@ DEVICE_SETTINGS_GROUP = "Device Settings"
 TARGET_APP_SETTINGS_GROUP = "Target App Settings"
 AI_SETTINGS_GROUP = "AI Settings"
 CRAWLER_SETTINGS_GROUP = "Crawler Settings"
-FOCUS_AREAS_GROUP = "Focus Areas"
+
 TRAFFIC_CAPTURE_GROUP = "Traffic Capture"
 MOBSF_SETTINGS_GROUP = "MobSF Settings"
 API_KEYS_GROUP = "API Keys"

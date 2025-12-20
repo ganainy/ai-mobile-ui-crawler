@@ -4,29 +4,27 @@ Centralized URL configuration for all external services.
 All service URLs can be overridden via environment variables with sensible defaults.
 This provides flexibility for different deployment environments (dev, staging, prod).
 """
-
-import os
 from typing import Optional
 
 
 class ServiceURLs:
-    """Centralized service URL configuration with environment variable support."""
+    """Centralized service URL configuration."""
     
     # Appium Server
-    APPIUM = os.getenv("APPIUM_SERVER_URL", "http://127.0.0.1:4723")
+    APPIUM = "http://127.0.0.1:4723"
     
     # MobSF API
-    MOBSF = os.getenv("MOBSF_API_URL", "http://localhost:8000/api/v1")
+    MOBSF = "http://localhost:8000/api/v1"
     
     # Ollama Service
-    OLLAMA = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+    OLLAMA = "http://localhost:11434"
     
     # OpenRouter API
-    OPENROUTER_API = os.getenv("OPENROUTER_API_URL", "https://openrouter.ai/api/v1")
+    OPENROUTER_API = "https://openrouter.ai/api/v1"
     OPENROUTER_MODELS = f"{OPENROUTER_API}/models"
     
     # Google Gemini API
-    GEMINI_API = os.getenv("GEMINI_API_URL", "https://generativelanguage.googleapis.com/v1beta")
+    GEMINI_API = "https://generativelanguage.googleapis.com/v1beta"
     GEMINI_MODELS = f"{GEMINI_API}/models"
     
     @classmethod

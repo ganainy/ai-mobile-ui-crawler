@@ -215,11 +215,15 @@ class ComponentFactory:
         config_widgets["CRAWLER_AVAILABLE_ACTIONS"].setToolTip(available_actions_tooltip)
         ai_layout.addRow(label_available_actions, config_widgets["CRAWLER_AVAILABLE_ACTIONS"])
         
-        # Crawler Action Decision Prompt (editable, saved to SQLite)
+        # Prompt layout with Reset button
+        prompt_container = QWidget()
+        prompt_sub_layout = QVBoxLayout(prompt_container)
+        prompt_sub_layout.setContentsMargins(0, 0, 0, 0)
+        
         config_widgets["CRAWLER_ACTION_DECISION_PROMPT"] = QTextEdit()
         config_widgets["CRAWLER_ACTION_DECISION_PROMPT"].setMinimumHeight(120)
         config_widgets["CRAWLER_ACTION_DECISION_PROMPT"].setMaximumHeight(180)
-        config_widgets["CRAWLER_ACTION_DECISION_PROMPT"].setReadOnly(False)  # Editable, saved to SQLite
+        config_widgets["CRAWLER_ACTION_DECISION_PROMPT"].setReadOnly(False)
         config_widgets["CRAWLER_ACTION_DECISION_PROMPT"].setStyleSheet("""
             QTextEdit {
                 background-color: #333333;
@@ -227,6 +231,25 @@ class ComponentFactory:
                 border: 1px solid #555555;
             }
         """)
+        prompt_sub_layout.addWidget(config_widgets["CRAWLER_ACTION_DECISION_PROMPT"])
+        
+        reset_prompt_btn = QPushButton("Reset to Default")
+        reset_prompt_btn.setFixedWidth(120)
+        reset_prompt_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #444444;
+                color: #FFFFFF;
+                border: 1px solid #555555;
+                padding: 4px;
+                font-size: 8pt;
+            }
+            QPushButton:hover {
+                background-color: #555555;
+            }
+        """)
+        config_widgets["RESET_ACTION_DECISION_PROMPT_BTN"] = reset_prompt_btn
+        prompt_sub_layout.addWidget(reset_prompt_btn, 0, Qt.AlignmentFlag.AlignRight)
+        
         label_action_prompt = QLabel("Action Decision Prompt: ")
         action_prompt_tooltip = (
             "Custom instructions for the AI agent (editable). "
@@ -236,19 +259,9 @@ class ComponentFactory:
         )
         label_action_prompt.setToolTip(action_prompt_tooltip)
         config_widgets["CRAWLER_ACTION_DECISION_PROMPT"].setToolTip(action_prompt_tooltip)
-        ai_layout.addRow(label_action_prompt, config_widgets["CRAWLER_ACTION_DECISION_PROMPT"])
+        ai_layout.addRow(label_action_prompt, prompt_container)
 
-        # Add Focus Areas as a subsection within AI Settings
-        focus_areas_widget = ComponentFactory._create_focus_areas_widget(
-            config_handler
-        )
-        label_focus_areas = QLabel("Privacy Focus Areas: ")
-        focus_areas_tooltip = (
-            "Configure what privacy aspects the AI agent should focus on during exploration. "
-            "Drag items to reorder priority, toggle checkboxes to enable/disable."
-        )
-        label_focus_areas.setToolTip(focus_areas_tooltip)
-        ai_layout.addRow(label_focus_areas, focus_areas_widget)
+
 
         layout.addRow(ai_group)
         return ai_group
@@ -395,60 +408,7 @@ class ComponentFactory:
 
 
 
-    @staticmethod
-    def _create_focus_areas_widget(config_handler: Any) -> QWidget:
-        """Create the Focus Areas widget (used as a subsection within AI Settings)."""
-        # Import the focus areas widget
-        try:
-            from ui.focus_areas_widget import FocusAreasWidget
-        except ImportError:
-            from ui.focus_areas_widget import FocusAreasWidget
 
-        # Try to get focus service from main controller
-        focus_service = None
-        try:
-            if hasattr(config_handler, 'main_controller'):
-                main_controller = config_handler.main_controller
-                if hasattr(main_controller, 'focus_service'):
-                    focus_service = main_controller.focus_service
-        except Exception as e:
-            logging.warning(f"Could not get focus_service from main_controller: {e}")
-
-        # Load focus areas from user store (full data with id, name, description, etc.)
-        try:
-            focus_areas_data = config_handler.config._user_store.get_focus_areas_full()
-            if not focus_areas_data:
-                focus_areas_data = []
-        except Exception as e:
-            logging.warning(f"Could not load focus areas from user store: {e}")
-            focus_areas_data = []
-
-        # Create the focus areas widget
-        focus_widget = FocusAreasWidget(focus_areas_data, parent=None, focus_service=focus_service)
-
-        # Store reference for later access
-        # Note: Focus areas are persisted directly through FocusAreaService when CRUD operations occur
-        config_handler.focus_areas_widget = focus_widget
-
-        return focus_widget
-
-    @staticmethod
-    def create_focus_areas_group(
-        layout: QFormLayout,
-        config_widgets: Dict[str, Any],
-        tooltips: Dict[str, str],
-        config_handler: Any,
-    ) -> QGroupBox:
-        """Create the Focus Areas group (legacy method, kept for backward compatibility)."""
-        focus_group = QGroupBox("Privacy Focus Areas")
-        focus_layout = QVBoxLayout(focus_group)
-
-        # Use the internal widget creation method
-        focus_widget = ComponentFactory._create_focus_areas_widget(config_handler)
-        focus_layout.addWidget(focus_widget)
-
-        layout.addRow(focus_group)
-        return focus_group
 
     @staticmethod
     def create_crawler_settings_group(

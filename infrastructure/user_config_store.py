@@ -69,18 +69,7 @@ class UserConfigStore:
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS focus_areas (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT UNIQUE NOT NULL,
-                description TEXT DEFAULT '',
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL,
-                enabled BOOLEAN DEFAULT TRUE,
-                priority INTEGER DEFAULT 0,
-                sort_order INTEGER
-            );
-        """)
+
         conn.execute("""
             CREATE TABLE IF NOT EXISTS crawler_actions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -107,8 +96,7 @@ class UserConfigStore:
         # Initialize default prompts on first launch
         self.initialize_default_prompts_if_empty()
         
-        # Initialize default focus areas on first launch
-        self.initialize_default_focus_areas_if_empty()
+
 
     def get(self, key: str, default: Any = None) -> Any:
         conn = self._ensure_conn()
@@ -251,19 +239,15 @@ class UserConfigStore:
             raise
 
     def reset_preferences(self, defaults: Dict[str, Any]) -> None:
-        """Clear stored preferences, focus areas, crawler actions, and crawler prompts, then reapply defaults."""
+        """Clear stored preferences, crawler actions, and crawler prompts, then reapply defaults."""
         conn = self._ensure_conn()
 
         try:
             # Clear all config-related tables
             conn.execute("DELETE FROM user_preferences")
             
-            # Clear focus areas (if table exists)
-            try:
-                conn.execute("DELETE FROM focus_areas")
-            except sqlite3.OperationalError:
-                pass
-            
+
+
             # Clear crawler actions (if table exists)
             try:
                 conn.execute("DELETE FROM crawler_actions")
@@ -282,6 +266,13 @@ class UserConfigStore:
             conn.rollback()
             raise
         self.initialize_defaults(defaults)
+        
+        # Re-initialize prompts and actions
+        self.initialize_default_prompts_if_empty()
+        
+        # Re-initialize actions if provided in defaults
+        if 'CRAWLER_AVAILABLE_ACTIONS' in defaults:
+            self.initialize_default_actions(defaults['CRAWLER_AVAILABLE_ACTIONS'])
 
     def _coerce_type(self, value: str, type_: str) -> Any:
         if type_ == 'int':
@@ -318,167 +309,7 @@ class UserConfigStore:
             return json.dumps(value)
         return str(value)
     
-    # Full focus area model methods (using proper SQLite table)
-    def get_focus_areas_full(self) -> List[Dict[str, Any]]:
-        """Get all focus areas with full model (id, name, description, timestamps).
-        
-        Returns:
-            List of focus area dictionaries with full model
-        """
-        conn = self._ensure_conn()
-        cur = conn.execute("""
-            SELECT id, name, description, created_at, updated_at, enabled, priority 
-            FROM focus_areas 
-            ORDER BY sort_order ASC, id ASC
-        """)
-        return [
-            {
-                "id": row[0],
-                "name": row[1],
-                "description": row[2] or "",
-                "created_at": row[3],
-                "updated_at": row[4],
-                "enabled": bool(row[5]),
-                "priority": row[6] or 0,
-            }
-            for row in cur.fetchall()
-        ]
-    
-    def add_focus_area_full(self, name: str, description: Optional[str] = None, 
-                           created_at: Optional[str] = None, 
-                           updated_at: Optional[str] = None) -> Dict[str, Any]:
-        """Add a new focus area with full model.
-        
-        Args:
-            name: Focus area name (must be unique)
-            description: Optional description
-            created_at: Optional creation timestamp (ISO format)
-            updated_at: Optional update timestamp (ISO format)
-            
-        Returns:
-            Dict representing the new focus area
-            
-        Raises:
-            ValueError if name is not unique
-        """
-        from datetime import datetime, UTC
-        
-        conn = self._ensure_conn()
-        
-        # Check for duplicates
-        cur = conn.execute("SELECT id FROM focus_areas WHERE name = ?", (name,))
-        if cur.fetchone():
-            raise ValueError("Focus area name must be unique.")
-        
-        # Get max sort_order
-        cur = conn.execute("SELECT MAX(sort_order) FROM focus_areas")
-        max_order = cur.fetchone()[0] or 0
-        
-        # Create new focus area
-        now = datetime.now(UTC).isoformat()
-        try:
-            cur = conn.execute("""
-                INSERT INTO focus_areas (name, description, created_at, updated_at, enabled, priority, sort_order)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (name, description or "", created_at or now, updated_at or now, True, 0, max_order + 1))
-            conn.commit()
-            area_id = cur.lastrowid
-            
-            # Return the created area
-            return {
-                "id": area_id,
-                "name": name,
-                "description": description or "",
-                "created_at": created_at or now,
-                "updated_at": updated_at or now,
-                "enabled": True,
-                "priority": 0,
-            }
-        except sqlite3.IntegrityError:
-            raise ValueError("Focus area name must be unique.")
-    
-    def update_focus_area_full(self, area_id: int, name: Optional[str] = None, 
-                               description: Optional[str] = None) -> Dict[str, Any]:
-        """Update a focus area by id.
-        
-        Args:
-            area_id: Focus area ID
-            name: New name (optional, must be unique if provided)
-            description: New description (optional)
-            
-        Returns:
-            Dict representing the updated focus area
-            
-        Raises:
-            ValueError if not found or name not unique
-        """
-        from datetime import datetime, UTC
-        
-        conn = self._ensure_conn()
-        
-        # Check if area exists
-        cur = conn.execute("SELECT id FROM focus_areas WHERE id = ?", (area_id,))
-        if not cur.fetchone():
-            raise ValueError("Focus area not found.")
-        
-        # Check for duplicate name if changing name
-        if name:
-            cur = conn.execute("SELECT id FROM focus_areas WHERE name = ? AND id != ?", (name, area_id))
-            if cur.fetchone():
-                raise ValueError("Focus area name must be unique.")
-        
-        # Build update query
-        updates = []
-        params = []
-        if name:
-            updates.append("name = ?")
-            params.append(name)
-        if description is not None:
-            updates.append("description = ?")
-            params.append(description)
-        updates.append("updated_at = ?")
-        params.append(datetime.now(UTC).isoformat())
-        params.append(area_id)
-        
-        conn.execute(
-            f"UPDATE focus_areas SET {', '.join(updates)} WHERE id = ?",
-            params
-        )
-        conn.commit()
-        
-        # Return the updated area
-        cur = conn.execute("""
-            SELECT id, name, description, created_at, updated_at, enabled, priority 
-            FROM focus_areas 
-            WHERE id = ?
-        """, (area_id,))
-        row = cur.fetchone()
-        return {
-            "id": row[0],
-            "name": row[1],
-            "description": row[2] or "",
-            "created_at": row[3],
-            "updated_at": row[4],
-            "enabled": bool(row[5]),
-            "priority": row[6] or 0,
-        }
-    
-    def remove_focus_area_full(self, area_id: int) -> None:
-        """Remove a focus area by id.
-        
-        Args:
-            area_id: Focus area ID
-            
-        Raises:
-            ValueError if not found
-        """
-        conn = self._ensure_conn()
-        cur = conn.execute("SELECT id FROM focus_areas WHERE id = ?", (area_id,))
-        if not cur.fetchone():
-            raise ValueError("Focus area not found.")
-        
-        conn.execute("DELETE FROM focus_areas WHERE id = ?", (area_id,))
-        conn.commit()
+
     
     # Crawler actions CRUD methods
     def initialize_default_actions(self, default_actions: Dict[str, str]) -> None:
@@ -910,43 +741,5 @@ class UserConfigStore:
             except Exception as e:
                 logging.error(f"Failed to initialize default prompts: {e}")
     
-    def initialize_default_focus_areas_if_empty(self) -> None:
-        """Initialize default focus area on first launch.
-        
-        Checks if focus_areas table is empty, and if so, creates a default
-        focus area for privacy policies and personally identifiable data.
-        """
-        conn = self._ensure_conn()
-        
-        # Check if any focus areas exist
-        cur = conn.execute("SELECT COUNT(*) FROM focus_areas")
-        count = cur.fetchone()[0]
-        
-        # Only initialize if table is empty (first launch)
-        if count == 0:
-            try:
-                default_name = "Privacy Policies & Personal Data"
-                default_description = (
-                    "Focus on privacy policies, terms of service, and areas of code "
-                    "that interact with personally identifiable data (personen bezogene Daten). "
-                    "This includes data collection notices, consent toggles, permission requests, "
-                    "privacy settings, account settings, data usage information, and any UI elements "
-                    "related to user data handling, storage, or sharing."
-                )
-                
-                
-                try:
-                    self.add_focus_area_full(
-                        name=default_name,
-                        description=default_description
-                    )
-                except sqlite3.IntegrityError:
-                    # Focus area already exists (shouldn't happen on first launch, but handle gracefully)
-                    pass
-                except Exception as e:
-                    logging.error(f"Failed to initialize default focus area: {e}")
-                
-            except Exception as e:
-                logging.error(f"Failed to initialize default focus areas: {e}")
-    
+
     
