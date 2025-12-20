@@ -108,6 +108,7 @@ class Config:
         """Return absolute path to shutdown flag file in project root."""
         return os.path.abspath(os.path.join(self._project_root(), "shutdown.flag"))
 
+
     def _project_root(self) -> str:
         """Return absolute project root using marker file detection."""
         from utils.paths import find_project_root

@@ -75,8 +75,7 @@ class CrawlerControllerWindow(QMainWindow):
         
         # These will be created by _setup_ui method
         # Initialize as None for now - they'll be set by the UI creation methods
-        self.start_btn = None
-        self.stop_btn = None
+        self.start_stop_btn = None
         self.log_output = None
         self.ai_input_log = None  # New AI Input log
         self.ai_output_log = None # New AI Output log
@@ -1043,18 +1042,13 @@ class CrawlerControllerWindow(QMainWindow):
             self.log_message("ERROR: Crawler manager not initialized", "red")
     
     @slot()
-    def start_crawler(self):
-        """Start the crawler process."""
+    def toggle_crawler_state(self):
+        """Toggle crawler state between running and stopped."""
         if hasattr(self, 'crawler_manager') and self.crawler_manager:
-            self.crawler_manager.start_crawler()
-        else:
-            self.log_message("ERROR: Crawler manager not initialized", "red")
-    
-    @slot()
-    def stop_crawler(self):
-        """Stop the crawler process."""
-        if hasattr(self, 'crawler_manager') and self.crawler_manager:
-            self.crawler_manager.stop_crawler()
+            if self.crawler_manager.is_crawler_running():
+                self.crawler_manager.stop_crawler()
+            else:
+                self.crawler_manager.start_crawler()
         else:
             self.log_message("ERROR: Crawler manager not initialized", "red")
     

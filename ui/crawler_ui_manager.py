@@ -80,6 +80,9 @@ class CrawlerManager(QObject):
         backend = create_process_backend(use_qt=True)  # UI uses Qt backend
         self.orchestrator = CrawlerOrchestrator(self.config, backend)
         
+
+
+        
         # Initialize thread pool for async validation
         self.thread_pool = QThreadPool()
         self.validation_worker = None
@@ -87,6 +90,10 @@ class CrawlerManager(QObject):
         # Connect orchestrator signals to UI
         self._connect_orchestrator_signals()
     
+    def is_crawler_running(self) -> bool:
+        """Check if the crawler process is currently running."""
+        return self.crawler_process is not None and self.crawler_process.state() == QProcess.ProcessState.Running
+
     def _connect_orchestrator_signals(self):
         """Connect orchestrator output callbacks to UI signals."""
         # Register callbacks with the orchestrator
@@ -413,10 +420,18 @@ class CrawlerManager(QObject):
             # Update UI
             self.main_controller.step_label.setText("Step: 0")
             # Action history clear removed
+            # Update UI
+            self.main_controller.step_label.setText("Step: 0")
+            # Action history clear removed
             self.main_controller.status_label.setText("Status: Starting...")
             self.main_controller.progress_bar.setValue(0)
-            self.main_controller.start_btn.setEnabled(False)
-            self.main_controller.stop_btn.setEnabled(True)
+            
+            if hasattr(self.main_controller, 'start_stop_btn'):
+                self.main_controller.start_stop_btn.setText("Stop Crawler")
+                # Optional: set red styling
+                self.main_controller.start_stop_btn.setStyleSheet("background-color: #ffcccc; color: #cc0000;")
+                self.main_controller.start_stop_btn.setEnabled(True)
+
             try:
                 if hasattr(self.main_controller, 'generate_report_btn') and self.main_controller.generate_report_btn:
                     self.main_controller.generate_report_btn.setEnabled(False)
@@ -521,15 +536,20 @@ class CrawlerManager(QObject):
     def stop_crawler(self) -> None:
         """Stop the crawler process, trying graceful shutdown first."""
         if self.crawler_process and self.crawler_process.state() == QProcess.ProcessState.Running:
-            self.main_controller.log_message("Stopping crawler...", 'blue')
+            self.main_controller.log_message("Stopping crawler... (waiting for current step to finish)", 'blue')
             self.main_controller.status_label.setText("Status: Stopping...")
             
+            # Disable button to prevent double clicks during checking
+            if hasattr(self.main_controller, 'start_stop_btn'):
+                self.main_controller.start_stop_btn.setEnabled(False)
+                self.main_controller.start_stop_btn.setText("Stopping...")
+
             try:
                 with open(self._shutdown_flag_file_path, 'w') as f:
                     f.write("shutdown requested")
                 
                 # Start a timer to force termination if graceful shutdown takes too long
-                self.shutdown_timer.start(10000)  # 10 seconds timeout
+                self.shutdown_timer.start(30000)  # 30 seconds timeout
             except Exception as e:
                 self.main_controller.log_message(f"Error creating shutdown flag: {e}", 'red')
                 # Fallback to termination
@@ -571,11 +591,11 @@ class CrawlerManager(QObject):
         if hasattr(self.main_controller, 'status_label'):
             self.main_controller.status_label.setText(final_msg)
         
-        if hasattr(self.main_controller, 'start_btn'):
-            self.main_controller.start_btn.setEnabled(True)
-        
-        if hasattr(self.main_controller, 'stop_btn'):
-            self.main_controller.stop_btn.setEnabled(False)
+        if hasattr(self.main_controller, 'start_stop_btn'):
+            self.main_controller.start_stop_btn.setEnabled(True)
+            self.main_controller.start_stop_btn.setText("Start Crawler")
+            self.main_controller.start_stop_btn.setStyleSheet("") # Reset style
+
 
         # Enable report generation after finish
         try:

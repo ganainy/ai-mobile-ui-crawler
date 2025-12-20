@@ -188,14 +188,7 @@ class ComponentFactory:
 
         # Enable Image Context has been moved to Image Preprocessing section
 
-        from config.numeric_constants import XML_SNIPPET_MAX_LEN_MIN, XML_SNIPPET_MAX_LEN_MAX
-        config_widgets["XML_SNIPPET_MAX_LEN"] = QSpinBox()
-        config_widgets["XML_SNIPPET_MAX_LEN"].setRange(XML_SNIPPET_MAX_LEN_MIN, XML_SNIPPET_MAX_LEN_MAX)
-        label_xml_snippet_max_len = QLabel("XML Snippet Max Length: ")
-        label_xml_snippet_max_len.setToolTip(tooltips["XML_SNIPPET_MAX_LEN"])
-        ai_layout.addRow(
-            label_xml_snippet_max_len, config_widgets["XML_SNIPPET_MAX_LEN"]
-        )
+
 
         # Crawler Available Actions (checkable list, managed via CLI: actions list/add/edit/remove)
         from ui.available_actions_widget import AvailableActionsWidget
@@ -302,6 +295,22 @@ class ComponentFactory:
         context_sources_layout = QHBoxLayout()
         context_sources_layout.addWidget(label_context_sources)
         context_sources_layout.addWidget(config_widgets["CONTEXT_SOURCE_XML"])
+
+        # XML Snippet Length (placed next to XML source)
+        from config.numeric_constants import XML_SNIPPET_MAX_LEN_MIN, XML_SNIPPET_MAX_LEN_MAX
+        config_widgets["XML_SNIPPET_MAX_LEN"] = QSpinBox()
+        config_widgets["XML_SNIPPET_MAX_LEN"].setRange(XML_SNIPPET_MAX_LEN_MIN, XML_SNIPPET_MAX_LEN_MAX)
+        config_widgets["XML_SNIPPET_MAX_LEN"].setToolTip(tooltips.get("XML_SNIPPET_MAX_LEN", "Max characters for XML snippet"))
+        config_widgets["XML_SNIPPET_MAX_LEN"].setFixedWidth(80) # Keep it compact
+        
+        label_xml_len = QLabel("Max Len:")
+        label_xml_len.setToolTip(tooltips.get("XML_SNIPPET_MAX_LEN", "Max characters for XML snippet"))
+        
+        context_sources_layout.addWidget(label_xml_len)
+        context_sources_layout.addWidget(config_widgets["XML_SNIPPET_MAX_LEN"])
+
+        # Add some spacing
+        context_sources_layout.addSpacing(10)
         context_sources_layout.addWidget(config_widgets["CONTEXT_SOURCE_OCR"])
         context_sources_layout.addWidget(config_widgets["CONTEXT_SOURCE_IMAGE"])
         context_sources_layout.addWidget(config_widgets["IMAGE_CONTEXT_WARNING"])
@@ -862,9 +871,15 @@ class ComponentFactory:
         group = QGroupBox("Controls")
         layout = QHBoxLayout(group)
 
-        controls_handler.start_btn = QPushButton("Start Crawler")
-        controls_handler.stop_btn = QPushButton("Stop Crawler")
-        controls_handler.stop_btn.setEnabled(False)
+        controls_handler.start_stop_btn = QPushButton("Start Crawler")
+        controls_handler.start_stop_btn.setToolTip("Start or stop the crawler process")
+        
+        # Connect to toggle handler
+        if hasattr(controls_handler, 'toggle_crawler_state'):
+            controls_handler.start_stop_btn.clicked.connect(controls_handler.toggle_crawler_state)
+        else:
+            # Fallback for during refactoring (though method should exist)
+            pass
 
         # Add pre-check button
         pre_check_btn = QPushButton("🔍 Pre-Check Services")
@@ -890,13 +905,9 @@ class ComponentFactory:
         controls_handler.generate_report_btn.setEnabled(True)
         controls_handler.generate_report_btn.clicked.connect(controls_handler.generate_report)
 
-        controls_handler.start_btn.clicked.connect(controls_handler.start_crawler)
-        controls_handler.stop_btn.clicked.connect(controls_handler.stop_crawler)
-
         layout.addWidget(pre_check_btn)
         layout.addWidget(controls_handler.open_session_folder_btn)
         layout.addWidget(controls_handler.generate_report_btn)
-        layout.addWidget(controls_handler.start_btn)
-        layout.addWidget(controls_handler.stop_btn)
+        layout.addWidget(controls_handler.start_stop_btn)
 
         return group

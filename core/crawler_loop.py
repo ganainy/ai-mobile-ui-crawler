@@ -67,12 +67,18 @@ class CrawlerLoop:
             self.crawl_logger: Optional[CrawlLogger] = None
             
             # Set up flag controller
-            shutdown_flag_path = config.get('SHUTDOWN_FLAG_PATH') or os.path.join(
-                config.BASE_DIR or '.', DEFAULT_SHUTDOWN_FLAG
-            )
-            pause_flag_path = config.get('PAUSE_FLAG_PATH') or os.path.join(
-                config.BASE_DIR or '.', DEFAULT_PAUSE_FLAG
-            )
+            # Prefer properties from Config object if available (to match UI usage)
+            shutdown_flag_path = getattr(config, 'SHUTDOWN_FLAG_PATH', None)
+            if not shutdown_flag_path:
+                shutdown_flag_path = config.get('SHUTDOWN_FLAG_PATH') or os.path.join(
+                    config.BASE_DIR or '.', DEFAULT_SHUTDOWN_FLAG
+                )
+            
+            pause_flag_path = getattr(config, 'PAUSE_FLAG_PATH', None)
+            if not pause_flag_path:
+                pause_flag_path = config.get('PAUSE_FLAG_PATH') or os.path.join(
+                    config.BASE_DIR or '.', DEFAULT_PAUSE_FLAG
+                )
             
             self.flag_controller = FlagController(shutdown_flag_path, pause_flag_path)
             
@@ -298,6 +304,31 @@ class CrawlerLoop:
         """Wait while pause flag is present."""
         while self.check_pause_flag() and not self.check_shutdown_flag():
             time.sleep(0.5)
+
+    def wait_with_check(self, seconds: float) -> bool:
+        """
+        Wait for a specified duration while checking for shutdown and pause flags.
+        
+        Args:
+            seconds: Number of seconds to wait
+            
+        Returns:
+            True if completed without shutdown request, False if shutdown requested
+        """
+        start_time = time.time()
+        while (time.time() - start_time) < seconds:
+            if self.check_shutdown_flag():
+                return False
+            
+            if self.check_pause_flag():
+                self.wait_while_paused()
+                # Check shutdown again after pause (in case stop was pressed while paused)
+                if self.check_shutdown_flag():
+                    return False
+            
+            # Sleep in small chunks
+            time.sleep(0.1)
+        return True
     
     
     def run_step(self) -> bool:
@@ -310,9 +341,11 @@ class CrawlerLoop:
             # 1. Check for shutdown and pause
             if self.check_shutdown_flag():
                 return False
-            self.wait_while_paused()
-            if self.check_shutdown_flag():
-                return False
+            
+            if self.check_pause_flag():
+                self.wait_while_paused()
+                if self.check_shutdown_flag():
+                    return False
             
             # 2. Increment step and log progress
             self.step_count += 1
@@ -371,6 +404,16 @@ class CrawlerLoop:
             )
             
             # 9. Get next action from AI
+            
+            # Check for shutdown/pause before expensive AI call
+            if self.check_shutdown_flag():
+                return False
+            
+            if self.check_pause_flag():
+                self.wait_while_paused()
+                if self.check_shutdown_flag():
+                    return False
+            
             ai_decision_start = time.time()
             action_result = self.agent_assistant._get_next_action_langchain(
                 screenshot_bytes=final_screen.screenshot_bytes,
@@ -398,6 +441,17 @@ class CrawlerLoop:
                 return True
             
             action_data, confidence, token_count, ai_input_prompt = action_result
+            
+            # Check for shutdown/pause after AI return but before action execution
+            # This allows "pausing mid-thought"
+            if self.check_shutdown_flag():
+                return False
+                
+            if self.check_pause_flag():
+                self.wait_while_paused()
+                if self.check_shutdown_flag():
+                    return False
+                    
             # Pass OCR results so action descriptions use actual text instead of opaque IDs
             ocr_results = candidate_screen.ocr_results if candidate_screen else None
             action_str = self.crawl_logger.log_ai_decision(action_data, ai_decision_time, ai_input_prompt, ocr_results)
@@ -408,7 +462,8 @@ class CrawlerLoop:
             element_find_time_ms = (time.time() - element_find_start) * 1000.0
             
             # Wait for action to settle before capturing the result
-            time.sleep(self.wait_after_action)
+            if not self.wait_with_check(self.wait_after_action):
+                return False
             
             # 11. Capture post-action screenshot immediately for UI (regardless of success)
             # This ensures the UI shows the current device state right after action execution
