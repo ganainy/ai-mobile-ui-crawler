@@ -2,8 +2,9 @@
 # Handles dynamic UI state and logic, separated from component creation
 
 import logging
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional
 
+from PySide6.QtCore import QThread, Signal, QObject
 from PySide6.QtWidgets import QGroupBox, QLabel, QApplication
 
 from config.app_config import Config
@@ -14,6 +15,68 @@ from ui.constants import (
     ADVANCED_GROUPS, ADVANCED_FIELDS,
     UI_MODE_CONFIG_KEY
 )
+
+
+class ModelFetchWorker(QThread):
+    """Background worker thread to fetch models from AI providers without blocking UI."""
+    
+    # Signal emitted when models are fetched successfully
+    models_fetched = Signal(str, list)  # (provider_name, models_list)
+    # Signal emitted when fetch fails
+    fetch_failed = Signal(str, str)  # (provider_name, error_message)
+    
+    def __init__(self, provider_name: str, free_only: bool = False, parent: Optional[QObject] = None):
+        super().__init__(parent)
+        self.provider_name = provider_name
+        self.free_only = free_only
+        self._is_cancelled = False
+    
+    def cancel(self):
+        """Request cancellation of the fetch operation."""
+        self._is_cancelled = True
+    
+    def run(self):
+        """Fetch models in background thread."""
+        try:
+            if self._is_cancelled:
+                return
+            
+            # Get provider strategy
+            strategy = ProviderRegistry.get_by_name(self.provider_name)
+            if not strategy:
+                self.fetch_failed.emit(self.provider_name, f"Unknown provider: {self.provider_name}")
+                return
+            
+            if self._is_cancelled:
+                return
+            
+            # Create a fresh config object for this thread (SQLite is thread-local)
+            try:
+                config = Config()
+                if self.free_only:
+                    config.set("OPENROUTER_SHOW_FREE_ONLY", True)
+            except Exception as e:
+                self.fetch_failed.emit(self.provider_name, f"Config error: {e}")
+                return
+            
+            if self._is_cancelled:
+                return
+            
+            # Fetch models (this is the blocking network call)
+            models = strategy.get_models(config)
+            
+            if self._is_cancelled:
+                return
+            
+            if models:
+                self.models_fetched.emit(self.provider_name, models)
+            else:
+                self.models_fetched.emit(self.provider_name, [])
+                
+        except Exception as e:
+            if not self._is_cancelled:
+                logging.warning(f"Background model fetch failed for {self.provider_name}: {e}")
+                self.fetch_failed.emit(self.provider_name, str(e))
 
 
 class UIStateHandler:
@@ -34,6 +97,11 @@ class UIStateHandler:
         self.config_widgets = config_widgets
         self.ui_groups = ui_groups
         self.config: Config = main_controller.config
+        
+        # Track active model fetch worker to cancel previous fetches
+        self._model_fetch_worker: Optional[ModelFetchWorker] = None
+        # Track current provider being fetched to avoid duplicate updates
+        self._current_fetching_provider: Optional[str] = None
 
     def toggle_ui_complexity(self, mode: str):
         """
@@ -229,7 +297,12 @@ class UIStateHandler:
         model_dropdown.currentTextChanged.connect(_on_openrouter_model_changed)
 
     def _update_model_types(self, provider: str) -> None:
-        """Update the model types based on the selected AI provider using provider strategy."""
+        """Update the model types based on the selected AI provider using provider strategy.
+        
+        For providers that require network requests (like Ollama), this uses async fetching
+        to prevent UI freezes. A background worker thread fetches the models while the UI
+        remains responsive.
+        """
         model_dropdown = self.config_widgets["DEFAULT_MODEL_TYPE"]
         # Capture the current selection to restore it after repopulating
         previous_text = model_dropdown.currentText()
@@ -262,39 +335,65 @@ class UIStateHandler:
         capabilities = strategy.get_capabilities()
         
         # Get config for provider methods
-        # Always create a fresh config object to avoid SQLite thread-safety issues
-        # The config object may have been accessed in a worker thread, making its SQLite connection thread-local
         try:
             from config.app_config import Config
-            config = Config()  # Create fresh config in current (main) thread
+            config = Config()
         except Exception:
             logging.warning("Could not create config for provider strategy")
             model_dropdown.blockSignals(False)
             return
 
-        # Get models using provider strategy
-        # Check free-only filter state from the config object (reliable source of truth)
-        # Reading from config instead of UI prevents race conditions during load_config
+        # Check free-only filter state from the config object
         free_only = False
         if "OPENROUTER_SHOW_FREE_ONLY" in self.config_widgets:
-            # Read from the temporary config object, which loaded from DB
             free_only = config.get("OPENROUTER_SHOW_FREE_ONLY", False)
-            # Update config to reflect checkbox state (for OpenRouter's get_models to use)
-            # This is technically redundant if config.get worked, but ensures
-            # the in-memory config object has the value set for get_models()
             if provider_enum == AIProvider.OPENROUTER:
                 config.set("OPENROUTER_SHOW_FREE_ONLY", free_only)
         
+        # Cancel any existing fetch worker
+        if self._model_fetch_worker is not None:
+            try:
+                self._model_fetch_worker.cancel()
+                self._model_fetch_worker.wait(500)  # Wait up to 500ms for clean shutdown
+            except Exception:
+                pass
+            self._model_fetch_worker = None
+        
+        # For Ollama provider, use async fetching to prevent UI freeze
+        # Ollama's get_models() makes HTTP requests that can block
+        if provider_enum == AIProvider.OLLAMA:
+            # Add a loading indicator
+            model_dropdown.addItem("Loading models...")
+            model_dropdown.blockSignals(False)
+            
+            # Store context for later use
+            self._current_fetching_provider = provider
+            self._previous_model_selection = previous_text
+            self._no_selection_label = NO_SELECTION_LABEL
+            
+            # Start background worker
+            self._model_fetch_worker = ModelFetchWorker(provider, free_only, parent=None)
+            self._model_fetch_worker.models_fetched.connect(self._on_models_fetched)
+            self._model_fetch_worker.fetch_failed.connect(self._on_model_fetch_failed)
+            self._model_fetch_worker.start()
+            
+            # Configure image context based on provider capabilities (synchronous part)
+            if "ENABLE_IMAGE_CONTEXT" in self.config_widgets:
+                self._configure_image_context_for_provider(
+                    strategy, config, capabilities, model_dropdown, NO_SELECTION_LABEL
+                )
+            return
+        
+        # For other providers (Gemini, OpenRouter), use synchronous fetching
+        # These are typically fast (cached or simple API calls)
         try:
             models = strategy.get_models(config)
             if models:
                 # Process models in batches to avoid blocking UI thread
-                # Add items in chunks and process events between chunks
                 batch_size = 50
                 for i in range(0, len(models), batch_size):
                     batch = models[i:i + batch_size]
                     model_dropdown.addItems(batch)
-                    # Process events to keep UI responsive
                     QApplication.processEvents()
         except Exception as e:
             logging.warning(f"Failed to get models from provider strategy: {e}")
@@ -314,12 +413,82 @@ class UIStateHandler:
                 strategy, config, capabilities, model_dropdown, NO_SELECTION_LABEL
             )
 
-        # Provider-specific UI updates
-        # Note: Free-only filter is now handled generically above for all providers
-        # The checkbox change handler is already connected in _create_ai_settings_group
-
         # Unblock signals after updating
         model_dropdown.blockSignals(False)
+    
+    def _on_models_fetched(self, provider_name: str, models: List[str]) -> None:
+        """Handle successful async model fetch.
+        
+        This slot is called when the background worker finishes fetching models.
+        Updates the dropdown with the fetched models on the main UI thread.
+        """
+        # Verify this is still the provider we're waiting for
+        if provider_name != self._current_fetching_provider:
+            return
+        
+        model_dropdown = self.config_widgets.get("DEFAULT_MODEL_TYPE")
+        if not model_dropdown:
+            return
+        
+        model_dropdown.blockSignals(True)
+        
+        # Clear and repopulate
+        model_dropdown.clear()
+        
+        from ui.strings import NO_MODEL_SELECTED
+        model_dropdown.addItem(self._no_selection_label or NO_MODEL_SELECTED)
+        
+        if models:
+            # Add models in batches
+            batch_size = 50
+            for i in range(0, len(models), batch_size):
+                batch = models[i:i + batch_size]
+                model_dropdown.addItems(batch)
+                QApplication.processEvents()
+            
+            logging.info(f"Loaded {len(models)} models for {provider_name}")
+        else:
+            logging.warning(f"No models found for {provider_name}")
+        
+        # Restore previous selection if available
+        previous_text = getattr(self, '_previous_model_selection', None)
+        if previous_text:
+            idx = model_dropdown.findText(previous_text)
+            if idx >= 0:
+                model_dropdown.setCurrentIndex(idx)
+        
+        model_dropdown.blockSignals(False)
+        self._current_fetching_provider = None
+        self._model_fetch_worker = None
+    
+    def _on_model_fetch_failed(self, provider_name: str, error_message: str) -> None:
+        """Handle failed async model fetch.
+        
+        This slot is called when the background worker fails to fetch models.
+        Shows an error state in the dropdown.
+        """
+        # Verify this is still the provider we're waiting for
+        if provider_name != self._current_fetching_provider:
+            return
+        
+        model_dropdown = self.config_widgets.get("DEFAULT_MODEL_TYPE")
+        if not model_dropdown:
+            return
+        
+        model_dropdown.blockSignals(True)
+        
+        # Clear and show error state
+        model_dropdown.clear()
+        
+        from ui.strings import NO_MODEL_SELECTED
+        model_dropdown.addItem(self._no_selection_label or NO_MODEL_SELECTED)
+        model_dropdown.addItem(f"⚠️ Failed to load: {error_message[:30]}...")
+        
+        logging.warning(f"Failed to fetch models for {provider_name}: {error_message}")
+        
+        model_dropdown.blockSignals(False)
+        self._current_fetching_provider = None
+        self._model_fetch_worker = None
 
     def _add_image_context_warning(self, provider: str, capabilities: Dict[str, Any]) -> None:
         """Add visual warning when image context is auto-disabled."""
@@ -370,7 +539,11 @@ class UIStateHandler:
                 label.setVisible(enabled)
 
     def _refresh_models(self) -> None:
-        """Generic refresh function that works for all AI providers."""
+        """Generic refresh function that works for all AI providers.
+        
+        For Ollama, uses async worker to prevent UI freezes.
+        For other providers, uses synchronous refresh with cache support.
+        """
         try:
             current_provider_name = self.config_widgets["AI_PROVIDER"].currentText()
             self.main_controller.log_message(
@@ -384,7 +557,15 @@ class UIStateHandler:
                 self.main_controller.log_message(error_msg, "red")
                 return
             
-            # Refresh models synchronously
+            # Get provider enum
+            provider_enum = AIProvider.from_string(current_provider_name) if AIProvider.is_valid(current_provider_name) else None
+            
+            # For Ollama, use async refresh to prevent UI freeze
+            if provider_enum == AIProvider.OLLAMA:
+                self._refresh_models_async(current_provider_name)
+                return
+            
+            # For other providers, use synchronous refresh
             try:
                 self.main_controller.log_message(
                     f"Refreshing {current_provider_name} models...", "blue"
@@ -396,7 +577,6 @@ class UIStateHandler:
                 )
                 
                 if success:
-                    # Success means models were downloaded from API
                     try:
                         models = provider.get_models(self.config_handler.config)
                         model_count = len(models) if models else 0
@@ -418,7 +598,6 @@ class UIStateHandler:
             
             except RuntimeError as e:
                 error_str = str(e)
-                # Try to load from cache if refresh failed
                 try:
                     models = provider.get_models(self.config_handler.config)
                     if models:
@@ -431,7 +610,6 @@ class UIStateHandler:
                 except Exception:
                     pass
                 
-                # If we couldn't load from cache, show error
                 if "timed out" in error_str.lower():
                     error_msg = f"{current_provider_name} model refresh timed out. {error_str}"
                 else:
@@ -439,7 +617,6 @@ class UIStateHandler:
                 logging.error(error_msg, exc_info=True)
                 self.main_controller.log_message(error_msg, "orange")
             except Exception as e:
-                # Try to load from cache if refresh failed
                 try:
                     models = provider.get_models(self.config_handler.config)
                     if models:
@@ -452,7 +629,6 @@ class UIStateHandler:
                 except Exception:
                     pass
                 
-                # If we couldn't load from cache, show error
                 error_msg = f"{current_provider_name} model refresh failed: {str(e)}"
                 logging.error(error_msg, exc_info=True)
                 self.main_controller.log_message(error_msg, "orange")
@@ -465,4 +641,81 @@ class UIStateHandler:
                 )
             except Exception:
                 pass
+    
+    def _refresh_models_async(self, provider_name: str) -> None:
+        """Refresh models asynchronously using a background worker.
+        
+        Used for providers like Ollama that require network requests.
+        """
+        # Cancel any existing fetch worker
+        if self._model_fetch_worker is not None:
+            try:
+                self._model_fetch_worker.cancel()
+                self._model_fetch_worker.wait(500)
+            except Exception:
+                pass
+            self._model_fetch_worker = None
+        
+        # Update dropdown to show loading state
+        model_dropdown = self.config_widgets.get("DEFAULT_MODEL_TYPE")
+        if model_dropdown:
+            model_dropdown.blockSignals(True)
+            # Remember current selection
+            previous_text = model_dropdown.currentText()
+            self._previous_model_selection = previous_text
+            
+            model_dropdown.clear()
+            from ui.strings import NO_MODEL_SELECTED
+            self._no_selection_label = NO_MODEL_SELECTED
+            model_dropdown.addItem(NO_MODEL_SELECTED)
+            model_dropdown.addItem("⏳ Refreshing models...")
+            model_dropdown.blockSignals(False)
+        
+        # Store context
+        self._current_fetching_provider = provider_name
+        
+        # Get free-only preference
+        free_only = False
+        if "OPENROUTER_SHOW_FREE_ONLY" in self.config_widgets:
+            try:
+                from config.app_config import Config
+                config = Config()
+                free_only = config.get("OPENROUTER_SHOW_FREE_ONLY", False)
+            except Exception:
+                pass
+        
+        # Start background worker
+        self._model_fetch_worker = ModelFetchWorker(provider_name, free_only, parent=None)
+        self._model_fetch_worker.models_fetched.connect(self._on_refresh_models_fetched)
+        self._model_fetch_worker.fetch_failed.connect(self._on_refresh_model_fetch_failed)
+        self._model_fetch_worker.start()
+        
+        self.main_controller.log_message(
+            f"{provider_name} models refresh started in background...", "blue"
+        )
+    
+    def _on_refresh_models_fetched(self, provider_name: str, models: List[str]) -> None:
+        """Handle successful async refresh."""
+        if provider_name != self._current_fetching_provider:
+            return
+        
+        model_count = len(models) if models else 0
+        self.main_controller.log_message(
+            f"{provider_name} models refreshed successfully. Found {model_count} models.", "green"
+        )
+        
+        # Update the dropdown via the standard handler
+        self._on_models_fetched(provider_name, models)
+    
+    def _on_refresh_model_fetch_failed(self, provider_name: str, error_message: str) -> None:
+        """Handle failed async refresh."""
+        if provider_name != self._current_fetching_provider:
+            return
+        
+        self.main_controller.log_message(
+            f"{provider_name} model refresh failed: {error_message}", "orange"
+        )
+        
+        # Update the dropdown via the standard handler
+        self._on_model_fetch_failed(provider_name, error_message)
 
