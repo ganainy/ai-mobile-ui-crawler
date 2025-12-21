@@ -246,24 +246,59 @@ class OllamaProvider(ProviderStrategy):
         
         return any(pattern in base_name for pattern in vision_patterns)
     
+    def _check_vision_via_cache(self, model_name: str) -> Optional[bool]:
+        """Check vision support from cached model data (non-blocking).
+        
+        Args:
+            model_name: The model name to check
+            
+        Returns:
+            True/False if found in cache, None if not cached
+        """
+        if not model_name:
+            return None
+        
+        try:
+            cached_models = self._load_models_cache()
+            if not cached_models:
+                return None
+            
+            # Search for the model in cache
+            for model in cached_models:
+                model_id = model.get("id") or model.get("name", "")
+                if model_id == model_name or model.get("name") == model_name:
+                    # Return cached vision_supported if available
+                    if "vision_supported" in model:
+                        return bool(model["vision_supported"])
+            
+            return None
+        except Exception:
+            return None
+    
     def is_model_vision(
         self,
         model_name: str,
         base_url: Optional[str] = None,
+        use_cache: bool = True,
         use_metadata: bool = True,
         use_cli: bool = True,
         use_patterns: bool = True
     ) -> bool:
         """Determine if an Ollama model supports vision using hybrid detection.
         
-        Uses a multi-tier approach:
-        1. Primary: Ollama SDK metadata inspection (if available)
-        2. Secondary: `ollama show` CLI command parsing
-        3. Fallback: Name pattern matching
+        Uses a multi-tier approach (in order of preference):
+        0. Cache lookup: Check cached model data (non-blocking, preferred for UI calls)
+        1. Primary: Ollama SDK metadata inspection (blocking network call)
+        2. Secondary: `ollama show` CLI command parsing (blocking subprocess)
+        3. Fallback: Name pattern matching (non-blocking)
+        
+        For UI responsiveness, call with use_cache=True, use_metadata=False, use_cli=False
+        to avoid blocking calls.
         
         Args:
             model_name: The model name to check
             base_url: Optional base URL for Ollama instance
+            use_cache: Whether to check cached model data first (default: True)
             use_metadata: Whether to attempt SDK metadata inspection (default: True)
             use_cli: Whether to attempt CLI command inspection (default: True)
             use_patterns: Whether to use pattern matching as fallback (default: True)
@@ -274,19 +309,25 @@ class OllamaProvider(ProviderStrategy):
         if not model_name:
             return False
         
-        # Tier 1: Try SDK metadata inspection
+        # Tier 0: Check cache first (non-blocking)
+        if use_cache:
+            result = self._check_vision_via_cache(model_name)
+            if result is not None:
+                return result
+        
+        # Tier 1: Try SDK metadata inspection (BLOCKING - avoid in UI thread)
         if use_metadata:
             result = self._check_vision_via_sdk_metadata(model_name, base_url)
             if result is not None:
                 return result
         
-        # Tier 2: Try CLI command inspection
+        # Tier 2: Try CLI command inspection (BLOCKING - avoid in UI thread)
         if use_cli:
             result = self._check_vision_via_cli(model_name, base_url)
             if result is not None:
                 return result
         
-        # Tier 3: Fallback to pattern matching
+        # Tier 3: Fallback to pattern matching (non-blocking)
         if use_patterns:
             result = self._check_vision_via_patterns(model_name)
             return result
@@ -470,10 +511,23 @@ class OllamaProvider(ProviderStrategy):
             return False, "Ollama Python SDK not installed. Run: pip install ollama"
     
     def supports_image_context(self, config: 'Config', model_name: Optional[str] = None) -> bool:
-        """Check if Ollama model supports image context."""
+        """Check if Ollama model supports image context.
+        
+        Uses non-blocking detection (cache + pattern matching) for UI responsiveness.
+        Blocking network calls are avoided to prevent UI freezes.
+        """
         if model_name:
             base_url = self.get_api_key(config)
-            return self.is_model_vision(model_name, base_url=base_url)
+            # Disable blocking calls (use_metadata=False, use_cli=False) for UI responsiveness
+            # Uses cache lookup and pattern matching only
+            return self.is_model_vision(
+                model_name, 
+                base_url=base_url,
+                use_cache=True,
+                use_metadata=False,  # Disable blocking SDK call
+                use_cli=False,       # Disable blocking CLI call
+                use_patterns=True
+            )
         return True  # Default to True for vision-capable models
     
     def get_capabilities(self) -> Dict[str, Any]:

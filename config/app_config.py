@@ -338,10 +338,16 @@ class Config:
             import json
             try:
                 # Handle stored JSON string list
-                return json.loads(val)
+                val = json.loads(val)
             except:
                 # Fallback for comma-separated string
-                return [s.strip() for s in val.split(',')]
+                val = [s.strip() for s in val.split(',') if s.strip()]
+        
+        # Ensure we always have at least one source (XML as default fallback)
+        if not val or not isinstance(val, list) or len(val) == 0:
+            from config.context_constants import ContextSource
+            return [ContextSource.XML]
+        
         return val
 
     def update_setting_and_save(self, key: str, value: Any, callback: Optional[Callable] = None) -> None:

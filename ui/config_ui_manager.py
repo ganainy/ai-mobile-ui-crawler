@@ -775,48 +775,57 @@ class ConfigManager(QObject):
 
     @Slot(int)
     def _on_context_source_changed(self, state: int):
-        """Handle changes to any of the Context Source checkboxes."""
+        """Handle changes to any of the Context Source checkboxes.
+        
+        Enforces that at least one context source must be selected.
+        If user unchecks all sources, XML is automatically re-enabled.
+        """
         try:
+            widgets = self.main_controller.config_widgets
+            
             # Reconstruct the CONTEXT_SOURCE list
             new_sources = []
             
             # Check XML
-            if 'CONTEXT_SOURCE_XML' in self.main_controller.config_widgets:
-                if self.main_controller.config_widgets['CONTEXT_SOURCE_XML'].isChecked():
+            if 'CONTEXT_SOURCE_XML' in widgets:
+                if widgets['CONTEXT_SOURCE_XML'].isChecked():
                     new_sources.append(ContextSource.XML)
             
             # Check OCR
-            if 'CONTEXT_SOURCE_OCR' in self.main_controller.config_widgets:
-                if self.main_controller.config_widgets['CONTEXT_SOURCE_OCR'].isChecked():
+            if 'CONTEXT_SOURCE_OCR' in widgets:
+                if widgets['CONTEXT_SOURCE_OCR'].isChecked():
                     new_sources.append(ContextSource.OCR)
             
             # Check Image
-            if 'CONTEXT_SOURCE_IMAGE' in self.main_controller.config_widgets:
-                if self.main_controller.config_widgets['CONTEXT_SOURCE_IMAGE'].isChecked():
+            if 'CONTEXT_SOURCE_IMAGE' in widgets:
+                if widgets['CONTEXT_SOURCE_IMAGE'].isChecked():
                     new_sources.append(ContextSource.IMAGE)
             
-            # Ensure at least one source is selected? (Optional, but safer for backend)
-            # if not new_sources: new_sources = ['xml'] # Force XML if nothing selected?
+            # Enforce at least one source: auto-enable XML if nothing selected
+            if not new_sources:
+                new_sources.append(ContextSource.XML)
+                # Re-check the XML checkbox in UI
+                if 'CONTEXT_SOURCE_XML' in widgets:
+                    widgets['CONTEXT_SOURCE_XML'].blockSignals(True)
+                    widgets['CONTEXT_SOURCE_XML'].setChecked(True)
+                    widgets['CONTEXT_SOURCE_XML'].blockSignals(False)
+                # Notify user
+                if hasattr(self.main_controller, 'log_message'):
+                    self.main_controller.log_message(
+                        "At least one context source required. XML enabled as default.", "orange"
+                    )
             
             # Update main config list
             self.config.set('CONTEXT_SOURCE', new_sources)
             
             # Sync legacy ENABLE_IMAGE_CONTEXT flag
-            # Note: OCR is enabled by adding ContextSource.OCR to CONTEXT_SOURCE (no separate ENABLE_OCR flag)
             enable_image = ContextSource.IMAGE in new_sources
             self.config.set('ENABLE_IMAGE_CONTEXT', enable_image)
             
             # Update UI visibility
             self._update_image_preprocessing_visibility(enable_image)
             
-            # Trigger full save (or just these keys)
-            # We already called set(), which triggers save if using the right mechanism, 
-            # but here we used config.set() which updates internal dict. 
-            # We should call save_config to persist.
-            
-            # Manually trigger save for these specific keys to ensure UI feedback
-            # Saving CONTEXT_SOURCE handles the list. 
-            # Boolean flags are synced for backward compatibility.
+            # Persist the change
             self.save_config(key='CONTEXT_SOURCE') 
             
         except Exception as e:
