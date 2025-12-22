@@ -775,45 +775,20 @@ class ConfigManager(QObject):
 
     @Slot(int)
     def _on_context_source_changed(self, state: int):
-        """Handle changes to any of the Context Source checkboxes.
+        """Handle changes to the Image Context checkbox.
         
-        Enforces that at least one context source must be selected.
-        If user unchecks all sources, XML is automatically re-enabled.
+        HYBRID (XML+OCR) is always enabled. This handler manages the optional IMAGE source.
         """
         try:
             widgets = self.main_controller.config_widgets
             
-            # Reconstruct the CONTEXT_SOURCE list
-            new_sources = []
+            # HYBRID is always included, check if IMAGE is enabled
+            new_sources = [ContextSource.HYBRID]  # Always include HYBRID
             
-            # Check XML
-            if 'CONTEXT_SOURCE_XML' in widgets:
-                if widgets['CONTEXT_SOURCE_XML'].isChecked():
-                    new_sources.append(ContextSource.XML)
-            
-            # Check OCR
-            if 'CONTEXT_SOURCE_OCR' in widgets:
-                if widgets['CONTEXT_SOURCE_OCR'].isChecked():
-                    new_sources.append(ContextSource.OCR)
-            
-            # Check Image
+            # Check Image toggle
             if 'CONTEXT_SOURCE_IMAGE' in widgets:
                 if widgets['CONTEXT_SOURCE_IMAGE'].isChecked():
                     new_sources.append(ContextSource.IMAGE)
-            
-            # Enforce at least one source: auto-enable XML if nothing selected
-            if not new_sources:
-                new_sources.append(ContextSource.XML)
-                # Re-check the XML checkbox in UI
-                if 'CONTEXT_SOURCE_XML' in widgets:
-                    widgets['CONTEXT_SOURCE_XML'].blockSignals(True)
-                    widgets['CONTEXT_SOURCE_XML'].setChecked(True)
-                    widgets['CONTEXT_SOURCE_XML'].blockSignals(False)
-                # Notify user
-                if hasattr(self.main_controller, 'log_message'):
-                    self.main_controller.log_message(
-                        "At least one context source required. XML enabled as default.", "orange"
-                    )
             
             # Update main config list
             self.config.set('CONTEXT_SOURCE', new_sources)
@@ -822,7 +797,7 @@ class ConfigManager(QObject):
             enable_image = ContextSource.IMAGE in new_sources
             self.config.set('ENABLE_IMAGE_CONTEXT', enable_image)
             
-            # Update UI visibility
+            # Update UI visibility for image preprocessing options
             self._update_image_preprocessing_visibility(enable_image)
             
             # Persist the change

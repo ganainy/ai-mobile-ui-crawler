@@ -321,12 +321,28 @@ class AppiumDriver:
             return False
     
     def input_text(self, target_identifier: str, text: str) -> bool:
-        """Input text into element."""
+        """Input text into element.
+        
+        Clicks the element first to focus it, then sends keys.
+        """
         if not self._ensure_helper():
             return False
         
         try:
-            return self.helper.send_keys(target_identifier, text, strategy='id')
+            # Find the element first
+            element = self.helper.find_element(target_identifier, strategy='id')
+            
+            # Click to focus the element
+            try:
+                element.click()
+                import time
+                time.sleep(0.3)  # Brief delay for keyboard to appear
+            except Exception as click_err:
+                logger.warning(f"Could not click element before input: {click_err}")
+            
+            # Now send the text
+            element.send_keys(text)
+            return True
         except Exception as e:
             logger.error(f"Error during input_text: {e}")
             return False
@@ -712,6 +728,8 @@ class AppiumDriver:
         """
         Replace existing text in input element.
         
+        Clicks the element first to focus it, clears existing text, then types new text.
+        
         Args:
             target_identifier: Element identifier
             text: New text to set
@@ -723,10 +741,23 @@ class AppiumDriver:
             return False
         
         try:
-            # Clear first, then send new text
-            if self.clear_text(target_identifier):
-                return self.helper.send_keys(target_identifier, text, strategy='id', clear_first=False)
-            return False
+            # Find the element first
+            element = self.helper.find_element(target_identifier, strategy='id')
+            
+            # Click to focus the element
+            try:
+                element.click()
+                import time
+                time.sleep(0.3)  # Brief delay for keyboard to appear
+            except Exception as click_err:
+                logger.warning(f"Could not click element before replace: {click_err}")
+            
+            # Clear existing text
+            element.clear()
+            
+            # Send new text
+            element.send_keys(text)
+            return True
             
         except Exception as e:
             logger.error(f"Error during replace_text: {e}")

@@ -486,16 +486,17 @@ class AgentAssistant:
             Tuple of (action_data dict, confidence float, token_count int, ai_input_prompt str, exploration_journal str) or None on error
         """
         try:
-            # Determine which context sources to use based on config
-            context_source = self.cfg.CONTEXT_SOURCE or ["xml"]
+            # Get context sources - HYBRID (XML+OCR) is always enabled
+            context_source = self.cfg.CONTEXT_SOURCE or [ContextSource.HYBRID]
             
-            # Log the used context sources so the user can verify
+            # HYBRID is always on, so XML and OCR are always included
+            # IMAGE is optional based on whether it's in context_source
             
-            # Prepare context for the chain
+            # Prepare context for the chain - always include OCR
             context = {
                 "screenshot_bytes": screenshot_bytes,
-                "xml_context": None, # Will be set later if enabled
-                "ocr_context": ocr_results if ContextSource.OCR in context_source else None,
+                "xml_context": None,  # Will be set below
+                "ocr_context": ocr_results,  # Always included with HYBRID
                 "exploration_journal": exploration_journal or "",
                 "current_screen_actions": current_screen_actions or [],  # For stuck detection
                 "current_screen_id": current_screen_id,
@@ -526,28 +527,23 @@ class AgentAssistant:
             elif not isinstance(xml_string_raw, str):
                 xml_string_raw = str(xml_string_raw)
             
-            # Clean and simplify XML before sending to AI to remove unnecessary attributes
-            # Original XML is unlimited, simplified XML is limited to 15000 chars
+            # Clean and simplify XML before sending to AI - ALWAYS do this since HYBRID is always on
             xml_string_simplified = xml_string_raw
-            if xml_string_raw and "xml" in context_source:
+            if xml_string_raw:
                 try:
                     from config.numeric_constants import XML_SNIPPET_MAX_LEN_DEFAULT
                     xml_string_simplified = simplify_xml_for_ai(
                         xml_string=xml_string_raw,
-                        max_len=XML_SNIPPET_MAX_LEN_DEFAULT,  # Simplified XML limited to default max length
+                        max_len=XML_SNIPPET_MAX_LEN_DEFAULT,
                         provider=self.ai_provider,
                         prune_noninteractive=True
                     )
                 except Exception as e:
-                    logging.warning(f"⚠️ XML simplification failed, using original: {e}")
+                    logging.warning(f"XML simplification failed, using original: {e}")
                     xml_string_simplified = xml_string_raw
             
-            # Update context with simplified XML (format_prompt_with_context will use this)
-            if "xml" in context_source:
-                context['xml_context'] = xml_string_simplified
-            else:
-                context['xml_context'] = None
-                
+            # Always set XML context since HYBRID is always on
+            context['xml_context'] = xml_string_simplified
             context['_full_xml_context'] = xml_string_raw  # Store original for reference
             
             # Prepare image if ENABLE_IMAGE_CONTEXT is enabled
@@ -619,10 +615,9 @@ class AgentAssistant:
             # Post-processing: Resolve OCR IDs to coordinates if needed
             if validated_data:
                 target_id = validated_data.get("target_identifier")
-                # Determine which context sources were used
-                context_source = self.cfg.CONTEXT_SOURCE or ["xml"]
                 
-                if target_id and str(target_id).startswith("ocr_") and ContextSource.OCR in context_source and ocr_results:
+                # With HYBRID always enabled, OCR is always on - resolve ocr_X targets to bounding boxes
+                if target_id and str(target_id).startswith("ocr_") and ocr_results:
                     try:
                         # Extract index from "ocr_X"
                         idx = int(str(target_id).split("_")[1])

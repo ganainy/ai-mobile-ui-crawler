@@ -219,8 +219,6 @@ class CrawlerManager(QObject):
     @Slot()
     def start_crawler(self):
         """Start the crawler process without validation checks."""
-        self.main_controller.log_message("🚀 Starting crawler...", 'blue')
-
         # Check if app package is selected
         app_package = self.config.get('APP_PACKAGE', None)
         if not app_package:
@@ -334,7 +332,7 @@ class CrawlerManager(QObject):
     
     def force_start_crawler(self):
         """Force start the crawler process without validation checks."""
-        self.main_controller.log_message("⚠️ Force starting crawler without validation checks...", 'orange')
+        self.main_controller.log_message("Force starting crawler without validation checks...", 'orange')
         self._start_crawler_process()
     
     def _start_crawler_process(self):

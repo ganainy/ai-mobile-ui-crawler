@@ -8,6 +8,11 @@ class StuckDetector:
     Detects if the crawler is stuck in a loop (same screen, multiple actions, no navigation).
     """
     
+    # Thresholds for stuck detection (lowered for faster escape)
+    VISIT_COUNT_THRESHOLD = 3  # Trigger stuck after 3 visits to same screen
+    SAME_SCREEN_ACTION_THRESHOLD = 2  # Trigger stuck after 2 actions that stayed on same screen
+    RECENT_ACTIONS_CHECK_COUNT = 3  # Check last 3 actions for all-stayed pattern
+    
     def __init__(self, config):
         self.config = config
 
@@ -44,18 +49,18 @@ class StuckDetector:
                                  (a.get('to_screen_id') == from_screen_id or a.get('to_screen_id') is None)]
             
             # Consider stuck if:
-            # 1. High visit count (>5) on same screen
-            # 2. Multiple successful actions that didn't navigate away (>=3)
-            # 3. All recent actions (last 5) stayed on same screen
-            if current_screen_visit_count > 5:
+            # 1. High visit count (>3) on same screen
+            # 2. Multiple successful actions that didn't navigate away (>=2)
+            # 3. All recent actions (last 3) stayed on same screen
+            if current_screen_visit_count > self.VISIT_COUNT_THRESHOLD:
                 reason = f"High visit count ({current_screen_visit_count}) on same screen"
                 return True, reason
-            elif len(same_screen_actions) >= 3:
+            elif len(same_screen_actions) >= self.SAME_SCREEN_ACTION_THRESHOLD:
                 reason = f"Multiple actions ({len(same_screen_actions)}) returned to same screen"
                 return True, reason
-            elif len(current_screen_actions) >= 5:
+            elif len(current_screen_actions) >= self.RECENT_ACTIONS_CHECK_COUNT:
                 # Check if all recent actions stayed on same screen
-                recent_actions = current_screen_actions[-5:]
+                recent_actions = current_screen_actions[-self.RECENT_ACTIONS_CHECK_COUNT:]
                 all_stayed = all(
                     a.get('to_screen_id') == from_screen_id or a.get('to_screen_id') is None 
                     for a in recent_actions if a.get('execution_success')
@@ -64,3 +69,4 @@ class StuckDetector:
                     return True, "All recent actions stayed on same screen"
         
         return False, ""
+

@@ -27,7 +27,7 @@ JSON_OUTPUT_SCHEMA = {
 # This should match CRAWLER_AVAILABLE_ACTIONS in config/app_config.py
 _DEFAULT_AVAILABLE_ACTIONS = {
     "click": "Perform a click action on the target element.",
-    "input": "Input text into the specified element.",
+    "input": "Tap on the element to focus it, then type the provided text (no need to click first).",
     "long_press": "Perform a long press action on the target element.",
     "scroll_down": "Scroll the view downward to reveal more content below.",
     "scroll_up": "Scroll the view upward to reveal more content above.",
@@ -36,7 +36,7 @@ _DEFAULT_AVAILABLE_ACTIONS = {
     "back": "Press the back button to return to the previous screen.",
     "double_tap": "Perform a double tap gesture on the target element (useful for zooming, image galleries).",
     "clear_text": "Clear all text from the target input element.",
-    "replace_text": "Replace existing text in the target input element with new text.",
+    "replace_text": "Tap on the input element, clear existing text, and type new text.",
     "flick": "Perform a fast flick gesture in the specified direction (faster than scroll for quick navigation).",
     "reset_app": "Reset the app to its initial state (clears app data and restarts)."
 }
@@ -81,24 +81,32 @@ EXPLORATION JOURNAL RULES:
 - You MUST output an updated exploration_journal that records your actions and their outcomes
 - Maximum journal length: {journal_max_length} characters
 - FORMAT REQUIRED - Each entry must include:
-  • What action you took: "CLICKED addMedication" or "SCROLLED down"
-  • What happened: "→ NEW: time selection screen" or "→ SAME screen (no effect)"
-  • Key observations about the new/current screen
-- Example format: "CLICKED ctaButton → NEW: medication list screen with 3 items. CLICKED back → returned to home."
+  • What action you took with DESCRIPTIVE TEXT: "CLICKED 'Login' button" or "INPUT 'email@test.com' in 'Email' field"
+  • The ACTUAL outcome from LAST ACTION OUTCOME section: "→ NAVIGATED to screen #X" or "→ STAYED (no effect)"
+  • Brief observations about the current screen
+- IMPORTANT: Use the actual text of elements, not opaque IDs. Write "CLICKED 'Einloggen'" not "CLICKED ocr_1"
+- Example format: "CLICKED 'Login' → NAVIGATED #2 (password screen). INPUT password → STAYED (form not submitted yet)."
 - When approaching limit, compress OLDEST entries but keep:
-  • Dead-ends to avoid (actions that had no effect)
+  • Dead-ends to avoid (actions with STAYED/no effect)
   • Last 3+ actions with full detail
 - On first action (empty journal), describe the initial screen state
-- CRITICAL: If an action keeps you on the same screen, note it as ineffective to avoid repeating
+- CRITICAL: Check the LAST ACTION OUTCOME section and record exactly what it says happened
 
 Use the following JSON schema to structure your output:
 {json_schema}
 
 IMPORTANT - target_identifier rules:
-- For OCR context: Use exact "ocr_X" IDs (e.g., "ocr_0", "ocr_5")
+- For OCR context: Use exact "ocr_X" IDs (e.g., "ocr_0", "ocr_5") as target_identifier
 - For XML context: Use ONLY the resource-id attribute (e.g., "addMedication", "ctaButton")
 - NEVER use class names like "android.widget.Button" or "android.view.View" - these are NOT valid identifiers
 - For scroll/swipe/back actions: Use "screen" as the target_identifier
+
+INPUT ACTION RULES:
+- When you see an EditText or input field, use action="input" with input_text filled
+- DO NOT just "click" on input fields to "test" them - directly use INPUT action
+- For search fields: INPUT a relevant search term (e.g., "Zahnarzt", "Berlin")
+- For login fields: Use credentials if provided, otherwise use test values like "test@email.com"
+- Example: {{"action": "input", "target_identifier": "ocr_1", "input_text": "Berlin"}}
 
 Available actions:
 {action_list}

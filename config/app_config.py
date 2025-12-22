@@ -333,7 +333,9 @@ class Config:
 
     @property
     def CONTEXT_SOURCE(self):
+        from config.context_constants import ContextSource
         val = self.get("CONTEXT_SOURCE")
+        
         if isinstance(val, str):
             import json
             try:
@@ -343,12 +345,19 @@ class Config:
                 # Fallback for comma-separated string
                 val = [s.strip() for s in val.split(',') if s.strip()]
         
-        # Ensure we always have at least one source (XML as default fallback)
-        if not val or not isinstance(val, list) or len(val) == 0:
-            from config.context_constants import ContextSource
-            return [ContextSource.XML]
+        # Reset old xml/ocr configs to HYBRID, ensure HYBRID is always present
+        if not val or not isinstance(val, list):
+            return ContextSource.default()
         
-        return val
+        # Filter to only valid values (HYBRID, IMAGE) and ensure HYBRID is always included
+        valid_values = [ContextSource.HYBRID, ContextSource.IMAGE]
+        result = [v for v in val if v in valid_values]
+        
+        # Always ensure HYBRID is present
+        if ContextSource.HYBRID not in result:
+            result.insert(0, ContextSource.HYBRID)
+        
+        return result
 
     def update_setting_and_save(self, key: str, value: Any, callback: Optional[Callable] = None) -> None:
         """Persist the provided value and optionally invoke a callback."""
@@ -708,10 +717,10 @@ from config.numeric_constants import (
     CACHE_MAX_SCREENS,
 )
 USE_AI_FILTER_FOR_TARGET_APP_DISCOVERY = True
-# OCR Settings - OCR is enabled by adding ContextSource.OCR to CONTEXT_SOURCE
+# Context Settings - HYBRID (XML+OCR) is always enabled, IMAGE is optional
 from config.context_constants import ContextSource
 OCR_ENGINE = "easyocr"
-CONTEXT_SOURCE = ContextSource.default()  # Default: [xml, image]. Add OCR to enable OCR processing
+CONTEXT_SOURCE = ContextSource.default()  # Default: [hybrid]. Add IMAGE for vision models
 # AI Safety Settings for Gemini - Less restrictive configuration
 # Set to BLOCK_NONE for all categories to allow all content through
 # Categories: HARM_CATEGORY_HARASSMENT, HARM_CATEGORY_HATE_SPEECH, 

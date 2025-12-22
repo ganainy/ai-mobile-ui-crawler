@@ -769,20 +769,31 @@ class CrawlerControllerWindow(QMainWindow):
             'input': content, # Store whatever we got (dict or str)
             'output': ""  # Output will arrive later
         }
+        
+        # Check if user was viewing the latest interaction before adding new one
+        was_viewing_latest = False
+        if self.ai_history_dropdown:
+            current_idx = self.ai_history_dropdown.currentIndex()
+            # User is viewing latest if current index is the last item (or dropdown is empty)
+            was_viewing_latest = (current_idx == len(self.ai_history) - 1) or len(self.ai_history) == 0
+        
         self.ai_history.append(new_entry)
         
         # Update dropdown
         if self.ai_history_dropdown:
             self.ai_history_dropdown.blockSignals(True)
             self.ai_history_dropdown.addItem(new_entry['label'])
-            self.ai_history_dropdown.setCurrentIndex(len(self.ai_history) - 1)
+            
+            # Only auto-switch to latest if user was already viewing the most recent interaction
+            # This prevents interrupting user who is reviewing an older interaction
+            if was_viewing_latest:
+                self.ai_history_dropdown.setCurrentIndex(len(self.ai_history) - 1)
+                # Update view only if we switched
+                self._display_ai_input(content)
+                if self.ai_output_log:
+                    self.ai_output_log.clear()
+            
             self.ai_history_dropdown.blockSignals(False)
-            
-        # Update view
-        self._display_ai_input(content)
-            
-        if self.ai_output_log:
-            self.ai_output_log.clear()
 
     def _display_ai_input(self, content: Union[str, Dict[str, str]]):
         """Helper to render AI input with proper formatting."""

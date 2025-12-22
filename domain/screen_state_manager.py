@@ -149,21 +149,21 @@ class ScreenStateManager:
         stability_wait = float(self.cfg.STABILITY_WAIT) # type: ignore
         if stability_wait > 0: time.sleep(stability_wait)
         try:
-            # Hide keyboard before taking screenshot for OCR to avoid detecting keyboard keys
-            if ContextSource.OCR in (self.cfg.CONTEXT_SOURCE or []):
-                try:
-                    self.driver.hide_keyboard()
-                except Exception as kb_err:
-                    pass
+            # Always hide keyboard before screenshot to avoid OCR detecting keyboard keys
+            # (HYBRID context is always enabled, so OCR is always on)
+            try:
+                self.driver.hide_keyboard()
+            except Exception as kb_err:
+                pass  # Keyboard may not be visible
             
             screenshot_bytes = self.driver.get_screenshot_bytes()
             page_source = self.driver.get_page_source() or ""
             current_package = self.driver.get_current_package() or "UnknownPackage"
             current_activity = self.driver.get_current_activity() or "UnknownActivity"
             
-            # OCR Extraction
+            # Always run OCR since HYBRID (XML+OCR) is always enabled
             ocr_results = None
-            if ContextSource.OCR in (self.cfg.CONTEXT_SOURCE or []) and screenshot_bytes:
+            if screenshot_bytes:
                 ocr_results = self.ocr_service.extract_text_from_bytes(screenshot_bytes)
 
             if not screenshot_bytes: logging.error("Failed to get screenshot (None)."); return None

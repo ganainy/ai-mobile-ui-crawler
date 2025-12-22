@@ -505,7 +505,18 @@ class CrawlerLoop:
                 element_find_time_ms
             )
             
-            self.last_action_feedback = "Action executed successfully" if success else "Action execution failed"
+            # Build detailed feedback including screen transition info
+            if success:
+                if to_screen_id is not None:
+                    if to_screen_id != from_screen_id:
+                        self.last_action_feedback = f"Action '{action_str}' executed -> NAVIGATED to new screen #{to_screen_id}"
+                    else:
+                        self.last_action_feedback = f"Action '{action_str}' executed -> STAYED on same screen #{from_screen_id} (no effect)"
+                else:
+                    self.last_action_feedback = f"Action '{action_str}' executed -> screen state unclear"
+            else:
+                self.last_action_feedback = f"Action '{action_str}' FAILED to execute"
+            
             return True
             
         except Exception as e:

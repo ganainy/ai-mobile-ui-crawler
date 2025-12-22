@@ -279,24 +279,26 @@ class ComponentFactory:
         group = QGroupBox("Image Preprocessing")
         form = QFormLayout(group)
 
-        # Context Source Selection - replacing single "Enable Image Context"
-        # We now allow selecting multiple sources: XML, OCR, Image
+        # Context Sources - HYBRID (XML+OCR) is always enabled, IMAGE is optional
+        # Info label about HYBRID
+        hybrid_info = QLabel("📝 XML + OCR context always enabled")
+        hybrid_info.setToolTip("HYBRID context provides both element hierarchy (XML) and visible text (OCR) for reliable element targeting.")
+        hybrid_info.setStyleSheet("color: #888; font-style: italic;")
         
-        # XML Source
-        config_widgets["CONTEXT_SOURCE_XML"] = QCheckBox("XML")
-        config_widgets["CONTEXT_SOURCE_XML"].setToolTip("Include generic XML hierarchy in the AI context.")
+        # XML Snippet Length (still configurable)
+        from config.numeric_constants import XML_SNIPPET_MAX_LEN_MIN, XML_SNIPPET_MAX_LEN_MAX
+        config_widgets["XML_SNIPPET_MAX_LEN"] = QSpinBox()
+        config_widgets["XML_SNIPPET_MAX_LEN"].setRange(XML_SNIPPET_MAX_LEN_MIN, XML_SNIPPET_MAX_LEN_MAX)
+        config_widgets["XML_SNIPPET_MAX_LEN"].setToolTip(tooltips.get("XML_SNIPPET_MAX_LEN", "Max characters for XML snippet"))
+        config_widgets["XML_SNIPPET_MAX_LEN"].setFixedWidth(80)
         
-        # OCR Source
-        config_widgets["CONTEXT_SOURCE_OCR"] = QCheckBox("OCR")
-        config_widgets["CONTEXT_SOURCE_OCR"].setToolTip("Include OCR-detected text and visual elements in the AI context. Enabling this automatically enables OCR processing.")
+        label_xml_len = QLabel("XML Max Len:")
+        label_xml_len.setToolTip(tooltips.get("XML_SNIPPET_MAX_LEN", "Max characters for XML snippet"))
         
-        # Image Source
-        config_widgets["CONTEXT_SOURCE_IMAGE"] = QCheckBox("Image")
-        config_widgets["CONTEXT_SOURCE_IMAGE"].setToolTip("Include screenshots in the AI context (for multimodal models).")
+        # Image Source - optional toggle
+        config_widgets["CONTEXT_SOURCE_IMAGE"] = QCheckBox("📷 Enable Image Context")
+        config_widgets["CONTEXT_SOURCE_IMAGE"].setToolTip("Include screenshots in the AI context (for vision-capable models like Gemini Pro Vision).")
 
-        label_context_sources = QLabel("Context Sources:")
-        label_context_sources.setToolTip("Select which information sources to provide to the AI model.")
-        
         # Warning label (used when auto-disabled by provider capabilities)
         config_widgets["IMAGE_CONTEXT_WARNING"] = QLabel("⚠️ Auto-disabled")
         config_widgets["IMAGE_CONTEXT_WARNING"].setStyleSheet(
@@ -304,32 +306,21 @@ class ComponentFactory:
         )
         config_widgets["IMAGE_CONTEXT_WARNING"].setVisible(False)
 
-        # Horizontal layout for checkboxes
-        context_sources_layout = QHBoxLayout()
-        context_sources_layout.addWidget(label_context_sources)
-        context_sources_layout.addWidget(config_widgets["CONTEXT_SOURCE_XML"])
-
-        # XML Snippet Length (placed next to XML source)
-        from config.numeric_constants import XML_SNIPPET_MAX_LEN_MIN, XML_SNIPPET_MAX_LEN_MAX
-        config_widgets["XML_SNIPPET_MAX_LEN"] = QSpinBox()
-        config_widgets["XML_SNIPPET_MAX_LEN"].setRange(XML_SNIPPET_MAX_LEN_MIN, XML_SNIPPET_MAX_LEN_MAX)
-        config_widgets["XML_SNIPPET_MAX_LEN"].setToolTip(tooltips.get("XML_SNIPPET_MAX_LEN", "Max characters for XML snippet"))
-        config_widgets["XML_SNIPPET_MAX_LEN"].setFixedWidth(80) # Keep it compact
+        # Layout
+        context_row1 = QHBoxLayout()
+        context_row1.addWidget(hybrid_info)
+        context_row1.addSpacing(20)
+        context_row1.addWidget(label_xml_len)
+        context_row1.addWidget(config_widgets["XML_SNIPPET_MAX_LEN"])
+        context_row1.addStretch()
         
-        label_xml_len = QLabel("Max Len:")
-        label_xml_len.setToolTip(tooltips.get("XML_SNIPPET_MAX_LEN", "Max characters for XML snippet"))
+        context_row2 = QHBoxLayout()
+        context_row2.addWidget(config_widgets["CONTEXT_SOURCE_IMAGE"])
+        context_row2.addWidget(config_widgets["IMAGE_CONTEXT_WARNING"])
+        context_row2.addStretch()
         
-        context_sources_layout.addWidget(label_xml_len)
-        context_sources_layout.addWidget(config_widgets["XML_SNIPPET_MAX_LEN"])
-
-        # Add some spacing
-        context_sources_layout.addSpacing(10)
-        context_sources_layout.addWidget(config_widgets["CONTEXT_SOURCE_OCR"])
-        context_sources_layout.addWidget(config_widgets["CONTEXT_SOURCE_IMAGE"])
-        context_sources_layout.addWidget(config_widgets["IMAGE_CONTEXT_WARNING"])
-        context_sources_layout.addStretch()
-        
-        form.addRow(context_sources_layout)
+        form.addRow(context_row1)
+        form.addRow(context_row2)
 
         # Store references to preprocessing option widgets and labels for visibility control
         preprocessing_widgets = []

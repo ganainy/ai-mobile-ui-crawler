@@ -178,7 +178,9 @@ class PromptBuilder:
             ocr_items = context['ocr_context']
             if ocr_items:
                 ocr_lines = ["\n\nVisual Elements (OCR detected):"]
-                ocr_lines.append("IMPORTANT: When using these elements, you MUST use the 'ocr_X' ID (e.g., 'ocr_0', 'ocr_5') as your target_identifier. Do NOT invent element names.")
+                ocr_lines.append("IMPORTANT: Use 'ocr_X' IDs as target_identifier for actions.")
+                ocr_lines.append("BUT in your exploration_journal, write the ACTUAL TEXT for clarity.")
+                ocr_lines.append("Example: Instead of 'CLICKED ocr_3' write 'CLICKED \"Login\" button (ocr_3)'")
                 ocr_lines.append("")
                 for idx, item in enumerate(ocr_items):
                     text = item.get('text', '').strip()
@@ -266,8 +268,19 @@ State in reasoning: "I am escaping by..."
             prompt_parts.append(actions_tried_part)
             dynamic_parts.append(actions_tried_part)
         
+        # Add last action outcome - this is CRITICAL for AI to learn what actually happened
         if context.get("last_action_feedback"):
-            feedback_part = f"\n\nLast action feedback: {context['last_action_feedback']}"
+            feedback = context['last_action_feedback']
+            # Make the feedback very prominent
+            feedback_part = f"""
+
+=== LAST ACTION OUTCOME ===
+{feedback}
+
+IMPORTANT: Use this outcome to update your exploration_journal accurately.
+- If it says "STAYED on same screen" -> that action was ineffective, DO NOT repeat it
+- If it says "NAVIGATED to new screen" -> record the transition in your journal
+==========================="""
             prompt_parts.append(feedback_part)
             dynamic_parts.append(feedback_part)
         
