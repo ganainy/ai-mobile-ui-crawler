@@ -130,198 +130,112 @@ class PromptBuilder:
         Returns:
             Complete formatted prompt string
         """
-        # Generate static part if not provided
+        # --- STATIC PART GENERATION (Instructions, Rules, Definitions) ---
+        # User requested to ALWAYS include static part since model has no memory
+        
         formatted_prompt = static_prompt_part
         if formatted_prompt is None:
+            # Fallback if not injected by chain
             available_actions = get_available_actions(self.cfg)
-            # Override available actions if provided in context (for preview)
+             # Override available actions if provided in context (for preview)
             if context.get('available_actions'):
-                available_actions = context['available_actions']
-                
+                 available_actions = context['available_actions']
+                 
             action_list_str = "\n".join([f"- {action}: {desc}" for action, desc in available_actions.items()])
             json_output_guidance = json.dumps(JSON_OUTPUT_SCHEMA, indent=2)
             
             # Get journal max length from config or use default
             journal_max_length = self.cfg.get('EXPLORATION_JOURNAL_MAX_LENGTH', EXPLORATION_JOURNAL_MAX_LENGTH_DEFAULT)
             
-            try:
-                formatted_prompt = prompt_template.format(
-                    json_schema=json_output_guidance,
-                    action_list=action_list_str,
-                    journal_max_length=journal_max_length
-                )
-            except Exception as e:
-                # Fallback if specific keys are missing in custom template
-                logger.warning(f"Error formatting prompt template: {e}")
-                formatted_prompt = prompt_template
-        
-        # Build the full prompt with context
-        prompt_parts = [formatted_prompt]
-        
-        # Build dynamic parts separately for logging
-        dynamic_parts = []
-        
-        # Add context information
-        xml_included = False
-        if context.get("xml_context"):
-            xml_string = context['xml_context']
-            if not isinstance(xml_string, str):
-                xml_string = str(xml_string)
-            
-            xml_part = f"\n\nCurrent screen XML:\n{xml_string}"
-            prompt_parts.append(xml_part)
-            dynamic_parts.append(xml_part)
-            xml_included = True
+            formatted_prompt = prompt_template.format(
+                json_schema=json_output_guidance,
+                action_list=action_list_str,
+                journal_max_length=journal_max_length
+            )
 
-        # Add OCR context if available
+        prompt_parts = []
+        
+        # Always include static context
+        prompt_parts.append("=== CONTEXT (Static - Instructions) ===")
+        prompt_parts.append(formatted_prompt)
+        
+        # --- DYNAMIC PART GENERATION ---
+        dynamic_parts = []
+        dynamic_parts.append("\n=== CURRENT STATE ===")
+        
+        # Screen Visit Count
+        if context.get("current_screen_visit_count"):
+             dynamic_parts.append(f"**Screen Visit Context**: Visited {context['current_screen_visit_count']} times.")
+        
+        # Last Action Feedback (Critical)
+        if context.get("last_action_feedback"):
+            feedback = context['last_action_feedback']
+            dynamic_parts.append(f"**Last Action Outcome**:\n{feedback}")
+
+        # XML Context (Structured)
+        if context.get("xml_context"):
+            xml_data = context['xml_context']
+            # It should be a JSON string from xml_to_structured_json
+            # We can present it as a code block
+            dynamic_parts.append(f"\n**UI Elements (JSON Structure)**:\n```json\n{xml_data}\n```")
+
+        # OCR Context (Compact)
         if context.get("ocr_context"):
             ocr_items = context['ocr_context']
             if ocr_items:
-                ocr_lines = ["\n\nVisual Elements (OCR detected):"]
-                ocr_lines.append("IMPORTANT: Use 'ocr_X' IDs as target_identifier for actions.")
-                ocr_lines.append("BUT in your exploration_journal, write the ACTUAL TEXT for clarity.")
-                ocr_lines.append("Example: Instead of 'CLICKED ocr_3' write 'CLICKED \"Login\" button (ocr_3)'")
-                ocr_lines.append("")
+                ocr_lines = ["\n**Visual Elements (OCR)**:"]
+                # Filter/Compact logic
                 for idx, item in enumerate(ocr_items):
                     text = item.get('text', '').strip()
-                    # Assign a temporary ID based on index
                     elem_id = f"ocr_{idx}"
-                    # Include bounds as a hint, though LLM should rely on ID
                     bounds = item.get('bounds')
-                    ocr_lines.append(f"- ID: {elem_id} | Text: \"{text}\" | Bounds: {bounds}")
+                    # Compact line
+                    ocr_lines.append(f"• {elem_id} = \"{text}\" {bounds}")
                 
-                ocr_part = "\n".join(ocr_lines)
-                prompt_parts.append(ocr_part)
-                dynamic_parts.append(ocr_part)
+                dynamic_parts.append("\n".join(ocr_lines))
         
-        # Add stuck detection warning if applicable
+        # Stuck Detection
         if context.get("is_stuck"):
             stuck_reason = context.get("stuck_reason", "Multiple actions on same screen")
-            current_screen_actions = context.get('current_screen_actions', [])
-            current_screen_id = context.get('current_screen_id')
-            
-            forbidden_actions = []
-            for action in current_screen_actions:
-                action_desc = action.get('action_description', '')
-                success = action.get('execution_success', False)
-                to_screen_id = action.get('to_screen_id')
-                
-                if success and (to_screen_id == current_screen_id or to_screen_id is None):
-                    forbidden_actions.append(action_desc)
-            
-            forbidden_text = ""
-            if forbidden_actions:
-                forbidden_lines = ["FORBIDDEN (these kept you here):"]
-                for action in forbidden_actions:
-                    forbidden_lines.append(f"  - {action}")
-                forbidden_text = "\n".join(forbidden_lines)
-            
-            stuck_warning = f"""
-** STUCK: {stuck_reason} **
-You must escape this screen. DO NOT repeat actions that kept you here.
-{forbidden_text}
+            stuck_part = f"\n⚠️ **STUCK DETECTED**: {stuck_reason}. YOU MUST ESCAPE. Do not repeat previous actions."
+            dynamic_parts.append(stuck_part)
 
-ESCAPE OPTIONS:
-1. Use "back" action to return to previous screen
-2. Click navigation elements: skipButton, ctaButton, toolbarBackIcon, nav tabs
-3. Scroll only if you haven't scrolled yet
-
-State in reasoning: "I am escaping by..."
-"""
-            prompt_parts.append(stuck_warning)
-            dynamic_parts.append(stuck_warning)
-        
-        # Add exploration journal
+        # Journal
         exploration_journal = context.get("exploration_journal", "")
         if exploration_journal:
-            journal_part = f"\n\nExploration Journal (your action history):\n{exploration_journal}"
-            prompt_parts.append(journal_part)
-            dynamic_parts.append(journal_part)
+             dynamic_parts.append(f"\n=== EXPLORATION JOURNAL ===\n{exploration_journal}")
         else:
-            # First step - no journal yet
-            journal_hint = "\n\nExploration Journal: Empty (first action - describe initial screen state)"
-            prompt_parts.append(journal_hint)
-            dynamic_parts.append(journal_hint)
-        
-        # Add actions already tried on current screen (lightweight, always shown)
+             dynamic_parts.append(f"\n=== EXPLORATION JOURNAL ===\n(Empty - Start of session)")
+
+        # Actions Already Tried (Lightweight)
         current_screen_actions = context.get("current_screen_actions", [])
         if current_screen_actions:
             current_screen_id = context.get('current_screen_id')
-            actions_tried_lines = [f"\n\nActions Tried on This Screen (#{current_screen_id}):"]
-            for action in current_screen_actions[-8:]:  # Last 8 actions on this screen
-                action_desc = action.get('action_description', 'unknown action')
-                success = action.get('execution_success', False)
-                to_screen_id = action.get('to_screen_id')
-                
-                if success:
-                    if to_screen_id and to_screen_id != current_screen_id:
-                        result = f"-> screen #{to_screen_id}"
-                    else:
-                        result = "-> stayed (ineffective)"
-                else:
-                    result = "-> FAILED"
-                
-                actions_tried_lines.append(f"  - {action_desc} {result}")
-            
-            actions_tried_lines.append("Choose something NOT in this list.")
-            actions_tried_part = "\n".join(actions_tried_lines)
-            prompt_parts.append(actions_tried_part)
-            dynamic_parts.append(actions_tried_part)
-        
-        # Add last action outcome - this is CRITICAL for AI to learn what actually happened
-        if context.get("last_action_feedback"):
-            feedback = context['last_action_feedback']
-            # Make the feedback very prominent
-            feedback_part = f"""
+            actions_lines = [f"\n**Actions Tried on This Screen (#{current_screen_id})**:"]
+            for action in current_screen_actions[-8:]:
+                 action_desc = action.get('action_description', 'unknown')
+                 success = action.get('execution_success', False)
+                 to_screen_id = action.get('to_screen_id')
+                 result = f"-> Screen #{to_screen_id}" if (success and to_screen_id != current_screen_id) else "-> Ineffective/Failed"
+                 actions_lines.append(f"- {action_desc} {result}")
+            dynamic_parts.append("\n".join(actions_lines))
 
-=== LAST ACTION OUTCOME ===
-{feedback}
-
-IMPORTANT: Use this outcome to update your exploration_journal accurately.
-- If it says "STAYED on same screen" -> that action was ineffective, DO NOT repeat it
-- If it says "NAVIGATED to new screen" -> record the transition in your journal
-==========================="""
-            prompt_parts.append(feedback_part)
-            dynamic_parts.append(feedback_part)
-        
-
-        
-        if context.get("current_screen_visit_count"):
-            visit_count_part = f"\n\nScreen visit count: {context['current_screen_visit_count']}"
-            prompt_parts.append(visit_count_part)
-            dynamic_parts.append(visit_count_part)
-
-        # Inject Test Credentials if available in Config
-        # These are critical for login flows
+        # Test Credentials
         test_email = self.cfg.get("TEST_EMAIL")
-        test_password = self.cfg.get("TEST_PASSWORD")
-        test_name = self.cfg.get("TEST_NAME")
+        if test_email:
+            dynamic_parts.append(f"\n**Test Credentials**: {test_email} / ...")
+
+        # Closing
+        dynamic_parts.append("\n\n**TASK**: Choose the next best action to maximize coverage. Respond in JSON.")
         
-        if test_email or test_password or test_name:
-            credential_lines = ["\n\nUSER-PROVIDED TEST CREDENTIALS:"]
-            credential_lines.append("Use these details if you need to Sign Up, Log In, or fill forms:")
-            if test_name:
-                credential_lines.append(f"- Name: {test_name}")
-            if test_email:
-                credential_lines.append(f"- Email: {test_email}")
-            if test_password:
-                credential_lines.append(f"- Password: {test_password}")
-            
-            creds_part = "\n".join(credential_lines)
-            prompt_parts.append(creds_part)
-            # Note: We add to dynamic parts too so it's logged/debuggable
-            dynamic_parts.append(creds_part)
+        prompt_parts.extend(dynamic_parts)
         
-        closing_part = "\n\nPlease respond with a JSON object matching the schema above."
-        prompt_parts.append(closing_part)
-        dynamic_parts.append(closing_part)
-        
-        # Store dynamic parts in context for logging
-        context['_dynamic_prompt_parts'] = "\n".join(dynamic_parts)
-        context['_static_prompt_part'] = formatted_prompt
-        
-        # Store the full prompt in context for database storage
+        # Combine
         full_prompt = "\n".join(prompt_parts)
+        
+        # Store for logging
+        context['_dynamic_prompt_parts'] = "\n".join(dynamic_parts)
+        context['_static_prompt_part'] = formatted_prompt # Keep referencing full static for debug even if not sent
         context['_full_ai_input_prompt'] = full_prompt
         
         return full_prompt

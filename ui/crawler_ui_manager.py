@@ -233,7 +233,7 @@ class CrawlerManager(QObject):
     @Slot()
     def perform_pre_crawl_validation(self):
         """Perform pre-crawl validation checks asynchronously."""
-        self.main_controller.log_message("⏳ Validating services and requirements...", 'blue')
+        self.main_controller.log_message("Validating services and requirements...", 'blue')
         
         # Show loading overlay
         self.main_controller.show_busy("Validating services and requirements...")

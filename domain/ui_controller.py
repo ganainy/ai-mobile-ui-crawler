@@ -762,12 +762,18 @@ class CrawlerControllerWindow(QMainWindow):
         Args:
             content: The text (str) or structured data (dict) to display.
         """
+        # Capture current screenshot path if available
+        current_screenshot_path = None
+        if hasattr(self, 'crawler_manager') and self.crawler_manager.current_screenshot:
+            current_screenshot_path = self.crawler_manager.current_screenshot
+            
         # Create new history entry
         step_num = len(self.ai_history) + 1
         new_entry = {
             'label': f"Interaction #{step_num}",
             'input': content, # Store whatever we got (dict or str)
-            'output': ""  # Output will arrive later
+            'output': "",  # Output will arrive later
+            'screenshot': current_screenshot_path
         }
         
         # Check if user was viewing the latest interaction before adding new one
@@ -840,7 +846,8 @@ class CrawlerControllerWindow(QMainWindow):
              self.ai_history.append({
                 'label': "Interaction #1 (Output Only)",
                 'input': "(No input recorded)",
-                'output': content
+                'output': content,
+                'screenshot': None
             })
              if self.ai_history_dropdown:
                 self.ai_history_dropdown.blockSignals(True)
@@ -883,6 +890,10 @@ class CrawlerControllerWindow(QMainWindow):
             cursor = self.ai_output_log.textCursor()
             cursor.movePosition(cursor.MoveOperation.Start)
             self.ai_output_log.setTextCursor(cursor)
+            
+        # Update screenshot if available for this step
+        if entry.get('screenshot'):
+            self.update_screenshot(entry['screenshot'])
 
     def _attempt_load_cached_health_apps(self):
         """Tries to load health apps from the cached file path if it exists."""

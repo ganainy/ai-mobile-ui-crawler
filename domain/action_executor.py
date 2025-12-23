@@ -44,9 +44,7 @@ class ActionExecutor:
     def _execute_input_action(self, action_data: Dict[str, Any]) -> bool:
         """Execute input action with proper argument handling.
         
-        For OCR-based targets (with bounding box), this will:
-        1. First tap on the bounding box to focus the input field
-        2. Then send keys using Appium's keyboard input
+        Uses tap + mobile:type for reliable input on both native and WebView elements.
         """
         target_id = action_data.get("target_identifier")
         bbox = action_data.get("target_bounding_box")
@@ -58,45 +56,56 @@ class ActionExecutor:
         if input_text is None:
             input_text = ""  # Empty string for clear operations
         
-        # If we have a bounding box (OCR-based target), use tap + keyboard input
+        import time
+        
+        # Step 1: Tap to focus the input field
         if bbox:
-            # First tap to focus the input field
+            # OCR-based: use bounding box coordinates
             tap_success = self.driver.tap(target_id, bbox)
-            if not tap_success:
-                logger.error("Failed to tap on input field (bbox)")
+        else:
+            # XML-based: use element tap
+            tap_success = self.driver.tap(target_id, None)
+        
+        if not tap_success:
+            logger.error(f"Failed to tap on input field: {target_id}")
+            return False
+        
+        # Brief delay for keyboard to appear
+        time.sleep(0.5)
+        
+        # Step 2: Use mobile: type for reliable text input (works on WebViews)
+        try:
+            driver = self.driver.helper.get_driver() if self.driver.helper else None
+            if driver:
+                driver.execute_script('mobile: type', {'text': input_text})
+                return True
+            else:
+                logger.error("Driver not available for keyboard input")
                 return False
+        except Exception as e:
+            logger.warning(f"mobile: type failed: {e}, trying fallback methods")
             
-            # Small delay to allow keyboard to appear
-            import time
-            time.sleep(0.5)
-            
-            # Send keys using Appium's keyboard (doesn't require element ID)
+            # Fallback 1: ActionChains send_keys
             try:
+                from selenium.webdriver.common.action_chains import ActionChains
                 driver = self.driver.helper.get_driver() if self.driver.helper else None
                 if driver:
-                    driver.execute_script('mobile: type', {'text': input_text})
+                    actions = ActionChains(driver)
+                    actions.send_keys(input_text)
+                    actions.perform()
                     return True
-                else:
-                    logger.error("Driver not available for keyboard input")
-                    return False
-            except Exception as e:
-                logger.error(f"Failed to send keys via mobile: type: {e}")
-                # Fallback: try using action API to send keys
+            except Exception as e2:
+                logger.warning(f"ActionChains fallback failed: {e2}")
+            
+            # Fallback 2: Element send_keys (last resort)
+            if not bbox and target_id:
                 try:
-                    from selenium.webdriver.common.action_chains import ActionChains
-                    from selenium.webdriver.common.keys import Keys
-                    driver = self.driver.helper.get_driver() if self.driver.helper else None
-                    if driver:
-                        actions = ActionChains(driver)
-                        actions.send_keys(input_text)
-                        actions.perform()
-                        return True
-                except Exception as e2:
-                    logger.error(f"Fallback keyboard input also failed: {e2}")
-                    return False
-        
-        # Standard input using element ID
-        return self.driver.input_text(target_id, input_text)
+                    return self.driver.input_text(target_id, input_text)
+                except Exception as e3:
+                    logger.error(f"All input methods failed: {e3}")
+            
+            return False
+
     
     def _execute_long_press_action(self, action_data: Dict[str, Any]) -> bool:
         """Execute long press action with proper argument handling."""
@@ -129,16 +138,55 @@ class ActionExecutor:
         return self.driver.clear_text(target_id)
     
     def _execute_replace_text_action(self, action_data: Dict[str, Any]) -> bool:
-        """Execute replace text action with proper argument handling."""
+        """Execute replace text action: tap, clear, then type new text."""
         target_id = action_data.get("target_identifier")
+        bbox = action_data.get("target_bounding_box")
         input_text = action_data.get("input_text")
-        if not target_id:
+        
+        if not target_id and not bbox:
             logger.error("Cannot execute replace_text: No target identifier provided")
             return False
         if input_text is None:
             logger.error("Cannot execute replace_text: No input_text provided")
             return False
-        return self.driver.replace_text(target_id, input_text)
+        
+        import time
+        
+        # Step 1: Tap to focus
+        if bbox:
+            tap_success = self.driver.tap(target_id, bbox)
+        else:
+            tap_success = self.driver.tap(target_id, None)
+        
+        if not tap_success:
+            logger.error(f"Failed to tap on input field for replace: {target_id}")
+            return False
+        
+        time.sleep(0.3)
+        
+        # Step 2: Clear existing text (select all + delete)
+        try:
+            driver = self.driver.helper.get_driver() if self.driver.helper else None
+            if driver:
+                # Try to clear using keyboard shortcuts
+                driver.execute_script('mobile: performEditorAction', {'action': 'selectAll'})
+                time.sleep(0.1)
+        except Exception:
+            pass  # Ignore if select all fails
+        
+        # Step 3: Type new text (replaces selection or appends)
+        try:
+            driver = self.driver.helper.get_driver() if self.driver.helper else None
+            if driver:
+                driver.execute_script('mobile: type', {'text': input_text})
+                return True
+        except Exception as e:
+            logger.warning(f"mobile: type failed in replace: {e}")
+            # Fall back to driver method
+            if not bbox and target_id:
+                return self.driver.replace_text(target_id, input_text)
+        
+        return False
     
     def _execute_flick_action(self, action_data: Dict[str, Any]) -> bool:
         """Execute flick action with proper argument handling."""

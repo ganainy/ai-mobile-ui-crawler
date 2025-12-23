@@ -500,7 +500,7 @@ class OllamaProvider(ProviderStrategy):
         base_url = config.get("OLLAMA_BASE_URL")
         if not base_url and default_url:
             return default_url
-        return base_url or DEFAULT_OLLAMA_URL
+        return base_url or ServiceURLs.OLLAMA
     
     def check_dependencies(self) -> Tuple[bool, str]:
         """Check if Ollama SDK is installed."""

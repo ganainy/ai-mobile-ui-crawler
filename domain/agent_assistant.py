@@ -531,13 +531,9 @@ class AgentAssistant:
             xml_string_simplified = xml_string_raw
             if xml_string_raw:
                 try:
-                    from config.numeric_constants import XML_SNIPPET_MAX_LEN_DEFAULT
-                    xml_string_simplified = simplify_xml_for_ai(
-                        xml_string=xml_string_raw,
-                        max_len=XML_SNIPPET_MAX_LEN_DEFAULT,
-                        provider=self.ai_provider,
-                        prune_noninteractive=True
-                    )
+                    # UPDATED: Use structured JSON instead of XML string
+                    from utils.utils import xml_to_structured_json
+                    xml_string_simplified = xml_to_structured_json(xml_string_raw)
                 except Exception as e:
                     logging.warning(f"XML simplification failed, using original: {e}")
                     xml_string_simplified = xml_string_raw

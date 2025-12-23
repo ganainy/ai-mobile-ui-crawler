@@ -167,17 +167,7 @@ class ComponentFactory:
         config_widgets["OPENROUTER_SHOW_FREE_ONLY"].setVisible(True)
         _model_row_layout.addWidget(config_widgets["OPENROUTER_SHOW_FREE_ONLY"])
 
-        # Add a warning label for non-free models
-        config_widgets["OPENROUTER_NON_FREE_WARNING"] = QLabel("⚠️ This model may use your OpenRouter credit.")
-        config_widgets["OPENROUTER_NON_FREE_WARNING"].setStyleSheet("color: orange;")
-        config_widgets["OPENROUTER_NON_FREE_WARNING"].setVisible(False)
-        config_widgets["OPENROUTER_NON_FREE_WARNING"].setWordWrap(True)
-
-        warning_layout = QVBoxLayout()
-        warning_layout.addWidget(config_widgets["OPENROUTER_NON_FREE_WARNING"])
-
         ai_layout.addRow(label_model_type, _model_row_layout)
-        ai_layout.addRow(warning_layout)
 
         # Connect the AI provider selection to update model types
         # Note: These connections will be set up in CrawlerControllerWindow after UIStateHandler is created
@@ -281,7 +271,7 @@ class ComponentFactory:
 
         # Context Sources - HYBRID (XML+OCR) is always enabled, IMAGE is optional
         # Info label about HYBRID
-        hybrid_info = QLabel("📝 XML + OCR context always enabled")
+        hybrid_info = QLabel("XML + OCR context always enabled")
         hybrid_info.setToolTip("HYBRID context provides both element hierarchy (XML) and visible text (OCR) for reliable element targeting.")
         hybrid_info.setStyleSheet("color: #888; font-style: italic;")
         
@@ -296,7 +286,7 @@ class ComponentFactory:
         label_xml_len.setToolTip(tooltips.get("XML_SNIPPET_MAX_LEN", "Max characters for XML snippet"))
         
         # Image Source - optional toggle
-        config_widgets["CONTEXT_SOURCE_IMAGE"] = QCheckBox("📷 Enable Image Context")
+        config_widgets["CONTEXT_SOURCE_IMAGE"] = QCheckBox("Enable Image Context")
         config_widgets["CONTEXT_SOURCE_IMAGE"].setToolTip("Include screenshots in the AI context (for vision-capable models like Gemini Pro Vision).")
 
         # Warning label (used when auto-disabled by provider capabilities)
@@ -583,7 +573,7 @@ class ComponentFactory:
         eye_icon = QIcon.fromTheme("view-hidden", QIcon())
         if eye_icon.isNull():
             # Fallback to Unicode eye emoji if theme icon not available
-            toggle_password_btn.setText("👁")
+            toggle_password_btn.setText("Show")
         else:
             toggle_password_btn.setIcon(eye_icon)
         
@@ -602,7 +592,7 @@ class ComponentFactory:
                 # Change to eye-slash icon when visible
                 eye_slash_icon = QIcon.fromTheme("view-visible", QIcon())
                 if eye_slash_icon.isNull():
-                    toggle_password_btn.setText("🙈")
+                    toggle_password_btn.setText("Hide")
                 else:
                     toggle_password_btn.setIcon(eye_slash_icon)
             else:
@@ -610,7 +600,7 @@ class ComponentFactory:
                 # Change to eye icon when hidden
                 eye_icon = QIcon.fromTheme("view-hidden", QIcon())
                 if eye_icon.isNull():
-                    toggle_password_btn.setText("👁")
+                    toggle_password_btn.setText("Show")
                 else:
                     toggle_password_btn.setIcon(eye_icon)
         

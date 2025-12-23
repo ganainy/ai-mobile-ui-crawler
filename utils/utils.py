@@ -541,6 +541,102 @@ def simplify_xml_for_ai(xml_string: str, max_len: int, provider: str = "gemini",
         logging.error(f"🔴 Unexpected error during XML simplification for {provider}: {e}. Falling back.", exc_info=True)
         return xml_string[:effective_max_len] + "\n... (fallback truncation)" if len(xml_string) > effective_max_len else xml_string
 
+def xml_to_structured_json(xml_string: str) -> str:
+    """
+    Parses XML and returns a compact JSON string representation for LLMs.
+    Prioritizes interactive elements and meaningful text.
+    
+    Structure:
+    {
+      "interactive": [
+         {"id": "resource-id", "class": "Button", "desc": "content-desc", "text": "text", "bounds": "[...]"}
+      ],
+      "static_text": [
+         "Some label text", "Another label"
+      ]
+    }
+    """
+    if not xml_string:
+        return "{}"
+
+    possible_parse_errors = (std_etree.ParseError,)
+    if USING_LXML and lxml_etree:
+        possible_parse_errors += (lxml_etree.ParseError, lxml_etree.XMLSyntaxError)
+
+    try:
+        if USING_LXML and lxml_etree:
+            parser = lxml_etree.XMLParser(recover=True, remove_blank_text=True)
+            root = lxml_etree.fromstring(xml_string.encode('utf-8'), parser=parser)
+        else:
+            root = std_etree.fromstring(xml_string.encode('utf-8'))
+
+        if root is None:
+            return "{}"
+
+        interactive_elements = []
+        static_texts = []
+        
+        # Helper to clean text
+        def clean_text(t):
+            if not t: return ""
+            # Decode entities if needed (basic ones)
+            t = t.replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>').replace('&quot;', '"').replace('&#39;', "'")
+            # Remove excessive whitespace
+            return " ".join(t.split())
+
+        for element in root.iter('*'):
+            # Determine interactivity
+            is_clickable = element.attrib.get('clickable', '').lower() == 'true'
+            is_focusable = element.attrib.get('focusable', '').lower() == 'true'
+            is_checkable = element.attrib.get('checkable', '').lower() == 'true'
+            is_long_clickable = element.attrib.get('long-clickable', '').lower() == 'true'
+            is_editable = element.attrib.get('editable', '').lower() == 'true'
+            
+            is_interactive = is_clickable or is_focusable or is_checkable or is_long_clickable or is_editable
+            
+            # Attributes to capture
+            resource_id = element.attrib.get('resource-id', '')
+            content_desc = clean_text(element.attrib.get('content-desc', ''))
+            text_val = clean_text(element.attrib.get('text', ''))
+            cls = element.attrib.get('class', '')
+            if '.' in cls:
+                cls = cls.split('.')[-1] # Strip package
+            
+            # Bounds logic could be simplified or kept as is
+            bounds = element.attrib.get('bounds', '')
+
+            if is_interactive:
+                entry = {}
+                if resource_id: entry['id'] = resource_id
+                if cls: entry['type'] = cls
+                if content_desc: entry['desc'] = content_desc
+                if text_val: entry['text'] = text_val
+                if bounds: entry['bounds'] = bounds
+                
+                # Only add if it has some identifier or text
+                if entry:
+                    interactive_elements.append(entry)
+            else:
+                # Capture static text if meaningful
+                if text_val and len(text_val) > 1: # Ignore single chars like icons sometimes represented as text
+                    static_texts.append(text_val)
+                elif content_desc and len(content_desc) > 1:
+                     static_texts.append(content_desc)
+
+        # Construct final dict
+        result = {}
+        if interactive_elements:
+            result['interactive'] = interactive_elements
+        if static_texts:
+            # unique static texts to save tokens
+            result['static_text'] = list(dict.fromkeys(static_texts))  
+            
+        return json.dumps(result, ensure_ascii=False)
+
+    except Exception as e:
+        logging.error(f"🔴 Error converting XML to JSON: {e}")
+        return json.dumps({"error": "Failed to parse XML", "raw_snippet": xml_string[:200]})
+
 def filter_xml_by_allowed_packages(xml_string: str, target_package: str, allowed_packages: List[str]) -> str:
     """
     Filters an XML string, removing elements not belonging to the target or allowed packages.
