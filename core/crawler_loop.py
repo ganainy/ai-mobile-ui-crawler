@@ -714,6 +714,23 @@ class CrawlerLoop:
                 except Exception as e:
                     logger.error(f"Error running MobSF analysis: {e}", exc_info=True)
             
+            # Annotate screenshots with action coordinates
+            try:
+                from cli.services.screenshot_annotator import ScreenshotAnnotator
+                if hasattr(self.config, '_path_manager') and self.config._path_manager:
+                    session_dir = self.config._path_manager.get_session_path()
+                    if session_dir and session_dir.exists():
+                        annotator = ScreenshotAnnotator()
+                        success, result = annotator.annotate_session(session_dir)
+                        if success:
+                            logger.info(f"Annotated {result.get('annotated_count', 0)} screenshots")
+                        else:
+                            errors = result.get('errors', [])
+                            if errors:
+                                logger.warning(f"Screenshot annotation issues: {errors[0]}")
+            except Exception as e:
+                logger.warning(f"Failed to annotate screenshots: {e}")
+            
             # Close the app when crawl loop is done
             if self.app_context_manager:
                 try:

@@ -741,3 +741,13 @@ LOG_ERROR_OCCURRED = "Error occurred: {error}"
 LOG_SERVICE_IS_STATUS = "Service {service_name} is {status}"
 LOG_OUTPUT_DATA_AS_JSON = "Output data as JSON"
 LOG_TELEMETRY_EVENTS_CLEARED = "Telemetry events cleared"
+
+# === Screenshots command group ===
+SCREENSHOTS_GROUP_DESC = "Screenshot management commands"
+
+CMD_ANNOTATE_SCREENSHOTS_DESC = "Annotate screenshots with action coordinates from the database"
+ARG_HELP_SESSION_DIR = "Session directory path (optional, uses latest if not provided)"
+MSG_ANNOTATE_SCREENSHOTS_SUCCESS = "Successfully annotated {count} screenshots. Output: {output_dir}"
+MSG_ANNOTATE_SCREENSHOTS_PARTIAL = "Annotated {annotated} screenshots, skipped {skipped}. Output: {output_dir}"
+ERR_ANNOTATE_SCREENSHOTS_FAILED = "Failed to annotate screenshots"
+ERR_ANNOTATE_SCREENSHOTS_NO_SESSION = "No session directory found. Please specify --session-dir or run a crawl first."

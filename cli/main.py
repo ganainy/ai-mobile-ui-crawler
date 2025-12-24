@@ -116,6 +116,7 @@ def _register_commands(registry: CommandRegistry) -> None:
             ollama,
             openrouter,
             packages,
+            screenshots,
             services_check
         )
 
@@ -136,6 +137,7 @@ def _register_commands(registry: CommandRegistry) -> None:
         packages_group = packages.PackagesCommandGroup()
         actions_group = actions.CrawlerActionsCommandGroup()
         prompts_group = crawler_prompts.CrawlerPromptsCommandGroup()
+        screenshots_group = screenshots.ScreenshotsCommandGroup()
 
         # Register groups instead of individual commands
         registry.add_group(config_group)
@@ -151,6 +153,7 @@ def _register_commands(registry: CommandRegistry) -> None:
         registry.add_group(packages_group)
         registry.add_group(actions_group)
         registry.add_group(prompts_group)
+        registry.add_group(screenshots_group)
 
 
     except ImportError as e:
