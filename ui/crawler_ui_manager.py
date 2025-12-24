@@ -435,6 +435,11 @@ class CrawlerManager(QObject):
             project_root = str(find_project_root(Path(self.config.BASE_DIR)))
             self.crawler_process.setWorkingDirectory(project_root)
             
+            # Auto-hide settings panel on start
+            if hasattr(self.main_controller, 'left_panel') and hasattr(self.main_controller, 'toggle_settings_btn'):
+                self.main_controller.left_panel.setVisible(False)
+                self.main_controller.toggle_settings_btn.setText("Show Settings")
+            
             # Choose entrypoint dynamically:
             # - Prefer package module (traverser_ai_api.main) if importable with -m
             # - Otherwise fall back to running a known script file (traverser_ai_api/main.py, main.py, run_cli.py)
@@ -584,6 +589,11 @@ class CrawlerManager(QObject):
             self.main_controller.start_stop_btn.setEnabled(True)
             self.main_controller.start_stop_btn.setText("Start Crawler")
             self.main_controller.start_stop_btn.setStyleSheet("") # Reset style
+
+        # Auto-show settings panel on finish/stop
+        if hasattr(self.main_controller, 'left_panel') and hasattr(self.main_controller, 'toggle_settings_btn'):
+            self.main_controller.left_panel.setVisible(True)
+            self.main_controller.toggle_settings_btn.setText("Hide Settings")
 
 
         # Enable report generation after finish

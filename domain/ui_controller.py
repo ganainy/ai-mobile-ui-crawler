@@ -166,58 +166,15 @@ class CrawlerControllerWindow(QMainWindow):
     def _setup_ui(self, main_layout: QHBoxLayout):
         """Setup the UI panels and initialize UIStateHandler."""
         from ui.component_factory import ComponentFactory
-        from ui.constants import (
-            UI_MODE_BASIC, UI_MODE_EXPERT, UI_MODE_DEFAULT, UI_MODE_CONFIG_KEY
-        )
         
         # Create left panel
-        left_panel = QWidget()
-        left_layout = QVBoxLayout(left_panel)
-
-        # Create UI mode switch (Basic/Expert)
-        mode_layout = QHBoxLayout()
-        mode_label = QLabel("UI Mode:")
-        self.config_manager.ui_mode_dropdown = QComboBox()
-        self.config_manager.ui_mode_dropdown.addItems([
-            UI_MODE_BASIC,
-            UI_MODE_EXPERT
-        ])
-
-        # Get the UI mode from config
-        initial_mode = UI_MODE_DEFAULT  # Default if not found
-
-        # Try to get UI_MODE from the Config object's SQLite store
-        try:
-            stored_mode = self.config.get(UI_MODE_CONFIG_KEY)
-            if stored_mode:
-                initial_mode = stored_mode
-        except Exception as e:
-            logging.warning(f"Error retrieving {UI_MODE_CONFIG_KEY} from config store: {e}")
-
-
-        # Set the dropdown to the initial mode
-        mode_index = self.config_manager.ui_mode_dropdown.findText(initial_mode)
-        if mode_index >= 0:
-            self.config_manager.ui_mode_dropdown.setCurrentIndex(mode_index)
-        else:
-            self.config_manager.ui_mode_dropdown.setCurrentIndex(0)  # Default to Basic if not found
-
-        from ui.strings import UI_MODE_TOOLTIP
-        self.config_manager.ui_mode_dropdown.setToolTip(UI_MODE_TOOLTIP)
-        mode_layout.addWidget(mode_label)
-        mode_layout.addWidget(self.config_manager.ui_mode_dropdown)
-
-        from ui.strings import RESET_TO_DEFAULTS_TOOLTIP
-        reset_button = QPushButton("Reset Settings")
-        reset_button.setToolTip(RESET_TO_DEFAULTS_TOOLTIP)
-        reset_button.clicked.connect(self.config_manager.reset_settings)
-        mode_layout.addWidget(reset_button)
-        left_layout.addLayout(mode_layout)
+        self.left_panel = QWidget()
+        left_layout = QVBoxLayout(self.left_panel)
 
         # Create scrollable area for config inputs
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         scroll_content = QWidget()
         scroll_layout = QFormLayout(scroll_content)
 
@@ -296,9 +253,6 @@ class CrawlerControllerWindow(QMainWindow):
         scroll.setWidget(scroll_content)
         left_layout.addWidget(scroll)
 
-        # Add control buttons
-        controls_group = ComponentFactory.create_control_buttons(self)
-        left_layout.addWidget(controls_group)
 
         # Assign refresh_devices_btn if set by ComponentFactory
         if hasattr(self, "refresh_devices_btn"):
@@ -325,10 +279,6 @@ class CrawlerControllerWindow(QMainWindow):
             ui_groups=self.ui_groups
         )
 
-        # Connect UI mode dropdown to toggle UI complexity
-        self.config_manager.ui_mode_dropdown.currentTextChanged.connect(
-            self.ui_state_handler.toggle_ui_complexity
-        )
 
         # Connect AI provider selection to update model types
         def _on_provider_changed(provider: str):
@@ -378,15 +328,15 @@ class CrawlerControllerWindow(QMainWindow):
         # Connect all widgets to auto-save
         self.config_manager.connect_widgets_for_auto_save()
 
-        # Initialize the UI complexity based on the mode we determined
-        self.ui_state_handler.toggle_ui_complexity(initial_mode)
 
         # Create right panel
         right_panel = QWidget()
         right_main_layout = QVBoxLayout(right_panel)
 
         # Step counter and status at the top (small header)
+        # Step counter and status at the top (small header)
         header_layout = QHBoxLayout()
+        
         self.step_label = QLabel("Step: 0")
         self.status_label = QLabel("Status: Idle")
         self.progress_bar = QProgressBar()
@@ -419,6 +369,86 @@ class CrawlerControllerWindow(QMainWindow):
 
         log_layout.addLayout(log_header_layout)
         log_layout.addWidget(self.log_output)
+        
+        # Add Start/Stop button below logs
+        self.start_stop_btn = QPushButton("Start Crawler")
+        self.start_stop_btn.setToolTip("Start or stop the crawler process")
+        # self.start_stop_btn.setMinimumHeight(50) # Removed to match other buttons
+        self.start_stop_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.start_stop_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2E7D32; 
+                color: white; 
+                font-weight: bold; 
+                font-size: 14px;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #388E3C;
+            }
+        """)
+        if hasattr(self, 'toggle_crawler_state'):
+            self.start_stop_btn.clicked.connect(self.toggle_crawler_state)
+            
+        # Add pre-check button
+        self.pre_check_btn = QPushButton("🔍 Pre-Check Services")
+        self.pre_check_btn.setToolTip(
+            "Check the status of all required services (Appium, Ollama, MobSF) before starting"
+        )
+        self.pre_check_btn.clicked.connect(self.perform_pre_crawl_validation)
+        
+        # Container for buttons
+        buttons_layout = QHBoxLayout()
+        buttons_layout.addWidget(self.start_stop_btn, 3) # Start/Stop takes 3 parts
+        buttons_layout.addWidget(self.pre_check_btn, 1) # Pre-check takes 1 part
+        
+        # Second row of controls (Session & Report & Reset)
+        secondary_buttons_layout = QHBoxLayout()
+        
+        # Open session folder button
+        self.open_session_folder_btn = QPushButton("📂 Open Session Folder")
+        self.open_session_folder_btn.setToolTip(
+            "Open the current session's output folder in the file explorer"
+        )
+        self.open_session_folder_btn.setEnabled(True)
+        self.open_session_folder_btn.clicked.connect(self.open_session_folder)
+        secondary_buttons_layout.addWidget(self.open_session_folder_btn, 3) # Takes left half of start button area
+        
+        # Generate report button
+        self.generate_report_btn = QPushButton("📄 Generate Report (PDF)")
+        self.generate_report_btn.setToolTip(
+            "Generate a PDF report from the current session's activities"
+        )
+        self.generate_report_btn.clicked.connect(self.generate_report)
+        secondary_buttons_layout.addWidget(self.generate_report_btn, 3) # Takes right half of start button area
+
+        # Toggle Settings Button (beside Reset)
+        self.toggle_settings_btn = QPushButton("Hide Settings")
+        self.toggle_settings_btn.setToolTip("Toggle the visibility of the settings panel")
+        # Removing checkable state to avoid "tinted" look
+        # self.toggle_settings_btn.setCheckable(True) 
+        # self.toggle_settings_btn.setChecked(True)
+        
+        def _toggle_settings_panel():
+            if self.left_panel.isVisible():
+                self.left_panel.setVisible(False)
+                self.toggle_settings_btn.setText("Show Settings")
+            else:
+                self.left_panel.setVisible(True)
+                self.toggle_settings_btn.setText("Hide Settings")
+                
+        self.toggle_settings_btn.clicked.connect(_toggle_settings_panel)
+        secondary_buttons_layout.addWidget(self.toggle_settings_btn, 1)
+
+        # Reset settings button (Aligned under Pre-Check)
+        self.reset_btn = QPushButton("Reset Settings")
+        from ui.strings import RESET_TO_DEFAULTS_TOOLTIP
+        self.reset_btn.setToolTip(RESET_TO_DEFAULTS_TOOLTIP)
+        self.reset_btn.clicked.connect(self.config_manager.reset_settings)
+        secondary_buttons_layout.addWidget(self.reset_btn, 1) # Matches Pre-check with padding adjustment or slightly larger
+
+        log_layout.addLayout(buttons_layout)
+        log_layout.addLayout(secondary_buttons_layout)
         
         # --- AI Trace (Input/Output) Definition ---
         ai_trace_group = QGroupBox("AI Interaction Inspector")
@@ -491,8 +521,8 @@ class CrawlerControllerWindow(QMainWindow):
         center_splitter.addWidget(log_group)
         
         # Set initial sizes for vertical splitter
-        center_splitter.setStretchFactor(0, 2)
-        center_splitter.setStretchFactor(1, 1)
+        center_splitter.setStretchFactor(0, 7) # AI Trace 70% (Top)
+        center_splitter.setStretchFactor(1, 3) # Logs 30% (Bottom)
         
 
 
@@ -529,7 +559,7 @@ class CrawlerControllerWindow(QMainWindow):
         right_main_layout.addLayout(content_layout, 1)  # Content takes all remaining vertical space
 
         # Add panels to main layout with stretch factors
-        main_layout.addWidget(left_panel, 1)
+        main_layout.addWidget(self.left_panel, 1)
         main_layout.addWidget(right_panel, 2)
 
         # Shutdown flag path for crawler process

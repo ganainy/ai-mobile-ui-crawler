@@ -1,4 +1,9 @@
-from PySide6.QtCore import Qt
+from PySide6.QtCore import (
+    Qt,
+    QAbstractAnimation,
+    QParallelAnimationGroup,
+    QPropertyAnimation,
+)
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -9,6 +14,9 @@ from PySide6.QtWidgets import (
     QSpinBox,
     QVBoxLayout,
     QWidget,
+    QScrollArea,
+    QSizePolicy,
+    QToolButton,
 )
 
 
@@ -467,3 +475,95 @@ class BusyDialog(QDialog):
                             widget.setEnabled(True)
                 except Exception:
                     pass
+
+
+class CollapsibleBox(QWidget):
+    def __init__(self, title="", parent=None, is_expanded=True):
+        super().__init__(parent)
+
+        self.toggle_button = QToolButton(text=title, checkable=True, checked=False)
+        self.toggle_button.setStyleSheet("QToolButton { border: none; font-weight: bold; }")
+        self.toggle_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.toggle_button.setArrowType(Qt.ArrowType.RightArrow)
+        # Use toggled signal which provides the new state
+        self.toggle_button.toggled.connect(self.on_toggled)
+
+        self.toggle_animation = QParallelAnimationGroup(self)
+
+        self.content_area = QScrollArea(maximumHeight=0, minimumHeight=0)
+        self.content_area.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.content_area.setFrameShape(QScrollArea.Shape.NoFrame)
+
+        self.animation = QPropertyAnimation(self.content_area, b"maximumHeight")
+        self.animation.setDuration(300)
+        
+        self.toggle_animation.addAnimation(self.animation)
+
+        self.main_layout = QVBoxLayout(self)
+        self.main_layout.setSpacing(0)
+        self.main_layout.setContentsMargins(0, 0, 0, 0)
+        self.main_layout.addWidget(self.toggle_button)
+        self.main_layout.addWidget(self.content_area)
+        
+        self._content_widget = QWidget()
+        self.content_layout = QVBoxLayout(self._content_widget)
+        self.content_area.setWidget(self._content_widget)
+        self.content_area.setWidgetResizable(True)
+        
+        # Set initial state
+        # Block signals to prevent animation during init
+        self.toggle_button.blockSignals(True)
+        self.toggle_button.setChecked(is_expanded)
+        self.toggle_button.setArrowType(Qt.ArrowType.DownArrow if is_expanded else Qt.ArrowType.RightArrow)
+        self.toggle_button.blockSignals(False)
+        
+        if is_expanded:
+            self.content_area.setMaximumHeight(16777215)
+            self.content_area.setMinimumHeight(0)
+        
+        self.setTitle = self.toggle_button.setText
+
+    def on_toggled(self, checked):
+        self.toggle_button.setArrowType(
+            Qt.ArrowType.DownArrow if checked else Qt.ArrowType.RightArrow
+        )
+        
+        if checked: # Expanding
+            self.toggle_animation.stop()
+            self.content_area.setVisible(True) # Ensure visible before animation
+            
+            # Calculate the actual height of the content
+            content_height = self._content_widget.sizeHint().height()
+            if content_height == 0:
+                # If content height is 0 (layout not ready), fallback to a large number
+                # likely meaning it hasn't been shown yet.
+                content_height = 16777215
+            else:
+                 # Add some padding/margin allowance if needed, or use layout spacing
+                 pass
+
+            self.animation.setStartValue(0)
+            self.animation.setEndValue(content_height)
+            self.toggle_animation.start()
+            
+            # After animation, remove fixed max height constraint to allow dynamic resizing
+            def on_finished():
+                if self.toggle_button.isChecked():
+                    self.content_area.setMaximumHeight(16777215)
+            
+            # Disconnect previous connections to avoid stacking
+            try:
+                self.toggle_animation.finished.disconnect()
+            except Exception:
+                pass
+            self.toggle_animation.finished.connect(on_finished)
+            
+        else: # Collapsing
+            self.toggle_animation.stop()
+            current_height = self.content_area.height()
+            self.animation.setStartValue(current_height)
+            self.animation.setEndValue(0)
+            self.toggle_animation.start()
+
+    def layout(self):
+        return self.content_layout

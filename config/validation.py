@@ -17,8 +17,6 @@ from config.numeric_constants import (
     IMAGE_MAX_WIDTH_MAX,
     IMAGE_QUALITY_MIN,
     IMAGE_QUALITY_MAX,
-    CROP_PERCENT_MIN,
-    CROP_PERCENT_MAX,
     MAX_CRAWL_STEPS_MIN,
     MAX_CRAWL_STEPS_MAX,
     MAX_CRAWL_DURATION_MIN_SECONDS,
@@ -284,26 +282,6 @@ class ConfigValidator:
                 IMAGE_QUALITY_MIN,
                 IMAGE_QUALITY_MAX,
                 "IMAGE_QUALITY"
-            )
-            if not is_valid:
-                errors.append(error)
-        
-        if 'IMAGE_CROP_TOP_PERCENT' in config:
-            is_valid, error = ConfigValidator.validate_numeric_range(
-                config['IMAGE_CROP_TOP_PERCENT'],
-                CROP_PERCENT_MIN,
-                CROP_PERCENT_MAX,
-                "IMAGE_CROP_TOP_PERCENT"
-            )
-            if not is_valid:
-                errors.append(error)
-        
-        if 'IMAGE_CROP_BOTTOM_PERCENT' in config:
-            is_valid, error = ConfigValidator.validate_numeric_range(
-                config['IMAGE_CROP_BOTTOM_PERCENT'],
-                CROP_PERCENT_MIN,
-                CROP_PERCENT_MAX,
-                "IMAGE_CROP_BOTTOM_PERCENT"
             )
             if not is_valid:
                 errors.append(error)

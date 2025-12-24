@@ -53,10 +53,6 @@ OLLAMA_CLI_TIMEOUT = 2
 
 # ========== UI Range Constants ==========
 
-# Image crop percentage limits
-CROP_PERCENT_MIN = 0
-CROP_PERCENT_MAX = 50
-
 # Crawler step limits
 MAX_CRAWL_STEPS_MIN = 1
 MAX_CRAWL_STEPS_MAX = 10000
@@ -130,9 +126,7 @@ HTTP_SERVICE_UNAVAILABLE = 503
 IMAGE_DEFAULT_QUALITY = 70
 IMAGE_DEFAULT_FORMAT = 'JPEG'
 
-# Image crop percentages (as decimals)
-IMAGE_CROP_TOP_PCT_DEFAULT = 0.06
-IMAGE_CROP_BOTTOM_PCT_DEFAULT = 0.06
+# Image crop percentages (as decimals) removed
 
 # Image dimensions
 IMAGE_MAX_WIDTH_DEFAULT = 640

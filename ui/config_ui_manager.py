@@ -29,7 +29,6 @@ from PySide6.QtWidgets import (
 )
 
 # Import constants
-from ui.constants import UI_MODE_CONFIG_KEY
 from config.context_constants import ContextSource
 
 
@@ -40,7 +39,6 @@ class ConfigManager(QObject):
     health_app_dropdown: QComboBox
     refresh_apps_btn: QPushButton
     app_scan_status_label: QLabel
-    ui_mode_dropdown: QComboBox
     ui_groups: Dict[str, QGroupBox]
     scroll_content: QWidget
 
@@ -206,9 +204,6 @@ class ConfigManager(QObject):
                         is_api_key_save = True
 
         # --- Always save these non-widget settings ---
-        # Save UI mode setting
-        if hasattr(self, 'ui_mode_dropdown'):
-            config_data['UI_MODE'] = self.ui_mode_dropdown.currentText()
 
         # Save health app list path
         if self.main_controller.current_health_app_list_file:
@@ -655,15 +650,6 @@ class ConfigManager(QObject):
         last_selected_app = self.config.get('LAST_SELECTED_APP', None)
         if last_selected_app is not None:
             self.main_controller.last_selected_app = last_selected_app or {}
-        # UI_MODE
-        ui_mode = self.config.get(UI_MODE_CONFIG_KEY, None)
-        if ui_mode and hasattr(self, 'ui_mode_dropdown'):
-            index = self.ui_mode_dropdown.findText(ui_mode)
-            if index >= 0:
-                self.ui_mode_dropdown.setCurrentIndex(index)
-                # UI complexity will be handled by UIStateHandler in CrawlerControllerWindow
-                if hasattr(self.main_controller, 'ui_state_handler'):
-                    self.main_controller.ui_state_handler.toggle_ui_complexity(ui_mode)
         # AI_PROVIDER
         ai_provider = self.config.get('AI_PROVIDER', None)
         if ai_provider:

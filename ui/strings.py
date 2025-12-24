@@ -58,12 +58,7 @@ IMAGE_FORMAT_LABEL = "Image Format: "
 IMAGE_FORMAT_TOOLTIP = "Choose output format for screenshots sent to AI."
 IMAGE_QUALITY_LABEL = "Image Quality (%): "
 IMAGE_QUALITY_TOOLTIP = "Compression quality for lossy formats (JPEG/WEBP). Lower = smaller payload, higher = more detail."
-CROP_BARS_LABEL = "Crop Top/Bottom Bars: "
-CROP_BARS_TOOLTIP = "Remove top/bottom bars to reduce payload while keeping UI content."
-CROP_TOP_PERCENT_LABEL = "Crop Top Percent (%): "
-CROP_TOP_PERCENT_TOOLTIP = "Percentage of image height to crop from the top when cropping bars is enabled."
-CROP_BOTTOM_PERCENT_LABEL = "Crop Bottom Percent (%): "
-CROP_BOTTOM_PERCENT_TOOLTIP = "Percentage of image height to crop from the bottom when cropping bars is enabled."
+IMAGE_QUALITY_TOOLTIP = "Compression quality for lossy formats (JPEG/WEBP). Lower = smaller payload, higher = more detail."
 
 # ========== Crawler Settings Labels ==========
 CRAWL_MODE_LABEL = "Crawl Mode: "
@@ -143,9 +138,7 @@ TOOLTIP_ENABLE_VIDEO_RECORDING = "Enable to record the entire crawl session as a
 TOOLTIP_IMAGE_MAX_WIDTH = "Max screenshot width before sending to AI. Smaller widths (e.g., 720–1080px) reduce payload and are sufficient for most UI understanding; use larger widths for dense UIs or OCR."
 TOOLTIP_IMAGE_FORMAT = "Screenshot format sent to AI. JPEG offers broad compatibility; WEBP typically yields smaller files with similar quality (great for OpenRouter); PNG is lossless and best for crisp text/OCR but larger."
 TOOLTIP_IMAGE_QUALITY = "Compression quality for JPEG/WEBP. 70–85 is a good balance; increase to 90–95 if the model struggles to read fine text; decrease to ~60 to minimize payload."
-TOOLTIP_IMAGE_CROP_BARS = "Remove top/bottom system bars to reduce payload while keeping the core app UI. Enable when bars are not needed for analysis."
-TOOLTIP_IMAGE_CROP_TOP_PERCENT = "Percent of image height to crop from the top. 5–8% is typical for Android status bars; adjust if needed."
-TOOLTIP_IMAGE_CROP_BOTTOM_PERCENT = "Percent of image height to crop from the bottom. 8–12% is typical for Android navigation bars; adjust if needed."
+TOOLTIP_IMAGE_QUALITY = "Compression quality for lossy formats (JPEG/WEBP). 70–85 is a good balance; increase to 90–95 if the model struggles to read fine text; decrease to ~60 to minimize payload."
 
 
 def get_tooltips_dict() -> Dict[str, str]:
@@ -184,8 +177,6 @@ def get_tooltips_dict() -> Dict[str, str]:
         "IMAGE_MAX_WIDTH": TOOLTIP_IMAGE_MAX_WIDTH,
         "IMAGE_FORMAT": TOOLTIP_IMAGE_FORMAT,
         "IMAGE_QUALITY": TOOLTIP_IMAGE_QUALITY,
-        "IMAGE_CROP_BARS": TOOLTIP_IMAGE_CROP_BARS,
-        "IMAGE_CROP_TOP_PERCENT": TOOLTIP_IMAGE_CROP_TOP_PERCENT,
-        "IMAGE_CROP_BOTTOM_PERCENT": TOOLTIP_IMAGE_CROP_BOTTOM_PERCENT,
+        "IMAGE_QUALITY": TOOLTIP_IMAGE_QUALITY,
     }
 

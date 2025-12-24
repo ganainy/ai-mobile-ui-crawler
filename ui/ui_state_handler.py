@@ -5,16 +5,11 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from PySide6.QtCore import QThread, Signal, QObject
-from PySide6.QtWidgets import QGroupBox, QLabel, QApplication
+from PySide6.QtWidgets import QGroupBox, QLabel, QApplication, QWidget
 
 from config.app_config import Config
 from domain.providers.registry import ProviderRegistry
 from domain.providers.enums import AIProvider
-from ui.constants import (
-    UI_MODE_BASIC, UI_MODE_EXPERT,
-    ADVANCED_GROUPS, ADVANCED_FIELDS,
-    UI_MODE_CONFIG_KEY
-)
 
 
 class ModelFetchWorker(QThread):
@@ -82,7 +77,7 @@ class ModelFetchWorker(QThread):
 class UIStateHandler:
     """Handles dynamic UI state management and logic."""
     
-    def __init__(self, main_controller: Any, config_handler: Any, config_widgets: Dict[str, Any], ui_groups: Dict[str, QGroupBox]):
+    def __init__(self, main_controller: Any, config_handler: Any, config_widgets: Dict[str, Any], ui_groups: Dict[str, QWidget]):
         """
         Initialize the UI state handler.
         
@@ -103,85 +98,6 @@ class UIStateHandler:
         # Track current provider being fetched to avoid duplicate updates
         self._current_fetching_provider: Optional[str] = None
 
-    def toggle_ui_complexity(self, mode: str):
-        """
-        Toggle between basic and expert UI modes
-
-        Args:
-            mode: "Basic" or "Expert" mode (use UI_MODE_BASIC or UI_MODE_EXPERT)
-        """
-        is_basic = mode == UI_MODE_BASIC
-
-        # Toggle group visibility based on mode
-        for group_name, group_widget in self.ui_groups.items():
-            # Hide advanced groups in basic mode
-            if group_name in ADVANCED_GROUPS:
-                group_widget.setVisible(not is_basic)
-
-        # Toggle individual field visibility based on mode
-        for field_name, is_advanced in ADVANCED_FIELDS.items():
-            # Skip if widget not in config_widgets
-            if field_name not in self.config_widgets:
-                continue
-
-            # Get widget reference
-            widget = self.config_widgets.get(field_name)
-
-            # Skip None widgets
-            if widget is None:
-                continue
-
-            try:
-                # Skip widgets that don't have a parent (not yet added to layout)
-                if not hasattr(widget, "parent") or widget.parent() is None:
-                    continue
-
-                # Get parent layout
-                parent_layout = widget.parent().layout() if widget.parent() else None
-                if parent_layout is None:
-                    continue
-
-                # If in basic mode and field is advanced, hide it
-                # If in expert mode, show all
-                widget_visible = not (is_basic and is_advanced)
-
-                # Find and set visibility of associated QLabel
-                for i in range(parent_layout.count()):
-                    label_item = parent_layout.itemAt(i)
-                    if (
-                        label_item
-                        and label_item.widget()
-                        and isinstance(label_item.widget(), QLabel)
-                        and i + 1 < parent_layout.count()
-                        and parent_layout.itemAt(i + 1).widget() == widget
-                    ):
-                        label_item.widget().setVisible(widget_visible)
-                        break
-
-                # Set widget visibility
-                widget.setVisible(widget_visible)
-            except Exception as e:
-                # Log but don't crash if there's an issue with a specific widget
-                logging.warning(f"Error toggling visibility for {field_name}: {e}")
-
-        # Set the dropdown to the current mode
-        if hasattr(self.config_handler, "ui_mode_dropdown"):
-            index = self.config_handler.ui_mode_dropdown.findText(mode)
-            if index >= 0 and self.config_handler.ui_mode_dropdown.currentIndex() != index:
-                # Only set if it's different to avoid triggering change events
-                self.config_handler.ui_mode_dropdown.setCurrentIndex(index)
-
-        # Save the current mode to user config
-        self.config_handler.config.update_setting_and_save(
-            UI_MODE_CONFIG_KEY, mode, self.main_controller._sync_user_config_files
-        )
-
-        # Synchronize the changes to the API config file
-        # Note: Synchronization is now handled automatically by the callback in update_setting_and_save
-
-        # Ensure the config.UI_MODE attribute is updated
-        if hasattr(self.config_handler.config, "UI_MODE"):
-            self.config_handler.config.UI_MODE = mode
 
     def _configure_image_context_for_provider(
         self, strategy, config, capabilities, model_dropdown, no_selection_label

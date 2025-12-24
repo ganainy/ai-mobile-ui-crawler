@@ -836,9 +836,7 @@ VIDEO_RECORDING_DIR = f"{{session_dir}}/{PathConstants.VIDEO_RECORDING_DIR}"
 IMAGE_MAX_WIDTH = 896  # Max width for downsampling; no upscaling
 IMAGE_FORMAT = "JPEG"  # Preferred encoding format (JPEG/WebP/PNG)
 IMAGE_QUALITY = 70  # Compression quality (0-100, typical 60-80)
-IMAGE_CROP_BARS = True  # If true, crop status bar and nav bar regions
-IMAGE_CROP_TOP_PERCENT = 0.06  # Fraction of image height to crop from top
-IMAGE_CROP_BOTTOM_PERCENT = 0.06  # Fraction of image height to crop from bottom
+IMAGE_QUALITY = 70  # Compression quality (0-100, typical 60-80)
 
 # --- AI Provider Capabilities Configuration ---
 # This configuration makes it easy to add new AI providers with different capabilities

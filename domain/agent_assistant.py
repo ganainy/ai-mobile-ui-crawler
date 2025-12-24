@@ -30,8 +30,8 @@ from config.numeric_constants import (
     IMAGE_MAX_WIDTH_DEFAULT,
     IMAGE_DEFAULT_QUALITY,
     IMAGE_DEFAULT_FORMAT,
-    IMAGE_CROP_TOP_PCT_DEFAULT,
-    IMAGE_CROP_BOTTOM_PCT_DEFAULT,
+    IMAGE_DEFAULT_FORMAT,
+    IMAGE_BG_COLOR,
     IMAGE_BG_COLOR,
     IMAGE_SHARPEN_RADIUS,
     IMAGE_SHARPEN_PERCENT,
@@ -385,24 +385,7 @@ class AgentAssistant:
             max_width = self.cfg.get('IMAGE_MAX_WIDTH', None) or capabilities.get('image_max_width', IMAGE_MAX_WIDTH_DEFAULT)
             quality = self.cfg.get('IMAGE_QUALITY', None) or capabilities.get('image_quality', IMAGE_DEFAULT_QUALITY)
             image_format = self.cfg.get('IMAGE_FORMAT', None) or capabilities.get('image_format', IMAGE_DEFAULT_FORMAT)
-            crop_bars = self.cfg.get('IMAGE_CROP_BARS', True)
-            crop_top_pct = float(self.cfg.get('IMAGE_CROP_TOP_PERCENT', IMAGE_CROP_TOP_PCT_DEFAULT) or 0.0)
-            crop_bottom_pct = float(self.cfg.get('IMAGE_CROP_BOTTOM_PERCENT', IMAGE_CROP_BOTTOM_PCT_DEFAULT) or 0.0)
-            
-
-            # Optional: crop status bar and bottom nav/keyboard areas before resizing
-            if crop_bars and (crop_top_pct > 0 or crop_bottom_pct > 0):
-                try:
-                    h = img.height
-                    crop_top_px = int(max(0, min(1.0, crop_top_pct)) * h)
-                    crop_bottom_px = int(max(0, min(1.0, crop_bottom_pct)) * h)
-                    # Ensure we don't invert or over-crop
-                    upper = crop_top_px
-                    lower = max(upper + 1, h - crop_bottom_px)
-                    if lower > upper:
-                        img = img.crop((0, upper, img.width, lower))
-                except Exception as crop_err:
-                    logging.warning(f"Failed to crop bars: {crop_err}")
+            image_format = self.cfg.get('IMAGE_FORMAT', None) or capabilities.get('image_format', IMAGE_DEFAULT_FORMAT)
             
             # Resize if necessary (maintain aspect ratio)
             if img.width > max_width:

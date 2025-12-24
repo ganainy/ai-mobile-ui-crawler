@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
 
 from ui.custom_widgets import NoScrollComboBox as QComboBox
 from ui.custom_widgets import NoScrollSpinBox as QSpinBox
+from ui.custom_widgets import CollapsibleBox
 
 
 class ComponentFactory:
@@ -38,10 +39,11 @@ class ComponentFactory:
         config_widgets: Dict[str, Any],
         tooltips: Dict[str, str],
         controls_handler: Any,
-    ) -> QGroupBox:
+    ) -> QWidget:
         """Create the Appium settings group."""
-        appium_group = QGroupBox("Appium Settings")
-        appium_layout = QFormLayout(appium_group)
+        appium_group = CollapsibleBox("Appium Settings")
+        appium_layout = QFormLayout()
+        appium_group.content_layout.addLayout(appium_layout)
 
         config_widgets["APPIUM_SERVER_URL"] = QLabel()
         label_appium_url = QLabel("Server URL:")
@@ -70,10 +72,11 @@ class ComponentFactory:
         config_widgets: Dict[str, Any],
         tooltips: Dict[str, str],
         config_handler: Any,
-    ) -> QGroupBox:
+    ) -> QWidget:
         """Create the App settings group with health app selection."""
-        app_group = QGroupBox("App Settings")
-        app_layout = QFormLayout(app_group)
+        app_group = CollapsibleBox("App Settings")
+        app_layout = QFormLayout()
+        app_group.content_layout.addLayout(app_layout)
 
         # Health App Selector with Discovery Filter checkbox
         config_handler.health_app_dropdown = QComboBox()
@@ -121,10 +124,11 @@ class ComponentFactory:
         config_widgets: Dict[str, Any],
         tooltips: Dict[str, str],
         config_handler: Any = None,
-    ) -> QGroupBox:
+    ) -> QWidget:
         """Create the AI settings group."""
-        ai_group = QGroupBox("AI Settings")
-        ai_layout = QFormLayout(ai_group)
+        ai_group = CollapsibleBox("AI Settings")
+        ai_layout = QFormLayout()
+        ai_group.content_layout.addLayout(ai_layout)
 
         # AI Provider Selection
         config_widgets["AI_PROVIDER"] = QComboBox()
@@ -155,17 +159,15 @@ class ComponentFactory:
             config_widgets["DEFAULT_MODEL_TYPE"].addItems([NO_MODEL_SELECTED])
         label_model_type = QLabel("Default Model Type: ")
         label_model_type.setToolTip(tooltips["DEFAULT_MODEL_TYPE"])
-        # Place dropdown and refresh button side-by-side
-        _model_row_layout = QHBoxLayout()
-        _model_row_layout.addWidget(config_widgets["DEFAULT_MODEL_TYPE"])
-        _model_row_layout.addWidget(config_widgets["OPENROUTER_REFRESH_BTN"])
+        # Row 1: Model Dropdown
+        ai_layout.addRow(label_model_type, config_widgets["DEFAULT_MODEL_TYPE"])
+        
         # Free-only filter (visible for all providers)
         config_widgets["OPENROUTER_SHOW_FREE_ONLY"] = QCheckBox("Free only")
         config_widgets["OPENROUTER_SHOW_FREE_ONLY"].setToolTip(
             "Show only models with free pricing (0 cost)."
         )
         config_widgets["OPENROUTER_SHOW_FREE_ONLY"].setVisible(True)
-        _model_row_layout.addWidget(config_widgets["OPENROUTER_SHOW_FREE_ONLY"])
         
         # Vision-only filter (visible for all providers)
         config_widgets["SHOW_VISION_ONLY"] = QCheckBox("Vision only")
@@ -173,9 +175,16 @@ class ComponentFactory:
             "Show only models that support image/vision inputs."
         )
         config_widgets["SHOW_VISION_ONLY"].setVisible(True)
-        _model_row_layout.addWidget(config_widgets["SHOW_VISION_ONLY"])
-
-        ai_layout.addRow(label_model_type, _model_row_layout)
+        
+        # Row 2: Controls (Refresh + Filters) - grouped in a horizontal layout
+        _controls_row_layout = QHBoxLayout()
+        _controls_row_layout.addWidget(config_widgets["OPENROUTER_REFRESH_BTN"])
+        _controls_row_layout.addWidget(config_widgets["OPENROUTER_SHOW_FREE_ONLY"])
+        _controls_row_layout.addWidget(config_widgets["SHOW_VISION_ONLY"])
+        _controls_row_layout.addStretch() # Push to left
+        
+        # indented under the field column
+        ai_layout.addRow("", _controls_row_layout)
 
         # Connect the AI provider selection to update model types
         # Note: These connections will be set up in CrawlerControllerWindow after UIStateHandler is created
@@ -269,13 +278,14 @@ class ComponentFactory:
         layout: QFormLayout,
         config_widgets: Dict[str, Any],
         tooltips: Dict[str, str],
-    ) -> QGroupBox:
+    ) -> QWidget:
         """Create the Image Preprocessing settings group."""
         from PySide6.QtWidgets import QHBoxLayout
         from ui.strings import IMAGE_CONTEXT_ENABLED_TOOLTIP
         
-        group = QGroupBox("Image Preprocessing")
-        form = QFormLayout(group)
+        group = CollapsibleBox("Image Preprocessing")
+        form = QFormLayout()
+        group.content_layout.addLayout(form)
 
         # Context Sources - HYBRID (XML+OCR) is always enabled, IMAGE is optional
         # Info label about HYBRID
@@ -356,36 +366,6 @@ class ComponentFactory:
         preprocessing_widgets.append(config_widgets["IMAGE_QUALITY"])
         preprocessing_labels.append(label_quality)
 
-        # Crop bars toggle
-        config_widgets["IMAGE_CROP_BARS"] = QCheckBox()
-        label_crop_bars = QLabel("Crop Status/Navigation Bars: ")
-        from ui.strings import CROP_BARS_TOOLTIP
-        label_crop_bars.setToolTip(tooltips.get("IMAGE_CROP_BARS", CROP_BARS_TOOLTIP))
-        form.addRow(label_crop_bars, config_widgets["IMAGE_CROP_BARS"])
-        preprocessing_widgets.append(config_widgets["IMAGE_CROP_BARS"])
-        preprocessing_labels.append(label_crop_bars)
-
-        # Top crop percent
-        from config.numeric_constants import CROP_PERCENT_MIN, CROP_PERCENT_MAX
-        config_widgets["IMAGE_CROP_TOP_PERCENT"] = QSpinBox()
-        config_widgets["IMAGE_CROP_TOP_PERCENT"].setRange(CROP_PERCENT_MIN, CROP_PERCENT_MAX)
-        label_crop_top = QLabel("Top Crop (% of height): ")
-        from ui.strings import CROP_TOP_PERCENT_TOOLTIP
-        label_crop_top.setToolTip(tooltips.get("IMAGE_CROP_TOP_PERCENT", CROP_TOP_PERCENT_TOOLTIP))
-        form.addRow(label_crop_top, config_widgets["IMAGE_CROP_TOP_PERCENT"])
-        preprocessing_widgets.append(config_widgets["IMAGE_CROP_TOP_PERCENT"])
-        preprocessing_labels.append(label_crop_top)
-
-        # Bottom crop percent
-        config_widgets["IMAGE_CROP_BOTTOM_PERCENT"] = QSpinBox()
-        config_widgets["IMAGE_CROP_BOTTOM_PERCENT"].setRange(CROP_PERCENT_MIN, CROP_PERCENT_MAX)
-        label_crop_bottom = QLabel("Bottom Crop (% of height): ")
-        from ui.strings import CROP_BOTTOM_PERCENT_TOOLTIP
-        label_crop_bottom.setToolTip(tooltips.get("IMAGE_CROP_BOTTOM_PERCENT", CROP_BOTTOM_PERCENT_TOOLTIP))
-        form.addRow(label_crop_bottom, config_widgets["IMAGE_CROP_BOTTOM_PERCENT"])
-        preprocessing_widgets.append(config_widgets["IMAGE_CROP_BOTTOM_PERCENT"])
-        preprocessing_labels.append(label_crop_bottom)
-
         # Store references for visibility control (attached to group as custom property)
         group.preprocessing_widgets = preprocessing_widgets
         group.preprocessing_labels = preprocessing_labels
@@ -402,10 +382,11 @@ class ComponentFactory:
     @staticmethod
     def create_crawler_settings_group(
         layout: QFormLayout, config_widgets: Dict[str, Any], tooltips: Dict[str, str]
-    ) -> QGroupBox:
+    ) -> QWidget:
         """Create the Crawler settings group."""
-        crawler_group = QGroupBox("Crawler Settings")
-        crawler_layout = QFormLayout(crawler_group)
+        crawler_group = CollapsibleBox("Crawler Settings")
+        crawler_layout = QFormLayout()
+        crawler_group.content_layout.addLayout(crawler_layout)
 
         config_widgets["CRAWL_MODE"] = QComboBox()
         config_widgets["CRAWL_MODE"].addItems(["steps", "time"])
@@ -481,10 +462,11 @@ class ComponentFactory:
     @staticmethod
     def create_recording_group(
         layout: QFormLayout, config_widgets: Dict[str, Any], tooltips: Dict[str, str]
-    ) -> QGroupBox:
+    ) -> QWidget:
         """Create the Recording group for media capture settings."""
-        recording_group = QGroupBox("Recording")
-        recording_layout = QFormLayout(recording_group)
+        recording_group = CollapsibleBox("Recording")
+        recording_layout = QFormLayout()
+        recording_group.content_layout.addLayout(recording_layout)
 
         config_widgets["ENABLE_VIDEO_RECORDING"] = QCheckBox()
         label_enable_video = QLabel("Enable Video Recording: ")
@@ -499,10 +481,11 @@ class ComponentFactory:
     @staticmethod
     def create_error_handling_group(
         layout: QFormLayout, config_widgets: Dict[str, Any], tooltips: Dict[str, str]
-    ) -> QGroupBox:
+    ) -> QWidget:
         """Create the Error Handling group for failure threshold settings."""
-        error_handling_group = QGroupBox("Error Handling")
-        error_handling_layout = QFormLayout(error_handling_group)
+        error_handling_group = CollapsibleBox("Error Handling")
+        error_handling_layout = QFormLayout()
+        error_handling_group.content_layout.addLayout(error_handling_layout)
 
         from config.numeric_constants import MAX_CONSECUTIVE_FAILURES_MIN, MAX_CONSECUTIVE_FAILURES_MAX
         config_widgets["MAX_CONSECUTIVE_AI_FAILURES"] = QSpinBox()
@@ -527,10 +510,11 @@ class ComponentFactory:
     @staticmethod
     def create_privacy_network_group(
         layout: QFormLayout, config_widgets: Dict[str, Any], tooltips: Dict[str, str]
-    ) -> QGroupBox:
+    ) -> QWidget:
         """Create the Privacy & Network group for traffic capture-related settings."""
-        privacy_group = QGroupBox("Privacy & Network")
-        privacy_layout = QFormLayout(privacy_group)
+        privacy_group = CollapsibleBox("Privacy & Network")
+        privacy_layout = QFormLayout()
+        privacy_group.content_layout.addLayout(privacy_layout)
 
         # Traffic capture toggles moved from Feature Toggles
         config_widgets["ENABLE_TRAFFIC_CAPTURE"] = QCheckBox()
@@ -572,7 +556,7 @@ class ComponentFactory:
         
         # Create eye icon button to toggle password visibility
         toggle_password_btn = QPushButton()
-        toggle_password_btn.setFixedSize(30, 30)
+        # Fixed size removed to allow text fallback to fit
         toggle_password_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         toggle_password_btn.setToolTip("Show/Hide API Key")
         toggle_password_btn.setFlat(True)
@@ -580,10 +564,12 @@ class ComponentFactory:
         # Set initial icon (eye icon for hidden password)
         eye_icon = QIcon.fromTheme("view-hidden", QIcon())
         if eye_icon.isNull():
-            # Fallback to Unicode eye emoji if theme icon not available
+            # Fallback to text if theme icon not available
             toggle_password_btn.setText("Show")
+            toggle_password_btn.setFixedWidth(45) # Sufficient width for text
         else:
             toggle_password_btn.setIcon(eye_icon)
+            toggle_password_btn.setFixedSize(30, 30)
         
         # Create container widget with horizontal layout
         api_key_container = QWidget()
@@ -601,16 +587,24 @@ class ComponentFactory:
                 eye_slash_icon = QIcon.fromTheme("view-visible", QIcon())
                 if eye_slash_icon.isNull():
                     toggle_password_btn.setText("Hide")
+                    toggle_password_btn.setFixedWidth(45)
+                    toggle_password_btn.setIcon(QIcon()) # Clear icon
                 else:
+                    toggle_password_btn.setText("") # Clear text
                     toggle_password_btn.setIcon(eye_slash_icon)
+                    toggle_password_btn.setFixedSize(30, 30)
             else:
                 api_key_field.setEchoMode(QLineEdit.EchoMode.Password)
                 # Change to eye icon when hidden
                 eye_icon = QIcon.fromTheme("view-hidden", QIcon())
                 if eye_icon.isNull():
                     toggle_password_btn.setText("Show")
+                    toggle_password_btn.setFixedWidth(45)
+                    toggle_password_btn.setIcon(QIcon()) # Clear icon
                 else:
+                    toggle_password_btn.setText("") # Clear text
                     toggle_password_btn.setIcon(eye_icon)
+                    toggle_password_btn.setFixedSize(30, 30)
         
         toggle_password_btn.clicked.connect(toggle_password_visibility)
         
@@ -626,7 +620,7 @@ class ComponentFactory:
         config_widgets: Dict[str, Any],
         tooltips: Dict[str, str],
         config_handler: Any,
-    ) -> QGroupBox:
+    ) -> QWidget:
         """Create the API Keys & Credentials settings group."""
         from ui.strings import (
             API_KEYS_GROUP,
@@ -636,8 +630,9 @@ class ComponentFactory:
         )
         
         # Rename group to reflect it contains more than just API keys
-        api_keys_group = QGroupBox("API Keys & Credentials")
-        api_keys_layout = QFormLayout(api_keys_group)
+        api_keys_group = CollapsibleBox("API Keys & Credentials")
+        api_keys_layout = QFormLayout()
+        api_keys_group.content_layout.addLayout(api_keys_layout)
         
         # --- API Keys ---
         
@@ -749,10 +744,11 @@ class ComponentFactory:
         config_widgets: Dict[str, Any],
         tooltips: Dict[str, str],
         config_handler: Any,
-    ) -> QGroupBox:
+    ) -> QWidget:
         """Create the MobSF settings group."""
-        mobsf_group = QGroupBox("MobSF Static Analysis")
-        mobsf_layout = QFormLayout(mobsf_group)
+        mobsf_group = CollapsibleBox("MobSF Static Analysis")
+        mobsf_layout = QFormLayout()
+        mobsf_group.content_layout.addLayout(mobsf_layout)
 
         # MobSF Enable Checkbox
         config_widgets["ENABLE_MOBSF_ANALYSIS"] = QCheckBox()
@@ -813,50 +809,3 @@ class ComponentFactory:
 
         layout.addRow(mobsf_group)
         return mobsf_group
-
-    @staticmethod
-    def create_control_buttons(controls_handler: Any) -> QGroupBox:
-        """Create the control buttons group."""
-        group = QGroupBox("Controls")
-        layout = QHBoxLayout(group)
-
-        controls_handler.start_stop_btn = QPushButton("Start Crawler")
-        controls_handler.start_stop_btn.setToolTip("Start or stop the crawler process")
-        
-        # Connect to toggle handler
-        if hasattr(controls_handler, 'toggle_crawler_state'):
-            controls_handler.start_stop_btn.clicked.connect(controls_handler.toggle_crawler_state)
-        else:
-            # Fallback for during refactoring (though method should exist)
-            pass
-
-        # Add pre-check button
-        pre_check_btn = QPushButton("🔍 Pre-Check Services")
-        pre_check_btn.setToolTip(
-            "Check the status of all required services (Appium, Ollama, MobSF) before starting"
-        )
-        pre_check_btn.clicked.connect(controls_handler.perform_pre_crawl_validation)
-
-        # Add open session folder button
-        controls_handler.open_session_folder_btn = QPushButton("📂 Open Session Folder")
-        controls_handler.open_session_folder_btn.setToolTip(
-            "Open the current session's output folder in the file explorer"
-        )
-        controls_handler.open_session_folder_btn.setEnabled(True)
-        controls_handler.open_session_folder_btn.clicked.connect(controls_handler.open_session_folder)
-
-        # Add generate report button
-        controls_handler.generate_report_btn = QPushButton("📄 Generate Report (PDF)")
-        controls_handler.generate_report_btn.setToolTip(
-            "Create an analysis PDF for the latest run in the current session"
-        )
-        # Enabled by default; will be disabled during crawling and re-enabled on finish
-        controls_handler.generate_report_btn.setEnabled(True)
-        controls_handler.generate_report_btn.clicked.connect(controls_handler.generate_report)
-
-        layout.addWidget(pre_check_btn)
-        layout.addWidget(controls_handler.open_session_folder_btn)
-        layout.addWidget(controls_handler.generate_report_btn)
-        layout.addWidget(controls_handler.start_stop_btn)
-
-        return group
