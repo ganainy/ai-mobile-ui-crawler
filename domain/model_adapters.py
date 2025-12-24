@@ -380,9 +380,9 @@ class OpenRouterAdapter(ModelAdapter):
             if image:
                 # Get provider capabilities for image settings
                 try:
-                    from config import AI_PROVIDER_CAPABILITIES
+                    from config.app_config import AI_PROVIDER_CAPABILITIES
                 except ImportError:
-                    from config import AI_PROVIDER_CAPABILITIES
+                    from config.app_config import AI_PROVIDER_CAPABILITIES
                 
                 capabilities = AI_PROVIDER_CAPABILITIES.get('openrouter', {})
                 # UI/kwargs overrides take precedence over provider defaults
@@ -439,9 +439,9 @@ class OpenRouterAdapter(ModelAdapter):
                 payload_size = len(payload_str.encode('utf-8'))
                 
                 try:
-                    from config import AI_PROVIDER_CAPABILITIES
+                    from config.app_config import AI_PROVIDER_CAPABILITIES
                 except ImportError:
-                    from config import AI_PROVIDER_CAPABILITIES
+                    from config.app_config import AI_PROVIDER_CAPABILITIES
                 
                 capabilities = AI_PROVIDER_CAPABILITIES.get('openrouter', {})
                 payload_max_kb = capabilities.get('payload_max_size_kb', 150)

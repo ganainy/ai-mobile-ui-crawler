@@ -116,18 +116,22 @@ class OpenRouterProvider(ProviderStrategy):
             "capabilities": model.get("capabilities", [])
         }
         
-        # Extract supports_image from capabilities
-        capabilities = normalized.get("capabilities", [])
-        if isinstance(capabilities, list):
-            normalized["supports_image"] = "image" in capabilities
-        else:
-            # Fallback: check architecture
-            arch = normalized.get("architecture", {})
-            if isinstance(arch, dict):
-                input_modalities = arch.get("input_modalities", [])
-                normalized["supports_image"] = "image" in input_modalities if isinstance(input_modalities, list) else False
+        # Extract supports_image from architecture.input_modalities (primary source)
+        # This is the reliable field from OpenRouter API per their documentation
+        arch = normalized.get("architecture", {})
+        if isinstance(arch, dict):
+            input_modalities = arch.get("input_modalities", [])
+            if isinstance(input_modalities, list) and "image" in input_modalities:
+                normalized["supports_image"] = True
             else:
-                normalized["supports_image"] = None
+                # Fallback: check capabilities list
+                capabilities = normalized.get("capabilities", [])
+                if isinstance(capabilities, list) and "image" in capabilities:
+                    normalized["supports_image"] = True
+                else:
+                    normalized["supports_image"] = False
+        else:
+            normalized["supports_image"] = False
         
         return normalized
     
@@ -251,7 +255,9 @@ class OpenRouterProvider(ProviderStrategy):
             return False
     
     def is_model_vision(self, model_id: str) -> bool:
-        """Determine vision support using cache metadata; fallback to heuristics.
+        """Determine vision support using cache metadata from API.
+        
+        Uses architecture.input_modalities from OpenRouter API (cached).
         
         Args:
             model_id: The model ID to check
@@ -263,27 +269,11 @@ class OpenRouterProvider(ProviderStrategy):
             return False
         try:
             meta = self.get_model_meta(model_id)
-            if isinstance(meta, dict) and "supports_image" in meta:
+            if isinstance(meta, dict):
                 return bool(meta.get("supports_image"))
         except Exception:
             pass
-        # Fallback to name-based heuristics
-        mid = str(model_id).lower()
-        patterns = [
-            "vision",
-            "vl",
-            "gpt-4o",
-            "gpt-4.1",
-            "o-mini",
-            "omni",
-            "llava",
-            "qwen-vl",
-            "minicpm-v",
-            "moondream",
-            "gemma3",
-            "image",
-        ]
-        return any(p in mid for p in patterns)
+        return False
     
     # ========== ProviderStrategy Interface ==========
     
@@ -345,16 +335,13 @@ class OpenRouterProvider(ProviderStrategy):
             return False, "OpenAI Python SDK not installed. Run: pip install openai"
     
     def supports_image_context(self, config: 'Config', model_name: Optional[str] = None) -> bool:
-        """Check if OpenRouter model supports image context."""
+        """Check if OpenRouter model supports image context.
+        
+        Uses architecture.input_modalities from OpenRouter API (cached).
+        """
         if model_name:
-            meta = self.get_model_meta(model_name)
-            if meta and isinstance(meta, dict):
-                supports_image = meta.get("supports_image")
-                if supports_image is not None:
-                    return bool(supports_image)
-            # Fallback to heuristic
             return self.is_model_vision(model_name)
-        return True  # Default to True
+        return True  # Default to True when no model specified
     
     def get_capabilities(self) -> Dict[str, Any]:
         """Get OpenRouter provider capabilities."""

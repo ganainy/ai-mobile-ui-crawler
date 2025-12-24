@@ -286,6 +286,13 @@ class UIStateHandler:
                 pass
         
         model_dropdown.currentTextChanged.connect(_on_model_changed)
+        
+        # Immediately validate the current model's image support
+        # This is needed when refreshing models, since the selection may not change
+        # but we still need to check if the current model supports images
+        current_model = model_dropdown.currentText()
+        if current_model:
+            _on_model_changed(current_model)
 
     def _update_model_types(self, provider: str) -> None:
         """Update the model types based on the selected AI provider using provider strategy.
@@ -341,6 +348,16 @@ class UIStateHandler:
             if provider_enum == AIProvider.OPENROUTER:
                 config.set("OPENROUTER_SHOW_FREE_ONLY", free_only)
         
+        # Check vision-only filter state
+        vision_only = False
+        if "SHOW_VISION_ONLY" in self.config_widgets:
+            vision_only = self.config_widgets["SHOW_VISION_ONLY"].isChecked()
+        
+        # Store strategy and config for vision filtering
+        self._current_strategy = strategy
+        self._current_config = config
+        self._vision_only = vision_only
+        
         # Cancel any existing fetch worker
         if self._model_fetch_worker is not None:
             try:
@@ -380,6 +397,10 @@ class UIStateHandler:
         try:
             models = strategy.get_models(config)
             if models:
+                # Apply vision-only filter if enabled
+                if vision_only:
+                    models = [m for m in models if strategy.supports_image_context(config, m)]
+                
                 # Process models in batches to avoid blocking UI thread
                 batch_size = 50
                 for i in range(0, len(models), batch_size):
@@ -430,6 +451,14 @@ class UIStateHandler:
         model_dropdown.addItem(self._no_selection_label or NO_MODEL_SELECTED)
         
         if models:
+            # Apply vision-only filter if enabled
+            vision_only = getattr(self, '_vision_only', False)
+            if vision_only:
+                strategy = getattr(self, '_current_strategy', None)
+                config = getattr(self, '_current_config', None)
+                if strategy and config:
+                    models = [m for m in models if strategy.supports_image_context(config, m)]
+            
             # Add models in batches
             batch_size = 50
             for i in range(0, len(models), batch_size):

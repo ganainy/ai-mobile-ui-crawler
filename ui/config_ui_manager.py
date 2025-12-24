@@ -683,6 +683,11 @@ class ConfigManager(QObject):
                     index = model_dropdown.findText(model_type)
                     if index >= 0:
                         model_dropdown.setCurrentIndex(index)
+                
+                # Validate image context checkbox against the loaded model's capabilities
+                if model_type and 'CONTEXT_SOURCE_IMAGE' in self.main_controller.config_widgets:
+                    self._validate_image_context_for_model(ai_provider, model_type)
+                    
         self._update_crawl_mode_inputs_state()
         
         # Update image preprocessing visibility based on ENABLE_IMAGE_CONTEXT state
@@ -698,6 +703,7 @@ class ConfigManager(QObject):
              
              enable_image_context = 'image' in context_source
              self._update_image_preprocessing_visibility(enable_image_context)
+
         
         if loaded_any:
             self.main_controller.log_message("Configuration loaded from SQLite successfully.", 'green')
@@ -793,15 +799,18 @@ class ConfigManager(QObject):
             # Update main config list
             self.config.set('CONTEXT_SOURCE', new_sources)
             
-            # Sync legacy ENABLE_IMAGE_CONTEXT flag
+            # Sync legacy ENABLE_IMAGE_CONTEXT flag - use update_setting_and_save for guaranteed persistence
             enable_image = ContextSource.IMAGE in new_sources
-            self.config.set('ENABLE_IMAGE_CONTEXT', enable_image)
+            self.config.update_setting_and_save('ENABLE_IMAGE_CONTEXT', enable_image)
             
             # Update UI visibility for image preprocessing options
             self._update_image_preprocessing_visibility(enable_image)
             
-            # Persist the change
-            self.save_config(key='CONTEXT_SOURCE') 
+            # Log the change for user feedback
+            if enable_image:
+                self.main_controller.log_message("📸 Image context enabled - screenshots will be sent to AI", 'green')
+            else:
+                self.main_controller.log_message("Image context disabled - text-only mode", 'blue')
             
         except Exception as e:
             logging.error(f"Error handling context source change: {e}", exc_info=True)
@@ -887,6 +896,61 @@ class ConfigManager(QObject):
                 logging.warning("UIStateHandler not available for updating image preprocessing visibility")
         except Exception as e:
             logging.error(f"Error updating image preprocessing visibility: {e}", exc_info=True)
+    
+    def _validate_image_context_for_model(self, provider: str, model_name: str):
+        """Validate and update image context checkbox based on model's vision capabilities.
+        
+        This ensures the checkbox is disabled/unchecked for non-vision models and 
+        enabled for vision-capable models. Called during config load and model change.
+        
+        Args:
+            provider: AI provider name (e.g., 'openrouter', 'ollama', 'gemini')
+            model_name: Name of the selected model
+        """
+        try:
+            from domain.providers.registry import ProviderRegistry
+            from ui.strings import (
+                MODEL_SUPPORTS_IMAGE_INPUTS, 
+                MODEL_DOES_NOT_SUPPORT_IMAGE_INPUTS,
+                NO_MODEL_SELECTED
+            )
+            
+            checkbox = self.main_controller.config_widgets.get('CONTEXT_SOURCE_IMAGE')
+            if not checkbox:
+                return
+            
+            # Skip validation for "No model selected" placeholder
+            if not model_name or model_name == NO_MODEL_SELECTED:
+                checkbox.setEnabled(False)
+                checkbox.setChecked(False)
+                return
+            
+            # Get provider strategy
+            strategy = ProviderRegistry.get_by_name(provider)
+            if not strategy:
+                return
+            
+            # Check if model supports vision
+            supports_image = strategy.supports_image_context(self.config, model_name)
+            
+            if supports_image:
+                checkbox.setEnabled(True)
+                checkbox.setToolTip(MODEL_SUPPORTS_IMAGE_INPUTS)
+                # Don't force-check it - let user decide (but they CAN enable it now)
+            else:
+                checkbox.setEnabled(False)
+                checkbox.setChecked(False)
+                checkbox.setToolTip(MODEL_DOES_NOT_SUPPORT_IMAGE_INPUTS)
+                # Also update the config to ensure consistency
+                self.config.set('ENABLE_IMAGE_CONTEXT', False)
+                # Log for user awareness
+                self.main_controller.log_message(
+                    f"Image context disabled - model '{model_name}' does not support vision", 'blue'
+                )
+                
+        except Exception as e:
+            logging.warning(f"Error validating image context for model: {e}")
+
     
     def _get_actions_service(self):
         """Get CrawlerActionsService instance."""

@@ -549,9 +549,9 @@ class AgentAssistant:
             
             # Log image context status
             if enable_image_context:
-                pass
+                logging.info(f"📸 Image context is ENABLED (screenshot_bytes: {len(screenshot_bytes) if screenshot_bytes else 0} bytes)")
             else:
-                pass
+                logging.debug("Image context is disabled")
             
             if enable_image_context and screenshot_bytes:
                 try:
@@ -565,15 +565,16 @@ class AgentAssistant:
                             prepared_image = self._prepare_image_part(screenshot_bytes)
                             if prepared_image:
                                 self._current_prepared_image = prepared_image
-                                pass
+                                logging.info(f"📸 Image prepared for AI: {prepared_image.size[0]}x{prepared_image.size[1]}")
                         else:
-                            pass
+                            logging.warning(f"📸 Model '{model_name}' does not support image context")
                     else:
-                        pass
+                        logging.warning(f"📸 Provider '{self.ai_provider}' not found in registry")
                 except Exception as e:
-                    pass
+                    logging.warning(f"📸 Error preparing image for AI: {e}")
             elif enable_image_context and not screenshot_bytes:
-                pass
+                logging.warning("📸 Image context enabled but no screenshot_bytes available")
+
             
             # Log the decision request context
             if self.ai_interaction_readable_logger:

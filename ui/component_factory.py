@@ -166,6 +166,14 @@ class ComponentFactory:
         )
         config_widgets["OPENROUTER_SHOW_FREE_ONLY"].setVisible(True)
         _model_row_layout.addWidget(config_widgets["OPENROUTER_SHOW_FREE_ONLY"])
+        
+        # Vision-only filter (visible for all providers)
+        config_widgets["SHOW_VISION_ONLY"] = QCheckBox("Vision only")
+        config_widgets["SHOW_VISION_ONLY"].setToolTip(
+            "Show only models that support image/vision inputs."
+        )
+        config_widgets["SHOW_VISION_ONLY"].setVisible(True)
+        _model_row_layout.addWidget(config_widgets["SHOW_VISION_ONLY"])
 
         ai_layout.addRow(label_model_type, _model_row_layout)
 

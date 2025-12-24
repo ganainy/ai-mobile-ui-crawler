@@ -280,13 +280,15 @@ class GeminiProvider(ProviderStrategy):
             return False, "Google Generative AI Python SDK not installed. Run: pip install google-generativeai"
     
     def supports_image_context(self, config: 'Config', model_name: Optional[str] = None) -> bool:
-        """Check if Gemini model supports image context."""
+        """Check if Gemini model supports image context.
+        
+        Uses vision_supported field from cached API data.
+        """
         if model_name:
-            # Check model metadata for vision support
             model_meta = self.get_model_meta(model_name)
             if model_meta:
-                return model_meta.get("vision_supported", True)  # Default to True for Gemini
-        return True  # Gemini generally supports image context
+                return bool(model_meta.get("vision_supported", False))
+        return False  # Default to False if no model or not found
     
     def get_capabilities(self) -> Dict[str, Any]:
         """Get Gemini provider capabilities."""

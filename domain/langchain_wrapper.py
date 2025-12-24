@@ -93,7 +93,9 @@ class LangChainWrapper:
                     if provider_strategy:
                         if provider_strategy.supports_image_context(self.cfg, self.model_name):
                             prepared_image = self.get_current_image()
-                            if not prepared_image:
+                            if prepared_image:
+                                logger.info(f"📸 Image context: Including prepared image in AI request (size: {prepared_image.size})")
+                            else:
                                 logger.warning("Image context enabled but prepared image is None")
                 except Exception as e:
                     logger.warning(f"Error checking image support: {e}")
@@ -126,7 +128,8 @@ class LangChainWrapper:
                     log_thread.join(timeout=1.0)
                 
                 elapsed_total = time.time() - start_time
-                print(f"\rAI response received in {elapsed_total:.2f}s   ", flush=True)
+                image_info = f" (with image)" if prepared_image else " (text only)"
+                print(f"\rAI response received in {elapsed_total:.2f}s{image_info}   ", flush=True)
                 
                 # Log the AI response
                 if self.interaction_logger:

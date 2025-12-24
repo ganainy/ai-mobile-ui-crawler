@@ -85,20 +85,11 @@ class HealthAppScanner(QObject):
 
     def trigger_scan_for_health_apps(self):
         """Starts the process of scanning for health apps, forcing a rescan."""
-        # UI log is sufficient; remove duplicate debug log
-        self.main_controller.log_message(
-            "DEBUG: trigger_scan_for_health_apps called", "blue"
-        )
-
         # Get the current device ID first to update main_controller.current_health_app_list_file
         device_id = self._get_current_device_id()
-        self.main_controller.log_message(f"DEBUG: Got device ID: {device_id}", "blue")
 
         # Now use single merged file for all device data
         device_file_path = self._get_device_health_app_file_path(device_id)
-        self.main_controller.log_message(
-            f"DEBUG: File path: {device_file_path}", "blue"
-        )
 
         # Update the file path in the main controller
         self.main_controller.current_health_app_list_file = device_file_path
@@ -112,7 +103,6 @@ class HealthAppScanner(QObject):
                 self.main_controller._sync_user_config_files,
             )
 
-        self.main_controller.log_message("DEBUG: About to execute scan", "blue")
         self._execute_scan_for_health_apps(force_rescan=True)
 
     @Slot()
@@ -151,22 +141,11 @@ class HealthAppScanner(QObject):
 
     def _execute_scan_for_health_apps(self, force_rescan: bool = False):
         """Execute the health app scan process."""
-        # UI log is sufficient; remove duplicate debug log
-        self.main_controller.log_message(
-            "DEBUG: _execute_scan_for_health_apps called", "blue"
-        )
-
         # Get the device ID and determine the file path for this device
         device_id = self._get_current_device_id()
-        self.main_controller.log_message(
-            f"DEBUG: Got device ID in execute: {device_id}", "blue"
-        )
 
         # Use merged file path for all device data
         device_file_path = self._get_device_health_app_file_path(device_id)
-        self.main_controller.log_message(
-            f"DEBUG: File path in execute: {device_file_path}", "blue"
-        )
 
         # Update the path in the main controller
         self.main_controller.current_health_app_list_file = device_file_path
@@ -218,7 +197,8 @@ class HealthAppScanner(QObject):
                 return
             # Now check the ADB version
             result = subprocess.run(
-                ["adb", "version"], capture_output=True, text=True, timeout=10
+                ["adb", "version"], capture_output=True, text=True, timeout=10,
+                encoding='utf-8', errors='replace'
             )
             if result.returncode != 0:
                 self.main_controller.log_message(
@@ -238,7 +218,8 @@ class HealthAppScanner(QObject):
 
             # Check if any devices are connected
             devices_result = subprocess.run(
-                ["adb", "devices"], capture_output=True, text=True, timeout=10
+                ["adb", "devices"], capture_output=True, text=True, timeout=10,
+                encoding='utf-8', errors='replace'
             )
             device_lines = devices_result.stdout.strip().split("\n")[
                 1:
@@ -267,6 +248,8 @@ class HealthAppScanner(QObject):
                 capture_output=True,
                 text=True,
                 timeout=10,
+                encoding='utf-8',
+                errors='replace'
             )
             if packages_result.returncode != 0:
                 self.main_controller.log_message(
@@ -348,20 +331,13 @@ class HealthAppScanner(QObject):
         if use_ai_filter:
             args.extend(["--ai-filter"])
 
-        # Run find_app_info.py as a script with additional debug logging
+        # Run find_app_info.py
         self.main_controller.log_message(
             f"Running: {python_executable} {' '.join(args)}", "blue"
-        )
-        self.main_controller.log_message(
-            f"DEBUG: Python executable exists: {os.path.exists(python_executable)}",
-            "blue",
         )
 
         try:
             self.find_apps_process.start(python_executable, args)
-            self.main_controller.log_message(
-                "DEBUG: Process started successfully", "green"
-            )
         except Exception as e:
             self.main_controller.log_message(f"ERROR starting process: {e}", "red")
             logging.error(f"Exception starting QProcess: {e}", exc_info=True)

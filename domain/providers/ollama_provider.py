@@ -513,22 +513,20 @@ class OllamaProvider(ProviderStrategy):
     def supports_image_context(self, config: 'Config', model_name: Optional[str] = None) -> bool:
         """Check if Ollama model supports image context.
         
-        Uses non-blocking detection (cache + pattern matching) for UI responsiveness.
-        Blocking network calls are avoided to prevent UI freezes.
+        Uses vision_supported field from cached API data only.
         """
         if model_name:
             base_url = self.get_api_key(config)
-            # Disable blocking calls (use_metadata=False, use_cli=False) for UI responsiveness
-            # Uses cache lookup and pattern matching only
+            # Use cache only - no pattern matching fallback
             return self.is_model_vision(
                 model_name, 
                 base_url=base_url,
                 use_cache=True,
                 use_metadata=False,  # Disable blocking SDK call
                 use_cli=False,       # Disable blocking CLI call
-                use_patterns=True
+                use_patterns=False   # Disable heuristic pattern matching
             )
-        return True  # Default to True for vision-capable models
+        return False  # Default to False if no model specified
     
     def get_capabilities(self) -> Dict[str, Any]:
         """Get Ollama provider capabilities."""

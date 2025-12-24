@@ -362,6 +362,19 @@ class CrawlerControllerWindow(QMainWindow):
             _on_free_only_changed
         )
 
+        # Wire up vision-only filter to re-populate models
+        def _on_vision_only_changed(_state: int):
+            try:
+                # Update the model list with the new filter state
+                current_provider = self.config_widgets["AI_PROVIDER"].currentText()
+                self.ui_state_handler._update_model_types(current_provider)
+            except Exception as e:
+                pass
+
+        self.config_widgets["SHOW_VISION_ONLY"].stateChanged.connect(
+            _on_vision_only_changed
+        )
+
         # Connect all widgets to auto-save
         self.config_manager.connect_widgets_for_auto_save()
 

@@ -44,7 +44,9 @@ def _run_command(command: List[str], timeout: int = 10) -> tuple[str, str, int]:
             capture_output=True,
             text=True,
             timeout=timeout,
-            check=False
+            check=False,
+            encoding='utf-8',
+            errors='replace'
         )
         return result.stdout, result.stderr, result.returncode
     except subprocess.TimeoutExpired:
