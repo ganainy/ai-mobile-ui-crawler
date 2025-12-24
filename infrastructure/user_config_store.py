@@ -152,9 +152,12 @@ class UserConfigStore:
         
         Excludes:
         - dict, list, and None values
-        - Path templates with placeholders (e.g., "{session_dir}")
         - ACTION_DESC_* constants (documentation strings, not config values)
         - App-specific hardcoded values (APP_PACKAGE, APP_ACTIVITY)
+        
+        Note: Path templates with placeholders (e.g., "{session_dir}") ARE included
+        because they are needed by SessionPathManager._resolve_template() to 
+        generate session-specific paths like DB_NAME, LOG_DIR, etc.
         
         Args:
             defaults: Dictionary of all default values
@@ -183,30 +186,31 @@ class UserConfigStore:
             if not isinstance(value, (int, str, bool, float)):
                 continue
             
-            # Exclude path templates with placeholders (they're resolved dynamically)
-            if isinstance(value, str) and '{' in value:
-                continue
+            # Note: Path templates with placeholders (e.g., "{session_dir}")
+            # are intentionally included for SessionPathManager to work
             
             simple_defaults[key] = value
         
         return simple_defaults
 
     def initialize_simple_defaults(self, defaults: Dict[str, Any]) -> None:
-        """Initialize SQLite with simple default values on first launch only.
+        """Initialize SQLite with simple default values.
         
         Filters defaults to only simple types (int, str, bool, float) and
-        populates the user_preferences table if it's empty.
+        populates missing keys in user_preferences table.
+        
+        Note: This now always runs (not just on first launch) to ensure
+        that any new config keys (e.g., path templates added in updates)
+        are properly initialized in existing databases.
         
         Args:
             defaults: Dictionary of all default values from module constants
         """
-        if not self.is_first_launch():
-            return
-        
         simple_defaults = self._filter_simple_defaults(defaults)
         if not simple_defaults:
             return
         
+        # Always initialize missing defaults (handles both first launch and migrations)
         self.initialize_defaults(simple_defaults)
 
     def initialize_defaults(self, defaults: Dict[str, Any]) -> None:

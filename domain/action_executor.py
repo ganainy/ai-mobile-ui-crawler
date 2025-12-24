@@ -5,7 +5,7 @@ Handles execution of all action types (click, input, scroll, etc.) with proper
 argument handling and error recovery.
 """
 import logging
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from config.numeric_constants import LONG_PRESS_MIN_DURATION_MS
 
@@ -32,14 +32,199 @@ class ActionExecutor:
         self.cfg = config
         self._init_action_dispatch_map()
     
-    def _execute_click_action(self, action_data: Dict[str, Any]) -> bool:
-        """Execute click action with proper argument handling."""
+    def _resolve_target_with_fallback(
+        self, 
+        action_data: Dict[str, Any]
+    ) -> Tuple[Optional[str], Optional[Dict[str, Any]], str]:
+        """Resolve target with layered fallback strategy.
+        
+        Fallback order:
+        1. Use target_identifier directly (element ID lookup)
+        2. If ocr_X identifier → extract bounding box from ocr_results
+        3. Use provided bounding box if available
+        4. Try fuzzy matching for partial ID matches
+        
+        Args:
+            action_data: Action data with target_identifier, target_bounding_box, 
+                        and optionally ocr_results
+            
+        Returns:
+            Tuple of (target_identifier, bounding_box, resolution_method)
+            resolution_method: 'element_id', 'ocr_coordinates', 'bounding_box', 'fuzzy_match',
+                              or 'none' if resolution failed
+        """
         target_id = action_data.get("target_identifier")
         bbox = action_data.get("target_bounding_box")
+        ocr_results = action_data.get("ocr_results", [])
         
-        # Pass target_identifier to driver.tap()
-        # Element lookup is now the only supported method.
-        return self.driver.tap(target_id, bbox)
+        # Case 1: OCR identifier (ocr_X format) - resolve to coordinates
+        if target_id and str(target_id).startswith("ocr_"):
+            try:
+                idx = int(str(target_id).split("_")[1])
+                if ocr_results and 0 <= idx < len(ocr_results):
+                    item = ocr_results[idx]
+                    bounds = item.get('bounds')
+                    if bounds and len(bounds) == 4:
+                        resolved_bbox = {
+                            "top_left": [bounds[0], bounds[1]],
+                            "bottom_right": [bounds[2], bounds[3]]
+                        }
+                        text_hint = item.get('text', target_id)
+                        logger.info(f"Resolved OCR target '{target_id}' to coordinates via text '{text_hint}'")
+                        return target_id, resolved_bbox, 'ocr_coordinates'
+            except (ValueError, IndexError) as e:
+                logger.warning(f"Failed to resolve OCR target {target_id}: {e}")
+            
+            # OCR ID but couldn't resolve - try bounding box fallback
+            if bbox:
+                logger.info(f"OCR target '{target_id}' unresolved, using provided bounding box")
+                return target_id, bbox, 'bounding_box'
+            
+            return target_id, None, 'none'
+        
+        # Case 2: Regular element ID
+        if target_id:
+            # First, try the element ID directly - this is handled by the caller
+            # We return the ID so the driver can try element lookup
+            return target_id, bbox, 'element_id'
+        
+        # Case 3: No target ID but have bounding box
+        if bbox:
+            return None, bbox, 'bounding_box'
+        
+        return None, None, 'none'
+    
+    def _tap_with_fallback(
+        self,
+        action_data: Dict[str, Any]
+    ) -> bool:
+        """Execute tap with layered fallback.
+        
+        Tries:
+        1. Element ID lookup
+        2. If failed + OCR target → use OCR coordinates
+        3. If failed + bounding box → tap coordinates
+        4. If failed → try fuzzy XPath matching by text
+        
+        Returns:
+            True if tap successful by any method
+        """
+        target_id, bbox, method = self._resolve_target_with_fallback(action_data)
+        
+        # Method 1: OCR coordinates - use coordinates directly
+        if method == 'ocr_coordinates' and bbox:
+            logger.info(f"Using OCR coordinates for target: {target_id}")
+            return self.driver.tap(target_id, bbox)
+        
+        # Method 2: Element ID lookup
+        if method == 'element_id' and target_id:
+            try:
+                # Try element lookup first
+                success = self.driver.tap(target_id, None)
+                if success:
+                    return True
+            except Exception as e:
+                logger.warning(f"Element lookup failed for '{target_id}': {e}")
+            
+            # Fallback: use bounding box if provided
+            if bbox:
+                logger.info(f"Element '{target_id}' not found, using bounding box coordinates")
+                return self.driver.tap(target_id, bbox)
+            
+            # Fallback: try to find element by text using XPath
+            return self._tap_by_text_fallback(target_id, action_data)
+        
+        # Method 3: Bounding box only
+        if method == 'bounding_box' and bbox:
+            logger.info(f"Using bounding box coordinates for tap")
+            return self.driver.tap(None, bbox)
+        
+        # No valid target
+        logger.error("No valid target for tap action")
+        return False
+    
+    def _tap_by_text_fallback(
+        self, 
+        target_id: str,
+        action_data: Dict[str, Any]
+    ) -> bool:
+        """Fallback: try to find element by text matching.
+        
+        Searches for elements containing the target_id text or
+        uses OCR label text for matching.
+        """
+        try:
+            driver = self.driver.helper.get_driver() if self.driver.helper else None
+            if not driver:
+                return False
+            
+            # Extract potential text hints from target_id or reasoning
+            reasoning = action_data.get("reasoning", "")
+            ocr_results = action_data.get("ocr_results", [])
+            
+            # Try to find a text hint
+            text_hint = None
+            
+            # Check if target_id contains useful text (after removing common prefixes)
+            clean_id = target_id
+            for prefix in ['field-', 'btn-', 'input-', 'text-', 'label-']:
+                if clean_id.startswith(prefix):
+                    clean_id = clean_id[len(prefix):]
+                    break
+            
+            # Skip if it looks like a React-generated ID (contains :r or is very short)
+            if ':r' in clean_id or len(clean_id) <= 3:
+                # Try to extract text from OCR results that might match
+                for ocr_item in ocr_results or []:
+                    ocr_text = ocr_item.get('text', '')
+                    # Look for matches in reasoning
+                    if ocr_text and ocr_text.lower() in reasoning.lower():
+                        text_hint = ocr_text
+                        break
+            else:
+                text_hint = clean_id
+            
+            if not text_hint:
+                logger.debug(f"No text hint found for fallback search of '{target_id}'")
+                return False
+            
+            # Try XPath search by text
+            from appium.webdriver.common.appiumby import AppiumBy
+            
+            # Try various text matching strategies
+            xpath_patterns = [
+                f'//*[@text="{text_hint}"]',
+                f'//*[contains(@text, "{text_hint}")]',
+                f'//*[@content-desc="{text_hint}"]',
+                f'//*[contains(@content-desc, "{text_hint}")]',
+            ]
+            
+            for xpath in xpath_patterns:
+                try:
+                    elements = driver.find_elements(AppiumBy.XPATH, xpath)
+                    if elements:
+                        # Tap the first visible element
+                        for elem in elements:
+                            try:
+                                if elem.is_displayed():
+                                    elem.click()
+                                    logger.info(f"Fallback: tapped element by text '{text_hint}'")
+                                    return True
+                            except Exception:
+                                continue
+                except Exception:
+                    continue
+            
+            logger.warning(f"Text fallback search failed for '{text_hint}'")
+            return False
+            
+        except Exception as e:
+            logger.error(f"Text fallback search error: {e}")
+            return False
+    
+    def _execute_click_action(self, action_data: Dict[str, Any]) -> bool:
+        """Execute click action with proper argument handling and fallbacks."""
+        return self._tap_with_fallback(action_data)
     
     def _execute_input_action(self, action_data: Dict[str, Any]) -> bool:
         """Execute input action with proper argument handling.
@@ -58,13 +243,8 @@ class ActionExecutor:
         
         import time
         
-        # Step 1: Tap to focus the input field
-        if bbox:
-            # OCR-based: use bounding box coordinates
-            tap_success = self.driver.tap(target_id, bbox)
-        else:
-            # XML-based: use element tap
-            tap_success = self.driver.tap(target_id, None)
+        # Step 1: Tap to focus the input field (using fallback logic)
+        tap_success = self._tap_with_fallback(action_data)
         
         if not tap_success:
             logger.error(f"Failed to tap on input field: {target_id}")
@@ -152,11 +332,8 @@ class ActionExecutor:
         
         import time
         
-        # Step 1: Tap to focus
-        if bbox:
-            tap_success = self.driver.tap(target_id, bbox)
-        else:
-            tap_success = self.driver.tap(target_id, None)
+        # Step 1: Tap to focus (use fallback logic)
+        tap_success = self._tap_with_fallback(action_data)
         
         if not tap_success:
             logger.error(f"Failed to tap on input field for replace: {target_id}")

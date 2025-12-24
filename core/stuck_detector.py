@@ -9,9 +9,9 @@ class StuckDetector:
     """
     
     # Thresholds for stuck detection (lowered for faster escape)
-    VISIT_COUNT_THRESHOLD = 3  # Trigger stuck after 3 visits to same screen
+    VISIT_COUNT_THRESHOLD = 2  # Trigger stuck after 2+ visits to same screen
     SAME_SCREEN_ACTION_THRESHOLD = 2  # Trigger stuck after 2 actions that stayed on same screen
-    RECENT_ACTIONS_CHECK_COUNT = 3  # Check last 3 actions for all-stayed pattern
+    RECENT_ACTIONS_CHECK_COUNT = 2  # Check last 2 actions for all-stayed pattern
     
     def __init__(self, config):
         self.config = config

@@ -66,6 +66,10 @@ class CrawlerLoop:
             self.context_builder: Optional[CrawlContextBuilder] = None
             self.crawl_logger: Optional[CrawlLogger] = None
             
+            # Database and screen state (initialized in initialize() method)
+            self.db_manager = None
+            self.screen_state_manager = None
+            
             # Set up flag controller
             # Prefer properties from Config object if available (to match UI usage)
             shutdown_flag_path = getattr(config, 'SHUTDOWN_FLAG_PATH', None)
@@ -269,11 +273,15 @@ class CrawlerLoop:
                     else:
                         logger.error(f"Database file STILL missing after init: {db_path}")
                 else:
-                    # This is a critical failure for post-run tasks, so log as an error.
-                    logger.error("Failed to initialize database. Post-run tasks will likely fail.")
+                    # This is a critical failure - db_manager, screen_state_manager, and context_builder are required
+                    logger.error("Failed to initialize database. Crawler cannot proceed without database.")
+                    print("STATUS: Database initialization failed", flush=True)
+                    return False
             except Exception as e:
-                # This is also critical.
-                logger.error(f"Could not initialize database: {e}. Post-run tasks will likely fail.", exc_info=True)
+                # This is also critical - cannot run without database
+                logger.error(f"Could not initialize database: {e}. Crawler cannot proceed.", exc_info=True)
+                print(f"STATUS: Database error - {e}", flush=True)
+                return False
             
             # Note: App launch verification is now handled by the MCP server during session initialization
             return True
@@ -349,7 +357,11 @@ class CrawlerLoop:
             
             # 2. Increment step and log progress
             self.step_count += 1
-            self.crawl_logger.log_ui_step(self.step_count)
+            if self.crawl_logger:
+                self.crawl_logger.log_ui_step(self.step_count)
+            else:
+                # Fallback UI step logging when crawl_logger is not available
+                print(f"UI_STEP:{self.step_count}", flush=True)
             
             # 3. Verify app context
             if self.app_context_manager:
@@ -463,6 +475,10 @@ class CrawlerLoop:
             action_str = self.crawl_logger.log_ai_decision(action_data, ai_decision_time, ai_input_prompt, ocr_results)
             
             # 10. Execute action
+            # Add OCR results to action_data for fallback element resolution
+            if ocr_results:
+                action_data["ocr_results"] = ocr_results
+            
             element_find_start = time.time()
             success = self.agent_assistant.execute_action(action_data)
             element_find_time_ms = (time.time() - element_find_start) * 1000.0
