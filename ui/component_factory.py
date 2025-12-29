@@ -25,7 +25,7 @@ from PySide6.QtWidgets import (
 
 from ui.custom_widgets import NoScrollComboBox as QComboBox
 from ui.custom_widgets import NoScrollSpinBox as QSpinBox
-from ui.custom_widgets import CollapsibleBox
+from ui.custom_widgets import CollapsibleBox, SearchableComboBox
 
 
 class ComponentFactory:
@@ -79,7 +79,10 @@ class ComponentFactory:
         app_group.content_layout.addLayout(app_layout)
 
         # Health App Selector with Discovery Filter checkbox
-        config_handler.health_app_dropdown = QComboBox()
+        # Use SearchableComboBox for type-to-search capability
+        config_handler.health_app_dropdown = SearchableComboBox(
+            placeholder_text="Type to search apps..."
+        )
         config_handler.health_app_dropdown.addItem(
             "Select target app (Scan first)", None
         )
@@ -87,7 +90,7 @@ class ComponentFactory:
             config_handler._on_health_app_selected
         )
         config_handler.health_app_dropdown.setToolTip(
-            "Select a health-related app discovered on the device. Use button below to scan."
+            "Select a health-related app discovered on the device. Type to search or use button below to scan."
         )
 
         # Create a horizontal layout for dropdown and discovery filter checkbox

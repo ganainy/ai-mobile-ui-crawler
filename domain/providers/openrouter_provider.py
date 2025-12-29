@@ -428,9 +428,15 @@ class OpenRouterProvider(ProviderStrategy):
             api_key = None
             if config:
                 api_key = self.get_api_key(config)
+            
+            # If no config passed, try to get API key from a fresh Config instance
             if not api_key:
-                # API key must be in config
-                pass
+                try:
+                    from config.app_config import Config
+                    fresh_config = Config()
+                    api_key = fresh_config.get("OPENROUTER_API_KEY")
+                except Exception:
+                    pass
             
             if not api_key:
                 raise RuntimeError("No OPENROUTER_API_KEY found for refresh")

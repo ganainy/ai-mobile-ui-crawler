@@ -44,6 +44,117 @@ class NoScrollComboBox(QComboBox):
             event.ignore()
 
 
+class SearchableComboBox(NoScrollComboBox):
+    """A combo box with search-by-typing capability.
+    
+    This widget provides an editable combo box with autocomplete functionality.
+    Users can type to filter through the available options. The completer uses
+    case-insensitive substring matching for flexible searching.
+    
+    Item data is preserved and can be retrieved via itemData() as usual.
+    """
+    
+    def __init__(self, parent=None, placeholder_text: str = "Type to search..."):
+        super().__init__(parent)
+        from PySide6.QtCore import QStringListModel, QSortFilterProxyModel
+        from PySide6.QtWidgets import QCompleter
+        
+        # Make the combo box editable to allow typing
+        self.setEditable(True)
+        
+        # Set placeholder text for the line edit
+        self.lineEdit().setPlaceholderText(placeholder_text)
+        
+        # Configure completer for case-insensitive substring matching
+        self._completer = QCompleter(self)
+        self._completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+        self._completer.setFilterMode(Qt.MatchFlag.MatchContains)
+        self._completer.setCompletionMode(QCompleter.CompletionMode.PopupCompletion)
+        self.setCompleter(self._completer)
+        
+        # Store the string list model for the completer
+        self._string_model = QStringListModel(self)
+        self._completer.setModel(self._string_model)
+        
+        # Connect signals to update completer when items change
+        self.currentIndexChanged.connect(self._on_selection_changed)
+        
+        # Store mapping from display text to original index for data retrieval
+        self._display_to_index: dict = {}
+        
+    def addItem(self, text: str, userData=None):
+        """Override to update the completer model when items are added."""
+        super().addItem(text, userData)
+        self._update_completer_model()
+        
+    def addItems(self, texts):
+        """Override to update the completer model when items are added."""
+        super().addItems(texts)
+        self._update_completer_model()
+        
+    def clear(self):
+        """Override to update the completer model when items are cleared."""
+        super().clear()
+        self._display_to_index.clear()
+        self._update_completer_model()
+        
+    def removeItem(self, index: int):
+        """Override to update the completer model when items are removed."""
+        super().removeItem(index)
+        self._update_completer_model()
+        
+    def insertItem(self, index: int, text: str, userData=None):
+        """Override to update the completer model when items are inserted."""
+        super().insertItem(index, text, userData)
+        self._update_completer_model()
+        
+    def _update_completer_model(self):
+        """Update the completer's string list model with current items."""
+        items = []
+        self._display_to_index.clear()
+        for i in range(self.count()):
+            text = self.itemText(i)
+            items.append(text)
+            self._display_to_index[text] = i
+        self._string_model.setStringList(items)
+        
+    def _on_selection_changed(self, index: int):
+        """Update the line edit text when selection changes programmatically."""
+        if index >= 0 and index < self.count():
+            self.lineEdit().setText(self.itemText(index))
+            
+    def focusOutEvent(self, event):
+        """Handle focus out: validate the entered text and select matching item."""
+        super().focusOutEvent(event)
+        
+        # Get the current text in the line edit
+        current_text = self.lineEdit().text().strip()
+        
+        if not current_text:
+            # If empty, reset to first item (usually placeholder)
+            if self.count() > 0:
+                self.setCurrentIndex(0)
+            return
+            
+        # Try to find an exact match first
+        if current_text in self._display_to_index:
+            self.setCurrentIndex(self._display_to_index[current_text])
+            return
+            
+        # Try case-insensitive match
+        for display_text, index in self._display_to_index.items():
+            if display_text.lower() == current_text.lower():
+                self.setCurrentIndex(index)
+                self.lineEdit().setText(display_text)  # Fix case
+                return
+                
+        # If no match found, reset to current selection or first item
+        if self.currentIndex() >= 0:
+            self.lineEdit().setText(self.itemText(self.currentIndex()))
+        elif self.count() > 0:
+            self.setCurrentIndex(0)
+
+
 class LoadingSplashScreen(QSplashScreen):
     """Splash screen shown during UI initialization."""
     

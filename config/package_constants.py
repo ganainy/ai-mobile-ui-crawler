@@ -18,9 +18,8 @@ class PackageConstants:
     SYSTEM_UI_PACKAGE = "com.android.systemui"
     
     # Default allowed external packages (can be extended via config)
+    # Only permission controller by default - app package is handled dynamically
     DEFAULT_ALLOWED_EXTERNAL_PACKAGES = [
-        "com.google.android.gms",
-        "com.android.chrome",
         "com.google.android.permissioncontroller",
     ]
     

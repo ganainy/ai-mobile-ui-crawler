@@ -666,13 +666,8 @@ APP_PACKAGE = None  # App-specific, must be set by user (not initialized on firs
 APP_ACTIVITY = None  # App-specific, must be set by user (not initialized on first launch)
 # Package constants are now in config.package_constants
 from config.package_constants import PackageConstants
-ALLOWED_EXTERNAL_PACKAGES = PackageConstants.get_allowed_external_packages([
-    "org.mozilla.firefox",
-    "com.sec.android.app.sbrowser",
-    "com.microsoft.emmx",
-    "com.brave.browser",
-    "com.duckduckgo.mobile.android",
-])
+# Only permission controller by default - app package is handled dynamically
+ALLOWED_EXTERNAL_PACKAGES = PackageConstants.get_allowed_external_packages([])
 
 OUTPUT_DATA_DIR = "output_data"  # This is a template name, Config class makes it a path
 SESSION_DIR = f"{{{CONFIG_OUTPUT_DATA_DIR}}}/sessions/{{device_id}}_{{app_package}}_{{timestamp}}"
@@ -777,6 +772,13 @@ MAX_CONSECUTIVE_MAP_FAILURES = 3
 MAX_CONSECUTIVE_EXEC_FAILURES = 3
 MAX_CONSECUTIVE_CONTEXT_FAILURES = 3
 LOOP_DETECTION_VISIT_THRESHOLD = 1
+
+# Multi-action batch settings
+# These settings control the multi-action feature where AI can return multiple
+# actions to be executed sequentially, reducing AI calls and speeding up crawling.
+MAX_ACTIONS_PER_BATCH = 5  # Maximum number of actions AI can return in one response
+WAIT_BETWEEN_BATCH_ACTIONS = 0.5  # Seconds to wait between actions in a batch
+MULTI_ACTION_STOP_ON_ERROR = True  # Stop batch execution on first error (safer)
 
 ENABLE_TRAFFIC_CAPTURE = True
 # PCAPDROID_PACKAGE is now in config.package_constants.PackageConstants.PCAPDROID_PACKAGE

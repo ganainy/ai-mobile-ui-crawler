@@ -87,11 +87,17 @@ class PromptBuilder:
         # Get journal max length from config or use default
         journal_max_length = self.cfg.get('EXPLORATION_JOURNAL_MAX_LENGTH', EXPLORATION_JOURNAL_MAX_LENGTH_DEFAULT)
         
+        # Get test credentials from config (with defaults)
+        test_email = self.cfg.get('TEST_EMAIL') or 'test@email.com'
+        test_password = self.cfg.get('TEST_PASSWORD') or 'Test123!'
+        
         # Create formatted prompt string
         formatted_prompt = prompt_template.format(
             json_schema=json_output_guidance,
             action_list=action_list_str,
-            journal_max_length=journal_max_length
+            journal_max_length=journal_max_length,
+            test_email=test_email,
+            test_password=test_password
         )
         
         # Log static prompt parts once
@@ -147,10 +153,16 @@ class PromptBuilder:
             # Get journal max length from config or use default
             journal_max_length = self.cfg.get('EXPLORATION_JOURNAL_MAX_LENGTH', EXPLORATION_JOURNAL_MAX_LENGTH_DEFAULT)
             
+            # Get test credentials from config (with defaults)
+            test_email = self.cfg.get('TEST_EMAIL') or 'test@email.com'
+            test_password = self.cfg.get('TEST_PASSWORD') or 'Test123!'
+            
             formatted_prompt = prompt_template.format(
                 json_schema=json_output_guidance,
                 action_list=action_list_str,
-                journal_max_length=journal_max_length
+                journal_max_length=journal_max_length,
+                test_email=test_email,
+                test_password=test_password
             )
 
         prompt_parts = []
@@ -220,10 +232,43 @@ class PromptBuilder:
                  actions_lines.append(f"- {action_desc} {result}")
             dynamic_parts.append("\n".join(actions_lines))
 
-        # Test Credentials
-        test_email = self.cfg.get("TEST_EMAIL")
-        if test_email:
-            dynamic_parts.append(f"\n**Test Credentials**: {test_email} / ...")
+        # Test Credentials - Check credential store for this app
+        app_package = context.get('app_package')
+        stored_creds = None
+        has_stored_creds = False
+        
+        if app_package:
+            try:
+                from infrastructure.credential_store import get_credential_store
+                cred_store = get_credential_store()
+                stored_creds = cred_store.get_credentials(app_package)
+                has_stored_creds = stored_creds is not None
+            except Exception as e:
+                logger.debug(f"Could not check credential store: {e}")
+        
+        if has_stored_creds and stored_creds:
+            # We have stored credentials for this app - use LOGIN
+            email = stored_creds.get('email', '')
+            password = stored_creds.get('password', '')
+            name = stored_creds.get('name', '')
+            dynamic_parts.append(f"""
+**AUTHENTICATION STRATEGY**: 🔑 LOGIN (credentials exist for this app)
+- Email: {email}
+- Password: {password}
+- Name: {name if name else 'N/A'}
+→ When you see a login/signup choice, CHOOSE LOGIN and use these credentials.""")
+        else:
+            # No stored credentials - use SIGNUP then we'll store them
+            test_email = self.cfg.get("TEST_EMAIL") or "test@email.com"
+            test_password = self.cfg.get("TEST_PASSWORD") or "Test123!"
+            test_name = self.cfg.get("TEST_NAME") or "Test User"
+            dynamic_parts.append(f"""
+**AUTHENTICATION STRATEGY**: 📝 SIGNUP (no stored credentials for this app)
+- Email: {test_email}
+- Password: {test_password}
+- Name: {test_name}
+→ When you see a login/signup choice, CHOOSE SIGNUP and create a new account.
+→ IMPORTANT: After completing signup successfully, set "signup_completed": true in your response to save credentials for future logins.""")
 
         # Closing
         dynamic_parts.append("\n\n**TASK**: Choose the next best action to maximize coverage. Respond in JSON.")

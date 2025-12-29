@@ -32,6 +32,44 @@ class ActionExecutor:
         self.cfg = config
         self._init_action_dispatch_map()
     
+    def _is_likely_resource_id(self, identifier: str) -> bool:
+        """Check if identifier looks like a valid Android resource ID.
+        
+        Android resource IDs typically contain only:
+        - Alphanumeric characters (a-z, A-Z, 0-9)
+        - Underscores (_)
+        - Dots (.) for package names
+        - Colons (:) for resource type separation (e.g., com.app:id/button)
+        - Forward slashes (/) for id separation
+        - Hyphens (-) in some cases
+        
+        Display text (from OCR) usually contains:
+        - Spaces
+        - Unicode letters beyond basic ASCII
+        - Special punctuation
+        
+        Returns:
+            True if the identifier looks like a valid resource ID, False otherwise
+        """
+        import re
+        
+        if not identifier:
+            return False
+        
+        # OCR IDs (ocr_X) are handled separately - not resource IDs
+        if identifier.startswith("ocr_"):
+            return False
+        
+        # Resource IDs should only contain: alphanumeric, underscore, dot, colon, slash, hyphen
+        # This pattern matches valid Android resource ID characters
+        resource_id_pattern = r'^[a-zA-Z0-9_.:/-]+$'
+        
+        if not re.match(resource_id_pattern, identifier):
+            # Contains characters not valid in resource IDs (spaces, unicode, etc.)
+            return False
+        
+        return True
+    
     def _resolve_target_with_fallback(
         self, 
         action_data: Dict[str, Any]
@@ -82,11 +120,20 @@ class ActionExecutor:
             
             return target_id, None, 'none'
         
-        # Case 2: Regular element ID
+        # Case 2: Check if identifier looks like a resource ID or display text
         if target_id:
-            # First, try the element ID directly - this is handled by the caller
-            # We return the ID so the driver can try element lookup
-            return target_id, bbox, 'element_id'
+            if self._is_likely_resource_id(target_id):
+                # Looks like a valid resource ID - use element lookup
+                return target_id, bbox, 'element_id'
+            else:
+                # Looks like display text (from OCR) - prefer bounding box if available
+                if bbox:
+                    logger.info(f"Target '{target_id}' looks like display text, using bounding box coordinates")
+                    return target_id, bbox, 'bounding_box'
+                else:
+                    # No bounding box, try element lookup as fallback (will likely fail)
+                    logger.warning(f"Target '{target_id}' looks like display text but no bounding box provided, trying element lookup")
+                    return target_id, bbox, 'element_id'
         
         # Case 3: No target ID but have bounding box
         if bbox:
@@ -497,3 +544,69 @@ class ActionExecutor:
         except Exception as e:
             logger.error(f"Error executing action {action_data.get('action', 'unknown')}: {e}", exc_info=True)
             return False
+    
+    def execute_action_batch(
+        self,
+        actions: List[Dict[str, Any]],
+        wait_between_actions: float = 0.5,
+        stop_on_error: bool = True
+    ) -> Tuple[int, List[bool], Optional[str]]:
+        """Execute a batch of actions sequentially.
+        
+        This enables multi-action mode where the AI can return multiple actions
+        to be executed in sequence, reducing AI calls and speeding up crawling.
+        
+        Args:
+            actions: List of action data dictionaries
+            wait_between_actions: Delay between actions in seconds
+            stop_on_error: If True, stop executing on first failure
+            
+        Returns:
+            Tuple of (actions_executed_count, success_list, error_message)
+            - actions_executed_count: Number of actions that were attempted
+            - success_list: List of success/failure booleans for each action
+            - error_message: Error description if stopped early, None otherwise
+        """
+        import time
+        
+        if not actions:
+            return 0, [], "No actions provided"
+        
+        success_list: List[bool] = []
+        error_message: Optional[str] = None
+        
+        for i, action_data in enumerate(actions):
+            action_type = action_data.get("action", "unknown")
+            target = action_data.get("target_identifier", "no-target")
+            
+            logger.info(f"Executing batch action {i + 1}/{len(actions)}: {action_type} on '{target}'")
+            
+            try:
+                success = self.execute_action(action_data)
+                success_list.append(success)
+                
+                if not success:
+                    error_message = f"Action {i + 1} ({action_type}) failed on '{target}'"
+                    logger.warning(error_message)
+                    
+                    if stop_on_error:
+                        logger.info(f"Stopping batch execution at action {i + 1} (stop_on_error=True)")
+                        break
+                
+                # Wait between actions (except after the last one)
+                if i < len(actions) - 1:
+                    time.sleep(wait_between_actions)
+                    
+            except Exception as e:
+                error_message = f"Action {i + 1} ({action_type}) raised exception: {e}"
+                logger.error(error_message, exc_info=True)
+                success_list.append(False)
+                
+                if stop_on_error:
+                    break
+        
+        executed_count = len(success_list)
+        logger.info(f"Batch execution complete: {sum(success_list)}/{executed_count} actions succeeded")
+        
+        return executed_count, success_list, error_message
+

@@ -1,26 +1,43 @@
 from typing import Dict, Optional, Any
 
 # Define the JSON output schema as a dictionary
+# Supports multi-action batching: AI can return 1-5 actions to execute sequentially
 JSON_OUTPUT_SCHEMA = {
     "type": "object",
     "properties": {
         "exploration_journal": {
             "type": "string",
-            "description": "Updated exploration journal. Include what happened from your action. Compress older entries if needed to fit within the character limit."
+            "description": "Updated exploration journal. Include what happened from your actions. Compress older entries if needed to fit within the character limit."
         },
-        "action": {"type": "string"},
-        "target_identifier": {"type": "string"},
-        "target_bounding_box": {
-            "type": ["object", "null"],
-            "properties": {
-                "top_left": {"type": "array", "items": {"type": "number"}},
-                "bottom_right": {"type": "array", "items": {"type": "number"}}
-            }
+        "actions": {
+            "type": "array",
+            "description": "Array of 1-5 actions to execute sequentially. First action MUST be valid from current screen. Each subsequent action assumes previous actions succeeded.",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "action": {"type": "string"},
+                    "target_identifier": {"type": "string"},
+                    "target_bounding_box": {
+                        "type": ["object", "null"],
+                        "properties": {
+                            "top_left": {"type": "array", "items": {"type": "number"}},
+                            "bottom_right": {"type": "array", "items": {"type": "number"}}
+                        }
+                    },
+                    "input_text": {"type": ["string", "null"]},
+                    "reasoning": {"type": "string"}
+                },
+                "required": ["action", "target_identifier", "reasoning"]
+            },
+            "minItems": 1,
+            "maxItems": 5
         },
-        "input_text": {"type": ["string", "null"]},
-        "reasoning": {"type": "string"},
+        "signup_completed": {
+            "type": "boolean",
+            "description": "Set to true ONLY when you have just successfully completed a signup/registration flow. This triggers credential storage for future logins."
+        }
     },
-    "required": ["exploration_journal", "action", "target_identifier", "reasoning"]
+    "required": ["exploration_journal", "actions"]
 }
 
 # Fallback available actions (used only when config is not available)
@@ -79,6 +96,13 @@ You are a meticulous AI testing agent. Maximize exploration coverage of the mobi
 
 # Fixed part - automatically appended by code, not editable by users
 ACTION_DECISION_FIXED_PART = """
+# MULTI-ACTION MODE
+You can return 1-5 actions in a single response to speed up exploration:
+- **Use multiple actions** when confident about a sequence (e.g., fill fields → click submit).
+- **Use single action** when exploring new screens or uncertain about outcomes.
+- First action MUST be valid from current screen state.
+- Each subsequent action assumes previous actions succeeded.
+
 # JOURNAL
 Update exploration_journal (max {journal_max_length} chars):
 - Format: "ACTION 'element text' → OUTCOME". Example: "CLICKED 'Login' → NAVIGATED #2"
@@ -100,8 +124,8 @@ Update exploration_journal (max {journal_max_length} chars):
 # INPUT ACTIONS
 - **Type directly**: Don't click to focus first.
 - **Search**: Input terms like "Berlin", "Doctors".
-- **Login**: Use "test@email.com" / "Test123!".
-- Example: {{"action": "input", "target_identifier": "username", "input_text": "test@email.com"}}
+- **Login**: Use the test credentials: "{test_email}" / "{test_password}".
+- Example: {{"actions": [{{"action": "input", "target_identifier": "username", "input_text": "{test_email}", "reasoning": "Fill username"}}]}}
 
 # BOUNDING BOX FORMAT (CRITICAL)
 If used, MUST be a nested dictionary.

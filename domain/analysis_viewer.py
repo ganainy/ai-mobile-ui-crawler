@@ -136,8 +136,10 @@ class RunAnalyzer:
             end = datetime.fromisoformat(run_data['end_time'])
             duration = end - start
             metrics['Total Duration'] = str(duration).split('.')[0]
+            metrics['Total Duration Seconds'] = duration.total_seconds()
         else:
             metrics['Total Duration'] = "N/A (Run Incomplete)"
+            metrics['Total Duration Seconds'] = None
 
         metrics['Final Status'] = run_data['status']
         metrics['Total Steps'] = total_steps
@@ -148,6 +150,10 @@ class RunAnalyzer:
         
         unique_transitions = {(s['from_screen_id'], s['to_screen_id'], s['action_description']) for s in steps}
         metrics['Unique Transitions'] = len(unique_transitions)
+        
+        # Graph metrics for visualization
+        metrics['Graph Nodes'] = len(unique_screen_ids)
+        metrics['Graph Edges'] = len(unique_transitions)
         
         if self.conn and unique_screen_ids:
             cursor = self.conn.cursor()
@@ -161,22 +167,28 @@ class RunAnalyzer:
         action_types = [json.loads(s['ai_suggestion_json']).get('action') for s in steps if s['ai_suggestion_json']]
         action_distribution = {action: action_types.count(action) for action in set(action_types) if action}
         metrics['Action Distribution'] = ", ".join([f"{k}: {v}" for k, v in action_distribution.items()])
+        metrics['Action Distribution JSON'] = action_distribution  # For programmatic access
 
         # Efficiency Metrics
         if metrics['Unique Screens Discovered'] > 0:
             metrics['Steps per New Screen'] = f"{total_steps / metrics['Unique Screens Discovered']:.2f}"
+            metrics['Exploration Efficiency'] = f"{(metrics['Unique Screens Discovered'] / total_steps) * 100:.1f}%"
         else:
             metrics['Steps per New Screen'] = "N/A"
+            metrics['Exploration Efficiency'] = "N/A"
             
         total_tokens = sum(s['total_tokens'] for s in steps if s['total_tokens'])
         metrics['Total Token Usage'] = f"{total_tokens:,}" if total_tokens else "N/A"
+        metrics['Total Tokens Raw'] = total_tokens  # For programmatic access
         
         valid_response_times = [s['ai_response_time_ms'] for s in steps if s['ai_response_time_ms'] is not None]
         if valid_response_times:
             avg_time = sum(valid_response_times) / len(valid_response_times)
             metrics['Avg AI Response Time'] = f"{avg_time:.0f} ms"
+            metrics['Avg AI Response Time Raw'] = avg_time
         else:
             metrics['Avg AI Response Time'] = "N/A"
+            metrics['Avg AI Response Time Raw'] = None
         
         valid_element_find_times = [s['element_find_time_ms'] for s in steps if 'element_find_time_ms' in s.keys() and s['element_find_time_ms'] is not None]
         if valid_element_find_times:
@@ -196,6 +208,39 @@ class RunAnalyzer:
             metrics['Action Success Rate'] = f"{(1 - (exec_failures / total_steps)) * 100:.1f}%"
         else:
             metrics['Action Success Rate'] = "N/A"
+        
+        # Calculate consecutive failure streaks
+        max_consec_exec_failures = 0
+        current_streak = 0
+        for s in steps:
+            if not s['execution_success']:
+                current_streak += 1
+                max_consec_exec_failures = max(max_consec_exec_failures, current_streak)
+            else:
+                current_streak = 0
+        metrics['Max Consecutive Exec Failures'] = max_consec_exec_failures
+        
+        # Load runtime stats from run_meta table
+        runtime_stats = {}
+        if self.conn:
+            try:
+                cursor = self.conn.cursor()
+                cursor.execute("SELECT meta_json FROM run_meta WHERE run_id = ? ORDER BY timestamp DESC LIMIT 1", (run_id,))
+                row = cursor.fetchone()
+                if row and row[0]:
+                    runtime_stats = json.loads(row[0])
+            except Exception as e:
+                logger.warning(f"Could not load runtime stats: {e}")
+        
+        # Add runtime stats to metrics
+        metrics['Stuck Detection Count'] = runtime_stats.get('stuck_detection_count', 0)
+        metrics['AI Retry Count'] = runtime_stats.get('ai_retry_count', 0)
+        metrics['Element Not Found Count'] = runtime_stats.get('element_not_found_count', 0)
+        metrics['App Crash Count'] = runtime_stats.get('app_crash_count', 0)
+        metrics['Context Loss Count'] = runtime_stats.get('context_loss_count', 0)
+        metrics['Image Context Enabled'] = runtime_stats.get('image_context_enabled', False)
+        metrics['AI Provider'] = runtime_stats.get('ai_provider', 'unknown')
+        metrics['Model Type'] = runtime_stats.get('model_type', 'unknown')
             
         return metrics
 
@@ -250,6 +295,8 @@ class RunAnalyzer:
                          {metric_row('Total Duration', metrics.get('Total Duration', 'N/A'))}
                          {metric_row('Total Steps', metrics.get('Total Steps', 'N/A'))}
                          {metric_row('Final Status', metrics.get('Final Status', 'N/A'))}
+                         {metric_row('AI Provider', metrics.get('AI Provider', 'N/A'))}
+                         {metric_row('Model', metrics.get('Model Type', 'N/A'))}
                     </table>
                 </div>
             </div>
@@ -262,6 +309,7 @@ class RunAnalyzer:
                          {metric_row('Screens Discovered', metrics.get('Unique Screens Discovered', 'N/A'))}
                          {metric_row('Unique Transitions', metrics.get('Unique Transitions', 'N/A'))}
                          {metric_row('Activity Coverage', metrics.get('Activity Coverage', 'N/A'))}
+                         {metric_row('Exploration Efficiency', metrics.get('Exploration Efficiency', 'N/A'))}
                     </table>
                 </div>
             </div>
@@ -274,6 +322,9 @@ class RunAnalyzer:
                          {metric_row('Avg AI Response', metrics.get('Avg AI Response Time', 'N/A'))}
                          {metric_row('Success Rate', metrics.get('Action Success Rate', 'N/A'))}
                          {metric_row('Execution Failures', metrics.get('Execution Failures', '0'))}
+                         {metric_row('Total Tokens', metrics.get('Total Token Usage', 'N/A'))}
+                         {metric_row('Max Consec. Failures', metrics.get('Max Consecutive Exec Failures', '0'))}
+                         {metric_row('Image Context', 'Yes' if metrics.get('Image Context Enabled') else 'No')}
                     </table>
                  </div>
             </div>

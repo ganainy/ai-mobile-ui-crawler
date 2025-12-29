@@ -70,6 +70,18 @@ class CrawlerLoop:
             self.db_manager = None
             self.screen_state_manager = None
             
+            # Runtime stats for thesis metrics (tracked during crawl, saved at end)
+            self.runtime_stats: Dict[str, Any] = {
+                'stuck_detection_count': 0,
+                'ai_retry_count': 0,
+                'element_not_found_count': 0,
+                'app_crash_count': 0,
+                'context_loss_count': 0,
+                'image_context_enabled': config.get('ENABLE_IMAGE_CONTEXT', False),
+                'ai_provider': config.get('AI_PROVIDER', 'unknown'),
+                'model_type': config.get('DEFAULT_MODEL_TYPE', 'unknown'),
+            }
+            
             # Set up flag controller
             # Prefer properties from Config object if available (to match UI usage)
             shutdown_flag_path = getattr(config, 'SHUTDOWN_FLAG_PATH', None)
@@ -368,6 +380,8 @@ class CrawlerLoop:
                 if not self.app_context_manager.ensure_in_app():
                     logger.warning("Failed to ensure app context after retry - skipping step")
                     self.last_action_feedback = "App context check failed"
+                    # Track context loss for thesis metrics
+                    self.runtime_stats['context_loss_count'] += 1
                     return True
             
             # 4. Get current screen representation
@@ -412,6 +426,10 @@ class CrawlerLoop:
                 from_screen_id, current_screen_visit_count, action_history, current_screen_actions
             )
             
+            # Track stuck detection for thesis metrics
+            if is_stuck:
+                self.runtime_stats['stuck_detection_count'] += 1
+            
             # 8. Log context
             self.crawl_logger.log_ai_context(
                 self.step_count, is_stuck, stuck_reason, action_history, 
@@ -452,6 +470,8 @@ class CrawlerLoop:
                     "AI did not return a valid action"
                 )
                 self.last_action_feedback = "AI decision failed"
+                # Track AI retry/failure for thesis metrics
+                self.runtime_stats['ai_retry_count'] += 1
                 return True
             
             action_data, confidence, token_count, ai_input_prompt, new_exploration_journal = action_result
@@ -459,6 +479,32 @@ class CrawlerLoop:
             # Save the updated exploration journal to DB
             if self.db_manager and self.current_run_id and new_exploration_journal:
                 self.db_manager.update_exploration_journal(self.current_run_id, new_exploration_journal)
+            
+            # Check if AI signaled signup completion - store credentials for future logins
+            if action_data.get("signup_completed"):
+                try:
+                    from infrastructure.credential_store import get_credential_store
+                    app_package = self.config.get("APP_PACKAGE")
+                    test_email = self.config.get("TEST_EMAIL")
+                    test_password = self.config.get("TEST_PASSWORD")
+                    test_name = self.config.get("TEST_NAME")
+                    
+                    if app_package and test_email and test_password:
+                        cred_store = get_credential_store()
+                        success = cred_store.store_credentials(
+                            package_name=app_package,
+                            email=test_email,
+                            password=test_password,
+                            name=test_name,
+                            signup_completed=True
+                        )
+                        if success:
+                            logger.info(f"✅ Stored credentials for {app_package} after successful signup")
+                            self.last_action_feedback = f"Signup completed! Credentials saved for future logins."
+                        else:
+                            logger.warning(f"Failed to store credentials for {app_package}")
+                except Exception as e:
+                    logger.error(f"Error storing credentials after signup: {e}")
             
             # Check for shutdown/pause after AI return but before action execution
             # This allows "pausing mid-thought"
@@ -474,16 +520,42 @@ class CrawlerLoop:
             ocr_results = candidate_screen.ocr_results if candidate_screen else None
             action_str = self.crawl_logger.log_ai_decision(action_data, ai_decision_time, ai_input_prompt, ocr_results)
             
-            # 10. Execute action
-            # Add OCR results to action_data for fallback element resolution
+            # 10. Execute actions (supports multi-action batch)
+            # Extract actions array from the batch response
+            actions_list = action_data.get("actions", [])
+            if not actions_list:
+                # Legacy fallback: if no 'actions' key, treat action_data itself as single action
+                actions_list = [action_data]
+            
+            # Add OCR results to each action for fallback element resolution
             if ocr_results:
-                action_data["ocr_results"] = ocr_results
+                for act in actions_list:
+                    act["ocr_results"] = ocr_results
+            
+            # Get multi-action config settings
+            wait_between_actions = float(self.config.get('WAIT_BETWEEN_BATCH_ACTIONS', 0.5))
+            stop_on_error = bool(self.config.get('MULTI_ACTION_STOP_ON_ERROR', True))
             
             element_find_start = time.time()
-            success = self.agent_assistant.execute_action(action_data)
+            
+            # Use batch execution for multi-action support
+            executed_count, success_list, batch_error = self.agent_assistant.action_executor.execute_action_batch(
+                actions_list,
+                wait_between_actions=wait_between_actions,
+                stop_on_error=stop_on_error
+            )
+            
             element_find_time_ms = (time.time() - element_find_start) * 1000.0
             
-            # Wait for action to settle before capturing the result
+            # Overall success: all actions succeeded
+            success = all(success_list) if success_list else False
+            
+            # Track multi-action statistics
+            if len(actions_list) > 1:
+                self.runtime_stats['multi_action_batch_count'] = self.runtime_stats.get('multi_action_batch_count', 0) + 1
+                self.runtime_stats['total_batch_actions'] = self.runtime_stats.get('total_batch_actions', 0) + len(actions_list)
+            
+            # Wait for actions to settle before capturing the result
             if not self.wait_with_check(self.wait_after_action):
                 return False
             
@@ -521,17 +593,36 @@ class CrawlerLoop:
                 element_find_time_ms
             )
             
-            # Build detailed feedback including screen transition info
-            if success:
-                if to_screen_id is not None:
-                    if to_screen_id != from_screen_id:
-                        self.last_action_feedback = f"Action '{action_str}' executed -> NAVIGATED to new screen #{to_screen_id}"
+            # Build detailed feedback including batch execution results
+            if len(actions_list) > 1:
+                # Multi-action batch feedback
+                succeeded = sum(success_list)
+                total = len(actions_list)
+                executed = executed_count
+                
+                if success:
+                    if to_screen_id is not None and to_screen_id != from_screen_id:
+                        self.last_action_feedback = f"Batch of {total} actions executed ({succeeded}/{executed} succeeded) -> NAVIGATED to #{to_screen_id}"
                     else:
-                        self.last_action_feedback = f"Action '{action_str}' executed -> STAYED on same screen #{from_screen_id} (no effect)"
+                        self.last_action_feedback = f"Batch of {total} actions executed ({succeeded}/{executed} succeeded) -> STAYED on #{from_screen_id}"
                 else:
-                    self.last_action_feedback = f"Action '{action_str}' executed -> screen state unclear"
+                    self.last_action_feedback = f"Batch PARTIAL: {succeeded}/{executed} actions succeeded. {batch_error or ''}"
+                    # Track element not found / execution failure for thesis metrics
+                    self.runtime_stats['element_not_found_count'] += 1
             else:
-                self.last_action_feedback = f"Action '{action_str}' FAILED to execute"
+                # Single action feedback (legacy format)
+                if success:
+                    if to_screen_id is not None:
+                        if to_screen_id != from_screen_id:
+                            self.last_action_feedback = f"Action '{action_str}' executed -> NAVIGATED to new screen #{to_screen_id}"
+                        else:
+                            self.last_action_feedback = f"Action '{action_str}' executed -> STAYED on same screen #{from_screen_id} (no effect)"
+                    else:
+                        self.last_action_feedback = f"Action '{action_str}' executed -> screen state unclear"
+                else:
+                    self.last_action_feedback = f"Action '{action_str}' FAILED to execute"
+                    # Track element not found / execution failure for thesis metrics
+                    self.runtime_stats['element_not_found_count'] += 1
             
             return True
             
@@ -618,6 +709,11 @@ class CrawlerLoop:
                     from datetime import datetime
                     end_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     self.db_manager.update_run_status(self.current_run_id, "COMPLETED", end_time)
+                    
+                    # Save runtime stats for thesis metrics
+                    import json
+                    self.db_manager.update_run_meta(self.current_run_id, json.dumps(self.runtime_stats))
+                    logger.info(f"Saved runtime stats: {self.runtime_stats}")
                 except Exception as e:
                     logger.error(f"Error updating run status: {e}")
             

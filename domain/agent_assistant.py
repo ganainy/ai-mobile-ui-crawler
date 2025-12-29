@@ -54,18 +54,22 @@ class Tools:
     def __init__(self, driver):
         self.driver = driver
 
-# Define the Pydantic model for ActionData
+# Define the Pydantic model for a single action
 class ActionData(BaseModel):
+    """Single action data model."""
     action: str
     target_identifier: Optional[str] = None  # Optional for actions like scroll
     target_bounding_box: Optional[Dict[str, Any]] = None
     input_text: Optional[str] = None
     reasoning: str
 
-    @validator("target_identifier")
+    @validator("target_identifier", pre=True)
     def clean_target_identifier(cls, value):
+        # Handle None values
+        if value is None:
+            return None
         # Add normalization logic for target_identifier if needed
-        return value.strip()
+        return str(value).strip()
 
     @validator("target_bounding_box", pre=True)
     def validate_bounding_box(cls, value):
@@ -75,6 +79,23 @@ class ActionData(BaseModel):
         if not isinstance(value, dict) or "top_left" not in value or "bottom_right" not in value:
             raise ValueError("Invalid bounding box format")
         return value
+
+
+class ActionBatch(BaseModel):
+    """Batch of actions returned by AI for multi-action execution."""
+    exploration_journal: str = ""
+    actions: List[ActionData]
+    
+    @validator("actions", pre=True)
+    def validate_actions(cls, v):
+        """Validate and clean actions list."""
+        if not isinstance(v, list):
+            raise ValueError("Actions must be a list")
+        if len(v) < 1:
+            raise ValueError("At least one action is required")
+        if len(v) > 5:
+            raise ValueError("Maximum 5 actions per batch")
+        return v
 
 class AgentAssistant:
     """
@@ -487,7 +508,8 @@ class AgentAssistant:
                 "current_composite_hash": current_composite_hash or "",
                 "last_action_feedback": last_action_feedback or "",
                 "is_stuck": is_stuck,
-                "stuck_reason": stuck_reason or ""
+                "stuck_reason": stuck_reason or "",
+                "app_package": self.cfg.get("APP_PACKAGE") or "",  # For credential store lookup
             }
 
             # Extract actual XML string and simplify it before sending to AI
@@ -592,28 +614,29 @@ class AgentAssistant:
             
             validated_data = self._validate_and_clean_action_data(chain_result)
             
-            # Post-processing: Resolve OCR IDs to coordinates if needed
-            if validated_data:
-                target_id = validated_data.get("target_identifier")
-                
-                # With HYBRID always enabled, OCR is always on - resolve ocr_X targets to bounding boxes
-                if target_id and str(target_id).startswith("ocr_") and ocr_results:
-                    try:
-                        # Extract index from "ocr_X"
-                        idx = int(str(target_id).split("_")[1])
-                        if 0 <= idx < len(ocr_results):
-                            item = ocr_results[idx]
-                            bounds = item.get('bounds') # [x_min, y_min, x_max, y_max]
-                            
-                            if bounds and len(bounds) == 4:
-                                # Convert to bbox expected by tap method
-                                bbox = {
-                                    "top_left": [bounds[0], bounds[1]],
-                                    "bottom_right": [bounds[2], bounds[3]]
-                                }
-                                validated_data["target_bounding_box"] = bbox
-                    except (ValueError, IndexError) as e:
-                        logging.warning(f"Failed to resolve OCR target {target_id}: {e}")
+            # Post-processing: Resolve OCR IDs to coordinates for each action in the batch
+            if validated_data and "actions" in validated_data:
+                for action_item in validated_data["actions"]:
+                    target_id = action_item.get("target_identifier")
+                    
+                    # With HYBRID always enabled, OCR is always on - resolve ocr_X targets to bounding boxes
+                    if target_id and str(target_id).startswith("ocr_") and ocr_results:
+                        try:
+                            # Extract index from "ocr_X"
+                            idx = int(str(target_id).split("_")[1])
+                            if 0 <= idx < len(ocr_results):
+                                item = ocr_results[idx]
+                                bounds = item.get('bounds')  # [x_min, y_min, x_max, y_max]
+                                
+                                if bounds and len(bounds) == 4:
+                                    # Convert to bbox expected by tap method
+                                    bbox = {
+                                        "top_left": [bounds[0], bounds[1]],
+                                        "bottom_right": [bounds[2], bounds[3]]
+                                    }
+                                    action_item["target_bounding_box"] = bbox
+                        except (ValueError, IndexError) as e:
+                            logging.warning(f"Failed to resolve OCR target {target_id}: {e}")
 
             # Return with metadata (confidence and token count are placeholders for now)
             # Include the AI input prompt for database storage
@@ -638,7 +661,35 @@ class AgentAssistant:
 
 
     def _validate_and_clean_action_data(self, action_data: Dict[str, Any]) -> Dict[str, Any]:
-        return ActionData.model_validate(action_data).dict()
+        """Validate and clean action data from AI response.
+        
+        Handles both formats:
+        1. Multi-action format: {"actions": [...], "exploration_journal": "..."}
+        2. Legacy single-action format: {"action": "...", "target_identifier": "...", ...}
+        
+        Returns:
+            Validated ActionBatch as dictionary with 'actions' key (list) and 'exploration_journal'
+        """
+        # Check if this is multi-action format (has 'actions' array)
+        if "actions" in action_data and isinstance(action_data.get("actions"), list):
+            # Multi-action format - validate as ActionBatch
+            batch = ActionBatch.model_validate(action_data)
+            return batch.model_dump()
+        
+        # Legacy single-action format - wrap in batch
+        # Check for required fields of single action
+        if "action" in action_data:
+            # Validate as single ActionData first
+            single_action = ActionData.model_validate(action_data)
+            # Wrap in batch format
+            batch = ActionBatch(
+                exploration_journal=action_data.get("exploration_journal", ""),
+                actions=[single_action]
+            )
+            return batch.model_dump()
+        
+        # Neither format - this is an error
+        raise ValueError("Action data must contain either 'actions' array or 'action' field")
 
     def _ensure_driver_initialized(self):
         if not self.tools:
