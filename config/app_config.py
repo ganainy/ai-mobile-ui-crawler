@@ -399,6 +399,12 @@ class Config:
         - Documentation constants (ACTION_DESC_*)
         - Key constants (CONFIG_OUTPUT_DATA_DIR, etc.)
         """
+        # Gmail Configuration
+        import os
+        self.GMAIL_USER = os.getenv('GMAIL_USER', '')
+        self.GMAIL_APP_PASSWORD = os.getenv('GMAIL_APP_PASSWORD', '')
+        self.GMAIL_SEARCH_TIMEOUT = int(os.getenv('GMAIL_SEARCH_TIMEOUT', '60'))  # Seconds
+
         module = globals()
         result: Dict[str, Any] = {}
         
@@ -757,7 +763,8 @@ CRAWLER_AVAILABLE_ACTIONS = {
     "clear_text": "Clear all text from the target input element.",
     "replace_text": "Replace existing text in the target input element with new text.",
     "flick": "Perform a fast flick gesture in the specified direction (faster than scroll for quick navigation).",
-    "reset_app": "Reset the app to its initial state (clears app data and restarts)."
+    "reset_app": "Reset the app to its initial state (clears app data and restarts).",
+    "fetch_email_otp": "Fetch the verification code from my email and type it into this input field."
 }
 
 CRAWL_MODE = "steps"

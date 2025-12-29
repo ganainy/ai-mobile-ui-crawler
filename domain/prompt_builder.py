@@ -187,9 +187,17 @@ class PromptBuilder:
         # XML Context (Structured)
         if context.get("xml_context"):
             xml_data = context['xml_context']
-            # It should be a JSON string from xml_to_structured_json
-            # We can present it as a code block
-            dynamic_parts.append(f"\n**UI Elements (JSON Structure)**:\n```json\n{xml_data}\n```")
+            # Convert dict/list to formatted JSON string for the prompt
+            if isinstance(xml_data, (dict, list)):
+                try:
+                    xml_string = json.dumps(xml_data, indent=2, ensure_ascii=False)
+                    dynamic_parts.append(f"\n**UI Elements (JSON Structure)**:\n```json\n{xml_string}\n```")
+                except Exception:
+                     # Fallback
+                     dynamic_parts.append(f"\n**UI Elements (JSON Structure)**:\n```json\n{xml_data}\n```")
+            else:
+                 # It's already a string
+                 dynamic_parts.append(f"\n**UI Elements (JSON Structure)**:\n```json\n{xml_data}\n```")
 
         # OCR Context (Compact)
         if context.get("ocr_context"):

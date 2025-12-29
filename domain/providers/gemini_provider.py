@@ -40,7 +40,7 @@ class GeminiProvider(ProviderStrategy):
         """Determine the full path to the Gemini models cache file."""
         # Use the traverser_ai_api directory as the base
         traverser_ai_api_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        cache_dir = os.path.join(traverser_ai_api_dir, "output_data", "cache")
+        cache_dir = os.path.join(traverser_ai_api_dir, "traverser_data", "cache")
         os.makedirs(cache_dir, exist_ok=True)
         cache_file_path = os.path.join(cache_dir, "gemini_models.json")
         return cache_file_path

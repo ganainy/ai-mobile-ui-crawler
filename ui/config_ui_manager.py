@@ -702,9 +702,29 @@ class ConfigManager(QObject):
         try:
             is_enabled = bool(state)
             
+            # Check for PCAPDroid API Key requirement if enabling
+            if is_enabled:
+                pcap_key = self.config.get('PCAPDROID_API_KEY')
+                if not pcap_key:
+                    # Revert checkbox state
+                    if 'ENABLE_MOBSF_ANALYSIS' in self.main_controller.config_widgets:
+                        checkbox = self.main_controller.config_widgets['ENABLE_MOBSF_ANALYSIS']
+                        checkbox.blockSignals(True)
+                        checkbox.setChecked(False)
+                        checkbox.blockSignals(False)
+                    
+                    # Notify user
+                    QMessageBox.warning(
+                        self.main_controller,
+                        "Missing Requirement",
+                        "PCAPDroid API Key is required to enable MobSF Analysis / Packet Capture.\n\nPlease enter a valid API key in the API Keys section first."
+                    )
+                    return
+
             # Update visibility and enabled state of API URL field and label
             if 'MOBSF_API_URL' in self.main_controller.config_widgets:
                 self.main_controller.config_widgets['MOBSF_API_URL'].setVisible(is_enabled)
+
             if 'MOBSF_API_URL_LABEL' in self.main_controller.config_widgets:
                 self.main_controller.config_widgets['MOBSF_API_URL_LABEL'].setVisible(is_enabled)
             
@@ -800,7 +820,38 @@ class ConfigManager(QObject):
             
         except Exception as e:
             logging.error(f"Error handling context source change: {e}", exc_info=True)
-    
+
+    @Slot(int)
+    def _on_traffic_capture_changed(self, state: int):
+        """Handle traffic capture enabled state change with validation."""
+        try:
+            is_enabled = bool(state)
+            
+            if is_enabled:
+                pcap_key = self.config.get('PCAPDROID_API_KEY')
+                if not pcap_key:
+                    # Revert checkbox state
+                    if 'ENABLE_TRAFFIC_CAPTURE' in self.main_controller.config_widgets:
+                        checkbox = self.main_controller.config_widgets['ENABLE_TRAFFIC_CAPTURE']
+                        checkbox.blockSignals(True)
+                        checkbox.setChecked(False)
+                        checkbox.blockSignals(False)
+                    
+                    # Notify user
+                    QMessageBox.warning(
+                        self.main_controller,
+                        "Missing Requirement",
+                        "PCAPDroid API Key is required to enable Traffic Capture.\n\nPlease enter a valid API key in the API Keys section first."
+                    )
+                    # Don't save the enabled state
+                    return
+
+            # Save the valid state
+            self.save_config('ENABLE_TRAFFIC_CAPTURE')
+            
+        except Exception as e:
+            logging.error(f"Error handling traffic capture change: {e}")
+
     def connect_widgets_for_auto_save(self):
         """Connect all config widgets to auto-save on change."""
         for key, widget in self.main_controller.config_widgets.items():
@@ -826,7 +877,11 @@ class ConfigManager(QObject):
             elif isinstance(widget, QSpinBox):
                 widget.editingFinished.connect(save_lambda)
             elif isinstance(widget, QCheckBox):
-                widget.stateChanged.connect(save_lambda)
+                if key == 'ENABLE_TRAFFIC_CAPTURE':
+                    widget.stateChanged.connect(self._on_traffic_capture_changed)
+                else:
+                    widget.stateChanged.connect(save_lambda)
+                
                 # If the health-only AI filter checkbox changes, trigger a rescan automatically
                 if key == 'USE_AI_FILTER_FOR_TARGET_APP_DISCOVERY':
                     try:

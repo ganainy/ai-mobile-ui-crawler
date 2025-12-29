@@ -692,6 +692,20 @@ class ComponentFactory:
         ollama_label.setToolTip("Base URL for local Ollama instance")
         api_keys_layout.addRow(ollama_label, ollama_url_field)
 
+        # --- Gmail Credentials ---
+        
+        # Gmail App Password
+        _, gmail_pwd_container, gmail_pwd_label = ComponentFactory._create_api_key_field_with_toggle(
+            config_widgets,
+            "GMAIL_APP_PASSWORD",
+            "Enter App Password",
+            "Gmail App Password: ",
+            "App Password for Gmail IMAP access (generate in Google Account Security settings)",
+        )
+        api_keys_layout.addRow(gmail_pwd_label, gmail_pwd_container)
+        
+        # Note: GMAIL_USER is determined from TEST_EMAIL if not explicitly set
+
         # --- Test Credentials ---
         
         # Test Email
@@ -725,7 +739,8 @@ class ComponentFactory:
         keys_to_load = [
             "OPENROUTER_API_KEY", "GEMINI_API_KEY", "MOBSF_API_KEY", 
             "PCAPDROID_API_KEY", "OLLAMA_BASE_URL", 
-            "TEST_EMAIL", "TEST_PASSWORD", "TEST_NAME"
+            "TEST_EMAIL", "TEST_PASSWORD", "TEST_NAME",
+            "GMAIL_APP_PASSWORD"
         ]
         
         for key in keys_to_load:

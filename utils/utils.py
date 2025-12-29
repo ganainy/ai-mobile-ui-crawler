@@ -541,9 +541,9 @@ def simplify_xml_for_ai(xml_string: str, max_len: int, provider: str = "gemini",
         logging.error(f"🔴 Unexpected error during XML simplification for {provider}: {e}. Falling back.", exc_info=True)
         return xml_string[:effective_max_len] + "\n... (fallback truncation)" if len(xml_string) > effective_max_len else xml_string
 
-def xml_to_structured_json(xml_string: str) -> str:
+def xml_to_structured_json(xml_string: str) -> Dict[str, Any]:
     """
-    Parses XML and returns a compact JSON string representation for LLMs.
+    Parses XML and returns a compact dictionary representation for LLMs.
     Prioritizes interactive elements and meaningful text.
     
     Structure:
@@ -557,7 +557,9 @@ def xml_to_structured_json(xml_string: str) -> str:
     }
     """
     if not xml_string:
-        return "{}"
+        return {}
+    
+    # ... (skipping unchanged parts) ...
 
     possible_parse_errors = (std_etree.ParseError,)
     if USING_LXML and lxml_etree:
@@ -571,7 +573,7 @@ def xml_to_structured_json(xml_string: str) -> str:
             root = std_etree.fromstring(xml_string.encode('utf-8'))
 
         if root is None:
-            return "{}"
+            return {}
 
         interactive_elements = []
         static_texts = []
@@ -631,11 +633,11 @@ def xml_to_structured_json(xml_string: str) -> str:
             # unique static texts to save tokens
             result['static_text'] = list(dict.fromkeys(static_texts))  
             
-        return json.dumps(result, ensure_ascii=False)
+        return result
 
     except Exception as e:
         logging.error(f"🔴 Error converting XML to JSON: {e}")
-        return json.dumps({"error": "Failed to parse XML", "raw_snippet": xml_string[:200]})
+        return {"error": "Failed to parse XML", "raw_snippet": xml_string[:200]}
 
 def filter_xml_by_allowed_packages(xml_string: str, target_package: str, allowed_packages: List[str]) -> str:
     """

@@ -1,7 +1,7 @@
 from typing import Dict, Optional, Any
 
 # Define the JSON output schema as a dictionary
-# Supports multi-action batching: AI can return 1-5 actions to execute sequentially
+# Supports multi-action batching: AI can return 1-12 actions to execute sequentially
 JSON_OUTPUT_SCHEMA = {
     "type": "object",
     "properties": {
@@ -11,7 +11,7 @@ JSON_OUTPUT_SCHEMA = {
         },
         "actions": {
             "type": "array",
-            "description": "Array of 1-5 actions to execute sequentially. First action MUST be valid from current screen. Each subsequent action assumes previous actions succeeded.",
+            "description": "Array of 1-12 actions to execute sequentially. First action MUST be valid from current screen. Each subsequent action assumes previous actions succeeded.",
             "items": {
                 "type": "object",
                 "properties": {
@@ -30,7 +30,7 @@ JSON_OUTPUT_SCHEMA = {
                 "required": ["action", "target_identifier", "reasoning"]
             },
             "minItems": 1,
-            "maxItems": 5
+            "maxItems": 12
         },
         "signup_completed": {
             "type": "boolean",
@@ -55,7 +55,8 @@ _DEFAULT_AVAILABLE_ACTIONS = {
     "clear_text": "Clear all text from the target input element.",
     "replace_text": "Tap on the input element, clear existing text, and type new text.",
     "flick": "Perform a fast flick gesture in the specified direction (faster than scroll for quick navigation).",
-    "reset_app": "Reset the app to its initial state (clears app data and restarts)."
+    "reset_app": "Reset the app to its initial state (clears app data and restarts).",
+    "fetch_email_otp": "Fetch the verification code from my email and type it into this input field."
 }
 
 def get_available_actions(config: Optional[Any] = None) -> Dict[str, str]:
@@ -104,7 +105,7 @@ These disrupt testing by leaving the app. Focus on in-app navigation."""
 # Fixed part - automatically appended by code, not editable by users
 ACTION_DECISION_FIXED_PART = """
 # MULTI-ACTION MODE
-You can return 1-5 actions in a single response to speed up exploration:
+You can return 1-12 actions in a single response to speed up exploration:
 - **Use multiple actions** when confident about a sequence (e.g., fill fields → click submit).
 - **Use single action** when exploring new screens or uncertain about outcomes.
 - First action MUST be valid from current screen state.

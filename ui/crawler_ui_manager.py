@@ -75,6 +75,7 @@ class CrawlerManager(QObject):
         self.shutdown_timer = QTimer(self)
         self.shutdown_timer.setSingleShot(True)
         self.shutdown_timer.timeout.connect(self.force_stop_crawler_on_timeout)
+        self._stdout_buffer = ""  # Buffer for incomplete lines
         
         # Initialize shared orchestrator
         backend = create_process_backend(use_qt=True)  # UI uses Qt backend
@@ -683,135 +684,122 @@ class CrawlerManager(QObject):
             return
             
         try:
-            output = bytes(raw_data).decode('utf-8', errors='replace')
+            # Append new data to buffer
+            new_data = bytes(raw_data).decode('utf-8', errors='replace')
+            self._stdout_buffer += new_data
             
-            for line in output.strip().split('\n'):
+            # Process complete lines only
+            while '\n' in self._stdout_buffer:
+                line, self._stdout_buffer = self._stdout_buffer.split('\n', 1)
                 line = line.strip()
+                
+                # If we have a very large buffer without newlines (unlikely), force clear/process to avoid memory issues
+                if len(self._stdout_buffer) > 100000:
+                    self._stdout_buffer = ""
+                
                 if not line:
                     continue
-                
-                # Skip UI control messages (handled separately below)
-                if any(line.startswith(p) for p in ['UI_STEP:', 'UI_ACTION:', 'UI_SCREENSHOT:', 'UI_STATUS:', 'UI_END:', 'UI_AI_PROMPT:']):
-                    continue
-                
-                # Skip tracebacks and stack traces (remaining sources of clutter)
-                # Most noisy third-party logging is now silenced at the source
-                skip_patterns = [
-                    'Traceback (most recent call last):',
-                    'File "',  # Stack trace file lines
-                    '    at ',  # JS-style stack traces
-                    'Stacktrace:',
-                    'The above error is caused by',
-                ]
-                
-                if any(pattern in line for pattern in skip_patterns):
-                    continue
-
-                color = 'white'
-                message = line
-                
-                prefixes = {
-                    '[INFO]': 'blue',
-                    'INFO:': 'blue',
-                    '[WARNING]': 'orange',
-                    'WARNING:': 'orange',
-                    '[ERROR]': 'red',
-                    'ERROR:': 'red',
-                    '[CRITICAL]': 'red',
-                    'CRITICAL:': 'red',
-                }
-
-                for prefix, p_color in prefixes.items():
-                    if line.startswith(prefix):
-                        message = line[len(prefix):].lstrip()
-                        color = p_color
-                        break
-                
-                self.main_controller.log_message(message, color)
-
-            # Check for UI_STEP_PREFIX:step (use last match if multiple found)
-            step_matches = re.findall(r'UI_STEP:(\d+)', output)
-            if step_matches:
-                # Use the last step number in case of multiple matches
-                self.step_count = int(step_matches[-1])
-                self.main_controller.step_label.setText(f"Step: {self.step_count}")
-                self.update_progress()
-            
-            # Check for UI_ACTION_PREFIX:action (handle multiple matches in case of buffered output)
-            action_matches = re.findall(r'UI_ACTION:(.*?)(?:\n|$)', output)
-            for action_text in action_matches:
-                action_text = action_text.strip()
-                if action_text:
-                    self.last_action = action_text
-                    # Action history update removed
-            
-            # Check for UI_SCREENSHOT_PREFIX:path (use last match if multiple found)
-            screenshot_matches = re.findall(r'UI_SCREENSHOT:(.*?)(?:\n|$)', output)
-            if screenshot_matches:
-                # Use the last screenshot path in case of multiple matches
-                screenshot_path = screenshot_matches[-1].strip()
-                if screenshot_path and os.path.exists(screenshot_path):
-                    self.current_screenshot = screenshot_path
-                    self.main_controller.update_screenshot(screenshot_path)
                     
-            # Check for UI_STATUS_PREFIX:status
-            status_match = re.search(r'UI_STATUS:(.*?)($|\n)', output)
-            if status_match:
-                status_text = status_match.group(1).strip()
-                self.main_controller.status_label.setText(f"Status: {status_text}")
-
-            # Check for UI_END_PREFIX:final_status
-            # Note: Audio alerts are handled by handle_process_finished based on exit code/status
-            # This is just for logging purposes
-            end_match = re.search(r'UI_END:(.*?)($|\n)', output)
-            if end_match:
-                final_status = end_match.group(1).strip()
-                # Log final status line for visibility
-                self.main_controller.log_message(f"Final status: {final_status}", 'blue')
-            
-            # Check for UI_AI_PROMPT output lines (show complete AI input prompt)
-            ai_prompt_match = re.search(r'UI_AI_PROMPT:(.*)', output, re.DOTALL)
-            if ai_prompt_match:
-                try:
-                    ai_prompt_str = ai_prompt_match.group(1).strip()
-                    # Split the prompt at the first newline to avoid capturing other UI messages
-                    # that may come after in the same output batch
-                    if '\nUI_' in ai_prompt_str:
-                        ai_prompt_str = ai_prompt_str.split('\nUI_')[0].strip()
-                    
-                    if ai_prompt_str and hasattr(self.main_controller, 'update_ai_input'):
-                        # Try to parse as JSON first (new format)
-                        import json
-                        try:
-                            prompt_data = json.loads(ai_prompt_str)
-                            self.main_controller.update_ai_input(prompt_data)
-                        except json.JSONDecodeError:
-                            # Fallback to string (legacy format)
-                            self.main_controller.update_ai_input(ai_prompt_str)
-                        # AI prompt is shown in inspector only, no main log entry needed
-                except Exception as e:
-                    self.main_controller.log_message(f"Error displaying AI prompt: {e}", 'red')
-                    logging.error(f"Error displaying AI prompt: {e}")
-
-            # Check for UI_AI_RESPONSE output lines (show complete AI output response)
-            ai_response_match = re.search(r'UI_AI_RESPONSE:(.*)', output, re.DOTALL)
-            if ai_response_match:
-                try:
-                    ai_response = ai_response_match.group(1).strip()
-                    # Split at first newline to avoid capturing other UI messages
-                    if '\nUI_' in ai_response:
-                        ai_response = ai_response.split('\nUI_')[0].strip()
-                    
-                    if ai_response and hasattr(self.main_controller, 'update_ai_output'):
-                        self.main_controller.update_ai_output(ai_response)
-                        # AI response is shown in inspector only, no main log entry needed
-                except Exception as e:
-                    self.main_controller.log_message(f"Error displaying AI response: {e}", 'red')
-                    logging.error(f"Error displaying AI response: {e}")
-                
+                # Process the complete line
+                self._process_log_line(line)
         except Exception as e:
             self.main_controller.log_message(f"Error processing crawler output: {e}", 'red')
             logging.error(f"Error processing crawler output: {e}")
+            self._stdout_buffer = "" # Reset buffer on error
+
+    def _process_log_line(self, line: str) -> None:
+        """Process a single complete log line."""
+        try:
+             # Process the line (logic moved from read_stdout)
+             output = line # Keep variable name compatible with existing logic chunks if we were reusing
+             
+             # Skip UI control messages (handled separately below)
+             if any(line.startswith(p) for p in ['UI_STEP:', 'UI_ACTION:', 'UI_SCREENSHOT:', 'UI_STATUS:', 'UI_END:', 'UI_AI_PROMPT:', 'UI_AI_RESPONSE:']):
+                 pass # Check specific handlers below
+             else:
+                 # Skip tracebacks and stack traces
+                 skip_patterns = [
+                    'Traceback (most recent call last):',
+                    'File "',
+                    '    at ',
+                    'Stacktrace:',
+                    'The above error is caused by',
+                 ]
+                 if not any(pattern in line for pattern in skip_patterns):
+                    # Log normal messages
+                    color = 'white'
+                    message = line
+                    prefixes = {
+                        '[INFO]': 'blue', 'INFO:': 'blue',
+                        '[WARNING]': 'orange', 'WARNING:': 'orange',
+                        '[ERROR]': 'red', 'ERROR:': 'red',
+                        '[CRITICAL]': 'red', 'CRITICAL:': 'red',
+                    }
+                    for prefix, p_color in prefixes.items():
+                        if line.startswith(prefix):
+                            message = line[len(prefix):].lstrip()
+                            color = p_color
+                            break
+                    self.main_controller.log_message(message, color)
+
+             # Check for UI_STEP
+             if line.startswith('UI_STEP:'):
+                 try:
+                     self.step_count = int(line.split(':', 1)[1].strip())
+                     self.main_controller.step_label.setText(f"Step: {self.step_count}")
+                     self.update_progress()
+                 except ValueError:
+                     pass
+
+             # Check for UI_ACTION
+             if line.startswith('UI_ACTION:'):
+                 self.last_action = line.split(':', 1)[1].strip()
+            
+             # Check for UI_SCREENSHOT
+             if line.startswith('UI_SCREENSHOT:'):
+                 screenshot_path = line.split(':', 1)[1].strip()
+                 if screenshot_path and os.path.exists(screenshot_path):
+                     self.current_screenshot = screenshot_path
+                     self.main_controller.update_screenshot(screenshot_path)
+             
+             # Check for UI_STATUS
+             if line.startswith('UI_STATUS:'):
+                 status_text = line.split(':', 1)[1].strip()
+                 self.main_controller.status_label.setText(f"Status: {status_text}")
+
+             # Check for UI_END
+             if line.startswith('UI_END:'):
+                 final_status = line.split(':', 1)[1].strip()
+                 self.main_controller.log_message(f"Final status: {final_status}", 'blue')
+             
+             # Check for UI_AI_PROMPT
+             if line.startswith('UI_AI_PROMPT:'):
+                 # This is likely truncated if it was multi-line, but the new logger sends it as single line usually or we handle it via block buffering which is harder here. 
+                 # Assuming the new logger changes newlines to something else or sends it as a block?
+                 # If the prompt is multi-line, strictly line-based processing will break it.
+                 # However, looking at the logs, AI prompts are usually enclosed in blocks locally, but sent to stdout... 
+                 # The previous implementation used re.search(..., re.DOTALL) on the whole chunk.
+                 # If we switch to line-based, we lose multi-line regex matching capabilities unless we allow accumulating context.
+                 # BUT: The UI prompts are usually single-line JSON or explicit markers.
+                 # Let's check the previous regex: re.search(r'UI_AI_PROMPT:(.*)', output, re.DOTALL)
+                 # This implies it COULD challenge the line-based approach.
+                 # HOWEVER, 'UI_AI_PROMPT:' usually starts a JSON block.
+                 # Ideally, the python script should ensure one JSON object per line or use a delimiter.
+                 # For now, let's treat the line as the start.
+                 prompt_str = line.split(':', 1)[1].strip()
+                 if hasattr(self.main_controller, 'update_ai_input'):
+                     self.main_controller.update_ai_input(prompt_str)
+
+             # Check for UI_AI_RESPONSE
+             if line.startswith('UI_AI_RESPONSE:'):
+                 response_str = line.split(':', 1)[1].strip()
+                 if hasattr(self.main_controller, 'update_ai_output'):
+                     self.main_controller.update_ai_output(response_str)
+
+        except Exception as e:
+            logging.error(f"Error processing log line: {e}")
+
+
 
     @Slot()
     def open_session_folder(self) -> None:

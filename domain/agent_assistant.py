@@ -93,8 +93,8 @@ class ActionBatch(BaseModel):
             raise ValueError("Actions must be a list")
         if len(v) < 1:
             raise ValueError("At least one action is required")
-        if len(v) > 5:
-            raise ValueError("Maximum 5 actions per batch")
+        if len(v) > 12:
+            raise ValueError("Maximum 12 actions per batch")
         return v
 
 class AgentAssistant:
@@ -168,8 +168,19 @@ class AgentAssistant:
         # Initialize provider-agnostic session
         self._init_session(user_id=None)
         
+        # Define AI helper for text processing (simple prompt chain)
+        def ai_helper(prompt: str) -> str:
+            """Simple helper to invoke the AI model for a single text prompt."""
+            try:
+                # Use the adapter's standard interface
+                response_text, _ = self.model_adapter.generate_response(prompt)
+                return response_text
+            except Exception as e:
+                logging.error(f"AI Helper failed: {e}")
+                return ""
+
         # Initialize action executor (handles all action execution logic)
-        self.action_executor = ActionExecutor(self.tools.driver, self.cfg)
+        self.action_executor = ActionExecutor(self.tools.driver, self.cfg, ai_helper=ai_helper)
         
         # Initialize prompt builder
         self.prompt_builder = PromptBuilder(self.cfg)
@@ -547,14 +558,37 @@ class AgentAssistant:
             context['xml_context'] = xml_string_simplified
             context['_full_xml_context'] = xml_string_raw  # Store original for reference
             
+            # Detect secure screen (placeholder black image)
+            is_secure_screen = False
+            if screenshot_bytes and len(screenshot_bytes) < 200:
+                try:
+                    import base64
+                    # This matches the 1x1 pixel returned by appium_driver for FLAG_SECURE
+                    placeholder = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=")
+                    if screenshot_bytes == placeholder:
+                        is_secure_screen = True
+                        logging.warning("⚠️ SECURE SCREEN DETECTED: Visual context disabled. Relying on XML.")
+                        screenshot_bytes = None # Disable image context effectively
+                        
+                        # Add explicit warning to XML context for the AI
+                        warning_text = "SECURE VIEW DETECTED (FLAG_SECURE). SCREENSHOT IS BLACK. RELY ON XML HIERARCHY FOR NAVIGATION."
+                        if isinstance(xml_string_simplified, dict):
+                            xml_string_simplified["_WARNING"] = warning_text
+                        elif isinstance(xml_string_simplified, str):
+                            xml_string_simplified = f"<!-- ⚠️ {warning_text} -->\n" + xml_string_simplified
+                except Exception as e:
+                    logging.warning(f"Error checking secure screen: {e}")
+
             # Prepare image if ENABLE_IMAGE_CONTEXT is enabled
             # Store it in self so the LLM wrapper can access it
             self._current_prepared_image = None
             enable_image_context = self.cfg.get('ENABLE_IMAGE_CONTEXT', False)
             
             # Log image context status
-            if enable_image_context:
+            if enable_image_context and not is_secure_screen:
                 logging.info(f"📸 Image context is ENABLED (screenshot_bytes: {len(screenshot_bytes) if screenshot_bytes else 0} bytes)")
+            elif is_secure_screen:
+                logging.info("📸 Image context disabled (Secure Screen)")
             else:
                 logging.debug("Image context is disabled")
             

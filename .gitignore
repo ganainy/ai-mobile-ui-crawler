@@ -11,8 +11,6 @@ traverser_ai_api/database_output/
 find_app_info/output
 capture_app_traffic/output
 script_setup_manual_config
-output_data/
-old-runs/
 
 # Runtime databases
 crawler.db
@@ -93,8 +91,6 @@ Thumbs.db
 # Speckit generated files
 specs/
 
-
-
 # Legacy code (moved files)
 /src/legacy_code/
 legacy_code/
@@ -102,3 +98,16 @@ legacy_code/
 # Ignore test-suite error reports
 dev/test-suite-errors.md
 
+
+/domain/traverser_data/
+
+/output_data
+/output_data/*
+
+# Exception: Allow logs inside session folders
+#!/output_data/sessions/*/logs/
+#!/output_data/sessions/*/logs/*.log
+
+# Ignore all output_data but allow sessions
+#!/output_data/sessions/
+#!/output_data/sessions/*

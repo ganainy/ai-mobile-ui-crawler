@@ -254,6 +254,12 @@ class AppiumDriver:
                 screenshot = screenshot.split(",", 1)[1]
             return screenshot
         except Exception as e:
+            error_msg = str(e).lower()
+            if "secure" in error_msg:
+                logger.warning(f"Screenshot prevented by FLAG_SECURE. Returning placeholder black image. Error: {e}")
+                # Return 1x1 black pixel placeholder
+                return "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+            
             logger.error(f"Error getting screenshot: {e}")
             return None
     
@@ -442,7 +448,7 @@ class AppiumDriver:
         except Exception as e:
             logger.error(f"[ERROR] Error during press_back: {e}", exc_info=True)
             return False
-    
+
     def press_home(self) -> bool:
         """Press home button."""
         if not self._ensure_helper():

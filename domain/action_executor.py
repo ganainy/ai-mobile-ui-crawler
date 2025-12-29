@@ -20,16 +20,18 @@ class ActionExecutor:
     handling argument normalization, validation, and execution.
     """
     
-    def __init__(self, driver, config):
+    def __init__(self, driver, config, ai_helper: Optional[Callable[[str], str]] = None):
         """
         Initialize the ActionExecutor.
         
         Args:
             driver: AppiumDriver instance for device interaction
             config: Application configuration
+            ai_helper: Optional callback to invoke AI for text processing (e.g. OTP extraction)
         """
         self.driver = driver
         self.cfg = config
+        self.ai_helper = ai_helper
         self._init_action_dispatch_map()
     
     def _is_likely_resource_id(self, identifier: str) -> bool:
@@ -327,11 +329,17 @@ class ActionExecutor:
             # Fallback 2: Element send_keys (last resort)
             if not bbox and target_id:
                 try:
-                    return self.driver.input_text(target_id, input_text)
+                    result = self.driver.input_text(target_id, input_text)
+                    if result:
+                        self.driver.hide_keyboard()
+                    return result
                 except Exception as e3:
                     logger.error(f"All input methods failed: {e3}")
             
             return False
+        finally:
+            # Always try to hide keyboard after successful input
+            self.driver.hide_keyboard()
 
     
     def _execute_long_press_action(self, action_data: Dict[str, Any]) -> bool:
@@ -403,13 +411,17 @@ class ActionExecutor:
             driver = self.driver.helper.get_driver() if self.driver.helper else None
             if driver:
                 driver.execute_script('mobile: type', {'text': input_text})
+                self.driver.hide_keyboard()
                 return True
         except Exception as e:
             logger.warning(f"mobile: type failed in replace: {e}")
             # Fall back to driver method
             if not bbox and target_id:
-                return self.driver.replace_text(target_id, input_text)
+                result = self.driver.replace_text(target_id, input_text)
+                self.driver.hide_keyboard()
+                return result
         
+        self.driver.hide_keyboard()
         return False
     
     def _execute_flick_action(self, action_data: Dict[str, Any]) -> bool:
@@ -440,6 +452,89 @@ class ActionExecutor:
         # reset_app doesn't need any parameters
         return self.driver.reset_app()
 
+    def _execute_fetch_email_otp(self, action_data: Dict[str, Any]) -> bool:
+        """
+        Execute fetch email OTP action.
+        
+        Fetches code from Gmail and types it into the target element.
+        """
+        target_id = action_data.get("target_identifier")
+        bbox = action_data.get("target_bounding_box")
+        
+        if not target_id and not bbox:
+            logger.error("Cannot execute fetch_email_otp: No target identifier provided")
+            return False
+            
+        # Get credentials from config
+        # Fallback to TEST_EMAIL if GMAIL_USER is not set
+        user = self.cfg.get('GMAIL_USER') or self.cfg.get('TEST_EMAIL')
+        password = self.cfg.get('GMAIL_APP_PASSWORD')
+        timeout = self.cfg.get('GMAIL_SEARCH_TIMEOUT', 60)
+        
+        if not user or not password:
+            logger.error("Gmail credentials (GMAIL_APP_PASSWORD and either GMAIL_USER or TEST_EMAIL) not set")
+            return False
+            
+        try:
+            from infrastructure.gmail_service import GmailService
+            service = GmailService(user, password)
+            logger.info(f"Fetching OTP from Gmail for {user}...")
+            
+            # Helper to poll a few times if needed, or rely on service logic
+            # For now, single call as service handles lookback
+            # Pass min_timestamp to ensure we only get RECENT emails (ignore old runs)
+            import time
+            min_timestamp = time.time() - 120 # 2 minutes ago
+            
+            # Fetch raw content instead of code
+            subject, body = service.fetch_latest_email_content(timeout=timeout, min_timestamp=min_timestamp)
+            
+            if not body:
+                logger.warning("No email body found in Gmail")
+                return False
+                
+            code = ""
+            if self.ai_helper:
+                # Use AI to extract code
+                prompt = (
+                    f"You are an OTP extraction assistant.\n"
+                    f"Extract the verification code from the following email.\n"
+                    f"Subject: {subject}\n"
+                    f"Body:\n{body}\n\n"
+                    f"Return ONLY the code (digits). Do not return any other text."
+                )
+                logger.info(f"Asking AI to extract OTP from email '{subject}'...")
+                code = self.ai_helper(prompt).strip()
+                # loose cleanup in case AI is chatty
+                import re
+                match = re.search(r'\d{4,8}', code)
+                if match:
+                    code = match.group(0)
+            else:
+                # Fallback to simple regex if no AI helper available
+                logger.warning("No AI helper available for OTP extraction, using fallback regex.")
+                import re
+                match = re.search(r'\b\d{4,8}\b', body)
+                if match:
+                    code = match.group(0)
+
+            if not code:
+                logger.warning("No OTP code extracted from email")
+                return False
+                
+            logger.info(f"OTP extracted: {code}. Typing into target...")
+            
+            # Construct synthetic input action to reuse input logic
+            input_action_data = action_data.copy()
+            input_action_data['action'] = 'input'
+            input_action_data['input_text'] = code
+            
+            return self._execute_input_action(input_action_data)
+            
+        except Exception as e:
+            logger.error(f"Failed to fetch/enter email OTP: {e}", exc_info=True)
+            return False
+
     def _init_action_dispatch_map(self):
         """Initialize the action dispatch map for efficient action execution."""
         self.action_dispatch_map = {
@@ -455,7 +550,8 @@ class ActionExecutor:
             "clear_text": self._execute_clear_text_action,
             "replace_text": self._execute_replace_text_action,
             "flick": self._execute_flick_action,
-            "reset_app": self._execute_reset_app_action
+            "reset_app": self._execute_reset_app_action,
+            "fetch_email_otp": self._execute_fetch_email_otp
         }
     
     def normalize_action_type(self, action_type: str, action_data: Dict[str, Any]) -> str:
@@ -595,6 +691,11 @@ class ActionExecutor:
                 
                 # Wait between actions (except after the last one)
                 if i < len(actions) - 1:
+                    # Robustly ensure keyboard is hidden between batched actions
+                    try:
+                        self.driver.hide_keyboard()
+                    except Exception:
+                        pass
                     time.sleep(wait_between_actions)
                     
             except Exception as e:
