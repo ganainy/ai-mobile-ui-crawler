@@ -383,6 +383,15 @@ class CrawlerLoop:
                     # Track context loss for thesis metrics
                     self.runtime_stats['context_loss_count'] += 1
                     return True
+                
+                # Check if we escaped from a browser - add feedback for AI
+                browser_feedback = self.app_context_manager.get_and_clear_browser_escape_feedback()
+                if browser_feedback:
+                    # Prepend browser feedback to existing feedback
+                    if self.last_action_feedback:
+                        self.last_action_feedback = f"{browser_feedback} | {self.last_action_feedback}"
+                    else:
+                        self.last_action_feedback = browser_feedback
             
             # 4. Get current screen representation
             candidate_screen = self.screen_state_manager.get_current_screen_representation(
