@@ -33,7 +33,8 @@ class ScreenRepresentation:
                  screenshot_bytes: Optional[bytes] = None,
                  first_seen_run_id: Optional[int] = None,
                  first_seen_step_number: Optional[int] = None,
-                 ocr_results: Optional[List[Dict[str, Any]]] = None):
+                 ocr_results: Optional[List[Dict[str, Any]]] = None,
+                 is_screenshot_blocked: bool = False):
         self.id = screen_id
         self.composite_hash = composite_hash
         self.xml_hash = xml_hash
@@ -47,6 +48,7 @@ class ScreenRepresentation:
         self.first_seen_step_number = first_seen_step_number
         self.ocr_results = ocr_results
         self.xml_root_for_mapping: Optional[Any] = None
+        self.is_screenshot_blocked = is_screenshot_blocked
 
     def __repr__(self):
         ocr_count = len(self.ocr_results) if self.ocr_results else 0
@@ -189,12 +191,15 @@ class ScreenStateManager:
         ss_path = os.path.join(str(self.cfg.SCREENSHOTS_DIR), ss_filename)
 
         os.makedirs(str(self.cfg.SCREENSHOTS_DIR), exist_ok=True)
+        
+        # Check if the screenshot was blocked by FLAG_SECURE
+        is_screenshot_blocked = getattr(self.driver, '_last_screenshot_was_blocked', False)
 
         return ScreenRepresentation(
             screen_id=temp_id, composite_hash=composite_hash, xml_hash=xml_hash, visual_hash=visual_hash,
             screenshot_path=ss_path, activity_name=act, xml_content=xml_str,
             screenshot_bytes=screenshot_bytes, first_seen_run_id=run_id, first_seen_step_number=step_number,
-            ocr_results=ocr_results
+            ocr_results=ocr_results, is_screenshot_blocked=is_screenshot_blocked
         )
 
     def process_and_record_state(self, candidate_screen: ScreenRepresentation, run_id: int, step_number: int, increment_visit_count: bool = True) -> Tuple[ScreenRepresentation, Dict[str, Any]]:

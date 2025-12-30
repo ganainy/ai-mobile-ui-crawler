@@ -1175,11 +1175,11 @@ class CrawlerControllerWindow(QMainWindow):
             pass
 
 
-    def update_screenshot(self, file_path: str) -> None:
+    def update_screenshot(self, file_path: str, is_blocked: bool = False) -> None:
         """Update the screenshot displayed in the UI."""
         try:
             if self.screenshot_label and hasattr(self.screenshot_label, "setPixmap"):
-                update_screenshot(self.screenshot_label, file_path)
+                update_screenshot(self.screenshot_label, file_path, is_blocked=is_blocked)
             else:
                 logging.warning(
                     f"Screenshot label not properly initialized for update from: {file_path}"

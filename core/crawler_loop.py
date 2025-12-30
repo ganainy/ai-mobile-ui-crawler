@@ -267,6 +267,13 @@ class CrawlerLoop:
                     if app_package and app_activity:
                         self.current_run_id = self.db_manager.get_or_create_run_info(app_package, app_activity)
                         if self.current_run_id:
+                            # BUGFIX: Update start_time to NOW to ensure accurate session timing
+                            # This is crucial because get_or_create_run_info may reuse an old database row
+                            # that was created hours ago, causing the start_time to be stale.
+                            # This ensures start_time reflects when crawl actually started, not when row was created.
+                            self.db_manager.update_run_start_time(self.current_run_id)
+                            logger.info(f"Crawl session started. Run ID: {self.current_run_id}, start_time updated to NOW")
+                            
                             # Initialize ScreenStateManager for this run
                             self.screen_state_manager.initialize_for_run(
                                 self.current_run_id,
@@ -407,7 +414,9 @@ class CrawlerLoop:
                     os.makedirs(os.path.dirname(candidate_screen.screenshot_path), exist_ok=True)
                     with open(candidate_screen.screenshot_path, "wb") as f:
                         f.write(candidate_screen.screenshot_bytes)
-                    print(f"UI_SCREENSHOT:{candidate_screen.screenshot_path}", flush=True)
+                    # Send screenshot path to UI with blocked flag if applicable
+                    blocked_flag = "|BLOCKED" if candidate_screen.is_screenshot_blocked else ""
+                    print(f"UI_SCREENSHOT:{candidate_screen.screenshot_path}{blocked_flag}", flush=True)
                 except Exception as e:
                     logger.warning(f"Failed to save UI screenshot: {e}")
             
@@ -582,7 +591,9 @@ class CrawlerLoop:
                             os.makedirs(os.path.dirname(landing_candidate.screenshot_path), exist_ok=True)
                             with open(landing_candidate.screenshot_path, "wb") as f:
                                 f.write(landing_candidate.screenshot_bytes)
-                            print(f"UI_SCREENSHOT:{landing_candidate.screenshot_path}", flush=True)
+                            # Send screenshot path to UI with blocked flag if applicable
+                            blocked_flag = "|BLOCKED" if landing_candidate.is_screenshot_blocked else ""
+                            print(f"UI_SCREENSHOT:{landing_candidate.screenshot_path}{blocked_flag}", flush=True)
                         except Exception as e:
                             logger.warning(f"Failed to save UI screenshot (post-action): {e}")
                     
@@ -818,6 +829,30 @@ class CrawlerLoop:
                         logger.warning("APP_PACKAGE not configured, skipping MobSF analysis")
                 except Exception as e:
                     logger.error(f"Error running MobSF analysis: {e}", exc_info=True)
+            
+            # Generate AI run report if enabled
+            ai_report_enabled = self.config.get('ENABLE_AI_RUN_REPORT', False)
+            if ai_report_enabled is True or str(ai_report_enabled).lower() == 'true':
+                try:
+                    from cli.services.ai_run_report_service import AIRunReportService
+                    if hasattr(self.config, '_path_manager') and self.config._path_manager:
+                        session_dir = self.config._path_manager.get_session_path()
+                        if session_dir and session_dir.exists():
+                            report_service = AIRunReportService(self.config)
+                            success, result = report_service.generate_ai_report(session_dir)
+                            if success:
+                                json_path = result.get('json_path')
+                                markdown_path = result.get('markdown_path')
+                                logger.info(f"AI run report generated: {json_path}, {markdown_path}")
+                            else:
+                                error_msg = result.get('error', 'Unknown error')
+                                logger.error(f"AI run report generation failed: {error_msg}")
+                        else:
+                            logger.warning("Session directory not available for AI run report generation")
+                    else:
+                        logger.warning("Path manager not available for AI run report generation")
+                except Exception as e:
+                    logger.error(f"Error generating AI run report: {e}", exc_info=True)
             
             # Annotate screenshots with action coordinates
             try:

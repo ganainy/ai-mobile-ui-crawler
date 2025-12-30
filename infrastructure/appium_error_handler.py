@@ -194,10 +194,25 @@ async def with_retry(
             # Wait before retrying with exponential backoff
             delay = retry_delay * attempt
             context_str = f"{context}: " if context else ""
-            logger.warning(
-                f"[Retry] {context_str}Attempt {attempt} failed, retrying in {delay}s...",
-                exc_info=error
+            
+            # Suppress verbose logging for FLAG_SECURE screenshot errors
+            error_str = str(error).lower()
+            is_flag_secure_error = (
+                'screenshotexception' in error.__class__.__name__.lower() and
+                'secure' in error_str
             )
+            
+            if is_flag_secure_error:
+                # Log at DEBUG level without stack trace for FLAG_SECURE
+                logger.debug(
+                    f"[Retry] {context_str}Attempt {attempt} failed (FLAG_SECURE), retrying in {delay}s..."
+                )
+            else:
+                # Normal retry logging with stack trace
+                logger.warning(
+                    f"[Retry] {context_str}Attempt {attempt} failed, retrying in {delay}s...",
+                    exc_info=error
+                )
             await asyncio.sleep(delay)
     
     # This should never be reached, but just in case
@@ -251,10 +266,25 @@ def with_retry_sync(
             # Wait before retrying with exponential backoff
             delay = retry_delay * attempt
             context_str = f"{context}: " if context else ""
-            logger.warning(
-                f"[Retry] {context_str}Attempt {attempt} failed, retrying in {delay}s...",
-                exc_info=error
+            
+            # Suppress verbose logging for FLAG_SECURE screenshot errors
+            error_str = str(error).lower()
+            is_flag_secure_error = (
+                'screenshotexception' in error.__class__.__name__.lower() and
+                'secure' in error_str
             )
+            
+            if is_flag_secure_error:
+                # Log at DEBUG level without stack trace for FLAG_SECURE
+                logger.debug(
+                    f"[Retry] {context_str}Attempt {attempt} failed (FLAG_SECURE), retrying in {delay}s..."
+                )
+            else:
+                # Normal retry logging with stack trace
+                logger.warning(
+                    f"[Retry] {context_str}Attempt {attempt} failed, retrying in {delay}s...",
+                    exc_info=error
+                )
             time.sleep(delay)
     
     # This should never be reached, but just in case

@@ -41,6 +41,7 @@ class AppiumDriver:
         self.helper: Optional[AppiumHelper] = None
         self._session_initialized = False
         self._session_info: Optional[Dict[str, Any]] = None
+        self._last_screenshot_was_blocked = False  # Track if last screenshot was blocked by FLAG_SECURE
     
     def disconnect(self):
         """Disconnect Appium helper and close session."""
@@ -252,15 +253,18 @@ class AppiumDriver:
             # Screenshot is already base64 from Appium-Python-Client
             if screenshot.startswith("data:image"):
                 screenshot = screenshot.split(",", 1)[1]
+            self._last_screenshot_was_blocked = False  # Screenshot succeeded
             return screenshot
         except Exception as e:
             error_msg = str(e).lower()
             if "secure" in error_msg:
-                logger.warning(f"Screenshot prevented by FLAG_SECURE. Returning placeholder black image. Error: {e}")
+                logger.debug("Screenshot blocked by FLAG_SECURE, returning placeholder")
+                self._last_screenshot_was_blocked = True  # Mark screenshot as blocked
                 # Return 1x1 black pixel placeholder
                 return "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
             
             logger.error(f"Error getting screenshot: {e}")
+            self._last_screenshot_was_blocked = False  # Not blocked, just an error
             return None
     
     def get_screenshot_bytes(self) -> Optional[bytes]:
