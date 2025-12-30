@@ -536,7 +536,7 @@ class CrawlerLoop:
                     
             # Pass OCR results so action descriptions use actual text instead of opaque IDs
             ocr_results = candidate_screen.ocr_results if candidate_screen else None
-            action_str = self.crawl_logger.log_ai_decision(action_data, ai_decision_time, ai_input_prompt, ocr_results)
+            action_str = self.crawl_logger.log_ai_decision(action_data, ai_decision_time, ai_input_prompt, ocr_results, token_count)
             
             # 10. Execute actions (supports multi-action batch)
             # Extract actions array from the batch response

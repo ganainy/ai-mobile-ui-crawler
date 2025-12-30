@@ -929,15 +929,29 @@ class CrawlerControllerWindow(QMainWindow):
         Args:
             content: The text/JSON to display in the AI Output section.
         """
-        # Try to format as JSON if possible
+        # Try to format as JSON if possible and extract token info
         display_content = content
+        token_info_header = ""
         import json
         try:
             if content and isinstance(content, str) and (content.strip().startswith("{") or content.strip().startswith("[")):
                 parsed = json.loads(content)
+                
+                # Extract token count from _meta if available
+                if isinstance(parsed, dict) and '_meta' in parsed:
+                    meta = parsed['_meta']
+                    if 'token_count' in meta:
+                        token_count = meta['token_count']
+                        # Format token info header
+                        token_info_header = f"📊 Tokens Used: {token_count:,}\n" + ("─" * 50) + "\n\n"
+                
                 display_content = json.dumps(parsed, indent=2)
         except Exception:
             pass
+
+        # Prepend token info if available
+        if token_info_header:
+            display_content = token_info_header + display_content
 
         if not self.ai_history:
             # Received output without input? Create a placeholder entry

@@ -79,7 +79,8 @@ class CrawlLogger:
 
     def log_ai_decision(self, action_data: Dict[str, Any], decision_time: float, 
                         ai_input_prompt: Optional[Union[str, Dict[str, Any]]] = None,
-                        ocr_results: Optional[List[Dict[str, Any]]] = None):
+                        ocr_results: Optional[List[Dict[str, Any]]] = None,
+                        token_count: Optional[int] = None):
         """Log the AI's decision.
         
         Args:
@@ -87,6 +88,7 @@ class CrawlLogger:
             decision_time: Time taken for AI to make decision
             ai_input_prompt: The prompt sent to AI (for inspector)
             ocr_results: OCR results from current screen (to resolve ocr_X to text)
+            token_count: Total tokens used for this AI request (if available)
         """
         # Log the AI input prompt first (before the action)
         if ai_input_prompt:
@@ -96,9 +98,13 @@ class CrawlLogger:
         try:
             # Inject meta-data for the UI
             ui_data = action_data.copy()
-            ui_data['_meta'] = {
+            meta = {
                 'decision_time_sec': round(decision_time, 3)
             }
+            # Add token count if available
+            if token_count is not None:
+                meta['token_count'] = token_count
+            ui_data['_meta'] = meta
             # MUST be single-line JSON for UI line-based parser
             response_json = json.dumps(ui_data)
             print(f"UI_AI_RESPONSE:{response_json}", flush=True)
