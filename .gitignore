@@ -105,9 +105,10 @@ dev/test-suite-errors.md
 /output_data/*
 
 # Exception: Allow logs inside session folders
-#!/output_data/sessions/*/logs/
-#!/output_data/sessions/*/logs/*.log
+!/output_data/sessions/*/logs/
+!/output_data/sessions/*/logs/*.log
 
 # Ignore all output_data but allow sessions
-#!/output_data/sessions/
-#!/output_data/sessions/*
+!/output_data/sessions/
+!/output_data/sessions/*
+!/output_data/sessions/2107113SG_app_endometriose_prod_2025-12-29_23-56

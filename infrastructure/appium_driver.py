@@ -63,7 +63,7 @@ class AppiumDriver:
         """Ensure AppiumHelper is initialized."""
         if not self.helper:
             # Create helper with config values
-            max_retries = self.cfg.get('APPIUM_MAX_RETRIES', 3)
+            max_retries = self.cfg.get('APPIUM_MAX_RETRIES', 2)  # Reduced from 3 for faster failures
             retry_delay = self.cfg.get('APPIUM_RETRY_DELAY', 1.0)
             implicit_wait = self.cfg.get('APPIUM_IMPLICIT_WAIT', 5000)
             

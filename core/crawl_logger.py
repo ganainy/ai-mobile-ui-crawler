@@ -99,7 +99,8 @@ class CrawlLogger:
             ui_data['_meta'] = {
                 'decision_time_sec': round(decision_time, 3)
             }
-            response_json = json.dumps(ui_data, indent=2)
+            # MUST be single-line JSON for UI line-based parser
+            response_json = json.dumps(ui_data)
             print(f"UI_AI_RESPONSE:{response_json}", flush=True)
         except Exception:
             pass

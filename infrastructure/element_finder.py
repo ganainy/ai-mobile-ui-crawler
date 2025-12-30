@@ -79,7 +79,7 @@ class ElementFinder:
         try:
             # Temporarily reduce implicit wait for faster attempts
             original_timeout = self._current_implicit_wait or (implicit_wait_ms / 1000.0)
-            reduced_implicit_wait = 2.0  # Lower implicit wait for faster attempts
+            reduced_implicit_wait = 1.0  # Lower implicit wait for faster failure detection
             
             if abs(original_timeout - reduced_implicit_wait) > 0.1:
                 self.driver.implicitly_wait(reduced_implicit_wait)

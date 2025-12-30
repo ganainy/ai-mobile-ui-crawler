@@ -19,6 +19,51 @@ class GmailService:
         self.password = password
         self.imap_url = imap_url
 
+    def _extract_text_with_links(self, html: str) -> str:
+        """
+        Extract text from HTML while preserving URLs from anchor tags.
+        
+        Converts <a href="URL">text</a> to "text (URL)" format so links
+        are visible in plain text.
+        
+        Args:
+            html: Raw HTML content
+            
+        Returns:
+            Plain text with URLs preserved
+        """
+        # First, extract and preserve links: <a href="URL">text</a> -> text (URL)
+        def replace_link(match):
+            href = match.group(1)
+            text = match.group(2)
+            # Strip HTML from the link text
+            clean_text = re.sub(r'<[^>]+>', '', text).strip()
+            if clean_text and href:
+                return f"{clean_text} ({href})"
+            elif href:
+                return f"LINK: {href}"
+            return clean_text
+        
+        # Match anchor tags with href
+        html = re.sub(
+            r'<a[^>]+href=["\']([^"\']+)["\'][^>]*>(.*?)</a>',
+            replace_link,
+            html,
+            flags=re.IGNORECASE | re.DOTALL
+        )
+        
+        # Also find any standalone URLs that might be in the HTML
+        # (some emails put URLs directly in text)
+        
+        # Now strip remaining HTML tags
+        text = re.sub(r'<[^>]+>', ' ', html)
+        
+        # Clean up whitespace
+        text = re.sub(r'\s+', ' ', text)
+        text = text.strip()
+        
+        return text
+
     def fetch_latest_email_content(self, timeout: int = 60, min_timestamp: float = None) -> tuple[str, str]:
         """
         Fetches the latest verification code from recent emails.
@@ -112,15 +157,15 @@ class GmailService:
                                             pass
                                     elif content_type == "text/html" and not body: # Fallback to HTML if no plain text yet
                                         try:
-                                            body = part.get_payload(decode=True).decode()
-                                            # Clean HTML tags roughly for the AI
-                                            body = re.sub(r'<[^>]+>', '', body)
+                                            html_body = part.get_payload(decode=True).decode()
+                                            # Extract hrefs before stripping HTML
+                                            body = self._extract_text_with_links(html_body)
                                         except:
                                             pass
                             else:
                                 body = msg.get_payload(decode=True).decode()
                                 if msg.get_content_type() == "text/html":
-                                      body = re.sub(r'<[^>]+>', '', body)
+                                    body = self._extract_text_with_links(body)
 
                             logger.info(f"  -> Returned email content for AI extraction.")
                             return subject, body

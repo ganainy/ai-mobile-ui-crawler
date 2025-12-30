@@ -126,6 +126,20 @@ class OCRService:
                 image = Image.open(io.BytesIO(image_bytes))
                 original_height = image.height
                 
+                # Check for placeholder/invalid image (e.g., all black from FLAG_SECURE)
+                # Convert to grayscale and check if it's essentially uniform (all same color)
+                try:
+                    grayscale = image.convert('L')
+                    extrema = grayscale.getextrema()  # Returns (min, max) pixel values
+                    # If variance is very small (< 5), image is essentially uniform/blank
+                    if extrema[1] - extrema[0] < 5:
+                        logger.warning("Skipping OCR: Image appears to be a placeholder (uniform color, likely FLAG_SECURE)")
+                        stop_logging = True
+                        log_thread.join(timeout=0.5)
+                        return []
+                except Exception as check_err:
+                    logger.debug(f"Could not check image uniformity: {check_err}")
+                
                 # Crop status bar from top if enabled
                 status_bar_offset = 0
                 if crop_status_bar:

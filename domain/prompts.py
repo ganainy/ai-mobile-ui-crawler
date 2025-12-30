@@ -56,7 +56,8 @@ _DEFAULT_AVAILABLE_ACTIONS = {
     "replace_text": "Tap on the input element, clear existing text, and type new text.",
     "flick": "Perform a fast flick gesture in the specified direction (faster than scroll for quick navigation).",
     "reset_app": "Reset the app to its initial state (clears app data and restarts).",
-    "fetch_email_otp": "Fetch the verification code from my email and type it into this input field."
+    "fetch_email_otp": "Fetch the verification code from my email and type it into this input field.",
+    "click_email_link": "Fetch the activation/verification link from my email and open it on the device."
 }
 
 def get_available_actions(config: Optional[Any] = None) -> Dict[str, str]:

@@ -849,28 +849,73 @@ class CrawlerControllerWindow(QMainWindow):
         if not self.ai_input_log:
             return
 
-        if isinstance(content, dict) and 'static_part' in content and 'dynamic_part' in content:
-            # Structured content - use HTML for coloring
-            static_part = content['static_part']
-            dynamic_part = content['dynamic_part']
+        # Try to parse string content as JSON or dict
+        if isinstance(content, str):
+            content = content.strip()
+            # If it looks like a dict representation, try to eval or load it
+            import json
+            import ast
+            try:
+                # Try JSON first
+                parsed = json.loads(content)
+                content = parsed
+            except json.JSONDecodeError:
+                try:
+                    # Try literal eval for python dict strings
+                    if content.startswith("{") and content.endswith("}"):
+                        parsed = ast.literal_eval(content)
+                        content = parsed
+                except Exception:
+                    pass
+
+        if isinstance(content, dict):
+             # check for split visualization format
+            if 'static_part' in content and 'dynamic_part' in content:
+                # Structured content - use HTML for coloring
+                static_part = content['static_part']
+                dynamic_part = content['dynamic_part']
+                
+                # Escape HTML characters
+                import html
+                static_html = html.escape(static_part).replace('\n', '<br>')
+                dynamic_html = html.escape(dynamic_part).replace('\n', '<br>')
+                
+                # Construct HTML: Static in gray, Dynamic in default/white
+                html_content = f"""
+                <div style="font-family: 'Consolas', 'Monaco', monospace; white-space: pre-wrap;">
+                    <span style="color: #666666;">{static_html}</span>
+                    <br><br>
+                    <span style="color: #a9b7c6; font-weight: bold;">{dynamic_html}</span>
+                </div>
+                """
+                self.ai_input_log.setHtml(html_content)
+                return
             
-            # Escape HTML characters
-            import html
-            static_html = html.escape(static_part).replace('\n', '<br>')
-            dynamic_html = html.escape(dynamic_part).replace('\n', '<br>')
-            
-            # Construct HTML: Static in gray, Dynamic in default/white
-            html_content = f"""
-            <div style="font-family: 'Consolas', 'Monaco', monospace; white-space: pre-wrap;">
-                <span style="color: #666666;">{static_html}</span>
-                <br><br>
-                <span style="color: #a9b7c6; font-weight: bold;">{dynamic_html}</span>
-            </div>
-            """
-            self.ai_input_log.setHtml(html_content)
+            # Check for "full_prompt" key (seen in logs)
+            if 'full_prompt' in content:
+                # If it's just one big prompt string, display it cleanly
+                # It might be double encoded
+                raw_prompt = content['full_prompt']
+                # recursively try to clean it if it looks like a stringified string
+                self.ai_input_log.setText(str(raw_prompt))
+                return
+
+            # Otherwise, pretty print the dict
+            import json
+            try:
+                pretty_json = json.dumps(content, indent=2)
+                self.ai_input_log.setText(pretty_json)
+            except Exception:
+                self.ai_input_log.setText(str(content))
         else:
-            # Legacy string content
-            text_content = content if isinstance(content, str) else str(content)
+            # Clean up raw text if it has excessive escapes
+            text_content = str(content)
+            # Basic unescape if it looks like a python string literal
+            if text_content.startswith("'") and text_content.endswith("'"):
+                 text_content = text_content[1:-1].replace("\\n", "\n").replace('\\"', '"')
+            elif text_content.startswith('"') and text_content.endswith('"'):
+                 text_content = text_content[1:-1].replace("\\n", "\n").replace('\\"', '"')
+
             self.ai_input_log.setText(text_content)
             
         # Reset cursor
@@ -884,12 +929,22 @@ class CrawlerControllerWindow(QMainWindow):
         Args:
             content: The text/JSON to display in the AI Output section.
         """
+        # Try to format as JSON if possible
+        display_content = content
+        import json
+        try:
+            if content and isinstance(content, str) and (content.strip().startswith("{") or content.strip().startswith("[")):
+                parsed = json.loads(content)
+                display_content = json.dumps(parsed, indent=2)
+        except Exception:
+            pass
+
         if not self.ai_history:
             # Received output without input? Create a placeholder entry
              self.ai_history.append({
                 'label': "Interaction #1 (Output Only)",
                 'input': "(No input recorded)",
-                'output': content,
+                'output': display_content, # Store formatted
                 'screenshot': None
             })
              if self.ai_history_dropdown:
@@ -899,7 +954,7 @@ class CrawlerControllerWindow(QMainWindow):
                 self.ai_history_dropdown.blockSignals(False)
         else:
             # Update the latest entry
-            self.ai_history[-1]['output'] = content
+            self.ai_history[-1]['output'] = display_content
 
         # Check if we are currently viewing the latest item
         is_latest_selected = True
@@ -911,7 +966,7 @@ class CrawlerControllerWindow(QMainWindow):
         # Only update view if we are looking at the latest item
         if is_latest_selected:
             if self.ai_output_log:
-                self.ai_output_log.setText(content)
+                self.ai_output_log.setText(display_content)
                 cursor = self.ai_output_log.textCursor()
                 cursor.movePosition(cursor.MoveOperation.Start)
                 self.ai_output_log.setTextCursor(cursor)

@@ -37,18 +37,15 @@ class ActionExecutor:
     def _is_likely_resource_id(self, identifier: str) -> bool:
         """Check if identifier looks like a valid Android resource ID.
         
-        Android resource IDs typically contain only:
-        - Alphanumeric characters (a-z, A-Z, 0-9)
-        - Underscores (_)
-        - Dots (.) for package names
-        - Colons (:) for resource type separation (e.g., com.app:id/button)
-        - Forward slashes (/) for id separation
-        - Hyphens (-) in some cases
+        Android resource IDs typically:
+        - Use snake_case (lowercase with underscores)
+        - Contain package separators (e.g., com.app:id/button)
+        - Are short technical identifiers
         
-        Display text (from OCR) usually contains:
-        - Spaces
-        - Unicode letters beyond basic ASCII
-        - Special punctuation
+        Display text (from OCR) usually:
+        - Starts with capital letters (e.g., "Verstanden", "OK", "Submit")
+        - Contains spaces or special punctuation
+        - Uses natural language capitalization
         
         Returns:
             True if the identifier looks like a valid resource ID, False otherwise
@@ -62,15 +59,50 @@ class ActionExecutor:
         if identifier.startswith("ocr_"):
             return False
         
-        # Resource IDs should only contain: alphanumeric, underscore, dot, colon, slash, hyphen
-        # This pattern matches valid Android resource ID characters
-        resource_id_pattern = r'^[a-zA-Z0-9_.:/-]+$'
-        
-        if not re.match(resource_id_pattern, identifier):
-            # Contains characters not valid in resource IDs (spaces, unicode, etc.)
+        # Contains spaces → definitely display text
+        if ' ' in identifier:
             return False
         
-        return True
+        # Contains unicode characters → display text
+        if not identifier.isascii():
+            return False
+        
+        # Starts with capital letter (except all caps like "OK") → likely display text
+        # Resource IDs don't start with uppercase
+        if identifier[0].isupper() and not identifier.isupper() and not identifier.startswith("CheckBox"):
+            # Check if it looks like a natural word (no underscores, no package separators)
+            if '_' not in identifier and ':' not in identifier and '/' not in identifier:
+                # It's likely display text like "Verstanden", "Registrieren", "Submit"
+                return False
+        
+        # Contains package separators → definitely a resource ID
+        if ':id/' in identifier or ':' in identifier:
+            return True
+        
+        # Contains underscores → likely a resource ID (snake_case)
+        if '_' in identifier:
+            return True
+        
+        # Pure lowercase short string → could be resource ID (e.g., "button", "field")
+        if identifier.islower() and len(identifier) <= 15:
+            return True
+        
+        # All caps and short (e.g., "OK", "ID") → could be either, treat as resource ID
+        if identifier.isupper() and len(identifier) <= 4:
+            return True
+        
+        # Mixed case without separators (e.g., "CheckBox", "LoginButton") → special cases
+        # These are often class names used as identifiers
+        if any(c.isupper() for c in identifier[1:]) and any(c.islower() for c in identifier):
+            # CamelCase → could be resource ID
+            return True
+        
+        # Default: if it only has alphanumeric and starts with lowercase, it's likely resource ID
+        if identifier[0].islower() and identifier.isalnum():
+            return True
+        
+        # Otherwise, treat as display text
+        return False
     
     def _resolve_target_with_fallback(
         self, 
@@ -149,26 +181,42 @@ class ActionExecutor:
     ) -> bool:
         """Execute tap with layered fallback.
         
-        Tries:
-        1. Element ID lookup
-        2. If failed + OCR target → use OCR coordinates
-        3. If failed + bounding box → tap coordinates
-        4. If failed → try fuzzy XPath matching by text
+        Tries (optimized order):
+        1. If target looks like display text → try text-based search FIRST
+        2. OCR coordinates → use coordinates directly
+        3. Element ID lookup (only for resource-ID-like targets)
+        4. Bounding box coordinates
+        5. Fuzzy XPath matching by text
         
         Returns:
             True if tap successful by any method
         """
         target_id, bbox, method = self._resolve_target_with_fallback(action_data)
         
-        # Method 1: OCR coordinates - use coordinates directly
+        # Method 1: OCR coordinates - use coordinates directly  
         if method == 'ocr_coordinates' and bbox:
             logger.info(f"Using OCR coordinates for target: {target_id}")
             return self.driver.tap(target_id, bbox)
         
-        # Method 2: Element ID lookup
+        # Method 2: Element ID lookup with smart fallback order
         if method == 'element_id' and target_id:
+            # Check if this looks like display text vs resource ID
+            is_display_text = not self._is_likely_resource_id(target_id)
+            
+            # For display text targets, try text-based search FIRST (much faster)
+            if is_display_text:
+                logger.info(f"Target '{target_id}' looks like display text, trying fast text search first")
+                if self._tap_by_text_fallback(target_id, action_data):
+                    return True
+                # Text search failed, try bounding box if available
+                if bbox:
+                    logger.info(f"Text search failed, using bounding box for '{target_id}'")
+                    return self.driver.tap(target_id, bbox)
+                # Last resort: slow element lookup (may take long)
+                logger.info(f"Trying element lookup for display text '{target_id}' (may be slow)")
+            
             try:
-                # Try element lookup first
+                # Try element lookup
                 success = self.driver.tap(target_id, None)
                 if success:
                     return True
@@ -180,8 +228,11 @@ class ActionExecutor:
                 logger.info(f"Element '{target_id}' not found, using bounding box coordinates")
                 return self.driver.tap(target_id, bbox)
             
-            # Fallback: try to find element by text using XPath
-            return self._tap_by_text_fallback(target_id, action_data)
+            # Fallback: try to find element by text using XPath (if not already tried)
+            if not is_display_text:
+                return self._tap_by_text_fallback(target_id, action_data)
+            
+            return False
         
         # Method 3: Bounding box only
         if method == 'bounding_box' and bbox:
@@ -214,24 +265,27 @@ class ActionExecutor:
             # Try to find a text hint
             text_hint = None
             
-            # Check if target_id contains useful text (after removing common prefixes)
-            clean_id = target_id
-            for prefix in ['field-', 'btn-', 'input-', 'text-', 'label-']:
-                if clean_id.startswith(prefix):
-                    clean_id = clean_id[len(prefix):]
-                    break
-            
-            # Skip if it looks like a React-generated ID (contains :r or is very short)
-            if ':r' in clean_id or len(clean_id) <= 3:
-                # Try to extract text from OCR results that might match
-                for ocr_item in ocr_results or []:
-                    ocr_text = ocr_item.get('text', '')
-                    # Look for matches in reasoning
-                    if ocr_text and ocr_text.lower() in reasoning.lower():
-                        text_hint = ocr_text
-                        break
+            # First: If target_id looks like display text (not a resource ID), use it directly
+            if not self._is_likely_resource_id(target_id):
+                text_hint = target_id.strip().rstrip(',')  # Clean trailing punctuation
             else:
-                text_hint = clean_id
+                # It's a resource ID - try to extract text from it or OCR
+                clean_id = target_id
+                for prefix in ['field-', 'btn-', 'input-', 'text-', 'label-']:
+                    if clean_id.startswith(prefix):
+                        clean_id = clean_id[len(prefix):]
+                        break
+                
+                # Skip if it looks like a React-generated ID (contains :r or is very short)
+                if ':r' in clean_id or len(clean_id) <= 3:
+                    # Try to extract text from OCR results that might match reasoning
+                    for ocr_item in ocr_results or []:
+                        ocr_text = ocr_item.get('text', '')
+                        if ocr_text and ocr_text.lower() in reasoning.lower():
+                            text_hint = ocr_text
+                            break
+                else:
+                    text_hint = clean_id
             
             if not text_hint:
                 logger.debug(f"No text hint found for fallback search of '{target_id}'")
@@ -535,6 +589,152 @@ class ActionExecutor:
             logger.error(f"Failed to fetch/enter email OTP: {e}", exc_info=True)
             return False
 
+    def _execute_click_email_link(self, action_data: Dict[str, Any]) -> bool:
+        """
+        Execute click email link action.
+        
+        Fetches the latest email, extracts the activation/verification link,
+        and opens it on the device.
+        
+        Args:
+            action_data: May contain 'link_type' hint (e.g., 'activation', 'verification', 'confirm')
+        
+        Returns:
+            True if link was found and opened successfully
+        """
+        link_type = action_data.get("link_type", "activation or verification")
+        
+        # Get credentials from config
+        user = self.cfg.get('GMAIL_USER') or self.cfg.get('TEST_EMAIL')
+        password = self.cfg.get('GMAIL_APP_PASSWORD')
+        timeout = self.cfg.get('GMAIL_SEARCH_TIMEOUT', 60)
+        
+        if not user or not password:
+            logger.error("Gmail credentials (GMAIL_APP_PASSWORD and either GMAIL_USER or TEST_EMAIL) not set")
+            return False
+            
+        try:
+            from infrastructure.gmail_service import GmailService
+            service = GmailService(user, password)
+            logger.info(f"Fetching {link_type} link from Gmail for {user}...")
+            
+            import time
+            min_timestamp = time.time() - 300  # 5 minutes ago (links may take longer)
+            
+            # Fetch email content
+            subject, body = service.fetch_latest_email_content(timeout=timeout, min_timestamp=min_timestamp)
+            
+            if not body:
+                logger.warning("No email body found in Gmail")
+                return False
+            
+            link = ""
+            if self.ai_helper:
+                # Use AI to extract the link
+                prompt = (
+                    f"You are a link extraction assistant.\n"
+                    f"Extract the {link_type} link/URL from the following email.\n"
+                    f"Subject: {subject}\n"
+                    f"Body:\n{body}\n\n"
+                    f"Return ONLY the full URL (starting with http:// or https://). "
+                    f"Do not return any other text. If no link found, return 'NONE'."
+                )
+                logger.info(f"Asking AI to extract {link_type} link from email '{subject}'...")
+                link = self.ai_helper(prompt).strip()
+                
+                # Validate it looks like a URL
+                if not link.startswith(('http://', 'https://')) or link == 'NONE':
+                    # Fallback: try regex extraction
+                    import re
+                    # Match URLs, preferring those with common verification keywords
+                    url_pattern = r'https?://[^\s<>"\']+(?:verify|confirm|activate|token|auth|click|link)[^\s<>"\']*'
+                    matches = re.findall(url_pattern, body, re.IGNORECASE)
+                    if matches:
+                        link = matches[0]
+                    else:
+                        # Try any URL as last resort
+                        general_url_pattern = r'https?://[^\s<>"\']+\S'
+                        general_matches = re.findall(general_url_pattern, body)
+                        if general_matches:
+                            link = general_matches[0]
+            else:
+                # No AI helper, use regex
+                logger.warning("No AI helper available for link extraction, using fallback regex.")
+                import re
+                # Match URLs with common verification keywords
+                url_pattern = r'https?://[^\s<>"\']+(?:verify|confirm|activate|token|auth)[^\s<>"\']*'
+                matches = re.findall(url_pattern, body, re.IGNORECASE)
+                if matches:
+                    link = matches[0]
+                else:
+                    # Try any URL
+                    general_url_pattern = r'https?://[^\s<>"\']+'
+                    general_matches = re.findall(general_url_pattern, body)
+                    if general_matches:
+                        link = general_matches[0]
+            
+            # Clean up the link (remove trailing punctuation that might have been captured)
+            if link:
+                link = link.rstrip('.,;:!?)')
+            
+            if not link or not link.startswith(('http://', 'https://')):
+                logger.warning(f"No valid {link_type} link extracted from email")
+                return False
+                
+            logger.info(f"Activation link extracted: {link[:80]}...")
+            
+            # Open the link on the device using adb
+            try:
+                import subprocess
+                import time
+                
+                # Escape the URL for shell
+                escaped_url = link.replace("'", "'\\''")
+                cmd = f"adb shell am start -a android.intent.action.VIEW -d '{escaped_url}'"
+                logger.info(f"Opening link on device with: adb shell am start...")
+                result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
+                
+                if result.returncode == 0:
+                    logger.info("Successfully opened activation link on device")
+                    
+                    # Wait for browser/app to process the link
+                    # Many activation links redirect back to the app via deep link
+                    wait_time = action_data.get("wait_seconds", 5)
+                    logger.info(f"Waiting {wait_time}s for link to be processed...")
+                    time.sleep(wait_time)
+                    
+                    # Check if we should return to the target app
+                    return_to_app = action_data.get("return_to_app", True)
+                    if return_to_app:
+                        # Get target package from config or helper
+                        target_package = None
+                        if self.driver and self.driver.helper:
+                            target_package = self.driver.helper.target_package
+                        
+                        if target_package:
+                            logger.info(f"Returning to target app: {target_package}")
+                            return_cmd = f"adb shell am start -n {target_package}/.MainActivity"
+                            # Try to just bring app to foreground
+                            return_cmd = f"adb shell monkey -p {target_package} 1"
+                            subprocess.run(return_cmd, shell=True, capture_output=True, timeout=10)
+                            time.sleep(1)
+                    
+                    return True
+                else:
+                    logger.error(f"Failed to open link: {result.stderr}")
+                    return False
+                    
+            except subprocess.TimeoutExpired:
+                logger.error("Timeout waiting for adb command")
+                return False
+            except Exception as e:
+                logger.error(f"Error opening link on device: {e}")
+                return False
+            
+        except Exception as e:
+            logger.error(f"Failed to fetch/open email link: {e}", exc_info=True)
+            return False
+
     def _init_action_dispatch_map(self):
         """Initialize the action dispatch map for efficient action execution."""
         self.action_dispatch_map = {
@@ -551,7 +751,8 @@ class ActionExecutor:
             "replace_text": self._execute_replace_text_action,
             "flick": self._execute_flick_action,
             "reset_app": self._execute_reset_app_action,
-            "fetch_email_otp": self._execute_fetch_email_otp
+            "fetch_email_otp": self._execute_fetch_email_otp,
+            "click_email_link": self._execute_click_email_link
         }
     
     def normalize_action_type(self, action_type: str, action_data: Dict[str, Any]) -> str:
