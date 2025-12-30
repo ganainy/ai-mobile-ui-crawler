@@ -133,6 +133,7 @@ TOOLTIP_MOBSF_API_KEY = "API Key for authenticating with MobSF. This can be foun
 TOOLTIP_ENABLE_MOBSF_ANALYSIS = "Enable to perform static analysis of the app using MobSF."
 TOOLTIP_MOBSF_API_URL = "URL of the MobSF API (e.g., http://localhost:8000/api/v1)"
 TOOLTIP_ENABLE_VIDEO_RECORDING = "Enable to record the entire crawl session as an MP4 video."
+TOOLTIP_ENABLE_AI_RUN_REPORT = "Enable to generate an AI-powered analysis report summarizing the crawl session, including what went well, issues encountered, root causes, and mitigation strategies."
 
 # Image preprocessing tooltips
 TOOLTIP_IMAGE_MAX_WIDTH = "Max screenshot width before sending to AI. Smaller widths (e.g., 720–1080px) reduce payload and are sufficient for most UI understanding; use larger widths for dense UIs or OCR."
@@ -169,6 +170,7 @@ def get_tooltips_dict() -> Dict[str, str]:
         "ENABLE_IMAGE_CONTEXT": TOOLTIP_ENABLE_IMAGE_CONTEXT,
         "ENABLE_TRAFFIC_CAPTURE": TOOLTIP_ENABLE_TRAFFIC_CAPTURE,
         "ENABLE_MOBSF_ANALYSIS": TOOLTIP_ENABLE_MOBSF_ANALYSIS,
+        "ENABLE_AI_RUN_REPORT": TOOLTIP_ENABLE_AI_RUN_REPORT,
         "MOBSF_API_URL": TOOLTIP_MOBSF_API_URL,
         "MOBSF_API_KEY": TOOLTIP_MOBSF_API_KEY,
         "OPENROUTER_API_KEY": TOOLTIP_OPENROUTER_API_KEY,

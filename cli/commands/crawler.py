@@ -54,6 +54,11 @@ class StartCrawlerCommand(CommandHandler):
             action="store_true",
             help=MSG.START_CMD_ENABLE_MOBSF_ANALYSIS_HELP
         )
+        parser.add_argument(
+            MSG.START_CMD_ENABLE_AI_RUN_REPORT_ARG,
+            action="store_true",
+            help=MSG.START_CMD_ENABLE_AI_RUN_REPORT_HELP
+        )
         parser.set_defaults(handler=self)
         return parser
     
@@ -102,6 +107,14 @@ class StartCrawlerCommand(CommandHandler):
         else:
             # Default: disabled (overrides config if it's enabled)
             feature_flags['ENABLE_MOBSF_ANALYSIS'] = False
+        
+        # Handle AI run report flag
+        enable_ai_report = getattr(args, 'enable_ai_run_report', False)
+        if enable_ai_report:
+            feature_flags['ENABLE_AI_RUN_REPORT'] = True
+        else:
+            # Default: disabled (overrides config if it's enabled)
+            feature_flags['ENABLE_AI_RUN_REPORT'] = False
 
         # Get generate_pdf flag (argparse converts --generate-pdf to generate_pdf)
         generate_pdf_after_run = getattr(args, 'generate_pdf', False)

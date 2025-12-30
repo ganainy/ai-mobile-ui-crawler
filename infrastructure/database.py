@@ -300,6 +300,26 @@ class DatabaseManager:
             params = (status, run_id)
         result = self._execute_sql(sql, params, commit=True)
         return result is not None
+    
+    def update_run_start_time(self, run_id: int) -> bool:
+        """
+        Update the start_time of a run to the current timestamp.
+        
+        This ensures accurate session timing when reusing existing run entries,
+        preventing the issue where the recorded start_time reflects when the
+        database row was created rather than when the crawl actually started.
+        
+        Args:
+            run_id: The run ID to update
+            
+        Returns:
+            True if update was successful, False otherwise
+        """
+        from datetime import datetime
+        current_time = datetime.now().isoformat()
+        sql = "UPDATE runs SET start_time = ? WHERE run_id = ?"
+        result = self._execute_sql(sql, (current_time, run_id), commit=True)
+        return result is not None
 
     def get_exploration_journal(self, run_id: int) -> Optional[str]:
         """

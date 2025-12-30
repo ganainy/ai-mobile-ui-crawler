@@ -941,53 +941,24 @@ class ConfigManager(QObject):
     def _validate_image_context_for_model(self, provider: str, model_name: str):
         """Validate and update image context checkbox based on model's vision capabilities.
         
-        This ensures the checkbox is disabled/unchecked for non-vision models and 
-        enabled for vision-capable models. Called during config load and model change.
+        NOTE: This method no longer disables the checkbox. It always remains enabled.
+        A fixed warning message is shown to inform users that images won't be sent
+        if the selected model doesn't support vision.
         
         Args:
             provider: AI provider name (e.g., 'openrouter', 'ollama', 'gemini')
             model_name: Name of the selected model
         """
         try:
-            from domain.providers.registry import ProviderRegistry
-            from ui.strings import (
-                MODEL_SUPPORTS_IMAGE_INPUTS, 
-                MODEL_DOES_NOT_SUPPORT_IMAGE_INPUTS,
-                NO_MODEL_SELECTED
-            )
-            
             checkbox = self.main_controller.config_widgets.get('CONTEXT_SOURCE_IMAGE')
             if not checkbox:
                 return
             
-            # Skip validation for "No model selected" placeholder
-            if not model_name or model_name == NO_MODEL_SELECTED:
-                checkbox.setEnabled(False)
-                checkbox.setChecked(False)
-                return
+            # Always keep checkbox enabled
+            checkbox.setEnabled(True)
             
-            # Get provider strategy
-            strategy = ProviderRegistry.get_by_name(provider)
-            if not strategy:
-                return
-            
-            # Check if model supports vision
-            supports_image = strategy.supports_image_context(self.config, model_name)
-            
-            if supports_image:
-                checkbox.setEnabled(True)
-                checkbox.setToolTip(MODEL_SUPPORTS_IMAGE_INPUTS)
-                # Don't force-check it - let user decide (but they CAN enable it now)
-            else:
-                checkbox.setEnabled(False)
-                checkbox.setChecked(False)
-                checkbox.setToolTip(MODEL_DOES_NOT_SUPPORT_IMAGE_INPUTS)
-                # Also update the config to ensure consistency
-                self.config.set('ENABLE_IMAGE_CONTEXT', False)
-                # Log for user awareness
-                self.main_controller.log_message(
-                    f"Image context disabled - model '{model_name}' does not support vision", 'blue'
-                )
+            # The fixed warning message is always shown by default (set in component_factory.py)
+            # No need to toggle tooltip or enabled state based on model capabilities
                 
         except Exception as e:
             logging.warning(f"Error validating image context for model: {e}")

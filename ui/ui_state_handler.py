@@ -103,109 +103,61 @@ class UIStateHandler:
         self, strategy, config, capabilities, model_dropdown, no_selection_label
     ):
         """Configure image context UI based on provider strategy and capabilities."""
-        auto_disable = capabilities.get("auto_disable_image_context", False)
-        if auto_disable:
-            self.config_widgets["CONTEXT_SOURCE_IMAGE"].setChecked(False)
-            self.config_widgets["CONTEXT_SOURCE_IMAGE"].setEnabled(False)
-            from ui.strings import IMAGE_CONTEXT_DISABLED_PAYLOAD_LIMIT
-            self.config_widgets["CONTEXT_SOURCE_IMAGE"].setToolTip(
-                IMAGE_CONTEXT_DISABLED_PAYLOAD_LIMIT.format(max_kb=capabilities.get('payload_max_size_kb', 500))
-            )
-            if "IMAGE_CONTEXT_WARNING" in self.config_widgets:
-                self.config_widgets["IMAGE_CONTEXT_WARNING"].setVisible(True)
-            self._add_image_context_warning(strategy.name, capabilities)
-            # Update preprocessing visibility (disabled)
-            try:
-                self._update_image_preprocessing_visibility(False)
-            except Exception as e:
-                pass
-        else:
-            # Enable image context - provider supports it
-            from ui.strings import IMAGE_CONTEXT_ENABLED_TOOLTIP
-            self.config_widgets["CONTEXT_SOURCE_IMAGE"].setEnabled(True)
-            # Get current checked state to determine visibility
+        # Always keep the checkbox enabled
+        self.config_widgets["CONTEXT_SOURCE_IMAGE"].setEnabled(True)
+        
+        # Always show the fixed warning message
+        if "IMAGE_CONTEXT_WARNING" in self.config_widgets:
+            warning_text = "⚠️ No images will be sent if selected model doesn't support images"
+            self.config_widgets["IMAGE_CONTEXT_WARNING"].setText(warning_text)
+            self.config_widgets["IMAGE_CONTEXT_WARNING"].setVisible(True)
+        
+        # Set tooltip
+        from ui.strings import IMAGE_CONTEXT_ENABLED_TOOLTIP
+        self.config_widgets["CONTEXT_SOURCE_IMAGE"].setToolTip(IMAGE_CONTEXT_ENABLED_TOOLTIP)
+        self.config_widgets["CONTEXT_SOURCE_IMAGE"].setStyleSheet("")
+        
+        # Update preprocessing visibility based on current checked state
+        try:
             current_checked = self.config_widgets["CONTEXT_SOURCE_IMAGE"].isChecked()
-            self.config_widgets["CONTEXT_SOURCE_IMAGE"].setToolTip(IMAGE_CONTEXT_ENABLED_TOOLTIP)
-            self.config_widgets["CONTEXT_SOURCE_IMAGE"].setStyleSheet("")
-            if "IMAGE_CONTEXT_WARNING" in self.config_widgets:
-                self.config_widgets["IMAGE_CONTEXT_WARNING"].setVisible(False)
-            
-            # Update preprocessing visibility based on current checked state
-            try:
-                self._update_image_preprocessing_visibility(current_checked)
-            except Exception as e:
-                pass
-            
-            # For OpenRouter and Ollama, handle model-specific image support
-            if strategy.provider in (AIProvider.OPENROUTER, AIProvider.OLLAMA):
-                self._setup_model_image_context_handler(
-                    strategy, config, model_dropdown, no_selection_label
-                )
+            self._update_image_preprocessing_visibility(current_checked)
+        except Exception as e:
+            pass
 
     def _setup_model_image_context_handler(
         self, strategy, config, model_dropdown, no_selection_label
     ):
         """Set up model-specific image context handling with model change listener.
         
-        Works for providers that support per-model image capability detection
-        (OpenRouter, Ollama, etc.)."""
+        This handler no longer disables the checkbox, but maintains the connection
+        for potential future use.
+        """
         def _on_model_changed(name: str):
             try:
                 if "CONTEXT_SOURCE_IMAGE" not in self.config_widgets:
                     return
                 
-                if name == no_selection_label:
-                    self.config_widgets["CONTEXT_SOURCE_IMAGE"].setEnabled(False)
-                    self.config_widgets["CONTEXT_SOURCE_IMAGE"].setChecked(False)
-                    from ui.strings import SELECT_MODEL_TO_CONFIGURE
-                    self.config_widgets["CONTEXT_SOURCE_IMAGE"].setToolTip(SELECT_MODEL_TO_CONFIGURE)
-                    if "IMAGE_CONTEXT_WARNING" in self.config_widgets:
-                        self.config_widgets["IMAGE_CONTEXT_WARNING"].setVisible(False)
-                    # Update preprocessing visibility (disabled)
-                    try:
-                        self._update_image_preprocessing_visibility(False)
-                    except Exception as e:
-                        pass
-                    return
+                # Always keep checkbox enabled
+                self.config_widgets["CONTEXT_SOURCE_IMAGE"].setEnabled(True)
                 
-                # Check model-specific image support
-                supports_image = strategy.supports_image_context(config, name)
-                if supports_image:
-                    self.config_widgets["CONTEXT_SOURCE_IMAGE"].setEnabled(True)
-                    self.config_widgets["CONTEXT_SOURCE_IMAGE"].setChecked(True)
-                    from ui.strings import MODEL_SUPPORTS_IMAGE_INPUTS
-                    self.config_widgets["CONTEXT_SOURCE_IMAGE"].setToolTip(MODEL_SUPPORTS_IMAGE_INPUTS)
-                    if "IMAGE_CONTEXT_WARNING" in self.config_widgets:
-                        self.config_widgets["IMAGE_CONTEXT_WARNING"].setVisible(False)
-                    # Update preprocessing visibility (enabled)
-                    try:
-                        self._update_image_preprocessing_visibility(True)
-                    except Exception as e:
-                        pass
-                else:
-                    self.config_widgets["CONTEXT_SOURCE_IMAGE"].setEnabled(False)
-                    self.config_widgets["CONTEXT_SOURCE_IMAGE"].setChecked(False)
-                    from ui.strings import MODEL_DOES_NOT_SUPPORT_IMAGE_INPUTS, WARNING_MODEL_NO_IMAGE_SUPPORT
-                    self.config_widgets["CONTEXT_SOURCE_IMAGE"].setToolTip(MODEL_DOES_NOT_SUPPORT_IMAGE_INPUTS)
-                    if "IMAGE_CONTEXT_WARNING" in self.config_widgets:
-                        try:
-                            self.config_widgets["IMAGE_CONTEXT_WARNING"].setText(WARNING_MODEL_NO_IMAGE_SUPPORT)
-                        except Exception:
-                            pass
-                        self.config_widgets["IMAGE_CONTEXT_WARNING"].setVisible(True)
-                    # Update preprocessing visibility (disabled)
-                    try:
-                        self._update_image_preprocessing_visibility(False)
-                    except Exception as e:
-                        pass
+                # Always show the fixed warning
+                if "IMAGE_CONTEXT_WARNING" in self.config_widgets:
+                    warning_text = "⚠️ No images will be sent if selected model doesn't support images"
+                    self.config_widgets["IMAGE_CONTEXT_WARNING"].setText(warning_text)
+                    self.config_widgets["IMAGE_CONTEXT_WARNING"].setVisible(True)
+                
+                # Update preprocessing visibility based on checkbox state
+                try:
+                    current_checked = self.config_widgets["CONTEXT_SOURCE_IMAGE"].isChecked()
+                    self._update_image_preprocessing_visibility(current_checked)
+                except Exception as e:
+                    pass
             except Exception as e:
                 pass
         
         model_dropdown.currentTextChanged.connect(_on_model_changed)
         
-        # Immediately validate the current model's image support
-        # This is needed when refreshing models, since the selection may not change
-        # but we still need to check if the current model supports images
+        # Immediately validate the current model
         current_model = model_dropdown.currentText()
         if current_model:
             _on_model_changed(current_model)

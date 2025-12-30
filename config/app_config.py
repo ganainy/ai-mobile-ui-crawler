@@ -839,6 +839,9 @@ ENABLE_MOBSF_ANALYSIS = False
 ENABLE_VIDEO_RECORDING = False
 VIDEO_RECORDING_DIR = f"{{session_dir}}/{PathConstants.VIDEO_RECORDING_DIR}"
 
+# AI Run Report Settings
+ENABLE_AI_RUN_REPORT = False
+
 # --- Image Preprocessing (Global overrides) ---
 # These knobs control how screenshots are preprocessed before being sent to the AI.
 # They override provider defaults where applicable.

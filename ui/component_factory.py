@@ -310,12 +310,15 @@ class ComponentFactory:
         config_widgets["CONTEXT_SOURCE_IMAGE"] = QCheckBox("Enable Image Context")
         config_widgets["CONTEXT_SOURCE_IMAGE"].setToolTip("Include screenshots in the AI context (for vision-capable models like Gemini Pro Vision).")
 
-        # Warning label (used when auto-disabled by provider capabilities)
-        config_widgets["IMAGE_CONTEXT_WARNING"] = QLabel("⚠️ Auto-disabled")
+        # Warning label (always shown with fixed message)
+        config_widgets["IMAGE_CONTEXT_WARNING"] = QLabel("⚠️ No images will be sent if selected model doesn't support images")
         config_widgets["IMAGE_CONTEXT_WARNING"].setStyleSheet(
-            "color: #ff6b35; font-weight: bold;"
+            "color: #ff6b35; font-weight: bold; font-size: 9pt;"
         )
-        config_widgets["IMAGE_CONTEXT_WARNING"].setVisible(False)
+        config_widgets["IMAGE_CONTEXT_WARNING"].setToolTip(
+            "The checkbox can be enabled, but images will only be sent if your selected AI model supports vision/image inputs."
+        )
+        config_widgets["IMAGE_CONTEXT_WARNING"].setVisible(True)  # Always visible
 
         # Layout
         context_row1 = QHBoxLayout()
@@ -779,6 +782,18 @@ class ComponentFactory:
             config_handler.config, "ENABLE_MOBSF_ANALYSIS", False
         )
         config_widgets["ENABLE_MOBSF_ANALYSIS"].setChecked(is_mobsf_enabled)
+
+        # AI Run Report Enable Checkbox
+        config_widgets["ENABLE_AI_RUN_REPORT"] = QCheckBox()
+        label_enable_ai_report = QLabel("Enable AI Run Report: ")
+        label_enable_ai_report.setToolTip(tooltips["ENABLE_AI_RUN_REPORT"])
+        mobsf_layout.addRow(label_enable_ai_report, config_widgets["ENABLE_AI_RUN_REPORT"])
+
+        # Get current enabled state (default to False if not set)
+        is_ai_report_enabled = getattr(
+            config_handler.config, "ENABLE_AI_RUN_REPORT", False
+        )
+        config_widgets["ENABLE_AI_RUN_REPORT"].setChecked(is_ai_report_enabled)
 
         # API URL field
         from config.urls import ServiceURLs
