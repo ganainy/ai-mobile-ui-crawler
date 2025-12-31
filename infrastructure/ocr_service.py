@@ -6,6 +6,8 @@ Provides functionality to extract text and bounding boxes from images (bytes).
 import logging
 import io
 import time
+import json
+from datetime import datetime
 from typing import List, Dict, Any, Optional, Union
 
 try:
@@ -111,7 +113,13 @@ class OCRService:
                 while not stop_logging:
                     elapsed = time.time() - start_time
                     # Use carriage return to overwrite same line (no newline)
-                    print(f"\rOCR running... {elapsed:.1f}s   ", end='', flush=True)
+                    payload = {
+                        "type": "ui_event", 
+                        "kind": "log", 
+                        "data": {'level': 'INFO', 'message': f"OCR running... {elapsed:.1f}s"},
+                        "timestamp": datetime.now().isoformat()
+                    }
+                    print(f"JSON_IPC:{json.dumps(payload)}", flush=True)
                     time.sleep(1)
             
             log_thread = threading.Thread(target=log_progress)
@@ -183,7 +191,14 @@ class OCRService:
                 
             elapsed = time.time() - start_time
             # Clear the progress line and print final result
-            print(f"\rOCR completed in {elapsed:.2f}s ({len(processed_results)} elements)   ", flush=True)
+            msg = f"OCR completed in {elapsed:.2f}s ({len(processed_results)} elements)"
+            payload = {
+                "type": "ui_event", 
+                "kind": "log", 
+                "data": {'level': 'INFO', 'message': msg},
+                "timestamp": datetime.now().isoformat()
+            }
+            print(f"JSON_IPC:{json.dumps(payload)}", flush=True)
             
             return processed_results
             

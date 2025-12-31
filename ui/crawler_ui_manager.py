@@ -5,6 +5,7 @@ import logging
 import os
 import re
 import sys
+import json
 from typing import Any, Dict, List, Optional, Tuple
 
 from PySide6.QtCore import QObject, QProcess, QRunnable, QThread, QThreadPool, QTimer, Signal, Slot
@@ -381,13 +382,32 @@ class CrawlerManager(QObject):
             self.main_controller.log_message(f"ERROR: Failed to prepare output directories: {e}", 'red')
             return
 
-        if self._shutdown_flag_file_path and os.path.exists(self._shutdown_flag_file_path):
-            try:
+        # Clean up stale flags
+        try:
+            # Shutdown flag
+            if self._shutdown_flag_file_path and os.path.exists(self._shutdown_flag_file_path):
                 os.remove(self._shutdown_flag_file_path)
-            except Exception as e:
-                self.main_controller.log_message(
-                    f"Warning: Could not remove existing shutdown flag: {e}", 'orange'
-                )
+            
+            # Pause flag
+            if self.orchestrator.flag_controller.is_pause_flag_present():
+                self.orchestrator.flag_controller.remove_pause_flag()
+                
+            # Continue flag
+            if self.orchestrator.flag_controller.is_continue_flag_present():
+                self.orchestrator.flag_controller.remove_continue_flag()
+                
+            # Sync Step-by-step flag with checkbox
+            if hasattr(self.main_controller, 'step_by_step_chk') and self.main_controller.step_by_step_chk.isChecked():
+                self.orchestrator.flag_controller.create_step_by_step_flag()
+            else:
+                 # Checkbox not checked, ensure flag is removed
+                if self.orchestrator.flag_controller.is_step_by_step_flag_present():
+                    self.orchestrator.flag_controller.remove_step_by_step_flag()
+
+        except Exception as e:
+            self.main_controller.log_message(
+                f"Warning: Could not clean up crawler flags: {e}", 'orange'
+            )
 
         if hasattr(self.main_controller, 'log_output'):
             self.main_controller.log_message("Starting crawler...", 'blue')
@@ -534,6 +554,19 @@ class CrawlerManager(QObject):
                     'red'
                 )
                 return
+            
+            # --- Update Control Buttons State ---
+            # Enable Pause/Resume button
+            if hasattr(self.main_controller, 'pause_resume_btn'):
+                self.main_controller.pause_resume_btn.setEnabled(True)
+                self.main_controller.pause_resume_btn.setText("⏸️ Pause")
+            
+            # Update Next Step button based on Step-by-Step checkbox
+            if hasattr(self.main_controller, 'step_by_step_chk') and hasattr(self.main_controller, 'next_step_btn'):
+                is_step_mode = self.main_controller.step_by_step_chk.isChecked()
+                self.main_controller.next_step_btn.setEnabled(is_step_mode)
+            # ------------------------------------
+
             self.update_progress()
         else:
             self.main_controller.log_message("Crawler is already running.", 'orange')
@@ -549,6 +582,12 @@ class CrawlerManager(QObject):
             if hasattr(self.main_controller, 'start_stop_btn'):
                 self.main_controller.start_stop_btn.setEnabled(False)
                 self.main_controller.start_stop_btn.setText("Stopping...")
+            
+            # Disable control buttons during shutdown
+            if hasattr(self.main_controller, 'pause_resume_btn'):
+                self.main_controller.pause_resume_btn.setEnabled(False)
+            if hasattr(self.main_controller, 'next_step_btn'):
+                self.main_controller.next_step_btn.setEnabled(False)
 
             try:
                 with open(self._shutdown_flag_file_path, 'w') as f:
@@ -601,6 +640,12 @@ class CrawlerManager(QObject):
             self.main_controller.start_stop_btn.setEnabled(True)
             self.main_controller.start_stop_btn.setText("Start Crawler")
             self.main_controller.start_stop_btn.setStyleSheet("") # Reset style
+        
+        # Disable control buttons
+        if hasattr(self.main_controller, 'pause_resume_btn'):
+            self.main_controller.pause_resume_btn.setEnabled(False)
+        if hasattr(self.main_controller, 'next_step_btn'):
+            self.main_controller.next_step_btn.setEnabled(False)
 
         # Auto-show settings panel on finish/stop
         if hasattr(self.main_controller, 'left_panel') and hasattr(self.main_controller, 'toggle_settings_btn'):
@@ -679,6 +724,12 @@ class CrawlerManager(QObject):
         self.main_controller.status_label.setText(f"Status: Error ({error_name})")
         self.main_controller.progress_bar.setRange(0, 100)
         self.main_controller.progress_bar.setValue(0)
+        
+        # Disable control buttons
+        if hasattr(self.main_controller, 'pause_resume_btn'):
+            self.main_controller.pause_resume_btn.setEnabled(False)
+        if hasattr(self.main_controller, 'next_step_btn'):
+            self.main_controller.next_step_btn.setEnabled(False)
         try:
             pass
         except Exception:
@@ -721,102 +772,111 @@ class CrawlerManager(QObject):
     def _process_log_line(self, line: str) -> None:
         """Process a single complete log line."""
         try:
-             # Process the line (logic moved from read_stdout)
-             output = line # Keep variable name compatible with existing logic chunks if we were reusing
-             
-             # Skip UI control messages (handled separately below)
-             if any(line.startswith(p) for p in ['UI_STEP:', 'UI_ACTION:', 'UI_SCREENSHOT:', 'UI_STATUS:', 'UI_END:', 'UI_AI_PROMPT:', 'UI_AI_RESPONSE:']):
-                 pass # Check specific handlers below
-             else:
-                 # Skip tracebacks and stack traces
-                 skip_patterns = [
-                    'Traceback (most recent call last):',
-                    'File "',
-                    '    at ',
-                    'Stacktrace:',
-                    'The above error is caused by',
-                 ]
-                 if not any(pattern in line for pattern in skip_patterns):
-                    # Log normal messages
-                    color = 'white'
-                    message = line
-                    prefixes = {
-                        '[INFO]': 'blue', 'INFO:': 'blue',
-                        '[WARNING]': 'orange', 'WARNING:': 'orange',
-                        '[ERROR]': 'red', 'ERROR:': 'red',
-                        '[CRITICAL]': 'red', 'CRITICAL:': 'red',
-                    }
-                    for prefix, p_color in prefixes.items():
-                        if line.startswith(prefix):
-                            message = line[len(prefix):].lstrip()
-                            color = p_color
-                            break
-                    self.main_controller.log_message(message, color)
-
-             # Check for UI_STEP
-             if line.startswith('UI_STEP:'):
+             # Check for JSON IPC (New Robust Protocol via stdout)
+             if line.startswith('JSON_IPC:'):
                  try:
-                     self.step_count = int(line.split(':', 1)[1].strip())
-                     self.main_controller.step_label.setText(f"Step: {self.step_count}")
-                     self.update_progress()
-                 except ValueError:
-                     pass
+                     raw_json = line[len('JSON_IPC:'):]
+                     event = json.loads(raw_json)
+                     self._handle_json_event(event)
+                 except Exception as e:
+                     logging.error(f"Failed to parse JSON IPC: {e}")
+                 return # Skip legacy processing for IPC lines
 
-             # Check for UI_ACTION
-             if line.startswith('UI_ACTION:'):
-                 self.last_action = line.split(':', 1)[1].strip()
-            
-             # Check for UI_SCREENSHOT
-             if line.startswith('UI_SCREENSHOT:'):
-                 screenshot_data = line.split(':', 1)[1].strip()
-                 # Parse screenshot path and blocked flag (format: "path|BLOCKED" or "path")
-                 if '|BLOCKED' in screenshot_data:
-                     screenshot_path = screenshot_data.replace('|BLOCKED', '')
-                     is_blocked = True
-                 else:
-                     screenshot_path = screenshot_data
-                     is_blocked = False
-                 
-                 if screenshot_path and os.path.exists(screenshot_path):
-                     self.current_screenshot = screenshot_path
-                     self.main_controller.update_screenshot(screenshot_path, is_blocked=is_blocked)
+             # Process the line (legacy logic for mixed outputs)
+             output = line 
              
-             # Check for UI_STATUS
-             if line.startswith('UI_STATUS:'):
-                 status_text = line.split(':', 1)[1].strip()
-                 self.main_controller.status_label.setText(f"Status: {status_text}")
+             # Legacy UI control messages -> Ignored (handled via JSON_IPC)
+             if any(line.startswith(p) for p in ['UI_STEP:', 'UI_ACTION:', 'UI_SCREENSHOT:', 'UI_STATUS:', 'UI_END:', 'UI_AI_PROMPT:', 'UI_AI_RESPONSE:']):
+                 return 
 
-             # Check for UI_END
-             if line.startswith('UI_END:'):
-                 final_status = line.split(':', 1)[1].strip()
-                 self.main_controller.log_message(f"Final status: {final_status}", 'blue')
-             
-             # Check for UI_AI_PROMPT
-             if line.startswith('UI_AI_PROMPT:'):
-                 # This is likely truncated if it was multi-line, but the new logger sends it as single line usually or we handle it via block buffering which is harder here. 
-                 # Assuming the new logger changes newlines to something else or sends it as a block?
-                 # If the prompt is multi-line, strictly line-based processing will break it.
-                 # However, looking at the logs, AI prompts are usually enclosed in blocks locally, but sent to stdout... 
-                 # The previous implementation used re.search(..., re.DOTALL) on the whole chunk.
-                 # If we switch to line-based, we lose multi-line regex matching capabilities unless we allow accumulating context.
-                 # BUT: The UI prompts are usually single-line JSON or explicit markers.
-                 # Let's check the previous regex: re.search(r'UI_AI_PROMPT:(.*)', output, re.DOTALL)
-                 # This implies it COULD challenge the line-based approach.
-                 # HOWEVER, 'UI_AI_PROMPT:' usually starts a JSON block.
-                 # Ideally, the python script should ensure one JSON object per line or use a delimiter.
-                 # For now, let's treat the line as the start.
-                 prompt_str = line.split(':', 1)[1].strip()
-                 if hasattr(self.main_controller, 'update_ai_input'):
-                     self.main_controller.update_ai_input(prompt_str)
-
-             # Check for UI_AI_RESPONSE
-             if line.startswith('UI_AI_RESPONSE:'):
-                 response_str = line.split(':', 1)[1].strip()
-                 if hasattr(self.main_controller, 'update_ai_output'):
-                     self.main_controller.update_ai_output(response_str)
+             # Skip tracebacks and stack traces
+             skip_patterns = [
+                'Traceback (most recent call last):',
+                'File "',
+                '    at ',
+                'Stacktrace:',
+                'The above error is caused by',
+             ]
+             if not any(pattern in line for pattern in skip_patterns):
+                # Log normal messages
+                color = 'white'
+                message = line
+                prefixes = {
+                    '[INFO]': 'blue', 'INFO:': 'blue',
+                    '[WARNING]': 'orange', 'WARNING:': 'orange',
+                    '[ERROR]': 'red', 'ERROR:': 'red',
+                    '[CRITICAL]': 'red', 'CRITICAL:': 'red',
+                }
+                for prefix, p_color in prefixes.items():
+                    if line.startswith(prefix):
+                        message = line[len(prefix):].lstrip()
+                        color = p_color
+                        break
+                self.main_controller.log_message(message, color)
 
         except Exception as e:
             logging.error(f"Error processing log line: {e}")
+
+    def _handle_json_event(self, event: Dict[str, Any]) -> None:
+        """Handle structured JSON event from child process."""
+        if event.get('type') != 'ui_event':
+            return
+            
+        kind = event.get('kind')
+        data = event.get('data')
+        
+        if kind == 'ai_prompt':
+            # Update AI Service
+            if hasattr(self.main_controller, 'ai_service') and self.main_controller.ai_service:
+                prompt_str = data if isinstance(data, str) else json.dumps(data)
+                self.main_controller.ai_service.record_prompt(prompt_str)
+                
+        elif kind == 'ai_response':
+            if hasattr(self.main_controller, 'ai_service') and self.main_controller.ai_service:
+                response_str = json.dumps(data) if isinstance(data, dict) else str(data)
+                self.main_controller.ai_service.record_response_for_latest(response_str)
+        
+        elif kind == 'step':
+            try:
+                self.step_count = int(data)
+                self.main_controller.step_label.setText(f"Step: {self.step_count}")
+                self.update_progress()
+            except (ValueError, TypeError):
+                pass
+                
+        elif kind == 'action':
+            if isinstance(data, dict):
+                self.last_action = data.get('action', '')
+            else:
+                self.last_action = str(data)
+                
+        elif kind == 'status':
+            self.main_controller.status_label.setText(f"Status: {str(data)}")
+            
+        elif kind == 'screenshot':
+            if isinstance(data, dict):
+                path = data.get('path')
+                blocked = data.get('blocked', False)
+                if path and os.path.exists(path):
+                    self.current_screenshot = path
+                    self.main_controller.update_screenshot(path, is_blocked=blocked)
+                    
+        elif kind == 'log':
+            if isinstance(data, dict):
+                level = data.get('level', 'INFO')
+                message = data.get('message', '')
+                
+                # Map level to color
+                color_map = {
+                    'INFO': 'blue',
+                    'WARNING': 'orange',
+                    'ERROR': 'red',
+                    'CRITICAL': 'red'
+                }
+                color = color_map.get(level.upper(), 'white')
+                self.main_controller.log_message(message, color)
+            else:
+                self.main_controller.log_message(str(data))
 
 
 
@@ -916,3 +976,27 @@ class CrawlerManager(QObject):
         except Exception as e:
             self.main_controller.log_message(f"Error opening folder: {e}", 'red')
             logging.error(f"Error opening folder {folder_str}: {e}")
+
+    # ========================================================================
+    # Pause / Step Control Methods (Delegated to Orchestrator)
+    # ========================================================================
+
+    def enable_step_by_step(self) -> bool:
+        """Enable step-by-step mode."""
+        return self.orchestrator.flag_controller.create_step_by_step_flag()
+
+    def disable_step_by_step(self) -> bool:
+        """Disable step-by-step mode."""
+        return self.orchestrator.flag_controller.remove_step_by_step_flag()
+
+    def next_step(self) -> bool:
+        """Advance one step when paused."""
+        return self.orchestrator.flag_controller.create_continue_flag()
+
+    def pause_crawler(self) -> bool:
+        """Manually pause the crawler."""
+        return self.orchestrator.flag_controller.create_pause_flag()
+
+    def resume_crawler(self) -> bool:
+        """Resume manual pause."""
+        return self.orchestrator.flag_controller.remove_pause_flag()

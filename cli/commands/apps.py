@@ -89,7 +89,7 @@ class BaseListAppsCommand(CommandHandler):
         
         # If no cache found, automatically trigger a scan
         if not success and error_message == ERR_NO_APP_CACHE_FOUND:
-            print(MSG_AUTO_SCANNING)
+            self._emit_json('log', {'level': 'INFO', 'message': MSG_AUTO_SCANNING})
             scan_success, cache_path = app_service.scan_apps(force_rescan=False)
             if not scan_success:
                 return CommandResult(
@@ -104,7 +104,7 @@ class BaseListAppsCommand(CommandHandler):
                 success, apps, error_message = app_service.get_health_cached_apps()
         
         if not success:
-            print(error_message)
+            self._emit_json('log', {'level': 'ERROR', 'message': error_message})
             return CommandResult(
                 success=False,
                 message=error_message,
@@ -112,28 +112,11 @@ class BaseListAppsCommand(CommandHandler):
             )
 
         if not apps:
-            print(MSG_NO_APPS_FOUND.format(cache_key_type=self._cache_key_type))
-            return CommandResult(success=True, message=MSG_NO_APPS_FOUND.format(cache_key_type=self._cache_key_type))
+            msg = MSG_NO_APPS_FOUND.format(cache_key_type=self._cache_key_type)
+            self._emit_json('log', {'level': 'INFO', 'message': msg})
+            return CommandResult(success=True, message=msg)
 
-        print(HEADER_APPS_LIST.format(header_title=self._header_title, count=len(apps)))
-        for i, app in enumerate(apps):
-            # Handle null/None values from JSON - convert to default
-            name = app.get(APP_NAME) or DEFAULT_UNKNOWN
-            if name is None:
-                name = DEFAULT_UNKNOWN
-            package = app.get(PACKAGE_NAME, DEFAULT_UNKNOWN)
-            is_health = app.get(IS_HEALTH_APP) is True
-            
-            # Color code health apps in green
-            if is_health and COLORAMA_AVAILABLE:
-                colored_name = f"{Fore.GREEN}{name}{Style.RESET_ALL}"
-                colored_package = f"{Fore.GREEN}{package}{Style.RESET_ALL}"
-                formatted_item = FORMAT_APP_LIST_ITEM.format(index=i+1, name=colored_name, package=colored_package)
-            else:
-                formatted_item = FORMAT_APP_LIST_ITEM.format(index=i+1, name=name, package=package)
-            
-            print(formatted_item)
-        print(FOOTER_APPS_LIST.format(header_title=self._header_title))
+        self._emit_json('app_list', {'title': self._header_title, 'apps': apps, 'cache_key': self._cache_key_type})
 
         return CommandResult(
             success=True,
@@ -327,32 +310,23 @@ class ShowSelectedAppCommand(CommandHandler):
         app_activity = context.config.get(CONFIG_APP_ACTIVITY)
         
         if last_selected and isinstance(last_selected, dict):
-            name = last_selected.get(APP_NAME, DEFAULT_UNKNOWN)
-            package = last_selected.get(PACKAGE_NAME, DEFAULT_UNKNOWN)
-            activity = last_selected.get(ACTIVITY_NAME, DEFAULT_UNKNOWN)
-            
-            print(f"\n{HEADER_SELECTED_APP}")
-            print(f"{LABEL_NAME} {name}")
-            print(f"{LABEL_PACKAGE} {package}")
-            print(f"{LABEL_ACTIVITY} {activity}")
-            print(FOOTER_SELECTED_APP)
+            self._emit_json('selected_app_details', last_selected)
             
             return CommandResult(
                 success=True,
                 message=""
             )
         elif app_package:
-            print(f"\n{HEADER_SELECTED_APP}")
-            print(f"{LABEL_PACKAGE} {app_package}")
-            print(f"{LABEL_ACTIVITY} {app_activity}")
-            print(FOOTER_SELECTED_APP)
+            # Construct partial object
+            app_data = {PACKAGE_NAME: app_package, ACTIVITY_NAME: app_activity}
+            self._emit_json('selected_app_details', app_data)
             
             return CommandResult(
                 success=True,
                 message=""
             )
         else:
-            print(MSG_NO_APP_SELECTED)
+            self._emit_json('log', {'level': 'INFO', 'message': MSG_NO_APP_SELECTED})
             return CommandResult(
                 success=False,
                 message="No app selected",

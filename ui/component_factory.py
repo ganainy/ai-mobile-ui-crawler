@@ -340,37 +340,22 @@ class ComponentFactory:
         preprocessing_widgets = []
         preprocessing_labels = []
 
-        # Max width
+        # Max width - hidden from UI, configurable via CLI
         from config.numeric_constants import IMAGE_MAX_WIDTH_MIN, IMAGE_MAX_WIDTH_MAX
         config_widgets["IMAGE_MAX_WIDTH"] = QSpinBox()
         config_widgets["IMAGE_MAX_WIDTH"].setRange(IMAGE_MAX_WIDTH_MIN, IMAGE_MAX_WIDTH_MAX)
-        label_max_width = QLabel("Max Screenshot Width (px): ")
-        from ui.strings import MAX_SCREENSHOT_WIDTH_TOOLTIP
-        label_max_width.setToolTip(tooltips.get("IMAGE_MAX_WIDTH", MAX_SCREENSHOT_WIDTH_TOOLTIP))
-        form.addRow(label_max_width, config_widgets["IMAGE_MAX_WIDTH"])
-        preprocessing_widgets.append(config_widgets["IMAGE_MAX_WIDTH"])
-        preprocessing_labels.append(label_max_width)
+        # Not added to UI (form.addRow is skipped)
 
-        # Format
+        # Format - hidden from UI, configurable via CLI
         config_widgets["IMAGE_FORMAT"] = QComboBox()
         config_widgets["IMAGE_FORMAT"].addItems(["JPEG", "WEBP", "PNG"])
-        label_format = QLabel("Image Format: ")
-        from ui.strings import IMAGE_FORMAT_TOOLTIP
-        label_format.setToolTip(tooltips.get("IMAGE_FORMAT", IMAGE_FORMAT_TOOLTIP))
-        form.addRow(label_format, config_widgets["IMAGE_FORMAT"])
-        preprocessing_widgets.append(config_widgets["IMAGE_FORMAT"])
-        preprocessing_labels.append(label_format)
+        # Not added to UI (form.addRow is skipped)
 
-        # Quality
+        # Quality - hidden from UI, configurable via CLI
         from config.numeric_constants import IMAGE_QUALITY_MIN, IMAGE_QUALITY_MAX
         config_widgets["IMAGE_QUALITY"] = QSpinBox()
         config_widgets["IMAGE_QUALITY"].setRange(IMAGE_QUALITY_MIN, IMAGE_QUALITY_MAX)
-        label_quality = QLabel("Image Quality (%): ")
-        from ui.strings import IMAGE_QUALITY_TOOLTIP
-        label_quality.setToolTip(tooltips.get("IMAGE_QUALITY", IMAGE_QUALITY_TOOLTIP))
-        form.addRow(label_quality, config_widgets["IMAGE_QUALITY"])
-        preprocessing_widgets.append(config_widgets["IMAGE_QUALITY"])
-        preprocessing_labels.append(label_quality)
+        # Not added to UI (form.addRow is skipped)
 
         # Store references for visibility control (attached to group as custom property)
         group.preprocessing_widgets = preprocessing_widgets
@@ -460,6 +445,13 @@ class ComponentFactory:
         label_allowed_packages.setToolTip(tooltips["ALLOWED_EXTERNAL_PACKAGES"])
         config_widgets["ALLOWED_EXTERNAL_PACKAGES_WIDGET"].setToolTip(tooltips["ALLOWED_EXTERNAL_PACKAGES"])
         crawler_layout.addRow(label_allowed_packages, config_widgets["ALLOWED_EXTERNAL_PACKAGES_WIDGET"])
+
+        # Step-by-Step Mode checkbox (persisted)
+        config_widgets["STEP_BY_STEP_MODE"] = QCheckBox()
+        config_widgets["STEP_BY_STEP_MODE"].setToolTip("Pause after each step to inspect state. Useful for debugging.")
+        label_step_mode = QLabel("Step-by-Step Mode: ")
+        label_step_mode.setToolTip("Enable to pause after each crawler step for inspection")
+        crawler_layout.addRow(label_step_mode, config_widgets["STEP_BY_STEP_MODE"])
 
         layout.addRow(crawler_group)
         return crawler_group

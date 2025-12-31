@@ -64,17 +64,7 @@ class ListCrawlerActionsCommand(CommandHandler):
         all_actions: List[Dict[str, Any]] = actions_service.get_actions()
         action_count: int = len(all_actions)
         
-        # Display actions in a formatted numbered list
-        print(f"\n=== Crawler Actions ({action_count}) ===")
-        for index, action_data in enumerate(all_actions, start=1):
-            is_enabled: bool = action_data.get("enabled", True)
-            enabled_indicator: str = "✓" if is_enabled else "✗"
-            action_name: str = action_data.get("name", "Unknown")
-            action_description: str = action_data.get("description", "")
-            
-            print(f"{index:2d}. {enabled_indicator} {action_name}: {action_description}")
-        print("==============================")
-
+        self._emit_json('action_list', all_actions)
         return CommandResult(
             success=True,
             message=MSG.FOUND_ACTIONS.format(count=action_count)

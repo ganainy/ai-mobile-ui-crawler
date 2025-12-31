@@ -1,5 +1,4 @@
 import os
-import io
 import uuid
 import time
 import json
@@ -27,15 +26,6 @@ from config.numeric_constants import (
     DEFAULT_AI_PROVIDER,
     DEFAULT_MODEL_TEMP,
     DEFAULT_MAX_TOKENS,
-    IMAGE_MAX_WIDTH_DEFAULT,
-    IMAGE_DEFAULT_QUALITY,
-    IMAGE_DEFAULT_FORMAT,
-    IMAGE_DEFAULT_FORMAT,
-    IMAGE_BG_COLOR,
-    IMAGE_BG_COLOR,
-    IMAGE_SHARPEN_RADIUS,
-    IMAGE_SHARPEN_PERCENT,
-    IMAGE_SHARPEN_THRESHOLD,
     LONG_PRESS_MIN_DURATION_MS,
     AI_LOG_FILENAME,
 )
@@ -385,84 +375,37 @@ class AgentAssistant:
 
 
     def _prepare_image_part(self, screenshot_bytes: Optional[bytes]) -> Optional[Image.Image]:
-        """Prepare an image for the agent with config-driven preprocessing before model encoding.
+        """Prepare an image for the AI model.
 
-        Steps:
-        - Decode screenshot bytes to PIL Image
-        - Optional: Crop status/nav bars using configured percentages
-        - Resize down to configured max width (no upscaling), preserve aspect ratio
-        - Convert to RGB for consistent compression downstream
-        - Apply mild sharpening to preserve text clarity
-        - Return processed PIL Image (model adapters will handle provider-specific encoding)
+        Delegates to the centralized ImagePreprocessor service.
+        Screenshots are pre-processed at capture time, so this primarily
+        handles RGB conversion and any provider-specific size limits.
+
+        Args:
+            screenshot_bytes: Screenshot bytes (should be already preprocessed)
+
+        Returns:
+            PIL Image ready for model encoding, or None on error
         """
         if screenshot_bytes is None:
             return None
-            
+        
         try:
-            img = Image.open(io.BytesIO(screenshot_bytes))
-            original_size = len(screenshot_bytes)
+            from infrastructure.image_preprocessor import get_preprocessor
             
-            # Get AI provider for provider-specific optimizations
+            # Get provider-specific max width if different from global config
             ai_provider = self.cfg.get('AI_PROVIDER', DEFAULT_AI_PROVIDER).lower()
-            
-            # Get provider capabilities from config
             try:
                 from config.app_config import AI_PROVIDER_CAPABILITIES
             except ImportError:
                 from config.app_config import AI_PROVIDER_CAPABILITIES
             
-            capabilities = AI_PROVIDER_CAPABILITIES.get(ai_provider, AI_PROVIDER_CAPABILITIES.get(DEFAULT_AI_PROVIDER, {}))
+            capabilities = AI_PROVIDER_CAPABILITIES.get(ai_provider, {})
+            provider_max_width = capabilities.get('image_max_width')
             
-            # Resolve preprocessing settings (global overrides take precedence)
-            max_width = self.cfg.get('IMAGE_MAX_WIDTH', None) or capabilities.get('image_max_width', IMAGE_MAX_WIDTH_DEFAULT)
-            quality = self.cfg.get('IMAGE_QUALITY', None) or capabilities.get('image_quality', IMAGE_DEFAULT_QUALITY)
-            image_format = self.cfg.get('IMAGE_FORMAT', None) or capabilities.get('image_format', IMAGE_DEFAULT_FORMAT)
-            image_format = self.cfg.get('IMAGE_FORMAT', None) or capabilities.get('image_format', IMAGE_DEFAULT_FORMAT)
-            
-            # Resize if necessary (maintain aspect ratio)
-            if img.width > max_width:
-                scale = max_width / img.width
-                new_height = int(img.height * scale)
-                img = img.resize((max_width, new_height), Image.Resampling.LANCZOS)
-            
-            # Convert to RGB if necessary (for JPEG compatibility and better compression)
-            if img.mode in ('RGBA', 'LA', 'P'):
-                # Create white background for transparent images
-                if img.mode == 'RGBA':
-                    background = Image.new('RGB', img.size, IMAGE_BG_COLOR)
-
-                    background.paste(img, mask=img.split()[-1])  # Use alpha channel as mask
-                    img = background
-                else:
-                    img = img.convert('RGB')
-            
-            # Apply sharpening to maintain text clarity after compression
-            from PIL import ImageFilter
-
-            # Mild sharpening to preserve text readability
-            img = img.filter(ImageFilter.UnsharpMask(radius=IMAGE_SHARPEN_RADIUS, percent=IMAGE_SHARPEN_PERCENT, threshold=IMAGE_SHARPEN_THRESHOLD))
-            
-            # Note: We return the processed PIL Image. Encoding (format/quality) is handled by model adapters.
-            # Still, estimate potential savings for logging by encoding briefly to measure size.
-            try:
-                compressed_buffer = io.BytesIO()
-                if image_format.upper() == IMAGE_DEFAULT_FORMAT:
-                    img.save(
-                        compressed_buffer,
-                        format=IMAGE_DEFAULT_FORMAT,
-                        quality=quality,
-                        optimize=True,
-                        progressive=True,
-                        subsampling='4:2:0'
-                    )
-                else:
-                    img.save(compressed_buffer, format=image_format, optimize=True)
-                compressed_size = compressed_buffer.tell()
-                compression_ratio = original_size / compressed_size if compressed_size > 0 else 1
-            except Exception as est_err:
-                pass
-            
-            return img
+            # Use the preprocessor service
+            preprocessor = get_preprocessor(self.cfg)
+            return preprocessor.get_pil_image_for_ai(screenshot_bytes, max_width=provider_max_width)
             
         except Exception as e:
             logging.error(f"Failed to prepare image part for AI: {e}", exc_info=True)

@@ -64,25 +64,7 @@ class ListCrawlerPromptsCommand(CommandHandler):
         all_prompts: List[Dict[str, Any]] = prompts_service.get_prompts()
         prompt_count: int = len(all_prompts)
         
-        # Display prompts in a formatted numbered list
-        print(f"\n=== Crawler Prompt Templates ({prompt_count}) ===")
-        for index, prompt_data in enumerate(all_prompts, start=1):
-            is_enabled: bool = prompt_data.get("enabled", True)
-            enabled_indicator: str = "✓" if is_enabled else "✗"
-            prompt_name: str = prompt_data.get("name", "Unknown")
-            template_text: str = prompt_data.get("template", "")
-            
-            # Create a preview of the template (first 60 characters)
-            template_preview: str = (
-                template_text[:60] + "..." 
-                if len(template_text) > 60 
-                else template_text
-            )
-            
-            print(f"{index:2d}. {enabled_indicator} {prompt_name}")
-            print(f"    {template_preview}")
-        print("==============================")
-
+        self._emit_json('prompt_list', all_prompts)
         return CommandResult(
             success=True,
             message=MSG.FOUND_PROMPTS.format(count=prompt_count)

@@ -159,11 +159,19 @@ class ScreenStateManager:
                 pass  # Keyboard may not be visible
             
             screenshot_bytes = self.driver.get_screenshot_bytes()
+            
+            # Early preprocessing: Resize screenshot immediately to reduce memory and AI tokens
+            if screenshot_bytes:
+                from infrastructure.image_preprocessor import get_preprocessor
+                preprocessor = get_preprocessor(self.cfg)
+                screenshot_bytes, _, _ = preprocessor.preprocess_screenshot(screenshot_bytes)
+            
             page_source = self.driver.get_page_source() or ""
             current_package = self.driver.get_current_package() or "UnknownPackage"
             current_activity = self.driver.get_current_activity() or "UnknownActivity"
             
             # Always run OCR since HYBRID (XML+OCR) is always enabled
+            # Now runs on already-resized image for better performance
             ocr_results = None
             if screenshot_bytes:
                 ocr_results = self.ocr_service.extract_text_from_bytes(screenshot_bytes)
@@ -187,7 +195,8 @@ class ScreenStateManager:
         composite_hash = self._get_composite_hash(xml_hash, visual_hash)
 
         temp_id = -step_number
-        ss_filename = f"screen_run{run_id}_step{step_number}_{visual_hash[:8]}.png"
+        # Use .jpg extension since screenshots are preprocessed as JPEG
+        ss_filename = f"screen_run{run_id}_step{step_number}_{visual_hash[:8]}.jpg"
         ss_path = os.path.join(str(self.cfg.SCREENSHOTS_DIR), ss_filename)
 
         os.makedirs(str(self.cfg.SCREENSHOTS_DIR), exist_ok=True)
@@ -225,7 +234,7 @@ class ScreenStateManager:
                 is_new_discovery_for_system = True
                 candidate_screen.id = self._next_screen_db_id_counter
 
-                ss_filename = f"screen_{candidate_screen.id}_{candidate_screen.visual_hash[:8]}.png"
+                ss_filename = f"screen_{candidate_screen.id}_{candidate_screen.visual_hash[:8]}.jpg"
                 screenshots_dir = str(self.cfg.SCREENSHOTS_DIR)
                 candidate_screen.screenshot_path = os.path.join(screenshots_dir, ss_filename)
 

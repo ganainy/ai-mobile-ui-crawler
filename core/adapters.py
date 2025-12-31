@@ -183,17 +183,8 @@ class SubprocessBackend(ProcessBackend):
         """
         if error_output:
             self.logger.error(f"Subprocess error output:\n{error_output}")
-            # Print to stderr so it's visible in CLI
-            print(f"\n{'='*60}", file=sys.stderr, flush=True)
-            print(f"ERROR: Subprocess exited with code {return_code}", file=sys.stderr, flush=True)
-            print(f"{'='*60}", file=sys.stderr, flush=True)
-            print(error_output, file=sys.stderr, flush=True)
-            print(f"{'='*60}\n", file=sys.stderr, flush=True)
         else:
             self.logger.error("Subprocess exited but produced no output")
-            print(f"\nERROR: Subprocess exited with code {return_code} but produced no output", file=sys.stderr, flush=True)
-            print("This usually means the process crashed during initialization.", file=sys.stderr, flush=True)
-            print("Check the logs or try running the command directly to see the error.\n", file=sys.stderr, flush=True)
     
     def stop_process(self) -> bool:
         """Stop the subprocess."""

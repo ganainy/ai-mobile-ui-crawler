@@ -35,6 +35,20 @@ import threading
 import time
 import traceback
 from pathlib import Path
+from typing import Any
+
+def _emit_json(kind: str, data: Any) -> None:
+    """Helper to emit structured JSON event for IPC."""
+    try:
+        payload = {
+            "type": "scanner_event",
+            "kind": kind,
+            "data": data,
+            "timestamp": datetime.datetime.now().isoformat()
+        }
+        print(f"JSON_IPC:{json.dumps(payload)}", flush=True)
+    except Exception:
+        pass
 
 # Add project root to Python path before importing project modules
 # This is necessary when running the script directly
@@ -118,7 +132,7 @@ def _check_ai_filtering_prerequisites(config):
     # Check dependencies for selected provider
     deps_ok, deps_msg = check_dependencies(result["provider"])
     if not deps_ok:
-        print(f"Error: {deps_msg} AI Filtering will be globally unavailable.", file=sys.stderr)
+        _emit_json('log', {'level': 'ERROR', 'message': f"Error: {deps_msg} AI Filtering will be globally unavailable."})
         result["enabled"] = False
         return result
     
@@ -132,7 +146,7 @@ def _check_ai_filtering_prerequisites(config):
     # Validate provider configuration
     is_valid, error_msg = validate_provider_config(config, result["provider"], default_ollama_url)
     if not is_valid:
-        print(f"Error: {error_msg}. AI Filtering will be globally unavailable.", file=sys.stderr)
+        _emit_json('log', {'level': 'ERROR', 'message': f"Error: {error_msg}. AI Filtering will be globally unavailable."})
         result["enabled"] = False
         return result
     
@@ -143,10 +157,7 @@ def _check_ai_filtering_prerequisites(config):
     # For Ollama, it's okay if not set (will use default)
     if not result["api_key_or_url"] and result["provider"] != "ollama":
         missing_key_name = get_missing_key_name(result["provider"])
-        print(
-            f"Error: {missing_key_name} not found in configuration. AI Filtering will be globally unavailable.",
-            file=sys.stderr,
-        )
+        _emit_json('log', {'level': 'ERROR', 'message': f"Error: {missing_key_name} not found in configuration. AI Filtering will be globally unavailable."})
         result["enabled"] = False
         return result
     
@@ -197,33 +208,21 @@ def run_adb_command(command_list):
         if result.stderr:
             clean_stderr = _filter_warning_lines(result.stderr)
             if clean_stderr:
-                print(
-                    f"--- ADB STDERR for `{' '.join(adb_command)}`:\n{clean_stderr.strip()}",
-                    file=sys.stderr,
-                )
+                _emit_json('log', {'level': 'WARNING', 'message': f"--- ADB STDERR for `{' '.join(adb_command)}`:\n{clean_stderr.strip()}"})
         return result.stdout.strip()
 
     except FileNotFoundError:
-        print(
-            "Fatal Error: 'adb' command not found. Make sure ADB is installed and in your system PATH.",
-            file=sys.stderr,
-        )
+        _emit_json('log', {'level': 'CRITICAL', 'message': "Fatal Error: 'adb' command not found. Make sure ADB is installed and in your system PATH."})
         sys.exit(1)
     except subprocess.CalledProcessError as e:
         stderr_lower = e.stderr.lower() if e.stderr else ""
         if "device unauthorized" in stderr_lower:
-            print(
-                "\nFatal Error: Device unauthorized. Please check your device and allow USB debugging. ***",
-                file=sys.stderr,
-            )
+            _emit_json('log', {'level': 'CRITICAL', 'message': "\nFatal Error: Device unauthorized. Please check your device and allow USB debugging. ***"})
             sys.exit(1)
         elif "device" in stderr_lower and (
             "not found" in stderr_lower or "offline" in stderr_lower
         ):
-            print(
-                "\nFatal Error: Device not found or offline. Ensure device is connected and USB debugging is enabled. Check 'adb devices'.",
-                file=sys.stderr,
-            )
+            _emit_json('log', {'level': 'CRITICAL', 'message': "\nFatal Error: Device not found or offline. Ensure device is connected and USB debugging is enabled. Check 'adb devices'."})
             sys.exit(1)
 
         is_relevant_error = True
@@ -238,10 +237,8 @@ def run_adb_command(command_list):
         if is_relevant_error:
             relevant_stderr = _filter_warning_lines(e.stderr)
             if relevant_stderr:
-                print(
-                    f"Warning: ADB command `{' '.join(e.cmd)}` failed.", file=sys.stderr
-                )
-                print(f"Stderr: {relevant_stderr.strip()}", file=sys.stderr)
+                _emit_json('log', {'level': 'WARNING', 'message': f"Warning: ADB command `{' '.join(e.cmd)}` failed."})
+                _emit_json('log', {'level': 'ERROR', 'message': f"Stderr: {relevant_stderr.strip()}"})
         return None
 
 
@@ -253,7 +250,7 @@ def get_installed_packages():
 
     output = run_adb_command(command)
     if output is None:
-        print("Error: Failed to list packages via ADB.", file=sys.stderr)
+        _emit_json('log', {'level': 'ERROR', 'message': "Error: Failed to list packages via ADB."})
         return []
     packages = [
         line.split(":", 1)[1]
@@ -382,50 +379,28 @@ def generate_app_info_cache():
     
     
     if not can_enable_ai_filtering:
-        print(
-            "Warning: AI filtering is not available. All apps will be marked with unknown health status.",
-            file=sys.stderr,
-        )
+        _emit_json('log', {'level': 'WARNING', 'message': "Warning: AI filtering is not available. All apps will be marked with unknown health status."})
         
         # Show instructions on how to select a model
-        print(
-            "To enable AI filtering, select a provider and model:",
-            file=sys.stderr,
-        )
-        print(
-            "  python run_cli.py <provider> list-models  # provider: gemini, openrouter, or ollama",
-            file=sys.stderr,
-        )
-        print(
-            "  python run_cli.py <provider> select-model <model>",
-            file=sys.stderr,
-        )
+        _emit_json('log', {'level': 'WARNING', 'message': "To enable AI filtering, select a provider and model:"})
+        _emit_json('log', {'level': 'WARNING', 'message': "  python run_cli.py <provider> list-models  # provider: gemini, openrouter, or ollama"})
+        _emit_json('log', {'level': 'WARNING', 'message': "  python run_cli.py <provider> select-model <model>"})
 
     device_id = get_device_id()
     if not device_id or device_id == "unknown_device":
-        print(
-            "Warning: Could not obtain a valid device ID quickly. Proceeding with ADB-based discovery attempts.",
-            file=sys.stderr,
-        )
+        _emit_json('log', {'level': 'WARNING', 'message': "Warning: Could not obtain a valid device ID quickly. Proceeding with ADB-based discovery attempts."})
         # Continue with discovery; downstream ADB commands will surface clearer errors
         # (e.g., device not found or offline) if no device is actually available.
 
-    print(f"Device ID: {device_id}")
-    print(
-        f"\n--- Discovering installed packages (User-installed apps only) ---"
-    )
+    _emit_json('log', {'level': 'INFO', 'message': f"Device ID: {device_id}"})
+    _emit_json('log', {'level': 'INFO', 'message': "\n--- Discovering installed packages (User-installed apps only) ---"})
     packages = get_installed_packages()
     if not packages:
-        print(
-            "No packages found. Ensure device is connected.",
-            file=sys.stderr,
-        )
+        _emit_json('log', {'level': 'ERROR', 'message': "No packages found. Ensure device is connected."})
         return None, []
-    print(f"Found {len(packages)} packages.")
+    _emit_json('log', {'level': 'INFO', 'message': f"Found {len(packages)} packages."})
 
-    print(
-        f"\n--- Retrieving App Info (Label & Main Activity) for {len(packages)} packages ---"
-    )
+    _emit_json('log', {'level': 'INFO', 'message': f"\n--- Retrieving App Info (Label & Main Activity) for {len(packages)} packages ---"})
     
     # Use parallel processing to speed up ADB commands
     # ThreadPoolExecutor is ideal for I/O-bound operations like ADB commands
@@ -442,7 +417,7 @@ def generate_app_info_cache():
             processed_count[0] += 1
             count = processed_count[0]
             if count % 20 == 0 or count == len(packages):
-                print(f"  Processed {count}/{len(packages)} packages...")
+                _emit_json('log', {'level': 'INFO', 'message': f"  Processed {count}/{len(packages)} packages..."})
     
     # Process packages in parallel
     package_results = {}  # Dict to maintain order: {package_name: app_info}
@@ -462,10 +437,7 @@ def generate_app_info_cache():
                 update_progress()
             except Exception as e:
                 package_name = future_to_package[future]
-                print(
-                    f"  Warning: Error processing package {package_name}: {e}",
-                    file=sys.stderr
-                )
+                _emit_json('log', {'level': 'WARNING', 'message': f"  Warning: Error processing package {package_name}: {e}"})
                 # Still add the package with None values
                 package_results[package_name] = {
                     "package_name": package_name,
@@ -478,9 +450,7 @@ def generate_app_info_cache():
     # Reconstruct list in original package order
     all_apps_info = [package_results[package_name] for package_name in packages]
     
-    print(
-        f"\n--- Retrieved info for {len(all_apps_info)} apps ---"
-    )
+    _emit_json('log', {'level': 'INFO', 'message': f"\n--- Retrieved info for {len(all_apps_info)} apps ---"})
 
     # AI filtering: Always attempt to classify apps as health-related or not
     unified_apps = []
@@ -519,14 +489,13 @@ def generate_app_info_cache():
             }
             model_adapter.initialize(model_config, ai_model_safety_settings)
             
-            print(f"  Using AI model: {default_ai_model_name} (provider: {ai_provider})")
-            print(f"  Using AI model: {default_ai_model_name} (provider: {ai_provider})")
+            _emit_json('log', {'level': 'INFO', 'message': f"  Using AI model: {default_ai_model_name} (provider: {ai_provider})"})
             
             # Batch processing settings
             BATCH_SIZE = 25
             total_apps = len(all_apps_info)
             num_batches = (total_apps + BATCH_SIZE - 1) // BATCH_SIZE
-            print(f"  Classifying {total_apps} apps in {num_batches} batches (batch size: {BATCH_SIZE})...")
+            _emit_json('log', {'level': 'INFO', 'message': f"  Classifying {total_apps} apps in {num_batches} batches (batch size: {BATCH_SIZE})..."})
             
             # Process in batches
             classification_map = {}
@@ -537,7 +506,7 @@ def generate_app_info_cache():
                 end_idx = min(start_idx + BATCH_SIZE, total_apps)
                 current_batch = all_apps_info[start_idx:end_idx]
                 
-                print(f"  Processing batch {batch_idx + 1}/{num_batches} (apps {start_idx} to {end_idx - 1})...")
+                _emit_json('log', {'level': 'INFO', 'message': f"  Processing batch {batch_idx + 1}/{num_batches} (apps {start_idx} to {end_idx - 1})..."})
                 
                 # Identify missing names in this batch
                 batch_missing_names = 0
@@ -616,12 +585,13 @@ Return the JSON classification now:"""
                                 app_name_map[idx] = app_name
                                 
                 except Exception as e:
-                    print(f"    Warning: Failed to classify batch {batch_idx + 1}: {e}", file=sys.stderr)
-                    print(f"    [DEBUG] Raw response length: {len(response_text) if 'response_text' in locals() else 'N/A'}", file=sys.stderr)
+                    _emit_json('log', {'level': 'WARNING', 'message': f"    Warning: Failed to classify batch {batch_idx + 1}: {e}"})
+                    raw_len = len(response_text) if 'response_text' in locals() else 'N/A'
+                    _emit_json('log', {'level': 'DEBUG', 'message': f"    [DEBUG] Raw response length: {raw_len}"})
                     if 'response_text' in locals() and response_text:
-                        print(f"    [DEBUG] Raw response first 200 chars: {response_text[:200]!r}", file=sys.stderr)
+                        _emit_json('log', {'level': 'DEBUG', 'message': f"    [DEBUG] Raw response first 200 chars: {response_text[:200]!r}"})
                     else:
-                        print(f"    [DEBUG] Raw response is empty or None", file=sys.stderr)
+                        _emit_json('log', {'level': 'DEBUG', 'message': "    [DEBUG] Raw response is empty or None"})
                         
                     # Don't abort, just continue to next batch (items will remain unknown)
 
@@ -654,17 +624,17 @@ Return the JSON classification now:"""
             classified_count = len([a for a in unified_apps if a.get("is_health_app") is not None])
             if classified_count > 0:
                 ai_filter_was_effectively_applied = True
-                print(f"  [OK] Successfully classified {classified_count}/{total_apps} apps using AI")
+                _emit_json('log', {'level': 'INFO', 'message': f"  [OK] Successfully classified {classified_count}/{total_apps} apps using AI"})
                 if names_filled > 0:
-                    print(f"  [OK] Filled in {names_filled} missing app names")
+                    _emit_json('log', {'level': 'INFO', 'message': f"  [OK] Filled in {names_filled} missing app names"})
             else:
-                print(f"  Warning: No apps were successfully classified by AI.", file=sys.stderr)
+                _emit_json('log', {'level': 'WARNING', 'message': "  Warning: No apps were successfully classified by AI."})
                 
         except Exception as e:
             ai_filter_error = str(e)
-            print(f"  [ERR] AI filtering failed: {e}", file=sys.stderr)
-            traceback.print_exc(file=sys.stderr)
-            print(f"  Falling back to marking all apps as unknown health status.")
+            _emit_json('log', {'level': 'ERROR', 'message': f"  [ERR] AI filtering failed: {e}"})
+            _emit_json('log', {'level': 'ERROR', 'message': traceback.format_exc()})
+            _emit_json('log', {'level': 'WARNING', 'message': "  Falling back to marking all apps as unknown health status."})
             unified_apps = [
                 {**app, "is_health_app": None}
                 for app in all_apps_info
@@ -733,14 +703,14 @@ Return the JSON classification now:"""
     # Use shared utility to get cache path 
     output_path = get_app_cache_path(device_id, cfg)
 
-    print(f"  - Total apps: {len(unified_apps)}")
+    _emit_json('log', {'level': 'INFO', 'message': f"  - Total apps: {len(unified_apps)}"})
     health_count = sum(1 for app in unified_apps if app.get("is_health_app") is True)
     non_health_count = sum(1 for app in unified_apps if app.get("is_health_app") is False)
     unknown_count = sum(1 for app in unified_apps if app.get("is_health_app") is None)
-    print(f"  - Health apps: {health_count}")
-    print(f"  - Non-health apps: {non_health_count}")
-    print(f"  - Unknown status: {unknown_count}")
-    print(f"  - AI filtering applied: {ai_filter_was_effectively_applied}")
+    _emit_json('log', {'level': 'INFO', 'message': f"  - Health apps: {health_count}"})
+    _emit_json('log', {'level': 'INFO', 'message': f"  - Non-health apps: {non_health_count}"})
+    _emit_json('log', {'level': 'INFO', 'message': f"  - Unknown status: {unknown_count}"})
+    _emit_json('log', {'level': 'INFO', 'message': f"  - AI filtering applied: {ai_filter_was_effectively_applied}"})
     # Don't print ai_filter_error here - it's already been printed in the exception handler
 
     try:
@@ -748,7 +718,7 @@ Return the JSON classification now:"""
         with open(output_path, "w", encoding="utf-8") as f:
             json.dump(result_data, f, indent=4, ensure_ascii=False)
     except IOError as e:
-        print(f"Error writing to file {output_path}: {e}", file=sys.stderr)
+        _emit_json('log', {'level': 'ERROR', 'message': f"Error writing to file {output_path}: {e}"})
         traceback.print_exc()
         return None, result_data  # Return current data even if save fails
     return output_path, result_data
@@ -773,13 +743,11 @@ if __name__ == "__main__":
     args = parser.parse_args()
     start_time = time.time()
 
-    print(
-        f"--- Starting App Info Finder (Discovery Mode) ---"
-    )
+    _emit_json('log', {'level': 'INFO', 'message': "--- Starting App Info Finder (Discovery Mode) ---"})
     output_file_path, result_data = generate_app_info_cache()
     if output_file_path:
         # This print is crucial for ui_controller.py/cli_controller.py to parse the path
-        print(f"\nCache file generated at: {output_file_path}")
+        _emit_json('log', {'level': 'INFO', 'message': f"\nCache file generated at: {output_file_path}"})
         # Output a JSON string with the summary for better parsing by the caller
         # Count apps with is_health_app flag (unified format)
         app_count = (
@@ -787,27 +755,21 @@ if __name__ == "__main__":
             if isinstance(result_data, dict)
             else 0
         )
-        summary_json = json.dumps(
-            {
-                "status": "success",
-                "file_path": output_file_path,
-                "app_count": app_count,
-                "timestamp": (
-                    result_data.get("timestamp")
-                    if isinstance(result_data, dict)
-                    else ""
-                ),
-            }
-        )
-        print(f"\nSUMMARY_JSON: {summary_json}")
+        summary_data = {
+            "status": "success",
+            "file_path": output_file_path,
+            "app_count": app_count,
+            "timestamp": (
+                result_data.get("timestamp")
+                if isinstance(result_data, dict)
+                else ""
+            ),
+        }
+        _emit_json('result', summary_data)
     else:
-        print(
-            "\nApp info cache generation failed or did not produce a file."
-        )
-        error_json = json.dumps(
-            {"status": "error", "message": "Failed to generate app info cache"}
-        )
-        print(f"\nSUMMARY_JSON: {error_json}")
+        _emit_json('log', {'level': 'ERROR', 'message': "\nApp info cache generation failed or did not produce a file."})
+        error_data = {"status": "error", "message": "Failed to generate app info cache"}
+        _emit_json('result', error_data)
 
     end_time = time.time()
-    print(f"\n--- Script Finished in {end_time - start_time:.2f} seconds ---")
+    _emit_json('log', {'level': 'INFO', 'message': f"\n--- Script Finished in {end_time - start_time:.2f} seconds ---"})

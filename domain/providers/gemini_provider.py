@@ -107,15 +107,9 @@ class GeminiProvider(ProviderStrategy):
         model_id = model_name.replace("models/", "") if model_name.startswith("models/") else model_name
         
         # Detect vision support
-        # Check model name patterns first (most reliable)
-        model_id_lower = model_id.lower()
-        vision_supported = (
-            "gemini-1.5" in model_id_lower or 
-            "gemini-pro-vision" in model_id_lower or
-            "vision" in model_id_lower
-        )
+        vision_supported = False
         
-        # Also check supported methods and description if name pattern didn't match
+        # Check supported methods and description (metadata based)
         if not vision_supported:
             supported_methods = model_data.get("supportedGenerationMethods", [])
             # If generateContent is supported, check description for vision indicators
@@ -152,7 +146,7 @@ class GeminiProvider(ProviderStrategy):
     # ========== Model Fetching ==========
     
     def _fetch_models(self, api_key: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Fetch available models from Google Gemini API.
+        """Fetch available models from Google Gemini API using google-genai SDK.
         
         Args:
             api_key: Optional API key (uses get_api_key() if not provided)
@@ -161,7 +155,6 @@ class GeminiProvider(ProviderStrategy):
             List of normalized model dictionaries
             
         Raises:
-            ImportError: If requests package is not installed
             RuntimeError: If API call fails or API key is missing
         """
         if api_key is None:
@@ -172,10 +165,6 @@ class GeminiProvider(ProviderStrategy):
                 api_key = config.get("GEMINI_API_KEY")
             except Exception:
                 pass
-            
-            if not api_key:
-                # API key must be in config
-                pass
         
         if not api_key:
             raise RuntimeError(
@@ -183,35 +172,38 @@ class GeminiProvider(ProviderStrategy):
             )
         
         try:
-            from config.urls import ServiceURLs
-            url = ServiceURLs.get_gemini_models_url()
-            params = {"key": api_key}
+            from google import genai
             
-            response = requests.get(url, params=params, timeout=30)
-            response.raise_for_status()
+            # Initialize client
+            client = genai.Client(api_key=api_key)
             
-            data = response.json()
-            models_list = data.get("models", [])
-            
-            if not models_list:
-                return []
-            
-            # Normalize all models
             normalized_models = []
-            for model_data in models_list:
+            
+            # List models using SDK
+            # Returns iterator of Model objects
+            for model in client.models.list():
                 try:
+                    # Convert SDK Model object to dict structure expected by _normalize_model
+                    # We access attributes safely using getattr to handle potential schema changes
+                    model_data = {
+                        "name": getattr(model, "name", ""),
+                        "displayName": getattr(model, "display_name", ""),
+                        "description": getattr(model, "description", ""),
+                        "supportedGenerationMethods": getattr(model, "supported_generation_methods", []),
+                        "inputTokenLimit": getattr(model, "input_token_limit", 0),
+                        "outputTokenLimit": getattr(model, "output_token_limit", 0),
+                    }
+                    
                     normalized = self._normalize_model(model_data)
                     normalized_models.append(normalized)
                 except Exception as e:
-                    logger.warning(f"Failed to normalize model {model_data}: {e}")
+                    logger.warning(f"Failed to process model {getattr(model, 'name', 'unknown')}: {e}")
                     continue
             
             return normalized_models
             
-        except requests.exceptions.RequestException as e:
-            error_msg = f"Failed to fetch Gemini models: {e}"
-            logger.error(error_msg)
-            raise RuntimeError(error_msg) from None
+        except ImportError:
+            raise RuntimeError("Google GenAI SDK not installed. Run: pip install google-genai")
         except Exception as e:
             error_msg = f"Unexpected error fetching Gemini models: {e}"
             logger.error(error_msg)
@@ -272,12 +264,12 @@ class GeminiProvider(ProviderStrategy):
         return None
     
     def check_dependencies(self) -> Tuple[bool, str]:
-        """Check if Google Generative AI SDK is installed."""
+        """Check if Google GenAI SDK is installed."""
         try:
-            import google.generativeai
+            from google import genai
             return True, ""
         except ImportError:
-            return False, "Google Generative AI Python SDK not installed. Run: pip install google-generativeai"
+            return False, "Google GenAI Python SDK not installed. Run: pip install google-genai"
     
     def supports_image_context(self, config: 'Config', model_name: Optional[str] = None) -> bool:
         """Check if Gemini model supports image context.
@@ -285,6 +277,7 @@ class GeminiProvider(ProviderStrategy):
         Uses vision_supported field from cached API data.
         """
         if model_name:
+            # Use cached metadata
             model_meta = self.get_model_meta(model_name)
             if model_meta:
                 return bool(model_meta.get("vision_supported", False))

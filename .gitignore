@@ -111,4 +111,3 @@ dev/test-suite-errors.md
 # Ignore all output_data but allow sessions
 !/output_data/sessions/
 !/output_data/sessions/*
-!/output_data/sessions/2107113SG_app_endometriose_prod_2025-12-29_23-56

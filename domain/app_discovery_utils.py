@@ -24,10 +24,6 @@ def get_device_id() -> str:
 
     Returns:
         str: Sanitized device ID, or "unknown_device" if unable to detect
-
-    Examples:
-        >>> device_id = get_device_id()
-        >>> print(device_id)  # "emulator-5554" or "FA8AX1A00D" etc.
     """
     try:
         # Try get-serialno

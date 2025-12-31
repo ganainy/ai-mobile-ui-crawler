@@ -364,8 +364,44 @@ class HealthAppScanner(QObject):
             lines = new_data.strip().split("\n")
             for line in lines:
                 stripped_line = line.strip()
-                if stripped_line:  # Only log non-empty lines
-                    # Color code certain messages for better visibility
+                if not stripped_line:
+                    continue
+
+                if stripped_line.startswith("JSON_IPC:"):
+                    try:
+                        json_str = stripped_line.split(":", 1)[1]
+                        payload = json.loads(json_str)
+                        
+                        if payload.get("type") == "scanner_event":
+                            kind = payload.get("kind")
+                            data = payload.get("data")
+                            
+                            if kind == "log" and isinstance(data, dict):
+                                level = data.get("level", "INFO")
+                                msg = data.get("message", "")
+                                
+                                color = "black"  # default
+                                if level == "ERROR" or level == "CRITICAL":
+                                    color = "red"
+                                elif level == "WARNING":
+                                    color = "orange"
+                                elif level == "INFO":
+                                    if "success" in msg.lower() or "found" in msg.lower():
+                                        color = "green"
+                                    elif "starting" in msg.lower():
+                                        color = "blue"
+                                
+                                self.main_controller.log_message(msg, color)
+                                
+                            elif kind == "result":
+                                # We can store result here or parse it at the end. 
+                                # Logging it is good for debug.
+                                self.main_controller.log_message(f"Scanner Result Received.", "green")
+                    
+                    except Exception:
+                        self.main_controller.log_message(stripped_line)
+                else:
+                    # Legacy fallback
                     if (
                         "error" in stripped_line.lower()
                         or "fatal" in stripped_line.lower()
@@ -411,31 +447,46 @@ class HealthAppScanner(QObject):
             return
 
         try:
-            # Look for JSON after "SUMMARY_JSON:" marker
-            # Use a more robust approach to handle nested braces in the JSON
-            json_str = ""  # Initialize for use in error messages
+            # Look for JSON result in JSON_IPC stream
+            json_str = ""
             summary_json_match = False
-            summary_json_start = self.find_apps_stdout_buffer.find("SUMMARY_JSON:")
-            if summary_json_start != -1:
-                # Find the opening brace after SUMMARY_JSON:
-                brace_start = self.find_apps_stdout_buffer.find("{", summary_json_start)
-                if brace_start != -1:
-                    # Find matching closing brace by counting braces
-                    brace_count = 0
-                    brace_end = -1
-                    for idx in range(brace_start, len(self.find_apps_stdout_buffer)):
-                        char = self.find_apps_stdout_buffer[idx]
-                        if char == "{":
-                            brace_count += 1
-                        elif char == "}":
-                            brace_count -= 1
-                            if brace_count == 0:
-                                brace_end = idx + 1
-                                break
-                    
-                    if brace_end != -1:
-                        json_str = self.find_apps_stdout_buffer[brace_start:brace_end]
-                        summary_json_match = True
+            
+            for line in self.find_apps_stdout_buffer.splitlines():
+                if line.strip().startswith("JSON_IPC:"):
+                    try:
+                        payload = json.loads(line.strip().split(":", 1)[1])
+                        if payload.get("type") == "scanner_event" and payload.get("kind") == "result":
+                            # Found logic result
+                            summary_data_obj = payload.get("data")
+                            json_str = json.dumps(summary_data_obj)
+                            summary_json_match = True
+                            break
+                    except Exception:
+                        pass
+            
+            # Legacy fallback (only if not found via IPC)
+            if not summary_json_match:
+                summary_json_start = self.find_apps_stdout_buffer.find("SUMMARY_JSON:")
+                if summary_json_start != -1:
+                    # Find the opening brace after SUMMARY_JSON:
+                    brace_start = self.find_apps_stdout_buffer.find("{", summary_json_start)
+                    if brace_start != -1:
+                        # Find matching closing brace by counting braces
+                        brace_count = 0
+                        brace_end = -1
+                        for idx in range(brace_start, len(self.find_apps_stdout_buffer)):
+                            char = self.find_apps_stdout_buffer[idx]
+                            if char == "{":
+                                brace_count += 1
+                            elif char == "}":
+                                brace_count -= 1
+                                if brace_count == 0:
+                                    brace_end = idx + 1
+                                    break
+                        
+                        if brace_end != -1:
+                            json_str = self.find_apps_stdout_buffer[brace_start:brace_end]
+                            summary_json_match = True
                 
             if summary_json_match:
                 self.main_controller.log_message(

@@ -28,7 +28,16 @@ except ImportError:
     print(RUN_UI_ERROR_PYSIDE6)
     sys.exit(1)
 from domain.ui_controller import CrawlerControllerWindow
-from utils.utils import LoggerManager
+
+# Use new logging infrastructure
+from core.logging_infrastructure import (
+    configure_default_logging,
+    setup_logging_bridge,
+    LoggingContext,
+    UILogSink,
+    CompactFormatter,
+    LogLevel
+)
 
 def main():
     # Parse arguments first (but don't do heavy processing yet)
@@ -105,13 +114,48 @@ def main():
     # Create window (this may take time)
     window = CrawlerControllerWindow()
     
-    # Set up logging with LoggerManager
+    # Set up logging system
     splash.show_message("Configuring logging system...")
     app.processEvents()
     
-    logger_manager = LoggerManager()
-    logger_manager.set_ui_controller(window)
-    logger_manager.setup_logging(log_level_str="INFO")
+    # 1. Configure default logging (Console + File)
+    # Use log file from config if possible, or default
+    # Note: Config might need to be fully loaded to get proper path
+    service = configure_default_logging(
+        console_level=LogLevel.INFO,
+        file_level=LogLevel.DEBUG
+    )
+    
+    # 2. Setup compatibility bridge for standard logging
+    setup_logging_bridge(service, level="INFO")
+    
+    # 3. Setup UI Sink (replacing old set_ui_controller)
+    if hasattr(window, 'log_message'):
+        # Define a getter for the widget or just pass a method?
+        # UILogSink expects a text_widget_getter.
+        # But here we want to call window.log_message(msg, color)
+        
+        # We need a slight adapter for UILogSink if it only supports appending to widget
+        # The existing UILogSink implementation tries 'widget.append' or 'widget.setTextColor'
+        # window.log_message does custom logic.
+        
+        # Let's create a custom sink for the UI controller right here
+        from core.logging_infrastructure import ILogSink
+        
+        class ControllerSink(ILogSink):
+            def __init__(self, controller):
+                self.controller = controller
+                self.formatter = CompactFormatter()
+                
+            def write(self, entry):
+                msg = self.formatter.format(entry)
+                color = entry.level.to_color()
+                self.controller.log_message(msg, color=color)
+                
+            def flush(self): pass
+            def close(self): pass
+            
+        service.add_sink(ControllerSink(window))
     
     # Update splash message
     splash.show_message("Finalizing...")

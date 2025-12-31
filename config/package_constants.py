@@ -18,9 +18,16 @@ class PackageConstants:
     SYSTEM_UI_PACKAGE = "com.android.systemui"
     
     # Default allowed external packages (can be extended via config)
-    # Only permission controller by default - app package is handled dynamically
+    # Includes permission controller and common browsers for OAuth/signup flows
     DEFAULT_ALLOWED_EXTERNAL_PACKAGES = [
         "com.google.android.permissioncontroller",
+        # Common browsers for external auth (OAuth, signup, email verification)
+        "com.android.chrome",
+        "com.google.android.browser",
+        "org.mozilla.firefox",
+        "com.microsoft.emmx",  # Edge
+        "com.brave.browser",
+        "com.sec.android.app.sbrowser",  # Samsung Browser
     ]
     
     # System package prefixes (used to identify system packages)

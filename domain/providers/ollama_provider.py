@@ -214,38 +214,6 @@ class OllamaProvider(ProviderStrategy):
         except Exception as e:
             return None
     
-    def _check_vision_via_patterns(self, model_name: str) -> bool:
-        """Check vision support via name pattern matching (fallback method).
-        
-        Args:
-            model_name: The model name to check
-            
-        Returns:
-            True if the model name matches known vision patterns, False otherwise
-        """
-        if not model_name:
-            return False
-        
-        base_name = model_name.split(':')[0].lower()
-        vision_patterns = [
-            "vision",
-            "llava",
-            "bakllava",
-            "minicpm-v",
-            "moondream",
-            "gemma2",
-            "gemma3",
-            "qwen2.5vl",
-            "qwen-vl",
-            "llama3.2-vision",
-            "llama3.1-vision",
-            "llama3-vision",
-            "mistral3",
-            "vl",
-        ]
-        
-        return any(pattern in base_name for pattern in vision_patterns)
-    
     def _check_vision_via_cache(self, model_name: str) -> Optional[bool]:
         """Check vision support from cached model data (non-blocking).
         
@@ -326,11 +294,6 @@ class OllamaProvider(ProviderStrategy):
             result = self._check_vision_via_cli(model_name, base_url)
             if result is not None:
                 return result
-        
-        # Tier 3: Fallback to pattern matching (non-blocking)
-        if use_patterns:
-            result = self._check_vision_via_patterns(model_name)
-            return result
         
         return False
     

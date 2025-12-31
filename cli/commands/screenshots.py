@@ -90,7 +90,7 @@ class AnnotateScreenshotsCommand(CommandHandler):
             output_dir = Path(args.output_dir)
         
         # Run annotation
-        print(f"Annotating screenshots in: {session_dir}")
+        self._emit_json('log', {'level': 'INFO', 'message': f"Annotating screenshots in: {session_dir}"})
         success, result = annotator.annotate_session(session_dir, output_dir)
         
         # Report results
@@ -111,12 +111,12 @@ class AnnotateScreenshotsCommand(CommandHandler):
                     count=annotated,
                     output_dir=out_dir
                 )
-            print(f"\n✅ {message}")
+            self._emit_json('log', {'level': 'INFO', 'message': message})
             return CommandResult(success=True, message=message)
         else:
             error_detail = "; ".join(errors) if errors else "Unknown error"
             message = f"{ERR_ANNOTATE_SCREENSHOTS_FAILED}: {error_detail}"
-            print(f"\n❌ {message}")
+            self._emit_json('log', {'level': 'ERROR', 'message': message})
             return CommandResult(success=False, message=message, exit_code=1)
 
 

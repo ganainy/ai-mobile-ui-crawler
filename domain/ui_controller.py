@@ -109,6 +109,10 @@ class CrawlerControllerWindow(QMainWindow):
         # New specialized delegation managers
         self.agent_manager = AgentManager(self.config, self.log_message)
         
+        # AI Interaction Service - dedicated handler for AI input/output display
+        from infrastructure.ai_interaction_service import get_ai_interaction_service
+        self.ai_service = get_ai_interaction_service()
+        
         # Create central widget and main layout
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -135,6 +139,10 @@ class CrawlerControllerWindow(QMainWindow):
 
         # Load configuration
         self.config_manager.load_config()
+        
+        # Reference to step-by-step checkbox from config_widgets
+        self.step_by_step_chk = self.config_widgets["STEP_BY_STEP_MODE"]
+        self.step_by_step_chk.stateChanged.connect(self._on_step_mode_changed)
 
         # Initialize AgentAssistant after config is loaded (deferred to prevent UI freeze on startup)
         # Use a small delay to allow the window to render first
@@ -145,6 +153,12 @@ class CrawlerControllerWindow(QMainWindow):
 
         # Connect signals to slots
         self._connect_signals()
+        
+        # Set up AI Interaction Service callbacks for UI updates
+        self.ai_service.set_callbacks(
+            on_new_interaction=self._on_ai_new_interaction,
+            on_response_received=self._on_ai_response_received
+        )
 
         # Initialize preview prompt builder and timer
         self._preview_prompt_builder = PromptBuilder(self.config)
@@ -448,6 +462,31 @@ class CrawlerControllerWindow(QMainWindow):
         secondary_buttons_layout.addWidget(self.reset_btn, 1) # Matches Pre-check with padding adjustment or slightly larger
 
         log_layout.addLayout(buttons_layout)
+        
+        # --- Pause Control Section ---
+        pause_control_layout = QHBoxLayout()
+        
+        # Step-by-Step Mode is now in Crawler Settings (persisted via config_widgets["STEP_BY_STEP_MODE"])
+        # We create a reference here for backwards compatibility
+        # The actual checkbox is created in component_factory.create_crawler_group()
+        
+        # Next Step Button (initially disabled)
+        self.next_step_btn = QPushButton("Next Step ⏭️")
+        self.next_step_btn.setToolTip("Execute one step and pause again")
+        self.next_step_btn.setEnabled(False)
+        self.next_step_btn.clicked.connect(self._on_next_step_clicked)
+        
+        # Manual Pause/Resume Button
+        self.pause_resume_btn = QPushButton("⏸️ Pause") # Will toggle to ▶️ Resume
+        self.pause_resume_btn.setToolTip("Pause/Resume execution")
+        self.pause_resume_btn.setEnabled(False)
+        self.pause_resume_btn.clicked.connect(self._on_pause_resume_clicked)
+        
+        pause_control_layout.addWidget(self.next_step_btn)
+        pause_control_layout.addWidget(self.pause_resume_btn)
+        
+        log_layout.addLayout(pause_control_layout)
+
         log_layout.addLayout(secondary_buttons_layout)
         
         # --- AI Trace (Input/Output) Definition ---
@@ -514,22 +553,19 @@ class CrawlerControllerWindow(QMainWindow):
         ai_trace_layout.addWidget(ai_splitter)
 
         # --- Add Widgets to Vertical Splitter ---
-        # Add AI Trace to vertical splitter (Top, 2/3 height)
-        center_splitter.addWidget(ai_trace_group)
+        # Now we structure differently:
+        # Top: AI Trace (left) + Screenshot (right) side by side
+        # Bottom: Logs (full width)
         
-        # Add Logs to vertical splitter (Bottom, 1/3 height)
-        center_splitter.addWidget(log_group)
+        # Create a horizontal container for top area (AI Trace + Screenshot)
+        top_area_widget = QWidget()
+        top_area_layout = QHBoxLayout(top_area_widget)
+        top_area_layout.setContentsMargins(0, 0, 0, 0)
         
-        # Set initial sizes for vertical splitter
-        center_splitter.setStretchFactor(0, 7) # AI Trace 70% (Top)
-        center_splitter.setStretchFactor(1, 3) # Logs 30% (Bottom)
-        
+        # Add AI Trace to left of top area
+        top_area_layout.addWidget(ai_trace_group, 3)  # AI Trace takes 3/4
 
-
-        # Right side: Screenshot and Action History stacked vertically
-        right_side_layout = QVBoxLayout()
-
-        # Screenshot display (top right) - wider than tall
+        # Right side: Screenshot (compact)
         screenshot_group = QGroupBox("Current Screenshot")
         screenshot_layout = QVBoxLayout(screenshot_group)
         self.screenshot_label = QLabel()
@@ -537,23 +573,30 @@ class CrawlerControllerWindow(QMainWindow):
         self.screenshot_label.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
         )
-        self.screenshot_label.setMinimumHeight(300)
-        self.screenshot_label.setMinimumWidth(300)
+        self.screenshot_label.setMinimumHeight(200)  # Reduced from 300
+        self.screenshot_label.setMaximumHeight(400)  # Cap the height
+        self.screenshot_label.setMinimumWidth(200)   # Reduced from 300
         self.screenshot_label.setStyleSheet("""
             border: 1px solid #555555;
             background-color: #2a2a2a;
         """)
         screenshot_layout.addWidget(self.screenshot_label)
+        
+        # Add screenshot to right of top area
+        top_area_layout.addWidget(screenshot_group, 1)  # Screenshot takes 1/4
+        
+        # Add top area to vertical splitter
+        center_splitter.addWidget(top_area_widget)
+        
+        # Add Logs to vertical splitter (Bottom, full width)
+        center_splitter.addWidget(log_group)
+        
+        # Set initial sizes for vertical splitter
+        center_splitter.setStretchFactor(0, 6)  # Top area (AI + Screenshot) 60%
+        center_splitter.setStretchFactor(1, 4)  # Logs 40%
 
-        # Action history section removed as requested
-        # right_side_layout.addWidget(action_history_group, 1)
-
-        # Add screenshot to right side layout (taking full height now)
-        right_side_layout.addWidget(screenshot_group, 1)
-
-        # Add center splitter (left, 2/3) and right side (1/3) to content layout
-        content_layout.addWidget(center_splitter, 2)  # Logs/Trace take 2/3 of width
-        content_layout.addLayout(right_side_layout, 1)  # Right side takes 1/3 of width
+        # Add center splitter to content layout (now takes full width)
+        content_layout.addWidget(center_splitter, 1)
 
         # Add content layout to main layout
         right_main_layout.addLayout(content_layout, 1)  # Content takes all remaining vertical space
@@ -796,6 +839,10 @@ class CrawlerControllerWindow(QMainWindow):
         self.ai_history = []
         if self.ai_history_dropdown:
             self.ai_history_dropdown.clear()
+        
+        # Clear AI Interaction Service
+        if hasattr(self, 'ai_service') and self.ai_service:
+            self.ai_service.clear()
             
         self.log_message("Logs and AI Trace cleared.", "green")
 
@@ -993,6 +1040,9 @@ class CrawlerControllerWindow(QMainWindow):
             
         entry = self.ai_history[index]
         
+        if self.agent_manager:
+            self.agent_manager.display_interaction_history(index)
+
         if self.ai_input_log:
             self._display_ai_input(entry['input'])
             
@@ -1006,6 +1056,71 @@ class CrawlerControllerWindow(QMainWindow):
         # Update screenshot if available for this step
         if entry.get('screenshot'):
             self.update_screenshot(entry['screenshot'])
+
+    # ========================================================================
+    # AI Interaction Service Callbacks (separate from logging)
+    # ========================================================================
+
+    def _on_ai_new_interaction(self, interaction):
+        """Handle new AI interaction from the service.
+        
+        This is called by AIInteractionService when a new prompt is recorded.
+        Completely separate from log parsing.
+        """
+        from infrastructure.ai_interaction_service import AIInteraction
+        
+        # Add to legacy history for dropdown compatibility
+        new_entry = {
+            'label': interaction.label,
+            'input': interaction.prompt,
+            'output': "",
+            'screenshot': interaction.screenshot_path
+        }
+        
+        # Check if user was viewing latest
+        was_viewing_latest = False
+        if self.ai_history_dropdown:
+            current_idx = self.ai_history_dropdown.currentIndex()
+            was_viewing_latest = (current_idx == len(self.ai_history) - 1) or len(self.ai_history) == 0
+        
+        self.ai_history.append(new_entry)
+        
+        # Update dropdown
+        if self.ai_history_dropdown:
+            self.ai_history_dropdown.blockSignals(True)
+            self.ai_history_dropdown.addItem(new_entry['label'])
+            
+            if was_viewing_latest:
+                self.ai_history_dropdown.setCurrentIndex(len(self.ai_history) - 1)
+                self._display_ai_input(interaction.prompt)
+                if self.ai_output_log:
+                    self.ai_output_log.clear()
+                    self.ai_output_log.setPlaceholderText("Waiting for AI response...")
+            
+            self.ai_history_dropdown.blockSignals(False)
+
+    def _on_ai_response_received(self, step: int, response: str):
+        """Handle AI response from the service.
+        
+        This is called by AIInteractionService when a response is recorded.
+        """
+        # Update legacy history
+        if self.ai_history and step <= len(self.ai_history):
+            self.ai_history[step - 1]['output'] = response
+        
+        # Check if viewing latest
+        is_latest_selected = True
+        if self.ai_history_dropdown:
+            current_idx = self.ai_history_dropdown.currentIndex()
+            if current_idx != len(self.ai_history) - 1:
+                is_latest_selected = False
+        
+        # Update view if viewing latest
+        if is_latest_selected and self.ai_output_log:
+            self.ai_output_log.setText(response)
+            cursor = self.ai_output_log.textCursor()
+            cursor.movePosition(cursor.MoveOperation.Start)
+            self.ai_output_log.setTextCursor(cursor)
 
     def _attempt_load_cached_health_apps(self):
         """Tries to load health apps from the cached file path if it exists."""
@@ -1297,10 +1412,49 @@ class CrawlerControllerWindow(QMainWindow):
         self.device_manager.populate_devices()
 
 
-if __name__ == "__main__":
-    # Import LoggerManager for proper logging setup
-    from utils.utils import LoggerManager
+    # ========================================================================
+    # Pause / Step Control Methods
+    # ========================================================================
 
-    # GUI initialization is now handled in interfaces/gui.py
+    def _on_step_mode_changed(self, state: int):
+        """Handle Step-by-Step checkbox toggle."""
+        # Qt.CheckState is an enum, value 2 is Checked
+        is_checked = (state == 2) 
+        if self.crawler_manager:
+            if is_checked:
+                self.crawler_manager.enable_step_by_step()
+                self.log_message("Step-by-step mode enabled", "white")
+            else:
+                self.crawler_manager.disable_step_by_step()
+                self.log_message("Step-by-step mode disabled", "white")
+        
+        # Update Next Step button state immediately
+        self.next_step_btn.setEnabled(is_checked and self.crawler_manager.is_crawler_running())
+
+    def _on_next_step_clicked(self):
+        """Handle Next Step button click."""
+        if self.crawler_manager:
+            self.crawler_manager.next_step()
+            self.log_message("Advancing one step...", "cyan")
+
+    def _on_pause_resume_clicked(self):
+        """Handle Pause/Resume button click."""
+        if not self.crawler_manager:
+            return
+            
+        current_text = self.pause_resume_btn.text()
+        if "Pause" in current_text:
+            if self.crawler_manager.pause_crawler():
+                self.pause_resume_btn.setText("▶️ Resume")
+                self.log_message("Pausing crawler...", "yellow")
+        else:
+            if self.crawler_manager.resume_crawler():
+                self.pause_resume_btn.setText("⏸️ Pause")
+                self.log_message("Resuming crawler...", "green")
+
+
+if __name__ == "__main__":
+    # GUI initialization is now handled in run_ui.py
     # This file contains the controller class only
+    pass
 

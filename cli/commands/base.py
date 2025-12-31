@@ -4,6 +4,8 @@ Base command infrastructure for CLI operations.
 
 
 import argparse
+import json
+from datetime import datetime
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional
 
@@ -80,6 +82,25 @@ class CommandHandler(ABC):
             Command result
         """
         pass
+        
+    def _emit_json(self, kind: str, data: Any) -> None:
+        """
+        Emit a structured JSON event for IPC.
+        
+        Args:
+            kind: Event kind (e.g., 'log', 'result')
+            data: Event data
+        """
+        try:
+            payload = {
+                "type": "cli_event",
+                "kind": kind,
+                "data": data,
+                "timestamp": datetime.now().isoformat()
+            }
+            print(f"JSON_IPC:{json.dumps(payload)}", flush=True)
+        except Exception:
+            pass
     
     def add_common_arguments(self, parser: argparse.ArgumentParser) -> None:
         """

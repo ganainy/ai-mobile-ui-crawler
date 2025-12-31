@@ -80,16 +80,10 @@ class ListAnalysisTargetsCommand(CommandHandler):
             )
         
         if not targets:
-            print(INFO_NO_ANALYSIS_TARGETS_FOUND)
+            self._emit_json('log', {'level': 'INFO', 'message': INFO_NO_ANALYSIS_TARGETS_FOUND})
             return CommandResult(success=True, message=INFO_NO_ANALYSIS_TARGETS_FOUND)
         
-        print(f"\n{HEADER_AVAILABLE_ANALYSIS_TARGETS}")
-        for target in targets:
-            print(f"{target['index']}. {LABEL_APP_PACKAGE} {target['app_package']}")
-            print(f"   {LABEL_DB_FILE} {target['db_filename']}")
-            print(f"   {LABEL_SESSION_DIR} {target['session_dir']}")
-            print()
-        print(FOOTER_SECTION_SEPARATOR)
+        self._emit_json('analysis_targets', targets)
         
         return CommandResult(
             success=True,
@@ -155,23 +149,8 @@ class ListRunsForTargetCommand(CommandHandler):
         success, result_data = service.list_runs_for_target(target)
         
         if success:
-            # Print the runs information
-            print(f"\nTarget: {result_data['target_info']['app_package']} (Index: {result_data['target_info']['index']})")
-            print(f"Database: {result_data['target_info']['db_filename']}")
-            
-            if result_data.get('message'):
-                print(f"\n{result_data['message']}")
-            
-            if result_data['runs']:
-                print("\nAvailable runs:")
-                for run in result_data['runs']:
-                    print(f"  Run ID: {run.get('run_id', 'N/A')}")
-                    print(f"  Start Time: {run.get('start_time', 'N/A')}")
-                    print(f"  End Time: {run.get('end_time', 'N/A')}")
-                    print(f"  Status: {run.get('status', 'N/A')}")
-                    print()
-            else:
-                print("No runs found for this target.")
+            # Emit structured run list
+            self._emit_json('run_list', result_data)
             
             return CommandResult(success=True, message=MSG_RUNS_LISTED_SUCCESS)
         else:
@@ -318,22 +297,8 @@ class PrintAnalysisSummaryCommand(CommandHandler):
         success, result_data = service.get_analysis_summary(target)
         
         if success:
-            # Print the analysis summary
-            run_info = result_data.get('run_info', {})
-            metrics = result_data.get('metrics', {})
-            
-            print(f"\nAnalysis Summary for: {target['app_package']} (Index: {target['index']})")
-            print(f"Database: {target['db_filename']}")
-            
-            if run_info:
-                print("\nRun Information:")
-                for key, value in run_info.items():
-                    print(f"  {key}: {value}")
-            
-            if metrics:
-                print("\nMetrics:")
-                for key, value in metrics.items():
-                    print(f"  {key}: {value}")
+            # Emit structured summary
+            self._emit_json('analysis_summary', result_data)
             
             return CommandResult(success=True, message=MSG_ANALYSIS_SUMMARY_SUCCESS)
         else:

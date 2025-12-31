@@ -2,6 +2,7 @@
 Telemetry service for CLI operations.
 """
 
+import json
 import logging
 import sys
 from datetime import datetime
@@ -19,6 +20,19 @@ class TelemetryService:
         self.start_time = datetime.now()
         self.events: List[Dict[str, Any]] = []
     
+    def _emit_json(self, kind: str, data: Any) -> None:
+        """Emit structured JSON event."""
+        try:
+             payload = {
+                "type": "cli_event",
+                "kind": kind,
+                "data": data,
+                "timestamp": datetime.now().isoformat()
+             }
+             print(f"JSON_IPC:{json.dumps(payload)}", flush=True)
+        except Exception:
+             pass
+
     def log_event(self, event_type: str, message: str, data: Optional[Dict[str, Any]] = None) -> None:
         """
         Log a telemetry event.
@@ -122,26 +136,7 @@ class TelemetryService:
         Args:
             services: Dictionary of service information
         """
-        print(f"\n{MSG.ICON_SEARCH} {MSG.UI_SERVICE_STATUS_SUMMARY}:")
-        print("=" * 50)
-        
-        for service_name, service_info in services.items():
-            status = service_info.get(KEYS.STATUS_KEY_STATUS, MSG.STATUS_UNKNOWN)
-            message = service_info.get(KEYS.STATUS_KEY_MESSAGE, '')
-            
-            # Choose appropriate icon
-            if status == MSG.STATUS_RUNNING:
-                icon = MSG.ICON_SUCCESS
-            elif status == MSG.STATUS_WARNING:
-                icon = MSG.ICON_WARNING
-            elif status == MSG.STATUS_ERROR:
-                icon = MSG.ICON_ERROR
-            else:
-                icon = MSG.ICON_QUESTION
-            
-            print(f"{icon} {service_name}: {message}")
-        
-        print("=" * 50)
+        self._emit_json('table', {'title': MSG.UI_SERVICE_STATUS_SUMMARY, 'data': services})
     
     def print_config_table(self, config: Dict[str, Any], filter_key: Optional[str] = None) -> None:
         """
@@ -151,21 +146,7 @@ class TelemetryService:
             config: Configuration dictionary
             filter_key: Optional key to filter by
         """
-        print(f"\n=== {MSG.UI_CURRENT_CONFIGURATION} ===")
-        
-        for key, value in sorted(config.items()):
-            if filter_key and filter_key.lower() not in key.lower():
-                continue
-            
-            # Special formatting for CRAWLER_AVAILABLE_ACTIONS
-            if key == "CRAWLER_AVAILABLE_ACTIONS" and isinstance(value, dict):
-                print(f"  {key}:")
-                for i, (action, description) in enumerate(sorted(value.items()), 1):
-                    print(f"    {i}. {action}: {description}")
-            else:
-                print(f"  {key}: {value}")
-        
-        print("============================")
+        self._emit_json('config', {'config': config, 'filter': filter_key})
     
     def print_success(self, message: str) -> None:
         """
@@ -174,7 +155,7 @@ class TelemetryService:
         Args:
             message: Success message
         """
-        print(f"{MSG.ICON_SUCCESS} {message}")
+        self._emit_json('log', {'level': 'SUCCESS', 'message': message})
         self.log_event(MSG.EVENT_SUCCESS, message)
     
     def print_warning(self, message: str) -> None:
@@ -184,7 +165,7 @@ class TelemetryService:
         Args:
             message: Warning message
         """
-        print(f"{MSG.ICON_WARNING}  {message}")
+        self._emit_json('log', {'level': 'WARNING', 'message': message})
         self.log_event(MSG.EVENT_WARNING, message)
     
     def print_error(self, message: str) -> None:
@@ -194,7 +175,7 @@ class TelemetryService:
         Args:
             message: Error message
         """
-        print(f"{MSG.ICON_ERROR} {message}")
+        self._emit_json('log', {'level': 'ERROR', 'message': message})
         self.log_event(MSG.EVENT_ERROR, message)
     
     def print_info(self, message: str) -> None:
@@ -204,7 +185,7 @@ class TelemetryService:
         Args:
             message: Info message
         """
-        print(f"{MSG.ICON_INFO}  {message}")
+        self._emit_json('log', {'level': 'INFO', 'message': message})
         self.log_event(MSG.EVENT_INFO, message)
     
     def get_recent_events(self, count: int = 10) -> List[Dict[str, Any]]:
@@ -226,12 +207,7 @@ class TelemetryService:
         Args:
             status: Status dictionary from crawler service
         """
-        print(f"\n=== {MSG.UI_CRAWLER_STATUS} ===")
-        print(f"  Process: {status.get(KEYS.PROCESS_KEY, MSG.UI_UNKNOWN)}")
-        print(f"  State: {status.get(KEYS.STATE_KEY, MSG.UI_UNKNOWN)}")
-        print(f"  Target App: {status.get(KEYS.TARGET_APP_KEY, MSG.UI_UNKNOWN)}")
-        print(f"  Output Data Dir: {status.get(KEYS.OUTPUT_DIR_KEY, MSG.UI_UNKNOWN)}")
-        print("=======================")
+        self._emit_json('crawler_status', status)
     
     def print_device_list(self, devices: List[str]) -> None:
         """
@@ -240,16 +216,11 @@ class TelemetryService:
         Args:
             devices: List of device identifiers
         """
-        from cli.constants import messages as MSG
-        
         if not devices:
-            print(MSG.NO_CONNECTED_DEVICES_FOUND)
+            self._emit_json('log', {'level': 'INFO', 'message': MSG.NO_CONNECTED_DEVICES_FOUND})
             return
         
-        print(MSG.CONNECTED_DEVICES_HEADER)
-        for i, device in enumerate(devices):
-            print(MSG.CONNECTED_DEVICE_ITEM.format(index=i+1, device=device))
-        print(MSG.CONNECTED_DEVICES_FOOTER)
+        self._emit_json('device_list', devices)
     
     
     def print_model_list(self, models: List[Dict[str, Any]]) -> None:
@@ -260,44 +231,10 @@ class TelemetryService:
             models: List of model dictionaries
         """
         if not models:
-            print(MSG.UI_NO_MODELS_AVAILABLE)
+            self._emit_json('log', {'level': 'INFO', 'message': MSG.UI_NO_MODELS_AVAILABLE})
             return
         
-        # Detect provider from first model (all models should have same provider)
-        provider = models[0].get("provider", "openrouter") if models else "openrouter"
-        if provider == "ollama":
-            header = MSG.UI_OLLAMA_MODELS
-        elif provider == "gemini":
-            header = MSG.UI_GEMINI_MODELS
-        else:
-            header = MSG.UI_OPENROUTER_MODELS
-        
-        print(f"\n=== {header} ({len(models)}) ===")
-        for i, model in enumerate(models):
-            model_id = model.get(KEYS.MODEL_ID, MSG.UI_UNKNOWN)
-            # Use display_name for Gemini, fallback to name or id
-            model_name = model.get("display_name") or model.get(KEYS.MODEL_NAME) or model_id
-            pricing = model.get(KEYS.MODEL_PRICING, {})
-           
-            # Check if free (for OpenRouter models)
-            is_free = False
-            if provider == "openrouter":
-                is_free = (pricing.get(KEYS.MODEL_PROMPT_PRICE, "0") == "0" and
-                          pricing.get(KEYS.MODEL_COMPLETION_PRICE, "0") == "0")
-            elif provider in ("ollama", "gemini"):
-                # Ollama and Gemini models are always free (local/Google)
-                is_free = True
-            
-            free_marker = MSG.UI_FREE_MARKER if is_free else ""
-            print(f"{i+1:2d}. {model_name} {free_marker}")
-            print(f"    ID: {model_id}")
-            
-            # Only show pricing for OpenRouter models
-            if provider == "openrouter":
-                print(f"    {MSG.UI_PROMPT}: {pricing.get(KEYS.MODEL_PROMPT_PRICE, MSG.UI_NOT_AVAILABLE)} | {MSG.UI_COMPLETION}: {pricing.get(KEYS.MODEL_COMPLETION_PRICE, MSG.UI_NOT_AVAILABLE)}")
-            print()
-        
-        print("==============================")
+        self._emit_json('model_list', models)
     
     def print_selected_model(self, selected_model: Optional[Dict[str, Any]]) -> None:
         """
@@ -307,79 +244,18 @@ class TelemetryService:
             selected_model: Model dictionary or None if no model is selected
         """
         if selected_model:
-            model_id = selected_model.get(KEYS.MODEL_ID, MSG.UI_UNKNOWN)
-            model_name = selected_model.get(KEYS.MODEL_NAME, MSG.UI_UNKNOWN)
-            provider = selected_model.get("provider", "openrouter")
-            
-            if provider == "ollama":
-                header = MSG.UI_SELECTED_OLLAMA_MODEL
-            elif provider == "gemini":
-                header = MSG.UI_SELECTED_GEMINI_MODEL
-            else:
-                header = MSG.UI_SELECTED_OPENROUTER_MODEL
-            
-            print(f"\n=== {header} ===")
-            print(f"{MSG.UI_MODEL_NAME}: {model_name}")
-            print(f"{MSG.UI_MODEL_ID}: {model_id}")
-            print("==============================")
+            self._emit_json('selected_model', selected_model)
         else:
-            # No model selected - command handler should provide the specific error message
-            print(MSG.UI_NO_OPENROUTER_MODEL_SELECTED)
+            self._emit_json('log', {'level': 'INFO', 'message': MSG.UI_NO_OPENROUTER_MODEL_SELECTED})
     
     def print_model_selection(self, data: Dict[str, Any]) -> None:
         """
         Print model selection result.
         
         Args:
-            data: Dictionary containing selection result with keys:
-                  - model: Model dictionary
-                  - is_free: Whether the model is free (for OpenRouter)
-                  - show_warning: Whether to show a warning for paid models (for OpenRouter)
-                  - vision_supported: Whether the model supports vision (for Ollama)
+            data: Dictionary containing selection result
         """
-        model = data.get(KEYS.KEY_MODEL, {})
-        if not model:
-            # Try to detect provider from context - if we can't, default to OpenRouter
-            provider = data.get("provider", "openrouter")
-            if provider == "ollama":
-                print(MSG.UI_NO_OLLAMA_MODEL_SELECTED)
-            elif provider == "gemini":
-                print(MSG.UI_NO_GEMINI_MODEL_SELECTED)
-            else:
-                print(MSG.UI_NO_OPENROUTER_MODEL_SELECTED)
-            return
-        
-        model_id = model.get(KEYS.MODEL_ID, MSG.UI_UNKNOWN)
-        model_name = model.get(KEYS.MODEL_NAME, MSG.UI_UNKNOWN)
-        provider = model.get("provider", "openrouter")
-        
-        if provider == "ollama":
-            header = MSG.UI_SELECTED_OLLAMA_MODEL
-            vision_supported = data.get("vision_supported", False)
-        elif provider == "gemini":
-            header = MSG.UI_SELECTED_GEMINI_MODEL
-            vision_supported = data.get("vision_supported", False)
-        else:
-            header = MSG.UI_SELECTED_OPENROUTER_MODEL
-            is_free = data.get(KEYS.KEY_IS_FREE, False)
-            show_warning = data.get(KEYS.KEY_SHOW_WARNING, False)
-        
-        print(f"\n=== {header} ===")
-        print(f"{MSG.UI_MODEL_NAME}: {model_name}")
-        print(f"{MSG.UI_MODEL_ID}: {model_id}")
-        
-        if provider in ("ollama", "gemini"):
-            # Show vision support for Ollama and Gemini models
-            vision_status = MSG.UI_YES if vision_supported else MSG.UI_NO
-            print(f"Vision Supported: {vision_status}")
-        else:
-            # Show free/paid status for OpenRouter models
-            if is_free:
-                print(f"{MSG.ICON_SUCCESS} {MSG.UI_FREE_MODEL}: {MSG.UI_YES}")
-            elif show_warning:
-                print(f"{MSG.ICON_WARNING} {MSG.UI_FREE_MODEL}: {MSG.UI_NO} - {MSG.UI_PAID_MODEL_WARNING if hasattr(MSG, 'UI_PAID_MODEL_WARNING') else 'This is a paid model'}")
-        
-        print("==============================")
+        self._emit_json('model_selection', data)
     
     def print_json(self, data: Dict[str, Any]) -> None:
         """
@@ -388,8 +264,7 @@ class TelemetryService:
         Args:
             data: Data to print as JSON
         """
-        import json
-        print(json.dumps(data, indent=2))
+        self._emit_json('json_output', data)
         self.log_event(MSG.EVENT_JSON_OUTPUT, MSG.LOG_OUTPUT_DATA_AS_JSON)
     
     def print_package_list(self, packages: List[str]) -> None:
@@ -399,14 +274,10 @@ class TelemetryService:
         Args:
             packages: List of package names
         """
-        from cli.constants import messages as MSG
-        
         if not packages:
             self.print_info(MSG.LIST_PACKAGES_NO_PKGS)
         else:
-            self.print_info(MSG.LIST_PACKAGES_HEADER.format(count=len(packages)))
-            for i, pkg in enumerate(packages, 1):
-                self.print_info(MSG.LIST_PACKAGES_ITEM.format(index=i, package=pkg))
+            self._emit_json('package_list', packages)
         
     def confirm_action(self, prompt_message: str) -> bool:
         """
@@ -440,39 +311,7 @@ class TelemetryService:
         Args:
             data: Dictionary containing image context configuration data
         """
-        model_name = data.get("model_name", MSG.UI_UNKNOWN)
-        model_identifier = data.get("model_identifier", MSG.UI_UNKNOWN)
-        supports_image = data.get(KEYS.KEY_SUPPORTS_IMAGE)
-        current_setting = data.get(KEYS.KEY_CURRENT_SETTING)
-        enabled = data.get(KEYS.KEY_ENABLED)
-        action = data.get(KEYS.KEY_ACTION, "configured")
-        
-        print(f"\n=== {MSG.UI_OPENROUTER_IMAGE_CONTEXT_CONFIGURATION} ===")
-        print(f"{MSG.UI_MODEL}: {model_name} ({model_identifier})")
-        print(f"{MSG.UI_IMAGE_SUPPORT}: {MSG.UI_YES if supports_image else MSG.UI_NO}")
-        
-        if supports_image is True:
-            # Model supports images
-            if action == "checked":
-                print(f"{MSG.UI_CURRENT_IMAGE_CONTEXT_SETTING}: {MSG.UI_ENABLED if current_setting else MSG.UI_DISABLED}")
-                print(MSG.UI_THIS_MODEL_SUPPORTS_IMAGE_INPUTS)
-            else:
-                print(f"{MSG.ICON_SUCCESS} {MSG.UI_IMAGE_CONTEXT_ENABLED_FOR_MODEL} {model_name}" if enabled else f"{MSG.ICON_SUCCESS} {MSG.UI_IMAGE_CONTEXT_DISABLED_FOR_MODEL} {model_name}")
-        elif supports_image is False:
-            # Model doesn't support images
-            if enabled is True:
-                print(f"{MSG.ICON_WARNING} {MSG.UI_WARNING_MODEL_NO_IMAGE_SUPPORT}")
-            print(f"{MSG.ICON_SUCCESS} {MSG.UI_IMAGE_CONTEXT_DISABLED_MODEL_NO_SUPPORT}")
-        else:
-            # Unknown capability - using heuristic
-            heuristic_supports_image = data.get(KEYS.KEY_HEURISTIC_SUPPORTS_IMAGE, False)
-            if action == "checked":
-                print(f"{MSG.UI_CURRENT_IMAGE_CONTEXT_SETTING}: {MSG.UI_ENABLED if current_setting else MSG.UI_DISABLED}")
-                print(f"{MSG.UI_MODEL_CAPABILITY_UNKNOWN}; {MSG.UI_HEURISTIC_SUGGESTS_SUPPORTS_IMAGES}." if heuristic_supports_image else f"{MSG.UI_MODEL_CAPABILITY_UNKNOWN}; {MSG.UI_HEURISTIC_SUGGESTS_NO_SUPPORT}.")
-            else:
-                if enabled is True and not heuristic_supports_image:
-                    print(f"{MSG.ICON_WARNING} {MSG.UI_MODEL_CAPABILITY_UNKNOWN}; {MSG.UI_HEURISTIC_SUGGESTS_NO_SUPPORT}.")
-                print(f"{MSG.ICON_SUCCESS} {MSG.UI_IMAGE_CONTEXT_ENABLED_FOR_MODEL if enabled else MSG.UI_IMAGE_CONTEXT_DISABLED_FOR_MODEL} {MSG.UI_HEURISTIC_BASED}")
+        self._emit_json('image_context_config', data)
     
     def print_model_details(self, data: Dict[str, Any]) -> None:
         """
@@ -481,85 +320,4 @@ class TelemetryService:
         Args:
             data: Dictionary containing model details data
         """
-        model = data.get(KEYS.KEY_MODEL, {})
-        provider = model.get("provider", "openrouter")
-        
-        # Determine header based on provider
-        if provider == "ollama":
-            header = MSG.UI_OLLAMA_MODEL_DETAILS
-        elif provider == "gemini":
-            header = MSG.UI_GEMINI_MODEL_DETAILS
-        else:
-            header = MSG.UI_OPENROUTER_MODEL_DETAILS
-        
-        # Display detailed information
-        print(f"\n=== {header} ===")
-        print(f"{MSG.UI_MODEL_ID}: {model.get(KEYS.MODEL_ID, MSG.UI_NOT_AVAILABLE)}")
-        print(f"{MSG.UI_MODEL_NAME}: {model.get('display_name') or model.get(KEYS.MODEL_NAME, MSG.UI_NOT_AVAILABLE)}")
-        print(f"{MSG.UI_DESCRIPTION}: {model.get(KEYS.MODEL_DESCRIPTION, MSG.UI_NOT_AVAILABLE)}")
-        
-        # Context length (for OpenRouter and Gemini)
-        if provider in ("openrouter", "gemini"):
-            context_length = model.get(KEYS.MODEL_CONTEXT_LENGTH) or model.get("input_token_limit", MSG.UI_NOT_AVAILABLE)
-            print(f"{MSG.UI_CONTEXT_LENGTH}: {context_length}")
-        
-        # Pricing information (OpenRouter only)
-        if provider == "openrouter":
-            pricing = model.get(KEYS.MODEL_PRICING, {})
-            if pricing:
-                print(f"\n{MSG.UI_PRICING}:")
-                print(f"  {MSG.UI_PROMPT}: {pricing.get(KEYS.MODEL_PROMPT_PRICE, MSG.UI_NOT_AVAILABLE)}")
-                print(f"  {MSG.UI_COMPLETION}: {pricing.get(KEYS.MODEL_COMPLETION_PRICE, MSG.UI_NOT_AVAILABLE)}")
-                print(f"  {MSG.UI_IMAGE}: {pricing.get(KEYS.MODEL_IMAGE_PRICE, MSG.UI_NOT_AVAILABLE)}")
-                
-                # Free status
-                is_free = data.get(KEYS.KEY_IS_FREE, False)
-                print(f"  {MSG.UI_FREE_MODEL}: {MSG.UI_YES if is_free else MSG.UI_NO}")
-            else:
-                print(f"\n{MSG.UI_PRICING}: {MSG.UI_PRICING_NOT_AVAILABLE}")
-        
-        # Vision support (for Ollama and Gemini)
-        if provider in ("ollama", "gemini"):
-            vision_supported = data.get("vision_supported", False) or model.get("vision_supported", False)
-            print(f"\n{MSG.UI_CAPABILITIES}:")
-            print(f"  Vision Supported: {MSG.UI_YES if vision_supported else MSG.UI_NO}")
-            
-            # Show token limits for Gemini
-            if provider == "gemini":
-                input_tokens = model.get("input_token_limit", MSG.UI_NOT_AVAILABLE)
-                output_tokens = model.get("output_token_limit", MSG.UI_NOT_AVAILABLE)
-                if input_tokens != MSG.UI_NOT_AVAILABLE:
-                    print(f"  Input Token Limit: {input_tokens}")
-                if output_tokens != MSG.UI_NOT_AVAILABLE:
-                    print(f"  Output Token Limit: {output_tokens}")
-        
-        # Capabilities (for OpenRouter)
-        if provider == "openrouter":
-            architecture = model.get(KEYS.MODEL_ARCHITECTURE, {})
-            if architecture:
-                print(f"\n{MSG.UI_CAPABILITIES}:")
-                input_modalities = architecture.get(KEYS.MODEL_INPUT_MODALITIES, [])
-                output_modalities = architecture.get(KEYS.MODEL_OUTPUT_MODALITIES, [])
-                print(f"  {MSG.UI_INPUT_MODALITIES}: {', '.join(input_modalities) if input_modalities else MSG.UI_NOT_AVAILABLE}")
-                print(f"  {MSG.UI_OUTPUT_MODALITIES}: {', '.join(output_modalities) if output_modalities else MSG.UI_NOT_AVAILABLE}")
-                
-                supports_image = model.get(KEYS.MODEL_SUPPORTS_IMAGE)
-                print(f"  {MSG.UI_IMAGE_SUPPORT}: {MSG.UI_YES if supports_image else MSG.UI_NO}")
-                
-                supported_parameters = architecture.get(KEYS.MODEL_SUPPORTED_PARAMETERS, [])
-                if supported_parameters:
-                    print(f"  {MSG.UI_SUPPORTED_PARAMETERS}: {', '.join(supported_parameters)}")
-            
-            # Provider information (OpenRouter only)
-            top_provider = model.get(KEYS.MODEL_TOP_PROVIDER, {})
-            if top_provider:
-                print(f"\n{MSG.UI_PROVIDER_INFORMATION}:")
-                print(f"  {MSG.UI_PROVIDER_NAME}: {top_provider.get(KEYS.MODEL_PROVIDER_NAME, MSG.UI_NOT_AVAILABLE)}")
-                print(f"  {MSG.UI_MODEL_FORMAT}: {top_provider.get(KEYS.MODEL_MODEL_FORMAT, MSG.UI_NOT_AVAILABLE)}")
-            
-            # Current configuration (OpenRouter only)
-            current_image_context = data.get(KEYS.KEY_CURRENT_IMAGE_CONTEXT, False)
-            print(f"\n{MSG.UI_CURRENT_CONFIGURATION}:")
-            print(f"  {MSG.UI_IMAGE_CONTEXT}: {MSG.UI_ENABLED if current_image_context else MSG.UI_DISABLED}")
-        
-        print("=================================")
+        self._emit_json('model_details', data)

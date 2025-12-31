@@ -74,13 +74,15 @@ class ModelAdapter(ABC):
 # ------ Google Gemini Adapter ------
 
 class GeminiAdapter(ModelAdapter):
-    """Adapter for Google's Gemini models."""
+    """Adapter for Google's Gemini models using the new google-genai SDK."""
     
     def __init__(self, api_key: str, model_name: str):
         self.api_key = api_key
         self.original_model_name = model_name
         self.model_name = self._normalize_model_name(model_name)
-        self.model = None
+        self.client = None
+        self.generate_config_params = {}
+        self.safety_settings_list = []
         self._model_info = {
             "provider": "Google",
             "model_family": "Gemini",
@@ -110,146 +112,42 @@ class GeminiAdapter(ModelAdapter):
         return normalized
     
     def initialize(self, model_config: Dict[str, Any], safety_settings: Optional[Dict] = None) -> None:
-        """Initialize the Gemini model."""
+        """Initialize the Gemini model using google-genai SDK."""
         try:
-            import google.generativeai as genai
-            from google.generativeai.generative_models import GenerativeModel
-            
-            # Try to import types - handle different API versions
-            try:
-                from google.generativeai.types import GenerationConfig, HarmCategory, HarmBlockThreshold
-                # Try to import SafetySetting - may not exist in newer versions
-                try:
-                    from google.generativeai.types import SafetySetting
-                    USE_SAFETY_SETTING_CLASS = True
-                except ImportError:
-                    USE_SAFETY_SETTING_CLASS = False
-            except ImportError:
-                # Fallback: try importing from different locations
-                try:
-                    from google.generativeai import types
-                    GenerationConfig = types.GenerationConfig
-                    HarmCategory = types.HarmCategory
-                    HarmBlockThreshold = types.HarmBlockThreshold
-                    USE_SAFETY_SETTING_CLASS = hasattr(types, 'SafetySetting')
-                    if USE_SAFETY_SETTING_CLASS:
-                        SafetySetting = types.SafetySetting
-                except (ImportError, AttributeError):
-                    # If we can't import, we'll use dict format
-                    try:
-                        # Try to import just the enums we need
-                        import google.generativeai as genai
-                        HarmCategory = genai.types.HarmCategory
-                        HarmBlockThreshold = genai.types.HarmBlockThreshold
-                        GenerationConfig = genai.types.GenerationConfig
-                        USE_SAFETY_SETTING_CLASS = False
-                    except (ImportError, AttributeError):
-                        GenerationConfig = None
-                        HarmCategory = None
-                        HarmBlockThreshold = None
-                        USE_SAFETY_SETTING_CLASS = False
+            from google import genai
+            from google.genai import types
 
-            # Set API key
-            genai.configure(api_key=self.api_key)
+            # Initialize client
+            self.client = genai.Client(api_key=self.api_key)
             
-            # Create generation config
-            generation_config_dict = model_config.get('generation_config', {})
-            if GenerationConfig:
-                generation_config = GenerationConfig(
-                    temperature=generation_config_dict.get('temperature', 0.7),
-                    top_p=generation_config_dict.get('top_p', 0.95),
-                    top_k=generation_config_dict.get('top_k', 40),
-                    max_output_tokens=generation_config_dict.get('max_output_tokens', 1024)
-                )
-            else:
-                # Fallback to dict format
-                generation_config = {
-                    'temperature': generation_config_dict.get('temperature', 0.7),
-                    'top_p': generation_config_dict.get('top_p', 0.95),
-                    'top_k': generation_config_dict.get('top_k', 40),
-                    'max_output_tokens': generation_config_dict.get('max_output_tokens', 1024)
-                }
+            # Prepare configuration dictionary
+            gen_cfg_dict = model_config.get('generation_config', {})
             
-            # Convert safety settings from config format to Gemini API format
-            converted_safety_settings = None
-            if safety_settings:
-                if isinstance(safety_settings, list):
-                    if USE_SAFETY_SETTING_CLASS:
-                        # Convert list of dicts with string values to SafetySetting objects
-                        converted_safety_settings = []
-                        category_map = {
-                            "HARM_CATEGORY_HARASSMENT": HarmCategory.HARM_CATEGORY_HARASSMENT,
-                            "HARM_CATEGORY_HATE_SPEECH": HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-                            "HARM_CATEGORY_SEXUALLY_EXPLICIT": HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-                            "HARM_CATEGORY_DANGEROUS_CONTENT": HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-                        }
-                        threshold_map = {
-                            "BLOCK_NONE": HarmBlockThreshold.BLOCK_NONE,
-                            "BLOCK_ONLY_HIGH": HarmBlockThreshold.BLOCK_ONLY_HIGH,
-                            "BLOCK_MEDIUM_AND_ABOVE": HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-                            "BLOCK_LOW_AND_ABOVE": HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
-                        }
-                        for setting in safety_settings:
-                            if isinstance(setting, dict):
-                                category_str = setting.get("category", "")
-                                threshold_str = setting.get("threshold", "")
-                                category = category_map.get(category_str)
-                                threshold = threshold_map.get(threshold_str)
-                                if category and threshold:
-                                    converted_safety_settings.append(
-                                        SafetySetting(category=category, threshold=threshold)
-                                    )
-                                else:
-                                    logging.warning(f"Invalid safety setting: {setting}")
-                        if not converted_safety_settings:
-                            converted_safety_settings = None
-                    else:
-                        # Use dict format for newer API versions (pass enum values directly)
-                        converted_safety_settings = []
-                        if HarmCategory and HarmBlockThreshold:
-                            category_map = {
-                                "HARM_CATEGORY_HARASSMENT": HarmCategory.HARM_CATEGORY_HARASSMENT,
-                                "HARM_CATEGORY_HATE_SPEECH": HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-                                "HARM_CATEGORY_SEXUALLY_EXPLICIT": HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-                                "HARM_CATEGORY_DANGEROUS_CONTENT": HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-                            }
-                            threshold_map = {
-                                "BLOCK_NONE": HarmBlockThreshold.BLOCK_NONE,
-                                "BLOCK_ONLY_HIGH": HarmBlockThreshold.BLOCK_ONLY_HIGH,
-                                "BLOCK_MEDIUM_AND_ABOVE": HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-                                "BLOCK_LOW_AND_ABOVE": HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
-                            }
-                            for setting in safety_settings:
-                                if isinstance(setting, dict):
-                                    category_str = setting.get("category", "")
-                                    threshold_str = setting.get("threshold", "")
-                                    category = category_map.get(category_str)
-                                    threshold = threshold_map.get(threshold_str)
-                                    if category and threshold:
-                                        converted_safety_settings.append({
-                                            "category": category,
-                                            "threshold": threshold
-                                        })
-                                    else:
-                                        logging.warning(f"Invalid safety setting: {setting}")
-                            if not converted_safety_settings:
-                                converted_safety_settings = None
-                        else:
-                            # If we can't import enums, log a warning and skip safety settings
-                            logging.warning("Could not import HarmCategory/HarmBlockThreshold. Safety settings will be skipped.")
-                            converted_safety_settings = None
-                elif isinstance(safety_settings, (list, dict)):
-                    # Already in correct format or pass through
-                    converted_safety_settings = safety_settings
+            self.generate_config_params = {
+                'temperature': gen_cfg_dict.get('temperature', 0.7),
+                'top_p': gen_cfg_dict.get('top_p', 0.95),
+                'top_k': gen_cfg_dict.get('top_k', 40),
+                'max_output_tokens': gen_cfg_dict.get('max_output_tokens', 1024),
+            }
             
-            # Initialize the model with normalized name
-            self.model = GenerativeModel(
-                model_name=self.model_name,
-                generation_config=generation_config,
-                safety_settings=converted_safety_settings
-            )
+            # Map safety settings
+            if safety_settings and isinstance(safety_settings, list):
+                for s in safety_settings:
+                    if isinstance(s, dict):
+                        category = s.get("category")
+                        threshold = s.get("threshold")
+                        if category and threshold:
+                            self.safety_settings_list.append(
+                                types.SafetySetting(
+                                    category=category,
+                                    threshold=threshold
+                                )
+                            )
             
-            
+        except ImportError:
+            error_msg = "Google GenAI Python SDK not installed. Run: pip install google-genai"
+            logging.error(error_msg)
+            raise ImportError(error_msg)
         except Exception as e:
             logging.error(f"Failed to initialize Gemini model: {e}", exc_info=True)
             raise
@@ -258,29 +156,38 @@ class GeminiAdapter(ModelAdapter):
                         prompt: str, 
                         image: Optional[Image.Image] = None,
                          **kwargs) -> Tuple[str, Dict[str, Any]]:
-        """Generate a response from Gemini."""
-        if not self.model:
-            raise ValueError("Gemini model not initialized")
+        """Generate a response from Gemini using google-genai SDK."""
+        if not self.client:
+            raise ValueError("Gemini client not initialized")
             
         try:
+            from google.genai import types
             start_time = time.time()
             
-            # Prepare content parts
-            content_parts = []
-            
-            # Add image if provided
+            # Prepare contents
+            contents = []
             if image:
-                # Gemini handles PIL images directly
-                content_parts.append(image)
-                
-            # Add text prompt
-            content_parts.append(prompt)
+                contents.append(image)
+            contents.append(prompt)
             
-            # Generate response
-            response = self.model.generate_content(content_parts)
+            # Create config object
+            config = types.GenerateContentConfig(
+                temperature=self.generate_config_params.get('temperature'),
+                top_p=self.generate_config_params.get('top_p'),
+                top_k=self.generate_config_params.get('top_k'),
+                max_output_tokens=self.generate_config_params.get('max_output_tokens'),
+                safety_settings=self.safety_settings_list or None
+            )
             
-            # Get response text
-            response_text = response.text if hasattr(response, 'text') else str(response)
+            # Generate content
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=contents,
+                config=config
+            )
+            
+            # Extract text
+            response_text = response.text if response.text else ""
             
             # Prepare metadata
             elapsed_time = time.time() - start_time
@@ -290,22 +197,24 @@ class GeminiAdapter(ModelAdapter):
                 "provider": "Google Gemini"
             }
             
-            # Try to get token usage if available
+            # Extract token usage
             try:
-                prompt_token_count = getattr(response, 'usage_metadata', {}).get('prompt_token_count', 0)
-                response_token_count = getattr(response, 'usage_metadata', {}).get('candidates_token_count', 0)
-                metadata["token_count"] = {
-                    "prompt": prompt_token_count,
-                    "response": response_token_count,
-                    "total": prompt_token_count + response_token_count
-                }
-            except:
-                # If token count not available, make an estimate
-                metadata["token_count"] = {
-                    "prompt": len(prompt) // 4,  # Rough estimate
-                    "response": len(response_text) // 4,  # Rough estimate
-                    "total": (len(prompt) + len(response_text)) // 4  # Rough estimate
-                }
+                if hasattr(response, 'usage_metadata') and response.usage_metadata:
+                    usage = response.usage_metadata
+                    metadata["token_count"] = {
+                        "prompt": usage.prompt_token_count,
+                        "response": usage.candidates_token_count,
+                        "total": usage.total_token_count
+                    }
+                else:
+                    # Estimate if not provided
+                    metadata["token_count"] = {
+                        "prompt": len(prompt) // 4,
+                        "response": len(response_text) // 4,
+                        "total": (len(prompt) + len(response_text)) // 4
+                    }
+            except Exception:
+                pass
             
             return response_text, metadata
             

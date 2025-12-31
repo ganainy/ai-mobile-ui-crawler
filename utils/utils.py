@@ -24,7 +24,7 @@ try:
 except ImportError as e:
     lxml_etree = None
     USING_LXML = False
-    logging.warning(f"⚠️ lxml not available, falling back to xml.etree.ElementTree. Error: {e}")
+    logging.warning(f"lxml not available, falling back to xml.etree.ElementTree. Error: {e}")
 import re
 
 
@@ -81,202 +81,6 @@ def parse_json_robust(text: str) -> Dict[str, Any]:
             
     return {}
 
-# --- Global Script Start Time (for ElapsedTimeFormatter) ---
-SCRIPT_START_TIME = time.time()
-
-# --- Custom Log Formatter and Handler Manager (Moved from main.py) ---
-class ElapsedTimeFormatter(logging.Formatter):
-    def formatTime(self, record, datefmt=None):
-        _ = datefmt  # Intentionally unused; required by Formatter API.
-        elapsed_seconds = record.created - SCRIPT_START_TIME
-        h = int(elapsed_seconds // 3600)
-        m = int((elapsed_seconds % 3600) // 60)
-        s = int(elapsed_seconds % 60)
-        ms = int((elapsed_seconds - (h * 3600 + m * 60 + s)) * 1000)
-        return f"{h:02d}:{m:02d}:{s:02d}.{ms:03d}"
-
-class UIColoredLogHandler(logging.Handler):
-    """Custom logging handler that routes log messages to the UI with emoji indicators for better visibility."""
-
-    def __init__(self, ui_controller):
-        super().__init__()
-        self.ui_controller = ui_controller
-
-    def emit(self, record):
-        """Emit a log record to the UI with emoji indicators based on log level and content."""
-        try:
-            message = self.format(record)
-            message_lower = message.lower()
-            color = 'white'  # Default color
-            
-            # Check if the message already has an emoji prefix
-            has_emoji = any(emoji in message[:4] for emoji in ["🔴", "⚠️", "ℹ️", "✅", "🔧", "📌", "🚀", "🔍", "🟢", "🔒", "📍", "👁️", "🔐", "👆", "⌨️", "📜", "👈", "⬅️", "⚡"])
-            
-            # Add emoji indicators based on log level and message content
-            if record.levelno >= logging.CRITICAL:
-                if not has_emoji:
-                    message = f"🔴 CRITICAL: {message}"  # Critical errors
-                color = 'red'
-            elif record.levelno >= logging.ERROR:
-                if not has_emoji:
-                    message = f"🔴 {message}"  # Regular errors
-                color = 'red'
-            elif record.levelno >= logging.WARNING:
-                if not has_emoji:
-                    message = f"⚠️ {message}"  # Warnings
-                color = 'orange'
-            elif record.levelno >= logging.INFO:
-                if not has_emoji:
-                    # Add specific indicators based on message content
-                    if 'success' in message_lower or 'completed' in message_lower:
-                        message = f"✅ {message}"
-                        color = 'green'
-                    elif 'connected' in message_lower or 'ready' in message_lower:
-                        message = f"🟢 {message}"
-                        color = 'green'
-                    elif 'important' in message_lower:
-                        message = f"📌 {message}"
-                        color = 'magenta'
-                    elif 'privacy' in message_lower:
-                        message = f"🔒 {message}"
-                        color = 'blue'
-                    elif 'detecting' in message_lower or 'checking' in message_lower:
-                        message = f"🔍 {message}"
-                        color = 'cyan'
-                    elif 'starting' in message_lower or 'initializing' in message_lower:
-                        message = f"🚀 {message}"
-                        color = 'blue'
-                    elif 'failure' in message_lower or 'fail' in message_lower:
-                        message = f"🔴 {message}"  # Failures need red indicator
-                        color = 'red'
-                    elif 'termination' in message_lower or 'terminated' in message_lower:
-                        message = f"🔴 {message}"  # Termination messages need red indicator
-                        color = 'red'
-                    else:
-                        message = f"ℹ️ {message}"  # Default info indicator
-                        color = 'blue'
-            elif record.levelno >= logging.DEBUG:
-                if not has_emoji:
-                    message = f"🔧 {message}"  # Debug messages
-                color = 'gray'
-
-            # Send to UI controller if available
-            if self.ui_controller and hasattr(self.ui_controller, 'log_message'):
-                self.ui_controller.log_message(message, color=color)
-        except Exception:
-            # Don't let logging errors crash the application
-            pass
-class LoggerManager:
-    def __init__(self):
-        self.handlers: List[logging.Handler] = []
-        self.stdout_wrapper: Optional[io.TextIOWrapper] = None
-        self.stderr_wrapper: Optional[io.TextIOWrapper] = None
-        self.ui_controller = None  # Reference to UI controller for colored logging
-
-    def set_ui_controller(self, ui_controller):
-        """Set the UI controller reference for routing colored log messages."""
-        self.ui_controller = ui_controller
-        
-        # If logging is already set up, add the UI handler now
-        if self.handlers:  # Check if setup_logging has been called
-            logger = logging.getLogger()
-            
-            # Check if UI handler is already added
-            has_ui_handler = any(isinstance(handler, UIColoredLogHandler) for handler in logger.handlers)
-            
-            if not has_ui_handler and self.ui_controller:
-                # Get the current log level from the logger
-                current_level = logger.level
-                
-                # Create and add UI handler
-                ui_handler = UIColoredLogHandler(self.ui_controller)
-                ui_handler.setLevel(current_level)
-                
-                # Use the same formatter as other handlers
-                for handler in logger.handlers:
-                    if hasattr(handler, 'formatter') and handler.formatter:
-                        ui_handler.setFormatter(handler.formatter)
-                        break
-                
-                logger.addHandler(ui_handler)
-                self.handlers.append(ui_handler)
-
-    def setup_logging(self, log_level_str: str, log_file: Optional[str] = None) -> logging.Logger:
-        if log_level_str is None:
-            log_level_str = "INFO"
-        numeric_level = getattr(logging, log_level_str.upper(), None)
-        if not isinstance(numeric_level, int):
-            raise ValueError(f"Invalid log level string: {log_level_str}")
-
-        logger = logging.getLogger()
-        logger.setLevel(numeric_level)
-
-        for handler in list(logger.handlers):
-            logger.removeHandler(handler)
-            if isinstance(handler, logging.FileHandler):
-                try:
-                    handler.close()
-                except Exception:
-                    pass
-        self.handlers.clear()
-
-        log_formatter = ElapsedTimeFormatter(
-            "[%(levelname)s] (%(asctime)s) %(filename)s:%(lineno)d - %(message)s"
-        )
-
-        console_handler = logging.StreamHandler(sys.stdout)
-        console_handler.setFormatter(log_formatter)
-        logger.addHandler(console_handler)
-        self.handlers.append(console_handler)
-
-        # Add UI handler for colored logging if UI controller is available
-        if self.ui_controller:
-            ui_handler = UIColoredLogHandler(self.ui_controller)
-            ui_handler.setLevel(numeric_level)
-            ui_handler.setFormatter(log_formatter)
-            logger.addHandler(ui_handler)
-            self.handlers.append(ui_handler)
-
-        if log_file:
-            try:
-                log_file_dir = os.path.dirname(os.path.abspath(log_file))
-                if log_file_dir:
-                    os.makedirs(log_file_dir, exist_ok=True)
-
-                file_handler = logging.FileHandler(log_file, mode='a', encoding='utf-8')
-                file_handler.setFormatter(log_formatter)
-                logger.addHandler(file_handler)
-                self.handlers.append(file_handler)
-            except Exception as e:
-                print(f"Error setting up file logger for {log_file}: {e}", file=sys.stderr)
-
-
-        if numeric_level > logging.DEBUG:
-            # Silence noisy third-party loggers
-            noisy_loggers = [
-                # Appium/Selenium
-                "appium.webdriver.webdriver",
-                "urllib3.connectionpool",
-                "selenium.webdriver.remote.remote_connection",
-                # HTTP clients
-                "httpx",
-                "httpcore",
-                "urllib3",
-                # AI SDKs
-                "openai",
-                "openai._base_client",
-                "google.api_core",
-                "google.auth",
-                "google.generativeai",
-                # Other noisy libraries
-                "asyncio",
-                "PIL",
-            ]
-            for lib_name in noisy_loggers:
-                logging.getLogger(lib_name).setLevel(logging.WARNING)
-
-        return logger
-
 # --- Constants for XML Simplification ---
 KEEP_ATTRS = {
     'class', 'resource-id', 'text', 'content-desc', 'hint',
@@ -310,7 +114,7 @@ def calculate_visual_hash(screenshot_bytes: bytes) -> str:
         v_hash = str(imagehash.phash(img))
         return v_hash
     except Exception as e:
-        logging.error(f"🔴 Error calculating visual hash: {e}")
+        logging.error(f"Error calculating visual hash: {e}")
         return "hash_error"
 
 def visual_hash_distance(hash1: str, hash2: str) -> int:
@@ -326,7 +130,7 @@ def visual_hash_distance(hash1: str, hash2: str) -> int:
         h2 = imagehash.hex_to_hash(hash2)
         return h1 - h2
     except Exception as e:
-        logging.error(f"🔴 Error calculating hash distance between {hash1} and {hash2}: {e}")
+        logging.error(f"Error calculating hash distance between {hash1} and {hash2}: {e}")
         return 1000
 
 def simplify_xml_for_ai(xml_string: str, max_len: int, provider: str = "gemini", prune_noninteractive: bool = True) -> str:
@@ -516,7 +320,7 @@ def simplify_xml_for_ai(xml_string: str, max_len: int, provider: str = "gemini",
         simplified_xml = xml_bytes.decode('utf-8')
 
         if len(simplified_xml) > effective_max_len:
-            logging.warning(f"⚠️ Simplified XML still exceeds max_len ({len(simplified_xml)} > {effective_max_len}) for {provider}. Performing final smart truncation.")
+            logging.warning(f"Simplified XML still exceeds max_len ({len(simplified_xml)} > {effective_max_len}) for {provider}. Performing final smart truncation.")
             trunc_point = simplified_xml.rfind('</', 0, effective_max_len)
             if trunc_point != -1:
                 end_tag_point = simplified_xml.find('>', trunc_point, effective_max_len + 30)
@@ -535,32 +339,20 @@ def simplify_xml_for_ai(xml_string: str, max_len: int, provider: str = "gemini",
         return simplified_xml
 
     except possible_parse_errors + (ValueError, TypeError) as e:
-        logging.error(f"🔴 Failed to parse or simplify XML for {provider}: {e}. Falling back to basic truncation.")
+        logging.error(f"Failed to parse or simplify XML for {provider}: {e}. Falling back to basic truncation.")
         return xml_string[:effective_max_len] + "\n... (fallback truncation)" if len(xml_string) > effective_max_len else xml_string
     except Exception as e:
-        logging.error(f"🔴 Unexpected error during XML simplification for {provider}: {e}. Falling back.", exc_info=True)
+        logging.error(f"Unexpected error during XML simplification for {provider}: {e}. Falling back.", exc_info=True)
         return xml_string[:effective_max_len] + "\n... (fallback truncation)" if len(xml_string) > effective_max_len else xml_string
 
 def xml_to_structured_json(xml_string: str) -> Dict[str, Any]:
     """
-    Parses XML and returns a compact dictionary representation for LLMs.
-    Prioritizes interactive elements and meaningful text.
-    
-    Structure:
-    {
-      "interactive": [
-         {"id": "resource-id", "class": "Button", "desc": "content-desc", "text": "text", "bounds": "[...]"}
-      ],
-      "static_text": [
-         "Some label text", "Another label"
-      ]
-    }
+    Parses XML and returns a minimal dictionary for LLMs + Appium automation.
+    Preserves all fields needed for element identification and interaction.
     """
     if not xml_string:
         return {}
     
-    # ... (skipping unchanged parts) ...
-
     possible_parse_errors = (std_etree.ParseError,)
     if USING_LXML and lxml_etree:
         possible_parse_errors += (lxml_etree.ParseError, lxml_etree.XMLSyntaxError)
@@ -575,69 +367,66 @@ def xml_to_structured_json(xml_string: str) -> Dict[str, Any]:
         if root is None:
             return {}
 
-        interactive_elements = []
-        static_texts = []
+        interactive = []
+        static = set()
         
-        # Helper to clean text
-        def clean_text(t):
-            if not t: return ""
-            # Decode entities if needed (basic ones)
-            t = t.replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>').replace('&quot;', '"').replace('&#39;', "'")
-            # Remove excessive whitespace
-            return " ".join(t.split())
+        clean = lambda t: " ".join(t.replace('&amp;', '&').replace('&lt;', '<')
+                                    .replace('&gt;', '>').replace('&quot;', '"')
+                                    .replace('&#39;', "'").split()) if t else ""
 
-        for element in root.iter('*'):
-            # Determine interactivity
-            is_clickable = element.attrib.get('clickable', '').lower() == 'true'
-            is_focusable = element.attrib.get('focusable', '').lower() == 'true'
-            is_checkable = element.attrib.get('checkable', '').lower() == 'true'
-            is_long_clickable = element.attrib.get('long-clickable', '').lower() == 'true'
-            is_editable = element.attrib.get('editable', '').lower() == 'true'
+        for el in root.iter('*'):
+            attrs = el.attrib
             
-            is_interactive = is_clickable or is_focusable or is_checkable or is_long_clickable or is_editable
-            
-            # Attributes to capture
-            resource_id = element.attrib.get('resource-id', '')
-            content_desc = clean_text(element.attrib.get('content-desc', ''))
-            text_val = clean_text(element.attrib.get('text', ''))
-            cls = element.attrib.get('class', '')
-            if '.' in cls:
-                cls = cls.split('.')[-1] # Strip package
-            
-            # Bounds logic could be simplified or kept as is
-            bounds = element.attrib.get('bounds', '')
-
-            if is_interactive:
-                entry = {}
-                if resource_id: entry['id'] = resource_id
-                if cls: entry['type'] = cls
-                if content_desc: entry['desc'] = content_desc
-                if text_val: entry['text'] = text_val
-                if bounds: entry['bounds'] = bounds
+            # Check interactivity
+            if any(attrs.get(k, '').lower() == 'true' 
+                   for k in ('clickable', 'focusable', 'checkable', 'long-clickable', 'editable')):
                 
-                # Only add if it has some identifier or text
-                if entry:
-                    interactive_elements.append(entry)
+                entry = {}
+                
+                # Critical for Appium - keep full resource-id
+                if rid := attrs.get('resource-id'):
+                    entry['id'] = rid
+                
+                # Class helps with element selection strategies
+                if cls := attrs.get('class'):
+                    entry['type'] = cls.split('.')[-1]  # Strip package for readability
+                
+                # Text/desc for semantic understanding
+                if text := clean(attrs.get('text')):
+                    entry['text'] = text
+                if desc := clean(attrs.get('content-desc')):
+                    entry['desc'] = desc
+                
+                # Bounds for spatial reasoning (optional but useful)
+                if bounds := attrs.get('bounds'):
+                    entry['bounds'] = bounds
+                
+                # Only add if has at least ONE identifier (id, text, or desc)
+                if any(k in entry for k in ('id', 'text', 'desc')):
+                    interactive.append(entry)
             else:
-                # Capture static text if meaningful
-                if text_val and len(text_val) > 1: # Ignore single chars like icons sometimes represented as text
-                    static_texts.append(text_val)
-                elif content_desc and len(content_desc) > 1:
-                     static_texts.append(content_desc)
+                # Collect meaningful static text
+                text = clean(attrs.get('text', ''))
+                desc = clean(attrs.get('content-desc', ''))
+                if len(text) > 1:
+                    static.add(text)
+                elif len(desc) > 1:
+                    static.add(desc)
 
-        # Construct final dict
         result = {}
-        if interactive_elements:
-            result['interactive'] = interactive_elements
-        if static_texts:
-            # unique static texts to save tokens
-            result['static_text'] = list(dict.fromkeys(static_texts))  
+        if interactive:
+            result['interactive'] = interactive
+        if static:
+            result['static'] = list(static)
             
         return result
 
+    except possible_parse_errors as e:
+        logging.error(f"XML parse error: {e}")
+        return {"error": "parse_failed"}
     except Exception as e:
-        logging.error(f"🔴 Error converting XML to JSON: {e}")
-        return {"error": "Failed to parse XML", "raw_snippet": xml_string[:200]}
+        logging.error(f"Error converting XML: {e}")
+        return {"error": "conversion_failed"}
 
 def filter_xml_by_allowed_packages(xml_string: str, target_package: str, allowed_packages: List[str]) -> str:
     """
@@ -684,10 +473,10 @@ def filter_xml_by_allowed_packages(xml_string: str, target_package: str, allowed
         return xml_bytes.decode('utf-8')
 
     except possible_parse_errors + (ValueError, TypeError) as e:
-        logging.error(f"🔴 XML ParseError during package filtering: {e}. Returning original XML.")
+        logging.error(f"XML ParseError during package filtering: {e}. Returning original XML.")
         return xml_string
     except Exception as e:
-        logging.error(f"🔴 Unexpected error during XML filtering: {e}", exc_info=True)
+        logging.error(f"Unexpected error during XML filtering: {e}", exc_info=True)
         return xml_string
 
 
@@ -706,7 +495,7 @@ def draw_indicator_on_image(image_bytes: bytes, coordinates: Tuple[int, int], co
         img.save(output_buffer, format="PNG")
         return output_buffer.getvalue()
     except Exception as e:
-        logging.error(f"🔴 Error drawing indicator at {coordinates}: {e}")
+        logging.error(f"Error drawing indicator at {coordinates}: {e}")
         return None
 
 def generate_action_description(action_type: str, target_obj: Optional[Any], input_text: Optional[str], ai_target_identifier: Optional[str]) -> str:
@@ -730,13 +519,13 @@ def draw_rectangle_on_image(
 ) -> Optional[bytes]:
     """Draws a rectangle (bounding box) with a contrasting border on an image."""
     if not image_bytes or not box_coords:
-        logging.warning("⚠️ draw_rectangle_on_image: Missing image_bytes or box_coords.")
+        logging.warning("draw_rectangle_on_image: Missing image_bytes or box_coords.")
         return None
     if line_thickness <= 0:
-        logging.warning("⚠️ draw_rectangle_on_image: line_thickness must be positive.")
+        logging.warning("draw_rectangle_on_image: line_thickness must be positive.")
         return image_bytes
     if border_size < 0:
-        logging.warning("⚠️ draw_rectangle_on_image: border_size cannot be negative.")
+        logging.warning("draw_rectangle_on_image: border_size cannot be negative.")
         return image_bytes
 
     try:
@@ -747,7 +536,7 @@ def draw_rectangle_on_image(
         if not (0 <= x1 < img.width and 0 <= y1 < img.height and \
                 x1 < x2 <= img.width and y1 < y2 <= img.height):
             logging.warning(
-                f"⚠️ draw_rectangle_on_image: Invalid or out-of-bounds box_coords ({x1},{y1},{x2},{y2}) "
+                f"draw_rectangle_on_image: Invalid or out-of-bounds box_coords ({x1},{y1},{x2},{y2}) "
                 f"for image size ({img.width}x{img.height}). Skipping drawing."
             )
             return image_bytes
@@ -763,7 +552,7 @@ def draw_rectangle_on_image(
         img.save(output_buffer, format="PNG")
         return output_buffer.getvalue()
     except Exception as e:
-        logging.error(f"🔴 Error in draw_rectangle_on_image with box {box_coords}: {e}", exc_info=True)
+        logging.error(f"Error in draw_rectangle_on_image with box {box_coords}: {e}", exc_info=True)
         return None
 
 def create_jsonrpc_request(method: str, params: Optional[Dict[str, Any]] = None, request_id: Optional[str] = None) -> Dict[str, Any]:
@@ -796,21 +585,6 @@ class LoadingIndicator:
     A reusable CLI loading indicator that displays an animated message.
     
     Can be used as a context manager or with start/stop methods.
-    
-    Example usage:
-        # As context manager (recommended)
-        with LoadingIndicator("Processing..."):
-            # Do long-running operation
-            time.sleep(5)
-        
-        # With start/stop methods
-        loader = LoadingIndicator("Loading data...")
-        loader.start()
-        try:
-            # Do long-running operation
-            time.sleep(5)
-        finally:
-            loader.stop()
     """
     
     def __init__(self, message: str = "Processing...", update_interval: float = 0.5):
@@ -860,37 +634,15 @@ class LoadingIndicator:
         
         self.stop_event.set()
         if self.loading_thread:
-            self.loading_thread.join(timeout=1.0)
+            self.loading_thread.join()
         self._is_running = False
     
     def __enter__(self):
-        """Context manager entry."""
         self.start()
         return self
     
     def __exit__(self, exc_type, exc_val, exc_tb):
-        """Context manager exit."""
         self.stop()
-        return False  # Don't suppress exceptions
-
 
 if __name__ == '__main__':
-    # Example usage or tests for utils can go here
-    print(f"Utils module loaded. SCRIPT_START_TIME: {SCRIPT_START_TIME}")
-
-    # Basic test for LoggerManager
-    test_logger_manager = LoggerManager()
-    test_logger = test_logger_manager.setup_logging(log_level_str='DEBUG', log_file='test_utils.log')
-    print("Check test_utils.log for output.")
-
-    # Clean up test log file
-    if os.path.exists('test_utils.log'):
-        try:
-            # Close handlers if any are still open by the root logger for this file
-            for handler in test_logger.handlers:
-                if isinstance(handler, logging.FileHandler) and handler.baseFilename == os.path.abspath('test_utils.log'):
-                    handler.close()
-            os.remove('test_utils.log')
-            print("Cleaned up test_utils.log.")
-        except Exception as e:
-            print(f"Could not remove test_utils.log: {e}")
+    pass

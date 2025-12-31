@@ -123,13 +123,13 @@ HTTP_SERVICE_UNAVAILABLE = 503
 # ========== Image Processing Constants ==========
 
 # Image quality defaults
-IMAGE_DEFAULT_QUALITY = 70
+IMAGE_DEFAULT_QUALITY = 60  # Lower quality for smaller file size
 IMAGE_DEFAULT_FORMAT = 'JPEG'
 
 # Image crop percentages (as decimals) removed
 
 # Image dimensions
-IMAGE_MAX_WIDTH_DEFAULT = 640
+IMAGE_MAX_WIDTH_DEFAULT = 512  # Smaller default for faster AI processing
 
 # Image background color (RGB tuple for transparent image conversion)
 IMAGE_BG_COLOR = (255, 255, 255)  # White background

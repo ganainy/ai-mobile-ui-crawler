@@ -8,6 +8,8 @@ to handle SIGINT (Ctrl+C) and SIGTERM signals gracefully.
 import logging
 import signal
 import sys
+import json
+from datetime import datetime
 from typing import Any, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -58,7 +60,11 @@ def setup_cli_signal_handler(
         if crawler_stopped:
             pass
         # Print user-friendly message
-        print("\n[INFO] Operation interrupted by user (Ctrl+C)")
+        try:
+             payload = {"type": "ui_event", "kind": "log", "data": {"level": "WARNING", "message": "Operation interrupted by user (Ctrl+C)"}, "timestamp": datetime.now().isoformat()}
+             print(f"JSON_IPC:{json.dumps(payload)}", flush=True)
+        except Exception:
+             print("\n[INFO] Operation interrupted by user (Ctrl+C)")
         
         # Raise KeyboardInterrupt to trigger existing exception handling
         raise KeyboardInterrupt("Operation interrupted by user")

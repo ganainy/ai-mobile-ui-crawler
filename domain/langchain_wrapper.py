@@ -6,6 +6,7 @@ Runnable ecosystem, adding logging and image context support.
 """
 import logging
 import time
+import json
 from datetime import datetime
 from typing import Any, Callable, Dict, Optional, Union
 
@@ -66,21 +67,17 @@ class LangChainWrapper:
                 # Plain string
                 prompt_text = str(prompt_input)
 
-            # Log the AI input (prompt) - extract dynamic part for readability
-            if self.interaction_logger:
-                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                # Log a summary - extract the dynamic context part
-                if "Current screen XML:" in prompt_text:
-                    dynamic_start = prompt_text.find("Current screen XML:")
-                    dynamic_part = prompt_text[dynamic_start:]
-                    # Truncate if too long
-                    if len(dynamic_part) > 2000:
-                        dynamic_part = dynamic_part[:2000] + "\n... (truncated)"
-                    self.interaction_logger.info(f"\n{'='*60}\n[{timestamp}] AI INPUT (dynamic context):\n{dynamic_part}")
-                else:
-                    # Log first 2000 chars if no XML marker found
-                    preview = prompt_text[:2000] + "..." if len(prompt_text) > 2000 else prompt_text
-                    self.interaction_logger.info(f"\n{'='*60}\n[{timestamp}] AI INPUT:\n{preview}")
+            # Emit Prompt for UI (always, even if logger not configured)
+            try:
+                payload = {
+                    "type": "ui_event",
+                    "kind": "ai_prompt",
+                    "data": prompt_text,
+                    "timestamp": datetime.now().isoformat()
+                }
+                print(f"JSON_IPC:{json.dumps(payload)}", flush=True)
+            except Exception:
+                pass
 
             # Determine if we should include image context
             prepared_image = None
@@ -109,7 +106,13 @@ class LangChainWrapper:
                 def log_ai_progress():
                     while not stop_logging:
                         elapsed = time.time() - start_time
-                        print(f"\rAI thinking... {elapsed:.1f}s   ", end='', flush=True)
+                        payload = {
+                            "type": "ui_event", 
+                            "kind": "log", 
+                            "data": {'level': 'INFO', 'message': f"AI thinking... {elapsed:.1f}s"},
+                            "timestamp": datetime.now().isoformat()
+                        }
+                        print(f"JSON_IPC:{json.dumps(payload)}", flush=True)
                         time.sleep(5)
                 
                 log_thread = threading.Thread(target=log_ai_progress)
@@ -129,13 +132,32 @@ class LangChainWrapper:
                 
                 elapsed_total = time.time() - start_time
                 image_info = f" (with image)" if prepared_image else " (text only)"
-                print(f"\rAI response received in {elapsed_total:.2f}s{image_info}   ", flush=True)
+                msg = f"AI response received in {elapsed_total:.2f}s{image_info}"
+                payload = {
+                    "type": "ui_event", 
+                    "kind": "log", 
+                    "data": {'level': 'INFO', 'message': msg},
+                    "timestamp": datetime.now().isoformat()
+                }
+                print(f"JSON_IPC:{json.dumps(payload)}", flush=True)
                 
-                # Log the AI response
-                if self.interaction_logger:
-                    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    # Log full response (usually JSON, relatively short)
-                    self.interaction_logger.info(f"[{timestamp}] AI OUTPUT ({elapsed_total:.2f}s):\n{response_text}\n{'='*60}")
+                # Emit Response for UI
+                try:
+                    resp_data = response_text
+                    try:
+                        resp_data = json.loads(response_text)
+                    except:
+                        pass
+                        
+                    payload = {
+                        "type": "ui_event",
+                        "kind": "ai_response", 
+                        "data": resp_data,
+                        "timestamp": datetime.now().isoformat()
+                    }
+                    print(f"JSON_IPC:{json.dumps(payload)}", flush=True)
+                except Exception:
+                    pass
                 
                 return response_text
             except Exception as e:

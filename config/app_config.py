@@ -676,7 +676,7 @@ from config.package_constants import PackageConstants
 ALLOWED_EXTERNAL_PACKAGES = PackageConstants.get_allowed_external_packages([])
 
 OUTPUT_DATA_DIR = "output_data"  # This is a template name, Config class makes it a path
-SESSION_DIR = f"{{{CONFIG_OUTPUT_DATA_DIR}}}/sessions/{{device_id}}_{{app_package}}_{{timestamp}}"
+SESSION_DIR = f"{{{CONFIG_OUTPUT_DATA_DIR}}}/sessions/{{timestamp}}_{{device_id}}_{{app_package}}"
 APP_INFO_OUTPUT_DIR = f"{{{CONFIG_OUTPUT_DATA_DIR}}}/app_info"
 SCREENSHOTS_DIR = "{session_dir}/screenshots"
 ANNOTATED_SCREENSHOTS_DIR = "{session_dir}/annotated_screenshots"
@@ -845,10 +845,9 @@ ENABLE_AI_RUN_REPORT = False
 # --- Image Preprocessing (Global overrides) ---
 # These knobs control how screenshots are preprocessed before being sent to the AI.
 # They override provider defaults where applicable.
-IMAGE_MAX_WIDTH = 896  # Max width for downsampling; no upscaling
+IMAGE_MAX_WIDTH = 512  # Max width for downsampling; smaller = faster AI processing
 IMAGE_FORMAT = "JPEG"  # Preferred encoding format (JPEG/WebP/PNG)
-IMAGE_QUALITY = 70  # Compression quality (0-100, typical 60-80)
-IMAGE_QUALITY = 70  # Compression quality (0-100, typical 60-80)
+IMAGE_QUALITY = 60  # Compression quality (lower = smaller file, faster processing)
 
 # --- AI Provider Capabilities Configuration ---
 # This configuration makes it easy to add new AI providers with different capabilities

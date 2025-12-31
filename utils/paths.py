@@ -160,7 +160,7 @@ class SessionPathManager:
                 current_device_id = self._device_name or self._device_udid or "unknown_device"
                 current_device_id = re.sub(r'[^\w.-]', '_', current_device_id)
                 app_package_safe = self._get_app_package_safe()
-                potential_path = Path(base_dir) / "sessions" / f"{current_device_id}_{app_package_safe}_{self._timestamp}"
+                potential_path = Path(base_dir) / "sessions" / f"{self._timestamp}_{current_device_id}_{app_package_safe}"
                 if potential_path.exists():
                     logger = logging.getLogger(__name__)
                     # Update cached path to the existing one
@@ -251,7 +251,6 @@ class SessionPathManager:
         if self._session_path and not force_regenerate:
             return self._session_path
 
-        template = self.config.get(SessionKeys.SESSION_DIR_TEMPLATE)
         base_dir = self.config.OUTPUT_DATA_DIR  # This property is already resolved
         assert base_dir is not None, "OUTPUT_DATA_DIR must be set"
         
@@ -259,29 +258,9 @@ class SessionPathManager:
         app_package_safe = self._get_app_package_safe()
         assert self._timestamp is not None
 
-        if not template:
-            # Default: sessions/{device_id}_{app_package}_{timestamp}
-            session_dir_str = str(Path(base_dir) / "sessions" / f"{device_id}_{app_package_safe}_{self._timestamp}")
-        else:
-            # Replace placeholders in the template
-            # First replace OUTPUT_DATA_DIR placeholder
-            template = template.replace(f"{{{SessionKeys.OUTPUT_DATA_DIR_KEY}}}", str(base_dir))
-            # Then replace other placeholders
-            session_dir_str = template
-            session_dir_str = session_dir_str.replace(f"{{{SessionKeys.DEVICE_ID_KEY}}}", device_id)
-            session_dir_str = session_dir_str.replace(f"{{{SessionKeys.APP_PACKAGE_KEY}}}", app_package_safe)
-            session_dir_str = session_dir_str.replace(f"{{{SessionKeys.TIMESTAMP_KEY}}}", self._timestamp)
-            
-            # Ensure sessions/ subdirectory is present in the path
-            # If the template was somehow stored without sessions/, add it
-            base_dir_str = str(base_dir)
-            if session_dir_str.startswith(base_dir_str):
-                # Check if sessions/ is missing between base_dir and the session name
-                remaining = session_dir_str[len(base_dir_str):].lstrip('/\\')
-                # If remaining starts directly with device_id pattern (no sessions/), add it
-                if remaining and not remaining.startswith('sessions'):
-                    # Reconstruct with sessions/ subdirectory
-                    session_dir_str = str(Path(base_dir) / "sessions" / f"{device_id}_{app_package_safe}_{self._timestamp}")
+        # Session folder format: {timestamp}_{device_id}_{app_package}
+        # Timestamp first ensures chronological sorting in file explorers
+        session_dir_str = str(Path(base_dir) / "sessions" / f"{self._timestamp}_{device_id}_{app_package_safe}")
 
         self._session_path = Path(session_dir_str).resolve()
         # Only create parent directories (sessions/) if they don't exist

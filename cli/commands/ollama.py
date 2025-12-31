@@ -236,7 +236,8 @@ class ShowSelectionCommand(CommandHandler):
         
         if not selected_model:
             # Show Ollama-specific message when no model is selected
-            print(MSG.UI_NO_OLLAMA_MODEL_SELECTED)
+            if telemetry_service:
+                telemetry_service.print_warning(MSG.UI_NO_OLLAMA_MODEL_SELECTED)
             return CommandResult(
                 success=False,
                 message=MSG.OLLAMA_SHOW_SELECTION_FAIL,

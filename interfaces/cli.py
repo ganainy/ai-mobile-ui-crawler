@@ -7,8 +7,10 @@ This module provides a CLI interface that uses the shared core crawler modules
 from the layered architecture, ensuring consistent behavior between CLI and GUI.
 """
 
+import json
 import logging
 import os
+from datetime import datetime
 from typing import Dict, Any, Optional
 
 
@@ -43,6 +45,19 @@ class CLICrawlerInterface:
         self.storage: Optional[Storage] = None
         self.current_session: Optional[CrawlerSession] = None
 
+
+    def _emit_json(self, kind: str, data: Any) -> None:
+        """Helper to emit structured JSON event."""
+        try:
+            payload = {
+                "type": "ui_event",
+                "kind": kind,
+                "data": data,
+                "timestamp": datetime.now().isoformat()
+            }
+            print(f"JSON_IPC:{json.dumps(payload)}", flush=True)
+        except Exception:
+            pass
 
     def initialize_core(self) -> bool:
         """
@@ -101,8 +116,8 @@ class CLICrawlerInterface:
             self.crawler.storage.save_session(self.current_session)
 
             # Log session start for CLI user
-            print(f"UI_STATUS: Crawler session started: {session_id}")
-            print(f"UI_STEP: 1")
+            self._emit_json('log', {'level': 'INFO', 'message': f"Crawler session started: {session_id}"})
+            self._emit_json('step', {'step': 1, 'description': 'Session Started'})
             
             # TODO: Replace simulation with actual crawling implementation
             import threading
@@ -111,16 +126,16 @@ class CLICrawlerInterface:
             def simulate_crawling():
                 """Simulate crawling activity since real implementation is missing."""
                 try:
-                    print("UI_STATUS: Starting crawling simulation...")
+                    self._emit_json('log', {'level': 'INFO', 'message': "Starting crawling simulation..."})
                     
                     # Simulate some steps
                     for step in range(2, 6):
                         time.sleep(2)  # Simulate work
-                        print(f"UI_STEP: {step}")
-                        print(f"UI_ACTION: Simulated action {step}")
+                        self._emit_json('step', {'step': step})
+                        self._emit_json('action', {'description': f"Simulated action {step}"})
                     
                     # Complete the session
-                    print("UI_STATUS: Crawling simulation completed")
+                    self._emit_json('log', {'level': 'INFO', 'message': "Crawling simulation completed"})
                     
                     self.current_session.complete()
                     self.crawler.storage.save_session(self.current_session)
@@ -129,8 +144,8 @@ class CLICrawlerInterface:
                     logger.error(f"FIX: Error in crawling simulation: {e}")
                     self.current_session.fail(str(e))
                     self.crawler.storage.save_session(self.current_session)
-                    print("UI_STATUS: Crawling simulation failed")
-                    print("UI_END: FAILED")
+                    self._emit_json('log', {'level': 'ERROR', 'message': "Crawling simulation failed"})
+                    self._emit_json('lifecycle', {'event': 'end', 'status': 'failed'})
             
             # Start crawling in background thread
             crawling_thread = threading.Thread(target=simulate_crawling, daemon=True)
@@ -140,7 +155,7 @@ class CLICrawlerInterface:
 
         except Exception as e:
             logger.error(f"Failed to start crawler session: {e}")
-            print(f"UI_STATUS: Failed to start crawler session: {e}")
+            self._emit_json('log', {'level': 'ERROR', 'message': f"Failed to start crawler session: {e}"})
             return None
 
     def get_session_status(self, session_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
@@ -176,13 +191,13 @@ class CLICrawlerInterface:
             }
 
             # CLI-specific status output
-            print(f"UI_STATUS: Session {session.session_id} - {session.status} ({session.progress:.1%})")
+            self._emit_json('log', {'level': 'INFO', 'message': f"Session {session.session_id} - {session.status} ({session.progress:.1%})"})
 
             return status_info
 
         except Exception as e:
             logger.error(f"Failed to get session status: {e}")
-            print(f"UI_STATUS: Failed to get session status: {e}")
+            self._emit_json('log', {'level': 'ERROR', 'message': f"Failed to get session status: {e}"})
             return None
 
     def stop_crawler_session(self, session_id: Optional[str] = None) -> bool:
@@ -208,14 +223,14 @@ class CLICrawlerInterface:
             stopped_session = self.crawler.stop_session(target_session_id)
 
             # CLI-specific output
-            print(f"UI_STATUS: Session {stopped_session.session_id} stopped")
-            print("UI_END: Crawler session completed")
+            self._emit_json('log', {'level': 'INFO', 'message': f"Session {stopped_session.session_id} stopped"})
+            self._emit_json('lifecycle', {'event': 'end', 'status': 'completed'})
 
             return True
 
         except Exception as e:
             logger.error(f"Failed to stop crawler session: {e}")
-            print(f"UI_STATUS: Failed to stop crawler session: {e}")
+            self._emit_json('log', {'level': 'ERROR', 'message': f"Failed to stop crawler session: {e}"})
             return False
 
     def get_session_results(self, session_id: Optional[str] = None) -> Optional[list]:
@@ -242,13 +257,13 @@ class CLICrawlerInterface:
             results = self.storage.get_session_results(target_session_id) if hasattr(self.storage, 'get_session_results') else []
 
             # CLI-specific output
-            print(f"UI_STATUS: Retrieved {len(results)} results for session {target_session_id}")
+            self._emit_json('log', {'level': 'INFO', 'message': f"Retrieved {len(results)} results for session {target_session_id}"})
 
             return results
 
         except Exception as e:
             logger.error(f"Failed to get session results: {e}")
-            print(f"UI_STATUS: Failed to get session results: {e}")
+            self._emit_json('log', {'level': 'ERROR', 'message': f"Failed to get session results: {e}"})
             return None
 
     def save_configuration(self) -> bool:
@@ -264,12 +279,12 @@ class CLICrawlerInterface:
 
         try:
             self.storage.save_configuration(self.config)
-            print(f"UI_STATUS: Configuration saved")
+            self._emit_json('log', {'level': 'INFO', 'message': "Configuration saved"})
             return True
 
         except Exception as e:
             logger.error(f"Failed to save configuration: {e}")
-            print(f"UI_STATUS: Failed to save configuration: {e}")
+            self._emit_json('log', {'level': 'ERROR', 'message': f"Failed to save configuration: {e}"})
             return False
 
     def load_configuration(self, config_id: str) -> bool:
@@ -293,16 +308,16 @@ class CLICrawlerInterface:
                 # Reinitialize crawler with new config
                 if self.config:
                     self.crawler = Crawler(self.config)
-                print(f"UI_STATUS: Configuration loaded: {config_id}")
+                self._emit_json('log', {'level': 'INFO', 'message': f"Configuration loaded: {config_id}"})
                 return True
             else:
                 logger.warning(f"Configuration not found: {config_id}")
-                print(f"UI_STATUS: Configuration not found: {config_id}")
+                self._emit_json('log', {'level': 'WARNING', 'message': f"Configuration not found: {config_id}"})
                 return False
 
         except Exception as e:
             logger.error(f"Failed to load configuration: {e}")
-            print(f"UI_STATUS: Failed to load configuration: {e}")
+            self._emit_json('log', {'level': 'ERROR', 'message': f"Failed to load configuration: {e}"})
             return False
 
     def cleanup(self):

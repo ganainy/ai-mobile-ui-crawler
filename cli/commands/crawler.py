@@ -322,14 +322,6 @@ class StatusCrawlerCommand(CommandHandler):
         telemetry_service = context.services.get("telemetry")
         if telemetry_service:
             telemetry_service.print_crawler_status(status)
-        else:
-            # Fallback to basic printing if telemetry service is not available
-            print(MSG.STATUS_HEADER)
-            print(MSG.STATUS_PROCESS.format(process=status[KEY.PROCESS_KEY]))
-            print(MSG.STATUS_STATE.format(state=status[KEY.STATE_KEY]))
-            print(MSG.STATUS_TARGET_APP.format(target_app=status[KEY.TARGET_APP_KEY]))
-            print(MSG.STATUS_OUTPUT_DIR.format(output_dir=status[KEY.OUTPUT_DIR_KEY]))
-            print(MSG.STATUS_FOOTER)
 
         return CommandResult(
             success=True,

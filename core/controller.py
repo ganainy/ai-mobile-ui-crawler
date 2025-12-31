@@ -22,6 +22,8 @@ if TYPE_CHECKING:
 # Module-level constants for default fallback strings
 DEFAULT_SHUTDOWN_FLAG = 'crawler_shutdown.flag'
 DEFAULT_PAUSE_FLAG = 'crawler_pause.flag'
+DEFAULT_STEP_BY_STEP_FLAG = 'crawler_step_by_step.flag'
+DEFAULT_CONTINUE_FLAG = 'crawler_continue.flag'
 DEFAULT_OUTPUT_DIR = 'output_data'
 DEFAULT_LOG_SUBDIR = 'logs'
 DEFAULT_LOG_FILE = 'crawler.log'
@@ -67,12 +69,27 @@ class FlagController:
     
     SHUTDOWN_FLAG_CONTENT = "shutdown"
     PAUSE_FLAG_CONTENT = "pause"
+    STEP_BY_STEP_FLAG_CONTENT = "step_by_step"
+    CONTINUE_FLAG_CONTENT = "continue"
     
-    def __init__(self, shutdown_flag_path: str, pause_flag_path: str):
+    def __init__(
+        self, 
+        shutdown_flag_path: str, 
+        pause_flag_path: str,
+        step_by_step_flag_path: Optional[str] = None,
+        continue_flag_path: Optional[str] = None
+    ):
         self.shutdown_flag_path = shutdown_flag_path
         self.pause_flag_path = pause_flag_path
+        
+        # Derive defaults if not provided (backward compatibility helper)
+        base_dir = os.path.dirname(shutdown_flag_path)
+        self.step_by_step_flag_path = step_by_step_flag_path or os.path.join(base_dir, DEFAULT_STEP_BY_STEP_FLAG)
+        self.continue_flag_path = continue_flag_path or os.path.join(base_dir, DEFAULT_CONTINUE_FLAG)
+        
         self.logger = logging.getLogger(__name__)
     
+    # Shutdown Flags
     def create_shutdown_flag(self) -> bool:
         """Create a shutdown flag to signal the crawler to stop."""
         try:
@@ -81,7 +98,22 @@ class FlagController:
         except Exception as e:
             self.logger.error(f"Failed to create shutdown flag: {e}")
             return False
-    
+
+    def remove_shutdown_flag(self) -> bool:
+        """Remove the shutdown flag if it exists."""
+        try:
+            if Path(self.shutdown_flag_path).exists():
+                Path(self.shutdown_flag_path).unlink()
+            return True
+        except Exception as e:
+            self.logger.error(f"Failed to remove shutdown flag: {e}")
+            return False
+
+    def is_shutdown_flag_present(self) -> bool:
+        """Check if the shutdown flag exists."""
+        return Path(self.shutdown_flag_path).exists()
+
+    # Pause Flags
     def create_pause_flag(self) -> bool:
         """Create a pause flag to signal the crawler to pause."""
         try:
@@ -100,24 +132,58 @@ class FlagController:
         except Exception as e:
             self.logger.error(f"Failed to remove pause flag: {e}")
             return False
-    
-    def remove_shutdown_flag(self) -> bool:
-        """Remove the shutdown flag if it exists."""
-        try:
-            if Path(self.shutdown_flag_path).exists():
-                Path(self.shutdown_flag_path).unlink()
-            return True
-        except Exception as e:
-            self.logger.error(f"Failed to remove shutdown flag: {e}")
-            return False
-    
+
     def is_pause_flag_present(self) -> bool:
         """Check if the pause flag exists."""
         return Path(self.pause_flag_path).exists()
-    
-    def is_shutdown_flag_present(self) -> bool:
-        """Check if the shutdown flag exists."""
-        return Path(self.shutdown_flag_path).exists()
+
+    # Step-by-Step Flags
+    def create_step_by_step_flag(self) -> bool:
+        """Enable step-by-step mode."""
+        try:
+            Path(self.step_by_step_flag_path).write_text(self.STEP_BY_STEP_FLAG_CONTENT)
+            return True
+        except Exception as e:
+            self.logger.error(f"Failed to enable step-by-step mode: {e}")
+            return False
+
+    def remove_step_by_step_flag(self) -> bool:
+        """Disable step-by-step mode."""
+        try:
+            if Path(self.step_by_step_flag_path).exists():
+                Path(self.step_by_step_flag_path).unlink()
+            return True
+        except Exception as e:
+            self.logger.error(f"Failed to disable step-by-step mode: {e}")
+            return False
+
+    def is_step_by_step_flag_present(self) -> bool:
+        """Check if step-by-step mode is enabled."""
+        return Path(self.step_by_step_flag_path).exists()
+
+    # Continue Flags
+    def create_continue_flag(self) -> bool:
+        """Signal crawler to proceed to next step."""
+        try:
+            Path(self.continue_flag_path).write_text(self.CONTINUE_FLAG_CONTENT)
+            return True
+        except Exception as e:
+            self.logger.error(f"Failed to create continue flag: {e}")
+            return False
+
+    def remove_continue_flag(self) -> bool:
+        """Remove continue signal."""
+        try:
+            if Path(self.continue_flag_path).exists():
+                Path(self.continue_flag_path).unlink()
+            return True
+        except Exception as e:
+            self.logger.error(f"Failed to remove continue flag: {e}")
+            return False
+
+    def is_continue_flag_present(self) -> bool:
+        """Check if proceed signal is present."""
+        return Path(self.continue_flag_path).exists()
 
 
 class ProcessBackend(ABC):
@@ -214,10 +280,18 @@ class CrawlerOrchestrator:
         self._is_running = False
         
         # Set up flag paths from config
+        # Set up flag paths from config
         shutdown_flag_path = config.get('SHUTDOWN_FLAG_PATH') or os.path.join(config.BASE_DIR or '.', DEFAULT_SHUTDOWN_FLAG)
         pause_flag_path = config.get('PAUSE_FLAG_PATH') or os.path.join(config.BASE_DIR or '.', DEFAULT_PAUSE_FLAG)
+        step_by_step_flag_path = config.get('STEP_BY_STEP_FLAG_PATH') or os.path.join(config.BASE_DIR or '.', DEFAULT_STEP_BY_STEP_FLAG)
+        continue_flag_path = config.get('CONTINUE_FLAG_PATH') or os.path.join(config.BASE_DIR or '.', DEFAULT_CONTINUE_FLAG)
         
-        self.flag_controller = FlagController(shutdown_flag_path, pause_flag_path)
+        self.flag_controller = FlagController(
+            shutdown_flag_path, 
+            pause_flag_path,
+            step_by_step_flag_path,
+            continue_flag_path
+        )
     
     def prepare_plan(self) -> CrawlerLaunchPlan:
         """Prepare a launch plan with validation."""
