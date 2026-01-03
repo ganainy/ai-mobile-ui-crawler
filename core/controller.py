@@ -82,7 +82,7 @@ class FlagController:
         self.shutdown_flag_path = shutdown_flag_path
         self.pause_flag_path = pause_flag_path
         
-        # Derive defaults if not provided (backward compatibility helper)
+        # Derive flag paths if not provided
         base_dir = os.path.dirname(shutdown_flag_path)
         self.step_by_step_flag_path = step_by_step_flag_path or os.path.join(base_dir, DEFAULT_STEP_BY_STEP_FLAG)
         self.continue_flag_path = continue_flag_path or os.path.join(base_dir, DEFAULT_CONTINUE_FLAG)

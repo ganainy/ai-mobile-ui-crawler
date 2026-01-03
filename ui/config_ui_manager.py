@@ -678,7 +678,7 @@ class ConfigManager(QObject):
         
         # Update image preprocessing visibility based on ENABLE_IMAGE_CONTEXT state
         if 'ENABLE_IMAGE_CONTEXT' in self.main_controller.config_widgets:
-             # This key is kept for backward compatibility reference, but UI visibility 
+             # ENABLE_IMAGE_CONTEXT is now driven by CONTEXT_SOURCE containing 'image'
              # is now driven by CONTEXT_SOURCE including 'image'
              context_source = self.config.get('CONTEXT_SOURCE', ['xml'])
              if isinstance(context_source, str):

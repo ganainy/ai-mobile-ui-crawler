@@ -151,16 +151,12 @@ class UIProtocolSink(ILogSink):
         """Write AI response."""
         response_data = entry.context.get('response_data', {})
         
-        # Add metadata
-        meta = {}
-        if 'decision_time' in entry.context:
-            meta['decision_time_sec'] = round(entry.context['decision_time'], 3)
-        if 'token_count' in entry.context:
-            meta['token_count'] = entry.context['token_count']
-        
-        if meta:
-            response_data = response_data.copy() if isinstance(response_data, dict) else {}
-            response_data['_meta'] = meta
+        if isinstance(response_data, dict):
+            response_data = response_data.copy()
+            if 'decision_time' in entry.context:
+                response_data['decision_time_sec'] = round(entry.context['decision_time'], 3)
+            if 'token_count' in entry.context:
+                response_data['token_count'] = entry.context['token_count']
         
         # Emit structured event for parent process
         self._emit_json('ai_response', response_data)
@@ -302,8 +298,6 @@ class CrawlLogger:
     
     def log_step(self, step_count: int) -> None:
         """Log current step to UI."""
-        # Use log_ui_step alias for backward compatibility with crawler loop calls?
-        # No, we'll implement log_ui_step below to satisfy the interface.
         self._service.info(
             f"Step {step_count}",
             protocol_type='step',
@@ -311,7 +305,7 @@ class CrawlLogger:
         )
         
     def log_ui_step(self, step_count: int) -> None:
-        """Log current step to UI (method alias for CrawlerLoop compatibility)."""
+        """Log current step to UI (alias for log_step)."""
         self.log_step(step_count)
     
     def log_context(

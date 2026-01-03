@@ -122,14 +122,14 @@ HTTP_SERVICE_UNAVAILABLE = 503
 
 # ========== Image Processing Constants ==========
 
-# Image quality defaults
-IMAGE_DEFAULT_QUALITY = 60  # Lower quality for smaller file size
-IMAGE_DEFAULT_FORMAT = 'JPEG'
+# Image quality defaults - optimized for smaller payload
+IMAGE_DEFAULT_QUALITY = 50  # Reduced quality, still readable for AI vision
+IMAGE_DEFAULT_FORMAT = 'WEBP'  # Better compression than JPEG
 
 # Image crop percentages (as decimals) removed
 
-# Image dimensions
-IMAGE_MAX_WIDTH_DEFAULT = 512  # Smaller default for faster AI processing
+# Image dimensions - smaller for faster AI processing
+IMAGE_MAX_WIDTH_DEFAULT = 480  # Optimized for phone aspect ratio + AI speed
 
 # Image background color (RGB tuple for transparent image conversion)
 IMAGE_BG_COLOR = (255, 255, 255)  # White background

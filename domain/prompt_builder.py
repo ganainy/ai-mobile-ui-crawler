@@ -220,12 +220,13 @@ class PromptBuilder:
             stuck_part = f"\n⚠️ **STUCK DETECTED**: {stuck_reason}. YOU MUST ESCAPE. Do not repeat previous actions."
             dynamic_parts.append(stuck_part)
 
-        # Journal
-        exploration_journal = context.get("exploration_journal", "")
-        if exploration_journal:
-             dynamic_parts.append(f"\n=== EXPLORATION JOURNAL ===\n{exploration_journal}")
+        # Journal - list of {action, outcome} objects
+        exploration_journal = context.get("exploration_journal", [])
+        if exploration_journal and isinstance(exploration_journal, list):
+            journal_json = json.dumps(exploration_journal, indent=2, ensure_ascii=False)
+            dynamic_parts.append(f"\n=== EXPLORATION JOURNAL ===\n```json\n{journal_json}\n```")
         else:
-             dynamic_parts.append(f"\n=== EXPLORATION JOURNAL ===\n(Empty - Start of session)")
+            dynamic_parts.append(f"\n=== EXPLORATION JOURNAL ===\n(Empty - Start of session)")
 
         # Actions Already Tried (Lightweight)
         current_screen_actions = context.get("current_screen_actions", [])

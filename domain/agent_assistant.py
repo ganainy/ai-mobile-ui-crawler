@@ -71,9 +71,14 @@ class ActionData(BaseModel):
         return value
 
 
+class JournalEntry(BaseModel):
+    """Single exploration journal entry."""
+    action: str
+    outcome: str
+
+
 class ActionBatch(BaseModel):
     """Batch of actions returned by AI for multi-action execution."""
-    exploration_journal: str = ""
     actions: List[ActionData]
     
     @validator("actions", pre=True)
@@ -422,7 +427,7 @@ class AgentAssistant:
                                    is_stuck: bool = False,
                                    stuck_reason: Optional[str] = None,
                                    ocr_results: Optional[List[Dict[str, Any]]] = None,
-                                   exploration_journal: Optional[str] = None) -> Optional[Tuple[Dict[str, Any], float, int, Optional[str], Optional[str]]]:
+                                   exploration_journal: Optional[List[Dict[str, str]]] = None) -> Optional[Tuple[Dict[str, Any], float, int, Optional[str], Optional[List[Dict[str, str]]]]]:
         """Get the next action using LangChain decision chain.
         
         Args:
@@ -441,7 +446,7 @@ class AgentAssistant:
             exploration_journal: AI-maintained exploration journal (replaces action_history, visited_screens, current_screen_actions)
             
         Returns:
-            Tuple of (action_data dict, confidence float, token_count int, ai_input_prompt str, exploration_journal str) or None on error
+            Tuple of (action_data dict, confidence float, token_count int, ai_input_prompt str) or None on error
         """
         try:
             # Get context sources - HYBRID (XML+OCR) is always enabled
@@ -455,7 +460,7 @@ class AgentAssistant:
                 "screenshot_bytes": screenshot_bytes,
                 "xml_context": None,  # Will be set below
                 "ocr_context": ocr_results,  # Always included with HYBRID
-                "exploration_journal": exploration_journal or "",
+                "exploration_journal": exploration_journal or [],
                 "current_screen_actions": current_screen_actions or [],  # For stuck detection
                 "current_screen_id": current_screen_id,
                 "current_screen_visit_count": current_screen_visit_count or 0,
@@ -549,7 +554,7 @@ class AgentAssistant:
                                 self._current_prepared_image = prepared_image
                                 logging.info(f"📸 Image prepared for AI: {prepared_image.size[0]}x{prepared_image.size[1]}")
                         else:
-                            logging.warning(f"📸 Model '{model_name}' does not support image context")
+                            pass
                     else:
                         logging.warning(f"📸 Provider '{self.ai_provider}' not found in registry")
                 except Exception as e:
@@ -615,11 +620,8 @@ class AgentAssistant:
                         except (ValueError, IndexError) as e:
                             logging.warning(f"Failed to resolve OCR target {target_id}: {e}")
 
-            # Return with metadata (confidence and token count are placeholders for now)
-            # Include the AI input prompt for database storage
-            # Also include the exploration_journal from the AI response
-            new_exploration_journal = chain_result.get('exploration_journal', '') if chain_result else ''
-            return validated_data, 0.0, 0, ai_input_prompt, new_exploration_journal
+            # Return with metadata
+            return validated_data, 0.0, 0, ai_input_prompt
             
         except ValidationError as e:
             # Clear prepared image on error
@@ -645,7 +647,7 @@ class AgentAssistant:
         2. Legacy single-action format: {"action": "...", "target_identifier": "...", ...}
         
         Returns:
-            Validated ActionBatch as dictionary with 'actions' key (list) and 'exploration_journal'
+            Validated ActionBatch as dictionary with 'actions' key (list)
         """
         # Check if this is multi-action format (has 'actions' array)
         if "actions" in action_data and isinstance(action_data.get("actions"), list):
@@ -660,7 +662,6 @@ class AgentAssistant:
             single_action = ActionData.model_validate(action_data)
             # Wrap in batch format
             batch = ActionBatch(
-                exploration_journal=action_data.get("exploration_journal", ""),
                 actions=[single_action]
             )
             return batch.model_dump()

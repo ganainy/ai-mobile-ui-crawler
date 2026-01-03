@@ -261,7 +261,6 @@ class CrawlerControllerWindow(QMainWindow):
             "mobsf_settings_group": mobsf_group,
             "recording_group": recording_group,
         }
-        # Also store in config_manager for backward compatibility
         self.config_manager.ui_groups = self.ui_groups
 
         scroll.setWidget(scroll_content)
@@ -465,11 +464,6 @@ class CrawlerControllerWindow(QMainWindow):
         
         # --- Pause Control Section ---
         pause_control_layout = QHBoxLayout()
-        
-        # Step-by-Step Mode is now in Crawler Settings (persisted via config_widgets["STEP_BY_STEP_MODE"])
-        # We create a reference here for backwards compatibility
-        # The actual checkbox is created in component_factory.create_crawler_group()
-        
         # Next Step Button (initially disabled)
         self.next_step_btn = QPushButton("Next Step ⏭️")
         self.next_step_btn.setToolTip("Execute one step and pause again")
@@ -574,7 +568,7 @@ class CrawlerControllerWindow(QMainWindow):
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
         )
         self.screenshot_label.setMinimumHeight(200)  # Reduced from 300
-        self.screenshot_label.setMaximumHeight(400)  # Cap the height
+        # No max height - allow screenshot to fill available container space
         self.screenshot_label.setMinimumWidth(200)   # Reduced from 300
         self.screenshot_label.setStyleSheet("""
             border: 1px solid #555555;
@@ -970,35 +964,37 @@ class CrawlerControllerWindow(QMainWindow):
         cursor.movePosition(cursor.MoveOperation.Start)
         self.ai_input_log.setTextCursor(cursor)
 
+    def _format_ai_response(self, content: str) -> str:
+        """Format AI response for readable display.
+        
+        Simply pretty-prints JSON with indentation. Works with any JSON structure.
+        
+        Args:
+            content: Raw AI response string (may be JSON)
+            
+        Returns:
+            Formatted string with pretty-printed JSON
+        """
+        import json
+        
+        try:
+            if content and isinstance(content, str) and (content.strip().startswith("{") or content.strip().startswith("[")):
+                parsed = json.loads(content)
+                return json.dumps(parsed, indent=2, ensure_ascii=False)
+        except Exception:
+            pass
+        
+        return content
+
     def update_ai_output(self, content: str):
         """Update the AI Output log for the latest interaction.
         
         Args:
             content: The text/JSON to display in the AI Output section.
         """
-        # Try to format as JSON if possible and extract token info
-        display_content = content
-        token_info_header = ""
-        import json
-        try:
-            if content and isinstance(content, str) and (content.strip().startswith("{") or content.strip().startswith("[")):
-                parsed = json.loads(content)
-                
-                # Extract token count from _meta if available
-                if isinstance(parsed, dict) and '_meta' in parsed:
-                    meta = parsed['_meta']
-                    if 'token_count' in meta:
-                        token_count = meta['token_count']
-                        # Format token info header
-                        token_info_header = f"📊 Tokens Used: {token_count:,}\n" + ("─" * 50) + "\n\n"
-                
-                display_content = json.dumps(parsed, indent=2)
-        except Exception:
-            pass
+        display_content = self._format_ai_response(content)
 
-        # Prepend token info if available
-        if token_info_header:
-            display_content = token_info_header + display_content
+
 
         if not self.ai_history:
             # Received output without input? Create a placeholder entry
@@ -1104,9 +1100,10 @@ class CrawlerControllerWindow(QMainWindow):
         
         This is called by AIInteractionService when a response is recorded.
         """
-        # Update legacy history
+        # Update legacy history with formatted response
+        formatted_response = self._format_ai_response(response)
         if self.ai_history and step <= len(self.ai_history):
-            self.ai_history[step - 1]['output'] = response
+            self.ai_history[step - 1]['output'] = formatted_response
         
         # Check if viewing latest
         is_latest_selected = True
@@ -1117,7 +1114,8 @@ class CrawlerControllerWindow(QMainWindow):
         
         # Update view if viewing latest
         if is_latest_selected and self.ai_output_log:
-            self.ai_output_log.setText(response)
+            formatted_response = self._format_ai_response(response)
+            self.ai_output_log.setText(formatted_response)
             cursor = self.ai_output_log.textCursor()
             cursor.movePosition(cursor.MoveOperation.Start)
             self.ai_output_log.setTextCursor(cursor)
@@ -1362,14 +1360,11 @@ class CrawlerControllerWindow(QMainWindow):
 
     # Configuration synchronization method
     def _sync_user_config_files(self):
-        """Synchronize user configuration files.
+        """No-op callback for configuration update hooks.
         
-        This method is used as a callback when configuration settings are updated.
-        Currently, synchronization is handled automatically by the config system,
-        so this is a no-op method maintained for API compatibility.
+        Synchronization is handled automatically by the config system.
+        This method exists as a callback placeholder for update_setting_and_save().
         """
-        # Configuration synchronization is now handled automatically by the config system
-        # This method is kept for backward compatibility with existing callbacks
         pass
     
     # Delegate methods to appropriate managers

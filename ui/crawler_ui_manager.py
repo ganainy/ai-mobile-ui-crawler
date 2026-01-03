@@ -162,6 +162,9 @@ class CrawlerManager(QObject):
                 color = p_color
                 break
         
+        if log_message == "None":
+            return
+
         self.main_controller.log_message(log_message, color)
     
     def validate_pre_crawl_requirements(self) -> Tuple[bool, List[str]]:
@@ -759,7 +762,7 @@ class CrawlerManager(QObject):
                 if len(self._stdout_buffer) > 100000:
                     self._stdout_buffer = ""
                 
-                if not line:
+                if not line or line.strip() == "None":
                     continue
                     
                 # Process the complete line

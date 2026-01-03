@@ -417,6 +417,20 @@ class CrawlerLoop:
                 action_data, screen_state
             )
             
+            # Determine outcome string
+            if success:
+                outcome = "Action executed successfully"
+                # If it was a batch execution
+                if exec_count > 1:
+                     outcome = f"Executed {sum(success_list)}/{exec_count} actions successfully"
+            else:
+                outcome = f"Failed: {error_msg}" if error_msg else "Action execution failed"
+                
+            self.last_action_feedback = outcome
+            
+            # Update journal with execution results
+            self._update_journal_after_step(action_data, outcome, screen_state=screen_state)
+            
             # 7. Record Results
             self._record_step_results(
                 screen_state.id, 
@@ -608,9 +622,13 @@ class CrawlerLoop:
             return None
             
         from_screen_id = screen_state.id
-        exploration_journal = ""
+        exploration_journal = []
         if self.db_manager and self.current_run_id:
-            exploration_journal = self.db_manager.get_exploration_journal(self.current_run_id) or ""
+            journal_str = self.db_manager.get_exploration_journal(self.current_run_id) or "[]"
+            try:
+                exploration_journal = json.loads(journal_str)
+            except (json.JSONDecodeError, TypeError):
+                exploration_journal = []
             
         # Stuck detection
         action_history, visited_screens, current_screen_actions = (
@@ -655,10 +673,7 @@ class CrawlerLoop:
             self.runtime_stats.ai_retry_count += 1
             return None
             
-        action_data, _, token_count, input_prompt, new_journal = action_result
-        
-        if self.db_manager and self.current_run_id and new_journal:
-            self.db_manager.update_exploration_journal(self.current_run_id, new_journal)
+        action_data, _, token_count, input_prompt = action_result
             
         self._handle_signup_completion(action_data)
         
@@ -685,6 +700,80 @@ class CrawlerLoop:
                     self.last_action_feedback = "Signup completed! Credentials saved."
         except Exception as e:
             logger.error(f"Error storing credentials: {e}")
+
+    def _update_journal_after_step(self, action_data: Dict[str, Any], outcome: str, screen_state: Any = None) -> None:
+        """Update exploration journal with completed action and outcome."""
+        if not self.db_manager or not self.current_run_id:
+            return
+            
+        try:
+             # Load existing journal
+             journal_str = self.db_manager.get_exploration_journal(self.current_run_id) or "[]"
+             journal = []
+             try:
+                 journal = json.loads(journal_str)
+             except (json.JSONDecodeError, TypeError):
+                 journal = []
+             
+             if not isinstance(journal, list):
+                 journal = []
+                 
+             # Helper to resolve target text
+             def resolve_target(tgt):
+                 if not tgt: return ""
+                 # Resolve OCR text
+                 if screen_state and str(tgt).startswith("ocr_") and hasattr(screen_state, 'ocr_results') and screen_state.ocr_results:
+                     try:
+                         parts = str(tgt).split('_')
+                         if len(parts) > 1:
+                             idx = int(parts[1])
+                             if 0 <= idx < len(screen_state.ocr_results):
+                                 text = screen_state.ocr_results[idx].get('text')
+                                 if text:
+                                     return f"'{text}'"
+                     except Exception:
+                         pass
+                 return str(tgt)
+
+             # Create new entry
+             action_desc = "Action"
+             
+             # Handle ActionBatch format
+             if "actions" in action_data and isinstance(action_data["actions"], list) and action_data["actions"]:
+                 count = len(action_data["actions"])
+                 first = action_data["actions"][0]
+                 op = first.get("action", "unknown")
+                 raw_target = first.get("target_identifier") or first.get("input_text") or ""
+                 target = resolve_target(raw_target)
+                 
+                 if count > 1:
+                     action_desc = f"{op} {target} (+{count-1} more)"
+                 else:
+                     action_desc = f"{op} {target}"
+             # Legacy single action format
+             elif "action" in action_data:
+                 op = action_data.get("action")
+                 raw_target = action_data.get("target_identifier") or action_data.get("input_text") or ""
+                 target = resolve_target(raw_target)
+                 start_trunc = str(target)[:20] + "..." if len(str(target)) > 20 else str(target)
+                 action_desc = f"{op} {start_trunc}"
+                 
+             entry = {
+                 "action": action_desc.strip(),
+                 "outcome": str(outcome) if outcome else "Completed"
+             }
+             
+             journal.append(entry)
+             
+             # Keep last 15 entries
+             if len(journal) > 15:
+                 journal = journal[-15:]
+                 
+             # Save
+             self.db_manager.update_exploration_journal(self.current_run_id, json.dumps(journal))
+             
+        except Exception as e:
+            logger.warning(f"Failed to update journal: {e}")
 
     def _execute_actions(self, action_data: Dict[str, Any], screen_state: Any) -> Tuple[bool, List[bool], int, Optional[str], float]:
         actions_list = action_data.get("actions", [])
