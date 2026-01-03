@@ -25,7 +25,6 @@ try:
     from PySide6.QtWidgets import QApplication
 except ImportError:
     from ui.strings import RUN_UI_ERROR_PYSIDE6
-    print(RUN_UI_ERROR_PYSIDE6)
     sys.exit(1)
 from domain.ui_controller import CrawlerControllerWindow
 
@@ -78,6 +77,17 @@ def main():
     time.sleep(0.1)
     app.processEvents()
     
+    # Start Appium server in separate terminal if not already running
+    splash.show_message("Checking Appium server...")
+    app.processEvents()
+    
+    from infrastructure.appium_server import ensure_appium_running
+    if ensure_appium_running():
+        splash.show_message("Appium server ready")
+    else:
+        splash.show_message("Warning: Appium server failed to start")
+    app.processEvents()
+    
     splash.show_message("Loading configuration...")
     app.processEvents()
     
@@ -100,7 +110,6 @@ def main():
         provider_enum = AIProvider.from_string(provider)
         config.set("AI_PROVIDER", provider_enum.value)
     except ValueError as e:
-        print(f"{CLI_ERROR_PREFIX} {e}")
         splash.close()
         sys.exit(1)
 

@@ -569,15 +569,8 @@ class CrawlerLoop:
             logger.warning("Failed to ensure app context - skipping step")
             self.last_action_feedback = "App context check failed"
             self.runtime_stats.context_loss_count += 1
-            return False # Return False to skip rest of step but continue loop (via run_step returns True logic)
-            # Actually run_step logic says "if not verify: return True" -> yes, skip rest of step
+            return False
             
-        browser_feedback = self.app_context_manager.get_and_clear_browser_escape_feedback()
-        if browser_feedback:
-            if self.last_action_feedback:
-                self.last_action_feedback = f"{browser_feedback} | {self.last_action_feedback}"
-            else:
-                self.last_action_feedback = browser_feedback
         return True
 
     def _capture_and_record_screen(self) -> Optional[Any]:
@@ -702,75 +695,117 @@ class CrawlerLoop:
             logger.error(f"Error storing credentials: {e}")
 
     def _update_journal_after_step(self, action_data: Dict[str, Any], outcome: str, screen_state: Any = None) -> None:
-        """Update exploration journal with completed action and outcome."""
+        """Update exploration journal with completed action and outcome.
+        
+        Enhanced format includes:
+        - step: Step number for temporal context
+        - screen: Activity name for screen context
+        - action: Description of action (prefers AI's action_desc if provided)
+        - reasoning: AI's reasoning for the action
+        - outcome: Execution result (success/failure)
+        """
         if not self.db_manager or not self.current_run_id:
             return
             
         try:
-             # Load existing journal
-             journal_str = self.db_manager.get_exploration_journal(self.current_run_id) or "[]"
-             journal = []
-             try:
-                 journal = json.loads(journal_str)
-             except (json.JSONDecodeError, TypeError):
-                 journal = []
-             
-             if not isinstance(journal, list):
-                 journal = []
+            # Load existing journal
+            journal_str = self.db_manager.get_exploration_journal(self.current_run_id) or "[]"
+            journal = []
+            try:
+                journal = json.loads(journal_str)
+            except (json.JSONDecodeError, TypeError):
+                journal = []
+            
+            if not isinstance(journal, list):
+                journal = []
                  
-             # Helper to resolve target text
-             def resolve_target(tgt):
-                 if not tgt: return ""
-                 # Resolve OCR text
-                 if screen_state and str(tgt).startswith("ocr_") and hasattr(screen_state, 'ocr_results') and screen_state.ocr_results:
-                     try:
-                         parts = str(tgt).split('_')
-                         if len(parts) > 1:
-                             idx = int(parts[1])
-                             if 0 <= idx < len(screen_state.ocr_results):
-                                 text = screen_state.ocr_results[idx].get('text')
-                                 if text:
-                                     return f"'{text}'"
-                     except Exception:
-                         pass
-                 return str(tgt)
-
-             # Create new entry
-             action_desc = "Action"
-             
-             # Handle ActionBatch format
-             if "actions" in action_data and isinstance(action_data["actions"], list) and action_data["actions"]:
-                 count = len(action_data["actions"])
-                 first = action_data["actions"][0]
-                 op = first.get("action", "unknown")
-                 raw_target = first.get("target_identifier") or first.get("input_text") or ""
-                 target = resolve_target(raw_target)
+            # Helper to resolve OCR target IDs to actual text
+            def resolve_target(tgt: Any) -> str:
+                if not tgt:
+                    return ""
+                # Resolve OCR text from ocr_X format
+                if screen_state and str(tgt).startswith("ocr_") and hasattr(screen_state, 'ocr_results') and screen_state.ocr_results:
+                    try:
+                        parts = str(tgt).split('_')
+                        if len(parts) > 1:
+                            idx = int(parts[1])
+                            if 0 <= idx < len(screen_state.ocr_results):
+                                text = screen_state.ocr_results[idx].get('text')
+                                if text:
+                                    return f"'{text}'"
+                    except Exception:
+                        pass
+                return str(tgt)
+            
+            # Extract screen context
+            screen_context = "Unknown"
+            if screen_state and hasattr(screen_state, 'activity_name') and screen_state.activity_name:
+                # Simplify activity name (remove package prefix if present)
+                activity = screen_state.activity_name
+                if '.' in activity:
+                    activity = activity.split('.')[-1]
+                screen_context = activity
+            
+            # Build action description and extract reasoning
+            action_desc = None
+            reasoning = None
+            
+            # Handle ActionBatch format (list of actions)
+            if "actions" in action_data and isinstance(action_data["actions"], list) and action_data["actions"]:
+                count = len(action_data["actions"])
+                first = action_data["actions"][0]
+                
+                # Prefer AI's action_desc if provided
+                action_desc = first.get("action_desc")
+                reasoning = first.get("reasoning")
+                
+                # Fall back to system-generated description
+                if not action_desc:
+                    op = first.get("action", "unknown")
+                    raw_target = first.get("target_identifier") or first.get("input_text") or ""
+                    target = resolve_target(raw_target)
+                    # Truncate long targets
+                    if len(str(target)) > 25:
+                        target = str(target)[:22] + "..."
+                    
+                    if count > 1:
+                        action_desc = f"{op} {target} (+{count-1} more)"
+                    else:
+                        action_desc = f"{op} {target}"
+                        
+            # Handle legacy single action format
+            elif "action" in action_data:
+                action_desc = action_data.get("action_desc")
+                reasoning = action_data.get("reasoning")
+                
+                if not action_desc:
+                    op = action_data.get("action")
+                    raw_target = action_data.get("target_identifier") or action_data.get("input_text") or ""
+                    target = resolve_target(raw_target)
+                    if len(str(target)) > 25:
+                        target = str(target)[:22] + "..."
+                    action_desc = f"{op} {target}"
+            
+            # Build enhanced journal entry
+            entry = {
+                "step": self.step_count,
+                "screen": screen_context,
+                "action": action_desc.strip() if action_desc else "Unknown action",
+                "outcome": str(outcome) if outcome else "Completed"
+            }
+            
+            # Include reasoning if available (full text for complete context)
+            if reasoning:
+                entry["reasoning"] = str(reasoning)
+            
+            journal.append(entry)
+            
+            # Keep last 15 entries to limit context size
+            if len(journal) > 15:
+                journal = journal[-15:]
                  
-                 if count > 1:
-                     action_desc = f"{op} {target} (+{count-1} more)"
-                 else:
-                     action_desc = f"{op} {target}"
-             # Legacy single action format
-             elif "action" in action_data:
-                 op = action_data.get("action")
-                 raw_target = action_data.get("target_identifier") or action_data.get("input_text") or ""
-                 target = resolve_target(raw_target)
-                 start_trunc = str(target)[:20] + "..." if len(str(target)) > 20 else str(target)
-                 action_desc = f"{op} {start_trunc}"
-                 
-             entry = {
-                 "action": action_desc.strip(),
-                 "outcome": str(outcome) if outcome else "Completed"
-             }
-             
-             journal.append(entry)
-             
-             # Keep last 15 entries
-             if len(journal) > 15:
-                 journal = journal[-15:]
-                 
-             # Save
-             self.db_manager.update_exploration_journal(self.current_run_id, json.dumps(journal))
+            # Persist to database
+            self.db_manager.update_exploration_journal(self.current_run_id, json.dumps(journal))
              
         except Exception as e:
             logger.warning(f"Failed to update journal: {e}")

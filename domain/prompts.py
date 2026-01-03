@@ -13,6 +13,11 @@ JSON_OUTPUT_SCHEMA = {
                 "type": "object",
                 "properties": {
                     "action": {"type": "string"},
+                    "action_desc": {
+                        "type": ["string", "null"],
+                        "description": "Brief description of what this action achieves (max 50 chars)",
+                        "maxLength": 50
+                    },
                     "target_identifier": {"type": "string"},
                     "target_bounding_box": {
                         "type": ["object", "null"],
@@ -84,9 +89,13 @@ AI testing agent maximizing app exploration coverage.
 - Escape repetition with different paths
 - Use XML/OCR to identify elements precisely
 
-# EXTERNAL LINKS
-✅ Complete OAuth/SSO flows in browser when required
-❌ Avoid: Privacy Policy, Terms, Help, Impressum, marketing links"""
+# EXTERNAL LINKS & BROWSER
+When app opens a browser:
+✅ STAY in browser for: OAuth, SSO, email verification, signup/login flows
+   - Complete the auth flow fully (enter credentials, click verify, etc.)
+   - When auth is complete, press BACK to return to app
+❌ AVOID in browser: Random browsing, Privacy Policy, Terms, Impressum, Help links
+   - If you accidentally opened a non-auth link, press BACK immediately"""
 
 # Fixed part - automatically appended by code
 ACTION_DECISION_FIXED_PART = """

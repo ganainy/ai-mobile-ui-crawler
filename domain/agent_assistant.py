@@ -48,6 +48,7 @@ class Tools:
 class ActionData(BaseModel):
     """Single action data model."""
     action: str
+    action_desc: Optional[str] = None  # Brief description of what action achieves (max 50 chars)
     target_identifier: Optional[str] = None  # Optional for actions like scroll
     target_bounding_box: Optional[Dict[str, Any]] = None
     input_text: Optional[str] = None

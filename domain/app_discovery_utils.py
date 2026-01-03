@@ -63,12 +63,6 @@ def get_app_cache_path(
     
     Raises:
         OSError: If directory creation fails
-        
-    Examples:
-        >>> from config.app_config import Config
-        >>> cfg = Config()
-        >>> path = get_app_cache_path("emulator-5554", cfg)
-        >>> print(path)  # e.g., "/path/to/output_data/app_info/emulator-5554/..."
     """
     # Handle None device_id
     if not device_id:

@@ -15,6 +15,11 @@ from cli import run
 from config.app_config import Config
 
 def main():
+    # Start Appium server in separate terminal if not already running
+    from infrastructure.appium_server import ensure_appium_running
+    if not ensure_appium_running():
+        print("[Warning] Appium server failed to start. Please start it manually.")
+    
     # Check if running in crawler mode (via flag)
     # The crawler process is started with --crawler-run by the orchestrator
     crawler_mode = "--crawler-run" in sys.argv
@@ -71,7 +76,6 @@ def main():
             provider_enum = AIProvider.from_string(provider)
             config.set("AI_PROVIDER", provider_enum.value)
         except ValueError as e:
-            print(f"[ERROR] {e}")
             sys.exit(1)
 
     # Set model if given
