@@ -34,7 +34,8 @@ class ScreenRepresentation:
                  first_seen_run_id: Optional[int] = None,
                  first_seen_step_number: Optional[int] = None,
                  ocr_results: Optional[List[Dict[str, Any]]] = None,
-                 is_screenshot_blocked: bool = False):
+                 is_screenshot_blocked: bool = False,
+                 is_synthetic_screenshot: bool = False):
         self.id = screen_id
         self.composite_hash = composite_hash
         self.xml_hash = xml_hash
@@ -49,6 +50,7 @@ class ScreenRepresentation:
         self.ocr_results = ocr_results
         self.xml_root_for_mapping: Optional[Any] = None
         self.is_screenshot_blocked = is_screenshot_blocked
+        self.is_synthetic_screenshot = is_synthetic_screenshot
 
     def __repr__(self):
         ocr_count = len(self.ocr_results) if self.ocr_results else 0
@@ -146,8 +148,13 @@ class ScreenStateManager:
 
         self._next_screen_db_id_counter = max_db_id + 1
 
-
-    def _get_current_raw_state_from_driver(self) -> Optional[Tuple[bytes, str, str, str, Optional[List[Dict]]]]:
+    def _get_current_raw_state_from_driver(self) -> Optional[Tuple[Optional[bytes], str, str, str, Optional[List[Dict]], bool]]:
+        """Get current raw state from driver. Returns None only on critical errors.
+        
+        Returns:
+            Tuple of (screenshot_bytes, page_source, package, activity, ocr_results, is_synthetic)
+            screenshot_bytes may be None if FLAG_SECURE blocks screenshots (XML-only mode)
+        """
         stability_wait = float(self.cfg.STABILITY_WAIT) # type: ignore
         if stability_wait > 0: time.sleep(stability_wait)
         try:
@@ -170,14 +177,40 @@ class ScreenStateManager:
             current_package = self.driver.get_current_package() or "UnknownPackage"
             current_activity = self.driver.get_current_activity() or "UnknownActivity"
             
-            # Always run OCR since HYBRID (XML+OCR) is always enabled
-            # Now runs on already-resized image for better performance
+            # Only run OCR if we have a screenshot
             ocr_results = None
             if screenshot_bytes:
                 ocr_results = self.ocr_service.extract_text_from_bytes(screenshot_bytes)
 
-            if not screenshot_bytes: logging.error("Failed to get screenshot (None)."); return None
-            return screenshot_bytes, page_source, current_package, current_activity, ocr_results
+            # Check if screenshot was blocked by FLAG_SECURE
+            is_blocked = getattr(self.driver, '_last_screenshot_was_blocked', False)
+            is_synthetic = False
+            
+            if not screenshot_bytes:
+                if is_blocked:
+                    logging.warning("Screenshot blocked by FLAG_SECURE - generating XML-based screenshot")
+                    # Generate synthetic screenshot from XML
+                    try:
+                        from infrastructure.xml_screenshot_generator import generate_screenshot_from_xml
+                        screenshot_bytes = generate_screenshot_from_xml(page_source)
+                        if screenshot_bytes:
+                            logging.info("Generated synthetic screenshot from XML layout")
+                            # We keep is_blocked as True in principle, but we provide a synthetic image
+                            # Clear the driver flag so UI doesn't show blocked message
+                            self.driver._last_screenshot_was_blocked = False
+                            is_synthetic = True
+                    except Exception as e:
+                        logging.warning(f"Could not generate XML screenshot: {e}")
+                else:
+                    logging.error("Failed to get screenshot (None) - continuing with XML-only mode")
+            
+            # Continue even without screenshot - XML-only fallback mode
+            # Only return None if we also can't get the page_source
+            if not page_source:
+                logging.error("Failed to get page source - cannot continue")
+                return None
+                
+            return screenshot_bytes, page_source, current_package, current_activity, ocr_results, is_synthetic
         except Exception as e:
             logging.error(f"Exception getting current raw state from driver: {e}", exc_info=True)
             return None
@@ -189,26 +222,34 @@ class ScreenStateManager:
         raw_state = self._get_current_raw_state_from_driver()
         if not raw_state: return None
 
-        screenshot_bytes, xml_str, pkg, act, ocr_results = raw_state
+        screenshot_bytes, xml_str, pkg, act, ocr_results, is_synthetic = raw_state
         xml_hash = utils.calculate_xml_hash(xml_str)
-        visual_hash = utils.calculate_visual_hash(screenshot_bytes)
+        
+        # Handle case where screenshot is blocked (FLAG_SECURE or other error)
+        if screenshot_bytes:
+            visual_hash = utils.calculate_visual_hash(screenshot_bytes)
+            ss_filename = f"screen_run{run_id}_step{step_number}_{visual_hash[:8]}.jpg"
+            ss_path = os.path.join(str(self.cfg.SCREENSHOTS_DIR), ss_filename)
+            os.makedirs(str(self.cfg.SCREENSHOTS_DIR), exist_ok=True)
+        else:
+            # No screenshot available - use placeholder hash based on activity
+            visual_hash = "no_screenshot"
+            ss_path = None
+            
         composite_hash = self._get_composite_hash(xml_hash, visual_hash)
-
         temp_id = -step_number
-        # Use .jpg extension since screenshots are preprocessed as JPEG
-        ss_filename = f"screen_run{run_id}_step{step_number}_{visual_hash[:8]}.jpg"
-        ss_path = os.path.join(str(self.cfg.SCREENSHOTS_DIR), ss_filename)
-
-        os.makedirs(str(self.cfg.SCREENSHOTS_DIR), exist_ok=True)
         
         # Check if the screenshot was blocked by FLAG_SECURE
+        # Note: driver flag might be cleared if synthetic screenshot was generated,
+        # but is_synthetic tells us the truth.
         is_screenshot_blocked = getattr(self.driver, '_last_screenshot_was_blocked', False)
 
         return ScreenRepresentation(
             screen_id=temp_id, composite_hash=composite_hash, xml_hash=xml_hash, visual_hash=visual_hash,
             screenshot_path=ss_path, activity_name=act, xml_content=xml_str,
             screenshot_bytes=screenshot_bytes, first_seen_run_id=run_id, first_seen_step_number=step_number,
-            ocr_results=ocr_results, is_screenshot_blocked=is_screenshot_blocked
+            ocr_results=ocr_results, is_screenshot_blocked=is_screenshot_blocked,
+            is_synthetic_screenshot=is_synthetic
         )
 
     def process_and_record_state(self, candidate_screen: ScreenRepresentation, run_id: int, step_number: int, increment_visit_count: bool = True) -> Tuple[ScreenRepresentation, Dict[str, Any]]:
@@ -234,18 +275,20 @@ class ScreenStateManager:
                 is_new_discovery_for_system = True
                 candidate_screen.id = self._next_screen_db_id_counter
 
-                ss_filename = f"screen_{candidate_screen.id}_{candidate_screen.visual_hash[:8]}.jpg"
-                screenshots_dir = str(self.cfg.SCREENSHOTS_DIR)
-                candidate_screen.screenshot_path = os.path.join(screenshots_dir, ss_filename)
-
-                try:
-                    if candidate_screen.screenshot_bytes:
-                        # Ensure the screenshots directory exists
+                # Only save screenshot if we have the bytes (may be None in FLAG_SECURE mode)
+                if candidate_screen.screenshot_bytes:
+                    ss_filename = f"screen_{candidate_screen.id}_{candidate_screen.visual_hash[:8]}.jpg"
+                    screenshots_dir = str(self.cfg.SCREENSHOTS_DIR)
+                    candidate_screen.screenshot_path = os.path.join(screenshots_dir, ss_filename)
+                    try:
                         os.makedirs(screenshots_dir, exist_ok=True)
-                        with open(candidate_screen.screenshot_path, "wb") as f: f.write(candidate_screen.screenshot_bytes)
-                    else: raise IOError("Screenshot bytes missing for new screen.")
-                except Exception as e:
-                    logging.error(f"Failed to save screenshot {candidate_screen.screenshot_path}: {e}", exc_info=True)
+                        with open(candidate_screen.screenshot_path, "wb") as f: 
+                            f.write(candidate_screen.screenshot_bytes)
+                    except Exception as e:
+                        logging.error(f"Failed to save screenshot {candidate_screen.screenshot_path}: {e}")
+                        candidate_screen.screenshot_path = None
+                else:
+                    # XML-only mode (FLAG_SECURE) - no screenshot to save
                     candidate_screen.screenshot_path = None
 
                 db_id = self.db_manager.insert_screen(

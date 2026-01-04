@@ -559,10 +559,13 @@ class CrawlerControllerWindow(QMainWindow):
         # Add AI Trace to left of top area
         top_area_layout.addWidget(ai_trace_group, 3)  # AI Trace takes 3/4
 
-        # Right side: Screenshot (compact)
+        # Right side: Screenshot (compact, clickable for zoom)
         screenshot_group = QGroupBox("Current Screenshot")
         screenshot_layout = QVBoxLayout(screenshot_group)
-        self.screenshot_label = QLabel()
+        
+        # Use clickable label for zoom functionality
+        from ui.screenshot_zoom import ClickableScreenshotLabel, show_screenshot_zoom
+        self.screenshot_label = ClickableScreenshotLabel()
         self.screenshot_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.screenshot_label.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
@@ -574,6 +577,8 @@ class CrawlerControllerWindow(QMainWindow):
             border: 1px solid #555555;
             background-color: #2a2a2a;
         """)
+        # Connect click to zoom dialog
+        self.screenshot_label.clicked.connect(self._on_screenshot_clicked)
         screenshot_layout.addWidget(self.screenshot_label)
         
         # Add screenshot to right of top area
@@ -1307,12 +1312,29 @@ class CrawlerControllerWindow(QMainWindow):
         try:
             if self.screenshot_label and hasattr(self.screenshot_label, "setPixmap"):
                 update_screenshot(self.screenshot_label, file_path, is_blocked=is_blocked)
+                # Store path for zoom functionality
+                if hasattr(self.screenshot_label, 'set_screenshot_path'):
+                    self.screenshot_label.set_screenshot_path(file_path if not is_blocked else None)
             else:
                 logging.warning(
                     f"Screenshot label not properly initialized for update from: {file_path}"
                 )
         except Exception as e:
             logging.error(f"Error updating screenshot: {e}")
+
+    def _on_screenshot_clicked(self):
+        """Handle click on screenshot to open zoom dialog."""
+        try:
+            if hasattr(self.screenshot_label, 'get_screenshot_path'):
+                file_path = self.screenshot_label.get_screenshot_path()
+                if file_path and os.path.exists(file_path):
+                    from ui.screenshot_zoom import show_screenshot_zoom
+                    show_screenshot_zoom(file_path, self)
+                else:
+                    self.log_message("No screenshot available to zoom", "orange")
+        except Exception as e:
+            logging.error(f"Error opening screenshot zoom: {e}")
+
 
     def closeEvent(self, event):
         """Handle the window close event."""

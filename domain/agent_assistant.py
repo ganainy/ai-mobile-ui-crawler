@@ -428,7 +428,8 @@ class AgentAssistant:
                                    is_stuck: bool = False,
                                    stuck_reason: Optional[str] = None,
                                    ocr_results: Optional[List[Dict[str, Any]]] = None,
-                                   exploration_journal: Optional[List[Dict[str, str]]] = None) -> Optional[Tuple[Dict[str, Any], float, int, Optional[str], Optional[List[Dict[str, str]]]]]:
+                                   exploration_journal: Optional[List[Dict[str, str]]] = None,
+                                   is_synthetic_screenshot: bool = False) -> Optional[Tuple[Dict[str, Any], float, int, Optional[str], Optional[List[Dict[str, str]]]]]:
         """Get the next action using LangChain decision chain.
         
         Args:
@@ -445,6 +446,7 @@ class AgentAssistant:
             stuck_reason: Reason why the crawler is considered stuck
             ocr_results: List of OCR detected elements (text, bounds, confidence)
             exploration_journal: AI-maintained exploration journal (replaces action_history, visited_screens, current_screen_actions)
+            is_synthetic_screenshot: Whether the provided screenshot_bytes are generated from XML (FLAG_SECURE mode)
             
         Returns:
             Tuple of (action_data dict, confidence float, token_count int, ai_input_prompt str) or None on error
@@ -470,6 +472,7 @@ class AgentAssistant:
                 "is_stuck": is_stuck,
                 "stuck_reason": stuck_reason or "",
                 "app_package": self.cfg.get("APP_PACKAGE") or "",  # For credential store lookup
+                "is_synthetic_screenshot": is_synthetic_screenshot,  # New flag for prompt builder
             }
 
             # Extract actual XML string and simplify it before sending to AI

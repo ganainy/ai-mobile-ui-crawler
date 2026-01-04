@@ -73,9 +73,9 @@ class AppiumHelper:
     
     def __init__(
         self,
-        max_retries: int = 3,
+        max_retries: int = 2,  # Matches APPIUM_MAX_RETRIES in config
         retry_delay: float = 1.0,
-        implicit_wait: int = 5000
+        implicit_wait: int = 3000  # Matches APPIUM_IMPLICIT_WAIT in config
     ):
         """
         Initialize AppiumHelper.
@@ -214,17 +214,17 @@ class AppiumHelper:
         self,
         selector: str,
         strategy: LocatorStrategy = 'id',
-        timeout_ms: int = 10000
+        timeout_ms: int = 5000
     ) -> WebElement:
-        """Find element (delegated)."""
-        def _find():
-            return self.element_finder.find_element(
-                selector, strategy, timeout_ms, self.implicit_wait, 
-                self._get_current_platform() or 'android'
-            )
-        return self.safe_execute(_find, f'Find element with {strategy}: {selector}')
+        """Find element (delegated). No retries here - let caller handle retries."""
+        if not self.driver:
+            raise SessionNotFoundError('No active Appium session')
         
-        return self.safe_execute(_find, f'Find element with {strategy}: {selector}')
+        # Direct call without retry wrapper - avoids nested retries
+        return self.element_finder.find_element(
+            selector, strategy, timeout_ms, self.implicit_wait, 
+            self._get_current_platform() or 'android'
+        )
     
     def find_elements(
         self,

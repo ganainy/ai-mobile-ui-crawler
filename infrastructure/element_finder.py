@@ -79,7 +79,7 @@ class ElementFinder:
         try:
             # Temporarily reduce implicit wait for faster attempts
             original_timeout = self._current_implicit_wait or (implicit_wait_ms / 1000.0)
-            reduced_implicit_wait = 1.0  # Lower implicit wait for faster failure detection
+            reduced_implicit_wait = 0.5  # Very low implicit wait for fast failure detection
             
             if abs(original_timeout - reduced_implicit_wait) > 0.1:
                 self.driver.implicitly_wait(reduced_implicit_wait)
@@ -94,24 +94,25 @@ class ElementFinder:
                         uiautomator_selector = f'new UiSelector().resourceId("{selector}")'
                         element = self.driver.find_element(AppiumBy.ANDROID_UIAUTOMATOR, uiautomator_selector)
                         if element.is_displayed():
-                            strategy_duration = (time.time() - strategy_start) * 1000
-                            total_duration = (time.time() - start_time) * 1000
                             return element
                     except (NoSuchElementException, TimeoutException) as e:
                         strategy_duration = (time.time() - strategy_start) * 1000
                         last_error = e
+                        # Fast-fail: if UIAutomator didn't find it in <500ms, element likely doesn't exist
+                        # Skip expensive fallback strategies to fail faster
+                        if strategy_duration < 600:
+                            raise ElementNotFoundError(f'Element not found (fast-fail): {selector}') from e
                     
-                    # Fallback 1: Standard ID with explicit wait
+                    # Fallback 1: Standard ID with explicit wait (reduced timeout)
                     by, value = self.get_locator(selector, strategy)
-                    explicit_timeout = min(timeout_ms / 1000.0, 3.0)
+                    explicit_timeout = min(timeout_ms / 1000.0, 1.0)  # Reduced from 3s to 1s
                     fallback_start = time.time()
                     try:
                         wait = WebDriverWait(self.driver, explicit_timeout)
                         element = wait.until(EC.visibility_of_element_located((by, value)))
-                        fallback_duration = (time.time() - fallback_start) * 1000
                         return element
                     except (NoSuchElementException, TimeoutException) as e:
-                        fallback_duration = (time.time() - fallback_start) * 1000
+                        pass  # Try next fallback
                     
                     # Fallback 2: Accessibility ID
                     fallback_start = time.time()
@@ -153,13 +154,10 @@ class ElementFinder:
                 else:
                     # For non-Android or non-ID strategies, use standard approach
                     by, value = self.get_locator(selector, strategy)
-                    explicit_timeout = min(timeout_ms / 1000.0, 5.0)
+                    explicit_timeout = min(timeout_ms / 1000.0, 2.0)  # Reduced from 5s to 2s
                     
-                    strategy_start = time.time()
                     wait = WebDriverWait(self.driver, explicit_timeout)
                     element = wait.until(EC.visibility_of_element_located((by, value)))
-                    
-                    strategy_duration = (time.time() - strategy_start) * 1000
                     return element
             finally:
                 # Restore original timeout

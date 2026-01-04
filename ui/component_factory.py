@@ -401,38 +401,8 @@ class ComponentFactory:
             label_max_crawl_duration, config_widgets["MAX_CRAWL_DURATION_SECONDS"]
         )
 
-        config_widgets["WAIT_AFTER_ACTION"] = QSpinBox()
-        config_widgets["WAIT_AFTER_ACTION"].setRange(0, 60)
-        label_wait_after_action = QLabel("Wait After Action (s): ")
-        label_wait_after_action.setToolTip(tooltips["WAIT_AFTER_ACTION"])
-        crawler_layout.addRow(
-            label_wait_after_action, config_widgets["WAIT_AFTER_ACTION"]
-        )
-
-        config_widgets["STABILITY_WAIT"] = QSpinBox()
-        config_widgets["STABILITY_WAIT"].setRange(0, 60)
-        label_stability_wait = QLabel("Stability Wait (s): ")
-        label_stability_wait.setToolTip(tooltips["STABILITY_WAIT"])
-        crawler_layout.addRow(label_stability_wait, config_widgets["STABILITY_WAIT"])
-
-        from config.numeric_constants import APP_LAUNCH_WAIT_TIME_MIN, APP_LAUNCH_WAIT_TIME_MAX
-        config_widgets["APP_LAUNCH_WAIT_TIME"] = QSpinBox()
-        config_widgets["APP_LAUNCH_WAIT_TIME"].setRange(APP_LAUNCH_WAIT_TIME_MIN, APP_LAUNCH_WAIT_TIME_MAX)
-        label_app_launch_wait_time = QLabel("App Launch Wait Time (s): ")
-        label_app_launch_wait_time.setToolTip(tooltips["APP_LAUNCH_WAIT_TIME"])
-        crawler_layout.addRow(
-            label_app_launch_wait_time, config_widgets["APP_LAUNCH_WAIT_TIME"]
-        )
-
-        # Visual Similarity Threshold
-        from config.numeric_constants import VISUAL_SIMILARITY_THRESHOLD_MIN, VISUAL_SIMILARITY_THRESHOLD_MAX
-        config_widgets["VISUAL_SIMILARITY_THRESHOLD"] = QSpinBox()
-        config_widgets["VISUAL_SIMILARITY_THRESHOLD"].setRange(VISUAL_SIMILARITY_THRESHOLD_MIN, VISUAL_SIMILARITY_THRESHOLD_MAX)
-        label_visual_similarity = QLabel("Visual Similarity Threshold: ")
-        label_visual_similarity.setToolTip(tooltips["VISUAL_SIMILARITY_THRESHOLD"])
-        crawler_layout.addRow(
-            label_visual_similarity, config_widgets["VISUAL_SIMILARITY_THRESHOLD"]
-        )
+        # Note: WAIT_AFTER_ACTION, STABILITY_WAIT, APP_LAUNCH_WAIT_TIME, 
+        # VISUAL_SIMILARITY_THRESHOLD are configured via CLI/code only
 
         # Allowed External Packages - Use dedicated widget with CRUD support
         from ui.allowed_packages_widget import AllowedPackagesWidget

@@ -174,6 +174,15 @@ class PromptBuilder:
         # --- DYNAMIC PART GENERATION ---
         dynamic_parts = []
         dynamic_parts.append("\n=== CURRENT STATE ===")
+
+        # Visual Context Warning for Synthetic Screenshots
+        if context.get("is_synthetic_screenshot"):
+            dynamic_parts.append("""
+**VISUAL CONTEXT (WIRE ME)**:
+The image provided is a SYNTHETIC WIREFRAME generated from XML (real screenshots are blocked).
+- Trust the labels and bounding boxes shown.
+- Used for spatial reasoning only.
+""")
         
         # Screen Visit Count
         if context.get("current_screen_visit_count"):

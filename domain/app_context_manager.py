@@ -52,13 +52,10 @@ class AppContextManager:
 
         self.consecutive_context_failures: int = 0
 
-
     def reset_context_failures(self):
         """Resets the consecutive context failure counter."""
         if self.consecutive_context_failures > 0: # Only log if there were failures
             self.consecutive_context_failures = 0
-    
-
         
     def launch_and_verify_app(self) -> bool:
         """Launches the target application (defined in self.cfg) and verifies it is active."""

@@ -823,8 +823,8 @@ AUTO_HIDE_KEYBOARD_BEFORE_NON_INPUT = (
 )
 
 # Appium performance settings
-APPIUM_IMPLICIT_WAIT = 5000  # Implicit wait timeout in milliseconds (reduced from 10000 for faster element finding)
-APPIUM_MAX_RETRIES = 3  # Maximum retry attempts for Appium operations
+APPIUM_IMPLICIT_WAIT = 3000  # Implicit wait timeout in milliseconds (reduced for faster element finding)
+APPIUM_MAX_RETRIES = 2  # Maximum retry attempts for Appium operations (reduced for faster failure)
 APPIUM_RETRY_DELAY = 1.0  # Delay between retries in seconds
 APPIUM_WAIT_FOR_IDLE_TIMEOUT = 0  # Disable idle waiting for faster element finding
 APPIUM_SNAPSHOT_MAX_DEPTH = 25  # Limit XML tree depth to reduce scanning overhead
