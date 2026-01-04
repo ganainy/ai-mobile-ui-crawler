@@ -277,24 +277,25 @@ class ComponentFactory:
         return ai_group
 
     @staticmethod
-    def create_image_preprocessing_group(
+    def create_ai_input_group(
         layout: QFormLayout,
         config_widgets: Dict[str, Any],
         tooltips: Dict[str, str],
     ) -> QWidget:
-        """Create the Image Preprocessing settings group."""
+        """Create the AI Input settings group"""
         from PySide6.QtWidgets import QHBoxLayout
         from ui.strings import IMAGE_CONTEXT_ENABLED_TOOLTIP
         
-        group = CollapsibleBox("Image Preprocessing")
+        group = CollapsibleBox("AI Input")
         form = QFormLayout()
         group.content_layout.addLayout(form)
 
-        # Context Sources - HYBRID (XML+OCR) is always enabled, IMAGE is optional
-        # Info label about HYBRID
-        hybrid_info = QLabel("XML + OCR context always enabled")
-        hybrid_info.setToolTip("HYBRID context provides both element hierarchy (XML) and visible text (OCR) for reliable element targeting.")
-        hybrid_info.setStyleSheet("color: #888; font-style: italic;")
+        # Context Sources - XML and OCR are always enabled (disabled checkboxes), IMAGE is optional
+        # Row 1: XML (always enabled) - disabled checkbox
+        xml_checkbox = QCheckBox("XML Context")
+        xml_checkbox.setChecked(True)
+        xml_checkbox.setEnabled(False)  # Not editable
+        xml_checkbox.setToolTip("XML element hierarchy is always sent to the AI for reliable element targeting.")
         
         # XML Snippet Length (still configurable)
         from config.numeric_constants import XML_SNIPPET_MAX_LEN_MIN, XML_SNIPPET_MAX_LEN_MAX
@@ -303,38 +304,59 @@ class ComponentFactory:
         config_widgets["XML_SNIPPET_MAX_LEN"].setToolTip(tooltips.get("XML_SNIPPET_MAX_LEN", "Max characters for XML snippet"))
         config_widgets["XML_SNIPPET_MAX_LEN"].setFixedWidth(80)
         
-        label_xml_len = QLabel("XML Max Len:")
+        label_xml_len = QLabel("Max Len:")
         label_xml_len.setToolTip(tooltips.get("XML_SNIPPET_MAX_LEN", "Max characters for XML snippet"))
         
-        # Image Source - optional toggle
-        config_widgets["CONTEXT_SOURCE_IMAGE"] = QCheckBox("Enable Image Context")
+        # OCR (always enabled) - disabled checkbox with FLAG_SECURE hint
+        ocr_checkbox = QCheckBox("OCR Context")
+        ocr_checkbox.setChecked(True)
+        ocr_checkbox.setEnabled(False)  # Not editable
+        ocr_checkbox.setToolTip("OCR text extraction is always enabled when screenshots are available.")
+        
+        ocr_hint = QLabel("(skipped if FLAG_SECURE blocks screenshots)")
+        ocr_hint.setStyleSheet("color: #888; font-style: italic; font-size: 9pt;")
+        ocr_hint.setToolTip("Some apps use FLAG_SECURE to block screenshots. When blocked, OCR cannot extract text and is automatically skipped.")
+        
+        # Image Source - optional toggle (user can change this)
+        config_widgets["CONTEXT_SOURCE_IMAGE"] = QCheckBox("Image Context")
         config_widgets["CONTEXT_SOURCE_IMAGE"].setToolTip("Include screenshots in the AI context (for vision-capable models like Gemini Pro Vision).")
 
         # Warning label (always shown with fixed message)
-        config_widgets["IMAGE_CONTEXT_WARNING"] = QLabel("⚠️ No images will be sent if selected model doesn't support images")
+        config_widgets["IMAGE_CONTEXT_WARNING"] = QLabel("No images sent if model doesn't support vision")
         config_widgets["IMAGE_CONTEXT_WARNING"].setStyleSheet(
-            "color: #ff6b35; font-weight: bold; font-size: 9pt;"
+            "color: #ff6b35; font-size: 9pt;"
         )
         config_widgets["IMAGE_CONTEXT_WARNING"].setToolTip(
             "The checkbox can be enabled, but images will only be sent if your selected AI model supports vision/image inputs."
         )
         config_widgets["IMAGE_CONTEXT_WARNING"].setVisible(True)  # Always visible
 
-        # Layout
-        context_row1 = QHBoxLayout()
-        context_row1.addWidget(hybrid_info)
-        context_row1.addSpacing(20)
-        context_row1.addWidget(label_xml_len)
-        context_row1.addWidget(config_widgets["XML_SNIPPET_MAX_LEN"])
-        context_row1.addStretch()
+        # Layout - Each element on its own row for clarity
+        # Row 1: XML checkbox with Max Len on same row
+        row_xml = QHBoxLayout()
+        row_xml.addWidget(xml_checkbox)
+        row_xml.addSpacing(20)
+        row_xml.addWidget(label_xml_len)
+        row_xml.addWidget(config_widgets["XML_SNIPPET_MAX_LEN"])
+        row_xml.addStretch()
+
+        # Row 2: OCR checkbox with FLAG_SECURE hint
+        row_ocr = QHBoxLayout()
+        row_ocr.addWidget(ocr_checkbox)
+        row_ocr.addSpacing(10)
+        row_ocr.addWidget(ocr_hint)
+        row_ocr.addStretch()
         
-        context_row2 = QHBoxLayout()
-        context_row2.addWidget(config_widgets["CONTEXT_SOURCE_IMAGE"])
-        context_row2.addWidget(config_widgets["IMAGE_CONTEXT_WARNING"])
-        context_row2.addStretch()
+        # Row 3: Image context toggle with warning
+        row_image = QHBoxLayout()
+        row_image.addWidget(config_widgets["CONTEXT_SOURCE_IMAGE"])
+        row_image.addSpacing(10)
+        row_image.addWidget(config_widgets["IMAGE_CONTEXT_WARNING"])
+        row_image.addStretch()
         
-        form.addRow(context_row1)
-        form.addRow(context_row2)
+        form.addRow(row_xml)
+        form.addRow(row_ocr)
+        form.addRow(row_image)
 
         # Store references to preprocessing option widgets and labels for visibility control
         preprocessing_widgets = []

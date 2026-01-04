@@ -217,11 +217,11 @@ class CrawlerControllerWindow(QMainWindow):
         )
         ai_group.setObjectName("ai_settings_group")
 
-        # Image Preprocessing placed directly after AI for clearer perception grouping
-        image_prep_group = ComponentFactory.create_image_preprocessing_group(
+        # AI Input section (context sources for AI - XML, OCR, Image)
+        ai_input_group = ComponentFactory.create_ai_input_group(
             scroll_layout, self.config_widgets, self.tooltips
         )
-        image_prep_group.setObjectName("image_preprocessing_group")
+        ai_input_group.setObjectName("ai_input_group")
 
         crawler_group = ComponentFactory.create_crawler_settings_group(
             scroll_layout, self.config_widgets, self.tooltips
@@ -255,7 +255,7 @@ class CrawlerControllerWindow(QMainWindow):
             "appium_settings_group": appium_group,
             "app_settings_group": app_group,
             "ai_settings_group": ai_group,
-            "image_preprocessing_group": image_prep_group,
+            "ai_input_group": ai_input_group,
             "crawler_settings_group": crawler_group,
             "privacy_network_group": privacy_network_group,
             "mobsf_settings_group": mobsf_group,
@@ -346,17 +346,26 @@ class CrawlerControllerWindow(QMainWindow):
         right_panel = QWidget()
         right_main_layout = QVBoxLayout(right_panel)
 
-        # Step counter and status at the top (small header)
-        # Step counter and status at the top (small header)
+        # Step counter, timer, and status at the top (small header)
         header_layout = QHBoxLayout()
         
         self.step_label = QLabel("Step: 0")
+        self.timer_label = QLabel("⏱️ 00:00:00")
+        self.timer_label.setStyleSheet("color: #4CAF50; font-weight: bold; font-size: 12px;")
+        self.timer_label.setToolTip("Session elapsed time (starts when crawling begins)")
         self.status_label = QLabel("Status: Idle")
         self.progress_bar = QProgressBar()
         header_layout.addWidget(self.step_label)
+        header_layout.addWidget(self.timer_label)
         header_layout.addWidget(self.status_label)
         header_layout.addWidget(self.progress_bar)
         right_main_layout.addLayout(header_layout)
+        
+        # Initialize session timer
+        self._session_elapsed_seconds = 0
+        self._session_timer = QTimer(self)
+        self._session_timer.setInterval(1000)  # 1 second intervals
+        self._session_timer.timeout.connect(self._update_session_timer)
 
         # Main content area: Logs on left (2/3), Screenshot + Action History stacked on right (1/3)
         content_layout = QHBoxLayout()
@@ -570,9 +579,9 @@ class CrawlerControllerWindow(QMainWindow):
         self.screenshot_label.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
         )
-        self.screenshot_label.setMinimumHeight(200)  # Reduced from 300
-        # No max height - allow screenshot to fill available container space
-        self.screenshot_label.setMinimumWidth(200)   # Reduced from 300
+        self.screenshot_label.setMinimumHeight(150)  # Compact height
+        self.screenshot_label.setMaximumHeight(350)  # Limit max height
+        self.screenshot_label.setMinimumWidth(150)   # Compact width
         self.screenshot_label.setStyleSheet("""
             border: 1px solid #555555;
             background-color: #2a2a2a;
@@ -1464,10 +1473,52 @@ class CrawlerControllerWindow(QMainWindow):
             if self.crawler_manager.pause_crawler():
                 self.pause_resume_btn.setText("▶️ Resume")
                 self.log_message("Pausing crawler...", "yellow")
+                # Pause the session timer
+                self._pause_session_timer()
         else:
             if self.crawler_manager.resume_crawler():
                 self.pause_resume_btn.setText("⏸️ Pause")
                 self.log_message("Resuming crawler...", "green")
+                # Resume the session timer
+                self._resume_session_timer()
+
+    def _update_session_timer(self):
+        """Update the session timer display (called every second)."""
+        self._session_elapsed_seconds += 1
+        hours = self._session_elapsed_seconds // 3600
+        minutes = (self._session_elapsed_seconds % 3600) // 60
+        seconds = self._session_elapsed_seconds % 60
+        self.timer_label.setText(f"⏱️ {hours:02d}:{minutes:02d}:{seconds:02d}")
+    
+    def _start_session_timer(self):
+        """Start the session timer (called when crawler starts)."""
+        self._session_elapsed_seconds = 0
+        self.timer_label.setText("⏱️ 00:00:00")
+        self.timer_label.setStyleSheet("color: #4CAF50; font-weight: bold; font-size: 12px;")
+        self._session_timer.start()
+    
+    def _stop_session_timer(self):
+        """Stop the session timer (called when crawler stops)."""
+        self._session_timer.stop()
+        # Change color to indicate stopped
+        self.timer_label.setStyleSheet("color: #888888; font-weight: bold; font-size: 12px;")
+    
+    def _pause_session_timer(self):
+        """Pause the session timer (called when crawler is paused)."""
+        self._session_timer.stop()
+        # Change color to yellow to indicate paused
+        self.timer_label.setStyleSheet("color: #FFC107; font-weight: bold; font-size: 12px;")
+    
+    def _resume_session_timer(self):
+        """Resume the session timer (called when crawler is resumed)."""
+        self.timer_label.setStyleSheet("color: #4CAF50; font-weight: bold; font-size: 12px;")
+        self._session_timer.start()
+    
+    def _reset_session_timer(self):
+        """Reset the session timer display."""
+        self._session_elapsed_seconds = 0
+        self.timer_label.setText("⏱️ 00:00:00")
+        self.timer_label.setStyleSheet("color: #4CAF50; font-weight: bold; font-size: 12px;")
 
 
 if __name__ == "__main__":

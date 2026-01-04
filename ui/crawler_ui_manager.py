@@ -433,11 +433,12 @@ class CrawlerManager(QObject):
             # Update UI
             self.main_controller.step_label.setText("Step: 0")
             # Action history clear removed
-            # Update UI
-            self.main_controller.step_label.setText("Step: 0")
-            # Action history clear removed
             self.main_controller.status_label.setText("Status: Starting...")
             self.main_controller.progress_bar.setValue(0)
+            
+            # Start the session timer
+            if hasattr(self.main_controller, '_start_session_timer'):
+                self.main_controller._start_session_timer()
             
             if hasattr(self.main_controller, 'start_stop_btn'):
                 self.main_controller.start_stop_btn.setText("Stop Crawler")
@@ -649,6 +650,10 @@ class CrawlerManager(QObject):
             self.main_controller.pause_resume_btn.setEnabled(False)
         if hasattr(self.main_controller, 'next_step_btn'):
             self.main_controller.next_step_btn.setEnabled(False)
+        
+        # Stop the session timer
+        if hasattr(self.main_controller, '_stop_session_timer'):
+            self.main_controller._stop_session_timer()
 
         # Auto-show settings panel on finish/stop
         if hasattr(self.main_controller, 'left_panel') and hasattr(self.main_controller, 'toggle_settings_btn'):
@@ -733,10 +738,10 @@ class CrawlerManager(QObject):
             self.main_controller.pause_resume_btn.setEnabled(False)
         if hasattr(self.main_controller, 'next_step_btn'):
             self.main_controller.next_step_btn.setEnabled(False)
-        try:
-            pass
-        except Exception:
-            pass
+        
+        # Stop the session timer
+        if hasattr(self.main_controller, '_stop_session_timer'):
+            self.main_controller._stop_session_timer()
     
     @Slot()
     def read_stdout(self) -> None:
