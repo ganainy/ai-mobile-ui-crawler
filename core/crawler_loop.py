@@ -324,9 +324,13 @@ class CrawlerLoop:
             self.listener.on_error(str(e))
             return False
 
-    def run(self, max_steps: Optional[int] = None):
+    def run(self, max_steps: Optional[int] = None, max_duration_seconds: Optional[int] = None):
         """
         Execute the main crawler loop.
+        
+        Args:
+            max_steps: Maximum number of steps to execute (for step-based crawl mode)
+            max_duration_seconds: Maximum duration in seconds (for time-based crawl mode)
         """
         if self.state != CrawlerState.RUNNING:
             logger.warning(f"Run called but state is {self.state}, attempting re-init")
@@ -339,7 +343,12 @@ class CrawlerLoop:
             logger.info("Starting in STEP-BY-STEP mode")
             self.listener.on_status_change("Status: Starting in step-by-step mode")
 
-        logger.info(f"Starting crawl loop. Max steps: {max_steps}")
+        # Determine crawl mode
+        crawl_mode = self.config.get('CRAWL_MODE', 'steps')
+        if crawl_mode == 'time' and max_duration_seconds:
+            logger.info(f"Starting crawl loop. Mode: time, Duration: {max_duration_seconds}s")
+        else:
+            logger.info(f"Starting crawl loop. Mode: steps, Max steps: {max_steps}")
         self.listener.on_status_change("Crawler started")
         
         # Start background tasks
@@ -347,9 +356,21 @@ class CrawlerLoop:
         self._start_video_recording()
         self._update_run_status(RunStatus.RUNNING)
         
+        # Track start time for time-based crawl mode
+        crawl_start_time = time.time()
+        
         try:
             while True:
-                if max_steps and self.step_count >= max_steps:
+                # Check time-based termination condition
+                if crawl_mode == 'time' and max_duration_seconds:
+                    elapsed_time = time.time() - crawl_start_time
+                    if elapsed_time >= max_duration_seconds:
+                        logger.info(f"Max duration reached: {max_duration_seconds}s (elapsed: {elapsed_time:.1f}s)")
+                        self._update_run_status(RunStatus.COMPLETED)
+                        self.listener.on_status_change(f"Max duration reached ({max_duration_seconds}s)")
+                        break
+                # Check step-based termination condition (only for step mode)
+                elif crawl_mode == 'steps' and max_steps and self.step_count >= max_steps:
                     logger.info(f"Max steps reached: {max_steps}")
                     self._update_run_status(RunStatus.COMPLETED)
                     self.listener.on_status_change("Max steps reached")
@@ -572,12 +593,6 @@ class CrawlerLoop:
             return False # Return False to skip rest of step but continue loop (via run_step returns True logic)
             # Actually run_step logic says "if not verify: return True" -> yes, skip rest of step
             
-        browser_feedback = self.app_context_manager.get_and_clear_browser_escape_feedback()
-        if browser_feedback:
-            if self.last_action_feedback:
-                self.last_action_feedback = f"{browser_feedback} | {self.last_action_feedback}"
-            else:
-                self.last_action_feedback = browser_feedback
         return True
 
     def _capture_and_record_screen(self) -> Optional[Any]:
@@ -589,7 +604,7 @@ class CrawlerLoop:
             logger.error("Failed to get current screen state")
             return None
         
-        # Save screenshot for UI
+        # Save screenshot for UI (if available)
         if candidate_screen.screenshot_path and candidate_screen.screenshot_bytes:
             try:
                 os.makedirs(os.path.dirname(candidate_screen.screenshot_path), exist_ok=True)
@@ -602,6 +617,9 @@ class CrawlerLoop:
                 )
             except Exception as e:
                 logger.warning(f"Failed to save UI screenshot: {e}")
+        elif candidate_screen.is_screenshot_blocked:
+            # No screenshot but FLAG_SECURE is active - notify UI to show the blocked message
+            self.listener.on_screenshot_captured(None, True)
         
         # Record state
         final_screen, visit_info = self.screen_state_manager.process_and_record_state(
@@ -659,7 +677,8 @@ class CrawlerLoop:
             is_stuck=is_stuck,
             stuck_reason=stuck_reason if is_stuck else None,
             ocr_results=screen_state.ocr_results if screen_state else None,
-            exploration_journal=exploration_journal
+            exploration_journal=exploration_journal,
+            is_synthetic_screenshot=getattr(screen_state, 'is_synthetic_screenshot', False)
         )
         decision_time = time.time() - start_time
         
@@ -867,7 +886,9 @@ class CrawlerLoop:
         if self.video_recording_manager and self.video_recording_manager.is_recording():
             try:
                 logger.info("Stopping video recording")
-                if hasattr(self.video_recording_manager, 'stop_recording_and_pull'):
+                if hasattr(self.video_recording_manager, 'stop_recording_and_save'):
+                    video = self.video_recording_manager.stop_recording_and_save()
+                elif hasattr(self.video_recording_manager, 'stop_recording_and_pull'):
                     video = self.video_recording_manager.stop_recording_and_pull(self.current_run_id)
                 else:
                     video = asyncio.run(self.video_recording_manager.stop_recording_and_pull_async(self.current_run_id))
@@ -881,10 +902,6 @@ class CrawlerLoop:
             try:
                 end_time = None
                 if status in [RunStatus.COMPLETED, RunStatus.FAILED, RunStatus.INTERRUPTED]:
-                    end_time = datetime.now() if 'datetime' in globals() else 0 # Import datetime if needed, or use time.time()
-                    # Just use current time string format if DB expects it, or datetime object.
-                    # Original code used datetime.now().
-                    from datetime import datetime
                     end_time = datetime.now()
                 
                 self.db_manager.update_run_status(self.current_run_id, status, end_time)
@@ -989,14 +1006,23 @@ def run_crawler_loop(config: Optional[Config] = None):
             run_id=run_id
         )
         
-        # 7. Run
-        max_steps = config.get('MAX_CRAWL_STEPS')
-        if max_steps:
-            max_steps = int(max_steps)
+        # 7. Run based on crawl mode
+        crawl_mode = config.get('CRAWL_MODE', 'steps')
+        max_steps = None
+        max_duration_seconds = None
+        
+        if crawl_mode == 'time':
+            max_duration_seconds = config.get('MAX_CRAWL_DURATION_SECONDS')
+            if max_duration_seconds:
+                max_duration_seconds = int(max_duration_seconds)
+        else:
+            max_steps = config.get('MAX_CRAWL_STEPS')
+            if max_steps:
+                max_steps = int(max_steps)
             
         with crawler:
             if crawler.initialize():
-                crawler.run(max_steps=max_steps)
+                crawler.run(max_steps=max_steps, max_duration_seconds=max_duration_seconds)
             
     except KeyboardInterrupt:
         print("Interrupted by user", file=sys.stderr)
