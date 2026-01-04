@@ -19,15 +19,25 @@ class PackageConstants:
     
     # Default allowed external packages (can be extended via config)
     # Includes permission controller and common browsers for OAuth/signup flows
+    # Browsers are allowed so the crawler can interact with web content when needed
     DEFAULT_ALLOWED_EXTERNAL_PACKAGES = [
         "com.google.android.permissioncontroller",
-        # Common browsers for external auth (OAuth, signup, email verification)
+        # Common browsers - allowed for OAuth, signup, email verification flows
         "com.android.chrome",
         "com.google.android.browser",
         "org.mozilla.firefox",
         "com.microsoft.emmx",  # Edge
         "com.brave.browser",
         "com.sec.android.app.sbrowser",  # Samsung Browser
+        "com.duckduckgo.mobile.android",
+        "com.opera.browser",
+        "com.opera.mini.native",
+        "com.UCMobile.intl",  # UC Browser
+        "com.vivaldi.browser",
+        "org.chromium.chrome",
+        "com.kiwibrowser.browser",
+        # Google services (for OAuth flows)
+        "com.google.android.gms",
     ]
     
     # System package prefixes (used to identify system packages)

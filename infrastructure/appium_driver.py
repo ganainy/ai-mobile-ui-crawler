@@ -66,7 +66,7 @@ class AppiumDriver:
             # Create helper with config values
             max_retries = self.cfg.get('APPIUM_MAX_RETRIES', 2)  # Reduced from 3 for faster failures
             retry_delay = self.cfg.get('APPIUM_RETRY_DELAY', 1.0)
-            implicit_wait = self.cfg.get('APPIUM_IMPLICIT_WAIT', 5000)
+            implicit_wait = self.cfg.get('APPIUM_IMPLICIT_WAIT', 3000)
             
             self.helper = AppiumHelper(
                 max_retries=max_retries,
@@ -246,10 +246,14 @@ class AppiumDriver:
     def get_screenshot_as_base64(self) -> Optional[str]:
         """Get screenshot as base64 string."""
         if not self._ensure_helper():
+            logger.error("Screenshot failed: Helper not available")
             return None
         
         try:
             screenshot = self.helper.take_screenshot()
+            if not screenshot:
+                logger.warning("Screenshot returned empty/None")
+                return None
             # Screenshot is already base64 from Appium-Python-Client
             if screenshot.startswith("data:image"):
                 screenshot = screenshot.split(",", 1)[1]
@@ -258,10 +262,9 @@ class AppiumDriver:
         except Exception as e:
             error_msg = str(e).lower()
             if "secure" in error_msg:
-                logger.debug("Screenshot blocked by FLAG_SECURE, returning placeholder")
+                logger.warning("Screenshot blocked by FLAG_SECURE (app has secure flag)")
                 self._last_screenshot_was_blocked = True  # Mark screenshot as blocked
-                # Return 1x1 black pixel placeholder
-                return "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+                return None  
             
             logger.error(f"Error getting screenshot: {e}")
             self._last_screenshot_was_blocked = False  # Not blocked, just an error

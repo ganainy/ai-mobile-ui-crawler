@@ -51,24 +51,11 @@ class AppContextManager:
              raise ValueError("AppContextManager: APP_PACKAGE and APP_ACTIVITY cannot be empty in Config.")
 
         self.consecutive_context_failures: int = 0
-        self._last_browser_escape: Optional[str] = None  # Track last browser we escaped from
 
     def reset_context_failures(self):
         """Resets the consecutive context failure counter."""
         if self.consecutive_context_failures > 0: # Only log if there were failures
             self.consecutive_context_failures = 0
-    
-    def get_and_clear_browser_escape_feedback(self) -> Optional[str]:
-        """Get feedback message about browser escape, then clear it.
-        
-        Returns:
-            Feedback message if we escaped from a browser, None otherwise.
-        """
-        if self._last_browser_escape:
-            feedback = f"⚠️ Last action opened external browser ({self._last_browser_escape}). Auto-returned to app. AVOID clicking external links (Datenschutz, Impressum, Privacy, Terms, URLs)."
-            self._last_browser_escape = None
-            return feedback
-        return None
         
     def launch_and_verify_app(self) -> bool:
         """Launches the target application (defined in self.cfg) and verifies it is active."""
@@ -182,38 +169,8 @@ class AppContextManager:
         
         allowed_packages_set = set([target_package] + allowed_external_packages)
 
-        # ====== BROWSER DETECTION ======
-        # If we're in a known browser, immediately press back and return with feedback
-        # This handles external links gracefully without trying to crawl browser content
-        from config.package_constants import PackageConstants
-        if PackageConstants.is_browser_package(current_package):
-            self.logger.info(f"🌐 External browser detected ({current_package}). Auto-returning to app...")
-            
-            # Press back to return from browser
-            self.driver.press_back_button()
-            time.sleep(float(self.cfg.get('WAIT_AFTER_ACTION')) / 2)
-            
-            # Check if we're back in app
-            context_after_back = self.driver.get_current_app_context()
-            if context_after_back and context_after_back[0] in allowed_packages_set:
-                self.logger.info(f"✅ Successfully returned from browser to {context_after_back[0]}")
-                # Store feedback for AI about the external link
-                self._last_browser_escape = current_package
-                self.consecutive_context_failures = 0
-                return True
-            else:
-                # Browser didn't close with one back press, try again
-                self.logger.warning(f"First back didn't work, trying again...")
-                self.driver.press_back_button()
-                time.sleep(float(self.cfg.get('WAIT_AFTER_ACTION')) / 2)
-                
-                context_after_second_back = self.driver.get_current_app_context()
-                if context_after_second_back and context_after_second_back[0] in allowed_packages_set:
-                    self.logger.info(f"✅ Returned from browser after 2 back presses")
-                    self._last_browser_escape = current_package
-                    self.consecutive_context_failures = 0
-                    return True
-        # ====== END BROWSER DETECTION ======
+
+        # Browsers are now in allowed_packages_set, so no special handling needed
 
         if current_package in allowed_packages_set:
             self.consecutive_context_failures = 0 # Reset on success

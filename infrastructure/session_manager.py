@@ -6,6 +6,7 @@ import time
 from typing import Dict, Optional, Any, List
 from urllib.parse import urlparse
 
+import requests
 from appium import webdriver
 from appium.options.android import UiAutomator2Options
 
@@ -46,6 +47,96 @@ class SessionManager:
         self.consecutive_context_failures: int = 0
         self._current_implicit_wait: Optional[float] = None
 
+    def cleanup_existing_sessions(self, appium_url: str = 'http://localhost:4723') -> None:
+        """
+        Clean up any existing Appium sessions to prevent port conflicts.
+        
+        This is useful when previous sessions weren't properly closed, causing
+        'port 8200 is busy' errors.
+        
+        Args:
+            appium_url: Appium server URL
+        """
+        logger.info("Cleaning up existing Appium sessions...")
+        
+        try:
+            parsed_url = urlparse(appium_url)
+            server_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
+            
+            # Get list of existing sessions
+            sessions_url = f"{server_url}/sessions"
+            response = requests.get(sessions_url, timeout=5)
+            
+            if response.status_code == 200:
+                data = response.json()
+                sessions = data.get('value', [])
+                
+                if sessions:
+                    logger.info(f"Found {len(sessions)} existing session(s), cleaning up...")
+                    
+                    for session in sessions:
+                        session_id = session.get('id')
+                        if session_id:
+                            try:
+                                delete_url = f"{server_url}/session/{session_id}"
+                                delete_response = requests.delete(delete_url, timeout=10)
+                                if delete_response.status_code == 200:
+                                    logger.info(f"Successfully deleted session: {session_id}")
+                                else:
+                                    logger.warning(f"Failed to delete session {session_id}: {delete_response.status_code}")
+                            except Exception as del_error:
+                                logger.warning(f"Error deleting session {session_id}: {del_error}")
+                    
+                    # Brief pause to allow cleanup to complete
+                    time.sleep(1.0)
+                else:
+                    logger.debug("No existing sessions found via API")
+            else:
+                logger.debug(f"Could not get sessions list: {response.status_code}")
+                
+        except requests.exceptions.ConnectionError:
+            logger.debug("Could not connect to Appium server for session cleanup")
+        except Exception as e:
+            logger.warning(f"Error during session cleanup: {e}")
+        
+        # Fallback: Kill any process using port 8200 directly (Windows-specific)
+        self._kill_port_8200_process()
+    
+    def _kill_port_8200_process(self) -> None:
+        """Kill any process using port 8200 (Windows fallback for stuck sessions)."""
+        import subprocess
+        import sys
+        
+        if sys.platform != 'win32':
+            return  # Only implemented for Windows
+        
+        try:
+            # Find process using port 8200
+            result = subprocess.run(
+                ['netstat', '-ano', '-p', 'TCP'],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            
+            for line in result.stdout.split('\n'):
+                if ':8200' in line and 'LISTENING' in line:
+                    parts = line.split()
+                    if len(parts) >= 5:
+                        pid = parts[-1]
+                        if pid.isdigit():
+                            logger.info(f"Found process {pid} using port 8200, killing it...")
+                            try:
+                                subprocess.run(['taskkill', '/F', '/PID', pid], 
+                                             capture_output=True, timeout=5)
+                                time.sleep(0.5)
+                                logger.info(f"Killed process {pid}")
+                            except Exception as kill_error:
+                                logger.warning(f"Failed to kill process {pid}: {kill_error}")
+                            break
+        except Exception as e:
+            logger.debug(f"Port 8200 cleanup skipped: {e}")
+
     def initialize_driver(
         self,
         capabilities: AppiumCapabilities,
@@ -58,6 +149,8 @@ class SessionManager:
         start_time = time.time()
         
         try:
+            # Clean up any existing sessions first to prevent port conflicts
+            self.cleanup_existing_sessions(appium_url)
             
             parsed_url = urlparse(appium_url)
             server_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
