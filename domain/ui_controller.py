@@ -37,17 +37,39 @@ try:
 except Exception:
     RunAnalyzer = None
     XHTML2PDF_AVAILABLE = False
+
+# UI Component Managers
 from ui.log_manager import LogManager
 from ui.device_manager import DeviceManager
 from ui.report_manager import ReportManager
 from ui.agent_manager import AgentManager
 from ui.ui_utils import update_screenshot
 from ui.logo_widget import LogoWidget
+from ui.ui_helpers import SessionTimer, BusyOverlay
+
+# Domain
 from domain.prompt_builder import PromptBuilder
 
 
 class CrawlerControllerWindow(QMainWindow):
-    """Main window for the Appium Crawler Controller."""
+    """Main window for the Appium Crawler Controller.
+    
+    This is the main UI controller. It coordinates between:
+    - Configuration management
+    - Device management  
+    - Crawler process control
+    - Report generation
+    - AI interaction display
+    
+    The initialization is split into logical phases for maintainability.
+    """
+    
+    # Required UI components - validated after setup
+    REQUIRED_UI_COMPONENTS = [
+        'start_stop_btn', 'log_output', 'ai_input_log', 
+        'ai_output_log', 'screenshot_label', 'status_label',
+        'step_label', 'progress_bar'
+    ]
 
     def __init__(self, config=None, api_dir=None):
         """Initialize the main UI controller window.
@@ -58,122 +80,166 @@ class CrawlerControllerWindow(QMainWindow):
         """
         super().__init__()
         
-        # Initialize config if not provided
+        # Phase 1: Core dependencies
+        self._init_core_dependencies(config, api_dir)
+        
+        # Phase 2: Window setup
+        self._setup_window()
+        
+        # Phase 3: Feature managers (before UI - some are referenced during setup)
+        self._init_feature_managers()
+        
+        # Phase 4: UI structure
+        self._setup_ui_structure()
+        
+        # Phase 5: UI-dependent managers
+        self._init_ui_managers()
+        
+        # Phase 6: Connections and callbacks
+        self._init_connections()
+        
+        # Phase 7: Initial state
+        self._load_initial_state()
+
+    def _init_core_dependencies(self, config, api_dir):
+        """Phase 1: Initialize configuration and paths."""
+        # Initialize config
         if config is None:
             from config.app_config import Config
             config = Config()
         self.config = config
         
-        # Initialize api_dir if not provided
+        # Initialize api_dir
         if api_dir is None:
             from utils.paths import find_project_root
             from pathlib import Path
             api_dir = str(find_project_root(Path(__file__).resolve().parent))
         self.api_dir = api_dir
         
-        # Initialize empty config_widgets dict - will be populated by ComponentFactory
+        # Initialize component storage
         self.config_widgets = {}
         
-        # These will be created by _setup_ui method
-        # Initialize as None for now - they'll be set by the UI creation methods
+        # Initialize UI component placeholders
         self.start_stop_btn = None
         self.log_output = None
-        self.ai_input_log = None  # New AI Input log
-        self.ai_output_log = None # New AI Output log
+        self.ai_input_log = None
+        self.ai_output_log = None
         self.screenshot_label = None
         self.clear_logs_btn = None
+        
+        # Initialize state variables
         self.current_health_app_list_file = None
         self.health_apps_data = None
-        self.ai_history = []  # Stores list of dicts: {'label': str, 'input': str, 'output': str}
+        self.ai_history = []
         self.ai_history_dropdown = None
-
+        
+        # Busy overlay (lazy initialized)
+        self._busy_overlay = None
+        
+        # Ensure output directories exist
         self._ensure_output_directories_exist()
 
-        # Set the application icon
-        self._set_application_icon()
-        
-        # Set the window title
+    def _setup_window(self):
+        """Phase 2: Setup window properties."""
         self.setWindowTitle("Appium Traverser")
+        self._set_application_icon()
 
-        # Initialize managers
+    def _init_feature_managers(self):
+        """Phase 3: Initialize feature managers."""
         from ui.config_ui_manager import ConfigManager
         from ui.crawler_ui_manager import CrawlerManager
         from ui.app_scanner_ui import HealthAppScanner
         from ui.mobsf_ui_manager import MobSFUIManager
+        from infrastructure.ai_interaction_service import get_ai_interaction_service
         
         self.config_manager = ConfigManager(self.config, self)
         self.crawler_manager = CrawlerManager(self)
         self.health_app_scanner = HealthAppScanner(self)
         self.mobsf_ui_manager = MobSFUIManager(self)
-        
-        # New specialized delegation managers
         self.agent_manager = AgentManager(self.config, self.log_message)
-        
-        # AI Interaction Service - dedicated handler for AI input/output display
-        from infrastructure.ai_interaction_service import get_ai_interaction_service
         self.ai_service = get_ai_interaction_service()
+
+    def _setup_ui_structure(self):
+        """Phase 4: Create all UI components."""
+        # Define tooltips
+        self.tooltips = self._create_tooltips()
         
         # Create central widget and main layout
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         main_layout = QHBoxLayout(central_widget)
-
-        # Define tooltips
-        self.tooltips = self._create_tooltips()
-
-        # Setup UI panels
-        self._setup_ui(main_layout)
         
-        # Initialize Log, Device and Report managers after UI setup
-        # Initialize Log, Device and Report managers after UI setup
+        # Setup UI panels (this populates config_widgets and creates UI components)
+        self._setup_ui(main_layout)
+
+    def _init_ui_managers(self):
+        """Phase 5: Initialize managers that depend on UI components."""
+        # Log manager
         self.log_manager = LogManager(
             self.log_output, None, self.status_label, 
             self.step_label, self.progress_bar, self
         )
+        
+        # Device manager
         self.device_manager = DeviceManager(
-            self.config_widgets.get("TARGET_DEVICE_UDID"), self.config, self.log_message
+            self.config_widgets.get("TARGET_DEVICE_UDID"), 
+            self.config, 
+            self.log_message
         )
+        
+        # Report manager
         self.report_manager = ReportManager(
-            self.config, self.log_message, lambda busy, msg="": self.show_busy(msg) if busy else self.hide_busy()
+            self.config, 
+            self.log_message, 
+            lambda busy, msg="": self.show_busy(msg) if busy else self.hide_busy()
         )
+        
+        # Session timer (encapsulated)
+        self.session_timer = SessionTimer(self.timer_label)
+        
+        # Busy overlay
+        self._busy_overlay = BusyOverlay(self)
 
-        # Load configuration
+    def _init_connections(self):
+        """Phase 6: Connect all signals, slots, and callbacks."""
+        # Load configuration first
         self.config_manager.load_config()
         
-        # Reference to step-by-step checkbox from config_widgets
+        # Connect step-by-step checkbox
         self.step_by_step_chk = self.config_widgets["STEP_BY_STEP_MODE"]
         self.step_by_step_chk.stateChanged.connect(self._on_step_mode_changed)
-
-        # Initialize AgentAssistant after config is loaded (deferred to prevent UI freeze on startup)
-        # Use a small delay to allow the window to render first
-        QTimer.singleShot(100, lambda: self.agent_manager.init_agent())
-
-        # Attempt to load cached health apps
-        self._attempt_load_cached_health_apps()
-
+        
         # Connect signals to slots
         self._connect_signals()
         
-        # Set up AI Interaction Service callbacks for UI updates
+        # AI Interaction Service callbacks
         self.ai_service.set_callbacks(
             on_new_interaction=self._on_ai_new_interaction,
             on_response_received=self._on_ai_response_received
         )
-
-        # Initialize preview prompt builder and timer
+        
+        # Preview prompt builder and timer
         self._preview_prompt_builder = PromptBuilder(self.config)
         self._preview_timer = QTimer(self)
         self._preview_timer.setSingleShot(True)
-        self._preview_timer.setInterval(500)  # 500ms debounce
+        self._preview_timer.setInterval(500)
         self._preview_timer.timeout.connect(self.refresh_prompt_preview)
         
         # Setup live preview connections
         self._setup_live_preview_connections()
-
-        # Connect the refresh devices button
+        
+        # Connect refresh devices button
         if hasattr(self, "refresh_devices_btn") and self.refresh_devices_btn:
             self.refresh_devices_btn.clicked.connect(self.device_manager.populate_devices)
 
+    def _load_initial_state(self):
+        """Phase 7: Load initial application state."""
+        # Deferred agent initialization (allows window to render first)
+        QTimer.singleShot(100, self.agent_manager.init_agent)
+        
+        # Load cached health apps
+        self._attempt_load_cached_health_apps()
+        
         # Populate device dropdown on startup
         self.device_manager.populate_devices()
 
@@ -361,11 +427,7 @@ class CrawlerControllerWindow(QMainWindow):
         header_layout.addWidget(self.progress_bar)
         right_main_layout.addLayout(header_layout)
         
-        # Initialize session timer
-        self._session_elapsed_seconds = 0
-        self._session_timer = QTimer(self)
-        self._session_timer.setInterval(1000)  # 1 second intervals
-        self._session_timer.timeout.connect(self._update_session_timer)
+        # Note: Session timer is now handled by SessionTimer class in _init_ui_managers
 
         # Main content area: Logs on left (2/3), Screenshot + Action History stacked on right (1/3)
         content_layout = QHBoxLayout()
@@ -621,56 +683,21 @@ class CrawlerControllerWindow(QMainWindow):
         else:
             pass
 
-        # Busy overlay dialog (initialized lazily)
-        self._busy_dialog = None
-
     def show_busy(self, message: str = "Working...") -> None:
         """Show a modal busy overlay with the given message.
         
         The overlay will:
         - Cover the entire main window with a semi-transparent backdrop
         - Display a centered loading dialog with the message
-        - Disable all interactive widgets in the UI
         - Block all user interactions until hidden
         """
-        try:
-            if self._busy_dialog is None:
-                self._busy_dialog = BusyDialog(self)
-            self._busy_dialog.set_message(message)
-            # Cover the entire main window - ensure it's properly sized
-            try:
-                # Use frameGeometry to get the full window including title bar
-                main_geometry = self.frameGeometry()
-                self._busy_dialog.setGeometry(main_geometry)
-            except Exception:
-                # Fallback: use the main window geometry
-                try:
-                    self._busy_dialog.setGeometry(self.geometry())
-                except Exception:
-                    pass
-            # Show and raise the dialog to ensure it's visible
-            self._busy_dialog.show()
-            self._busy_dialog.raise_()
-            self._busy_dialog.activateWindow()
-            QApplication.processEvents()
-        except Exception as e:
-            pass
+        if self._busy_overlay:
+            self._busy_overlay.show(message)
 
     def hide_busy(self) -> None:
-        """Hide the busy overlay if visible.
-        
-        This will re-enable all widgets that were disabled during loading.
-        """
-        try:
-            if self._busy_dialog:
-                # Use close_dialog to properly reset state
-                if hasattr(self._busy_dialog, 'close_dialog'):
-                    self._busy_dialog.close_dialog()
-                else:
-                    self._busy_dialog.hide()
-                QApplication.processEvents()
-        except Exception as e:
-            pass
+        """Hide the busy overlay if visible."""
+        if self._busy_overlay:
+            self._busy_overlay.hide()
 
 
     def _create_tooltips(self) -> Dict[str, str]:
@@ -1433,10 +1460,6 @@ class CrawlerControllerWindow(QMainWindow):
 
     # _get_connected_devices removed as it's now handled by DeviceManager/DeviceDetection
 
-    def _populate_device_dropdown(self):
-        """Populate the device dropdown (delegated)."""
-        self.device_manager.populate_devices()
-
 
     # ========================================================================
     # Pause / Step Control Methods
@@ -1473,52 +1496,20 @@ class CrawlerControllerWindow(QMainWindow):
             if self.crawler_manager.pause_crawler():
                 self.pause_resume_btn.setText("▶️ Resume")
                 self.log_message("Pausing crawler...", "yellow")
-                # Pause the session timer
-                self._pause_session_timer()
+                self.session_timer.pause()
         else:
             if self.crawler_manager.resume_crawler():
                 self.pause_resume_btn.setText("⏸️ Pause")
                 self.log_message("Resuming crawler...", "green")
-                # Resume the session timer
-                self._resume_session_timer()
+                self.session_timer.resume()
 
-    def _update_session_timer(self):
-        """Update the session timer display (called every second)."""
-        self._session_elapsed_seconds += 1
-        hours = self._session_elapsed_seconds // 3600
-        minutes = (self._session_elapsed_seconds % 3600) // 60
-        seconds = self._session_elapsed_seconds % 60
-        self.timer_label.setText(f"⏱️ {hours:02d}:{minutes:02d}:{seconds:02d}")
-    
     def _start_session_timer(self):
-        """Start the session timer (called when crawler starts)."""
-        self._session_elapsed_seconds = 0
-        self.timer_label.setText("⏱️ 00:00:00")
-        self.timer_label.setStyleSheet("color: #4CAF50; font-weight: bold; font-size: 12px;")
-        self._session_timer.start()
+        """Start the session timer (called by crawler_ui_manager when crawler starts)."""
+        self.session_timer.start()
     
     def _stop_session_timer(self):
-        """Stop the session timer (called when crawler stops)."""
-        self._session_timer.stop()
-        # Change color to indicate stopped
-        self.timer_label.setStyleSheet("color: #888888; font-weight: bold; font-size: 12px;")
-    
-    def _pause_session_timer(self):
-        """Pause the session timer (called when crawler is paused)."""
-        self._session_timer.stop()
-        # Change color to yellow to indicate paused
-        self.timer_label.setStyleSheet("color: #FFC107; font-weight: bold; font-size: 12px;")
-    
-    def _resume_session_timer(self):
-        """Resume the session timer (called when crawler is resumed)."""
-        self.timer_label.setStyleSheet("color: #4CAF50; font-weight: bold; font-size: 12px;")
-        self._session_timer.start()
-    
-    def _reset_session_timer(self):
-        """Reset the session timer display."""
-        self._session_elapsed_seconds = 0
-        self.timer_label.setText("⏱️ 00:00:00")
-        self.timer_label.setStyleSheet("color: #4CAF50; font-weight: bold; font-size: 12px;")
+        """Stop the session timer (called by crawler_ui_manager when crawler stops)."""
+        self.session_timer.stop()
 
 
 if __name__ == "__main__":
