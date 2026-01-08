@@ -2,50 +2,18 @@
 Prompt building and processing module for the AI agent.
 
 Handles context-aware prompt construction, static/dynamic prompt parts,
-and LangChain Runnable chain creation for action decisions.
+and context formatting for action decisions.
 """
 import json
-import re
 import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from langchain_core.runnables import RunnableLambda
 from domain.prompts import JSON_OUTPUT_SCHEMA, get_available_actions
-from utils.utils import parse_json_robust, repair_json_string
+from utils.utils import parse_json_robust
 from config.numeric_constants import EXPLORATION_JOURNAL_MAX_LENGTH_DEFAULT
 
 logger = logging.getLogger(__name__)
-
-
-class ActionDecisionChain:
-    """
-    Wrapper for the LangChain runnable that handles execution and response parsing.
-    """
-    def __init__(self, chain):
-        self.chain = chain
-
-    def run(self, context: Dict[str, Any]) -> Dict[str, Any]:
-        """Run the decision chain with the given context."""
-        try:
-            # The chain expects a dict with prompt variables
-            # Format the context for the prompt template
-            result = self.chain.invoke(context)
-            # If result is a string, try to parse as JSON
-            if isinstance(result, str):
-                return self.parse_json(result)
-            return result if isinstance(result, dict) else {}
-        except Exception as e:
-            logger.error(f"Error running ActionDecisionChain: {e}", exc_info=True)
-            return {}
-
-    def parse_json(self, text: str) -> Dict[str, Any]:
-        """Robust JSON parsing with fallback and repair."""
-        result = parse_json_robust(text)
-        if not result:
-            from config.numeric_constants import RESULT_TRUNCATION_LENGTH
-            logger.warning(f"Could not parse JSON from result: {text[:RESULT_TRUNCATION_LENGTH]}")
-        return result
 
 
 class PromptBuilder:
@@ -65,64 +33,6 @@ class PromptBuilder:
         """
         self.cfg = config
         self._static_prompt_logged = False
-    
-    def create_prompt_chain(self, prompt_template: str, llm_wrapper, ai_interaction_readable_logger=None):
-        """
-        Create a LangChain Runnable chain from a prompt template.
-        
-        Args:
-            prompt_template: The prompt template string with placeholders
-            llm_wrapper: The LLM Runnable wrapper
-            ai_interaction_readable_logger: Optional logger for human-readable prompt logging
-            
-        Returns:
-            A Runnable chain: PromptTemplate | LLM | OutputParser
-        """
-        # Format the template with static values
-        # Get available actions from config property (reads from database or defaults)
-        available_actions = get_available_actions(self.cfg)
-        action_list_str = "\n".join([f"- {action}: {desc}" for action, desc in available_actions.items()])
-        json_output_guidance = json.dumps(JSON_OUTPUT_SCHEMA, indent=2)
-        
-        # Get journal max length from config or use default
-        journal_max_length = self.cfg.get('EXPLORATION_JOURNAL_MAX_LENGTH', EXPLORATION_JOURNAL_MAX_LENGTH_DEFAULT)
-        
-        # Get test credentials from config (with defaults)
-        test_email = self.cfg.get('TEST_EMAIL') or 'test@email.com'
-        test_password = self.cfg.get('TEST_PASSWORD') or 'Test123!'
-        
-        # Create formatted prompt string
-        formatted_prompt = prompt_template.format(
-            json_schema=json_output_guidance,
-            action_list=action_list_str,
-            journal_max_length=journal_max_length,
-            test_email=test_email,
-            test_password=test_password
-        )
-        
-        # Log static prompt parts once
-        if ai_interaction_readable_logger and not self._static_prompt_logged:
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            self._static_prompt_logged = True
-            
-        def format_prompt_wrapper(context: Dict[str, Any]) -> str:
-            """Wrapper to call self.format_prompt with static part."""
-            return self.format_prompt(prompt_template, context, static_prompt_part=formatted_prompt)
-            
-        def parse_json_output(llm_output: str) -> Dict[str, Any]:
-            """Parse JSON from LLM output."""
-            try:
-                result = parse_json_robust(llm_output)
-                if not result:
-                    logger.warning(f"Could not parse JSON from LLM output: {llm_output[:200]}")
-                return result
-            except Exception as e:
-                logger.error(f"Error in parse_json_output: {e}")
-                return {}
-        
-        # Create chain: format prompt -> LLM -> parse JSON
-        chain = RunnableLambda(format_prompt_wrapper) | llm_wrapper | RunnableLambda(parse_json_output)
-        return chain
 
     def format_prompt(self, prompt_template: str, context: Dict[str, Any], static_prompt_part: str = None) -> str:
         """

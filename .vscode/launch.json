@@ -5,9 +5,9 @@
             "name": "Run Appium Traverser",
             "type": "python",
             "request": "launch",
-            "program": "${workspaceFolder}/traverser_ai_api/main.py",
+            "program": "${workspaceFolder}/run_ui.py",
             "console": "integratedTerminal",
-            "justMyCode": true
+            "justMyCode": false
         },
         {
             "name": "Python: Attach to ui_controller.py (debugpy)",

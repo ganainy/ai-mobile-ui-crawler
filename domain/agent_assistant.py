@@ -9,19 +9,11 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 from PIL import Image
 from pydantic import BaseModel, ValidationError, validator
 
-# MCP client exceptions removed
-
-# LangChain imports for orchestration
-from langchain_core.runnables import RunnableLambda
-from langchain_core.prompts import PromptTemplate
-from langgraph.checkpoint.memory import MemorySaver
-
 # Always use absolute import for model_adapters
 from domain.model_adapters import create_model_adapter, Session
 from domain.provider_utils import get_provider_api_key, get_provider_config_key, validate_provider_config
 from domain.action_executor import ActionExecutor
-from domain.prompt_builder import PromptBuilder, ActionDecisionChain
-from domain.langchain_wrapper import LangChainWrapper
+from domain.prompt_builder import PromptBuilder
 from config.numeric_constants import (
     DEFAULT_AI_PROVIDER,
     DEFAULT_MODEL_TEMP,
@@ -31,7 +23,7 @@ from config.numeric_constants import (
 )
 from config.urls import ServiceURLs
 from config.context_constants import ContextSource
-from domain.prompts import JSON_OUTPUT_SCHEMA, get_available_actions, ACTION_DECISION_SYSTEM_PROMPT, build_action_decision_prompt
+from domain.prompts import JSON_OUTPUT_SCHEMA, get_available_actions, ACTION_DECISION_SYSTEM_PROMPT
 
 # Update AgentAssistant to initialize AppiumDriver with a valid Config instance
 from config.app_config import Config
@@ -181,11 +173,8 @@ class AgentAssistant:
         # Initialize prompt builder
         self.prompt_builder = PromptBuilder(self.cfg)
         
-        # Initialize logger before LangChain components
+        # Initialize logger
         self._setup_ai_interaction_logger()
-        
-        # Initialize LangChain components for orchestration
-        self._init_langchain_components()
 
     def _init_session(self, user_id: Optional[str] = None):
         """Initialize a new provider-agnostic session."""
@@ -208,39 +197,7 @@ class AgentAssistant:
             }
         )
 
-    def _init_langchain_components(self):
-        """Initialize LangChain components for orchestration."""
-        try:
 
-            # Create the LLM wrapper
-            wrapper = LangChainWrapper(
-                model_adapter=self.model_adapter,
-                config=self.cfg,
-                ai_provider=self.ai_provider,
-                model_name=self.actual_model_name,
-                interaction_logger=self.ai_interaction_readable_logger,
-                get_current_image=lambda: getattr(self, '_current_prepared_image', None)
-            )
-            self.langchain_llm = wrapper.create_llm_wrapper()
-
-            # Create the action decision chain
-            custom_prompt_part = self.cfg.CRAWLER_ACTION_DECISION_PROMPT
-            action_decision_prompt = build_action_decision_prompt(custom_prompt_part)
-            
-            action_chain = self.prompt_builder.create_prompt_chain(
-                action_decision_prompt, 
-                self.langchain_llm,
-                self.ai_interaction_readable_logger
-            )
-            self.action_decision_chain = ActionDecisionChain(chain=action_chain)
-
-            # Initialize memory checkpointer for cross-request context
-            self.langchain_memory = MemorySaver()
-
-
-        except Exception as e:
-            logging.error(f"Failed to initialize LangChain components: {e}", exc_info=True)
-            raise
 
     def execute_action(self, action_data: Dict[str, Any]) -> bool:
         """
@@ -417,7 +374,7 @@ class AgentAssistant:
             logging.error(f"Failed to prepare image part for AI: {e}", exc_info=True)
             return None
 
-    def _get_next_action_langchain(self, screenshot_bytes: Optional[bytes], xml_context: str, 
+    def get_next_action(self, screenshot_bytes: Optional[bytes], xml_context: str, 
                                    action_history: Optional[List[Dict[str, Any]]] = None,
                                    visited_screens: Optional[List[Dict[str, Any]]] = None,
                                    current_screen_actions: Optional[List[Dict[str, Any]]] = None,
@@ -430,7 +387,7 @@ class AgentAssistant:
                                    ocr_results: Optional[List[Dict[str, Any]]] = None,
                                    exploration_journal: Optional[List[Dict[str, str]]] = None,
                                    is_synthetic_screenshot: bool = False) -> Optional[Tuple[Dict[str, Any], float, int, Optional[str], Optional[List[Dict[str, str]]]]]:
-        """Get the next action using LangChain decision chain.
+        """Get the next action using direct LLM invocation.
         
         Args:
             screenshot_bytes: Screenshot image bytes (optional, for future vision support)
@@ -566,80 +523,90 @@ class AgentAssistant:
             elif enable_image_context and not screenshot_bytes:
                 logging.warning("📸 Image context enabled but no screenshot_bytes available")
 
+            # --- Prompt Construction ---
+            # Use PromptBuilder to generate the text prompt
+            from domain.prompts import build_action_decision_prompt
             
-            # Log the decision request context
-            if self.ai_interaction_readable_logger:
-                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                if is_stuck:
-                    pass
-                
-                # Log the simplified XML context that will be sent to AI
-
-            # Run the decision chain
-            try:
-                chain_result = self.action_decision_chain.run(context=context)
-            finally:
-                # Clear the prepared image after use to avoid memory leaks
-                self._current_prepared_image = None
+            # 1. Build the base prompt template (contains instructions and JSON schema)
+            custom_prompt_part = self.cfg.get('CRAWLER_ACTION_DECISION_PROMPT')
+            prompt_template = build_action_decision_prompt(custom_prompt_part)
             
-            # Extract the AI input prompt from context (stored by format_prompt_with_context)
+            # 2. Format with context (inserts dynamic parts like XML, Journal)
+            full_prompt = self.prompt_builder.format_prompt(prompt_template, context)
+            
+            # 3. Store for analytics
             ai_input_prompt = {
-                'full_prompt': context.get('_full_ai_input_prompt', ''),
+                'full_prompt': context.get('_full_ai_input_prompt', full_prompt),
                 'static_part': context.get('_static_prompt_part', ''),
                 'dynamic_part': context.get('_dynamic_prompt_parts', '')
             }
             
-            # Log the parsed result
-            if self.ai_interaction_readable_logger:
-                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            
-            # Validate and clean the result
-            if not chain_result:
-                logging.warning("Chain returned empty result")
+            # --- LLM Invocation ---
+            chain_result = None
+            token_count = 0
+            try:
+                # Log human-readable prompt
+                if self.ai_interaction_readable_logger:
+                   self.ai_interaction_readable_logger.info("=== AI INPUT ===\n" + full_prompt)
+                
+                # Call model adapter directly
+                response_text, token_usage = self.model_adapter.generate_response(
+                    prompt=full_prompt,
+                    image=self._current_prepared_image
+                )
+                token_count = token_usage.get('total_tokens', 0) if token_usage else 0
+                
+                # Log raw response
+                if self.ai_interaction_readable_logger:
+                    self.ai_interaction_readable_logger.info("=== AI OUTPUT ===\n" + response_text)
+                
+                # Parse JSON response
+                from utils.utils import parse_json_robust
+                chain_result = parse_json_robust(response_text)
+                
+                if not chain_result:
+                     logging.warning(f"Failed to parse JSON from AI response: {response_text[:200]}")
+                
+            except Exception as e:
+                logging.error(f"Error invoking AI model: {e}")
                 return None
+            finally:
+                self._current_prepared_image = None
             
+            # Validate and clean result
+            if not chain_result:
+                return None
+                
             validated_data = self._validate_and_clean_action_data(chain_result)
             
-            # Post-processing: Resolve OCR IDs to coordinates for each action in the batch
+            # Post-post-processing: Resolve OCR IDs
             if validated_data and "actions" in validated_data:
                 for action_item in validated_data["actions"]:
                     target_id = action_item.get("target_identifier")
-                    
-                    # With HYBRID always enabled, OCR is always on - resolve ocr_X targets to bounding boxes
                     if target_id and str(target_id).startswith("ocr_") and ocr_results:
                         try:
-                            # Extract index from "ocr_X"
                             idx = int(str(target_id).split("_")[1])
                             if 0 <= idx < len(ocr_results):
                                 item = ocr_results[idx]
-                                bounds = item.get('bounds')  # [x_min, y_min, x_max, y_max]
-                                
+                                bounds = item.get('bounds')
                                 if bounds and len(bounds) == 4:
-                                    # Convert to bbox expected by tap method
                                     bbox = {
                                         "top_left": [bounds[0], bounds[1]],
                                         "bottom_right": [bounds[2], bounds[3]]
                                     }
                                     action_item["target_bounding_box"] = bbox
-                        except (ValueError, IndexError) as e:
-                            logging.warning(f"Failed to resolve OCR target {target_id}: {e}")
+                        except (ValueError, IndexError):
+                            pass
 
-            # Return with metadata
-            return validated_data, 0.0, 0, ai_input_prompt
+            return validated_data, 0.0, token_count, ai_input_prompt
             
         except ValidationError as e:
-            # Clear prepared image on error
             self._current_prepared_image = None
             logging.error(f"Validation error in action data: {e}")
-            if self.ai_interaction_readable_logger:
-                pass
             return None
         except Exception as e:
-            # Clear prepared image on error
             self._current_prepared_image = None
-            logging.error(f"Error getting next action from LangChain: {e}", exc_info=True)
-            if self.ai_interaction_readable_logger:
-                pass
+            logging.error(f"Error in get_next_action: {e}", exc_info=True)
             return None
 
 
@@ -726,7 +693,3 @@ class AgentAssistant:
             logging.error(f"Error ensuring driver connection: {e}", exc_info=True)
             return False
 
-    def _initialize_action_decision_chain(self):
-        if not self.action_decision_chain:
-            # Properly initialize action_decision_chain here
-            self.action_decision_chain = ActionDecisionChain(chain=self._create_prompt_chain(ACTION_DECISION_SYSTEM_PROMPT))  # Replace with actual initialization logic

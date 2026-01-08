@@ -131,6 +131,10 @@ class CrawlerEventListener(Protocol):
     def on_error(self, message: str) -> None:
         """Called when a critical error occurs."""
         ...
+    
+    def on_action(self, action_desc: str) -> None:
+        """Called when an action is executed."""
+        ...
 
 
 class StdoutEventListener:
@@ -162,6 +166,9 @@ class StdoutEventListener:
         self._emit_json('status', f"ERROR: {message}")
         # Keep stderr for fatal errors as they might not be captured by stdout pipe if app crashes hard
         print(f"FATAL ERROR: {message}", file=sys.stderr, flush=True)
+    
+    def on_action(self, action_desc: str) -> None:
+        self._emit_json('action', action_desc)
 
 
 # ============================================================================
@@ -438,6 +445,10 @@ class CrawlerLoop:
                 action_data, screen_state
             )
             
+            # Emit action for UI display
+            action_desc = self._build_action_description(action_data)
+            self.listener.on_action(action_desc)
+            
             # Determine outcome string
             if success:
                 outcome = "Action executed successfully"
@@ -665,7 +676,7 @@ class CrawlerLoop:
         
         # Call AI
         start_time = time.time()
-        action_result = self.agent_assistant._get_next_action_langchain(
+        action_result = self.agent_assistant.get_next_action(
             screenshot_bytes=screen_state.screenshot_bytes,
             xml_context=screen_state.xml_content or "",
             current_screen_actions=current_screen_actions,
@@ -878,6 +889,32 @@ class CrawlerLoop:
             self.last_action_feedback = f"Action '{action_str}' failed: {error_msg}"
             self.listener.on_status_change(f"Failed: {action_str}")
             self.runtime_stats.element_not_found_count += 1
+    
+    def _build_action_description(self, action_data: Dict[str, Any]) -> str:
+        """Build a human-readable description of the action for UI display."""
+        try:
+            actions = action_data.get("actions", [])
+            if not actions:
+                # Single action format
+                action = action_data.get("action", "unknown")
+                target = action_data.get("target_identifier") or action_data.get("input_text", "")
+                if len(str(target)) > 30:
+                    target = str(target)[:27] + "..."
+                return f"{action}: {target}" if target else action
+            
+            # Batch action format
+            first = actions[0]
+            action = first.get("action", "unknown")
+            target = first.get("target_identifier") or first.get("input_text", "")
+            if len(str(target)) > 30:
+                target = str(target)[:27] + "..."
+            
+            desc = f"{action}: {target}" if target else action
+            if len(actions) > 1:
+                desc += f" (+{len(actions)-1} more)"
+            return desc
+        except Exception:
+            return "unknown action"
 
     def _cleanup_resources(self):
         self._stop_traffic_capture()

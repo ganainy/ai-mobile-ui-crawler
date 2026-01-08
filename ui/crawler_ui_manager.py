@@ -3,12 +3,11 @@
 
 import logging
 import os
-import re
 import sys
 import json
 from typing import Any, Dict, List, Optional, Tuple
 
-from PySide6.QtCore import QObject, QProcess, QRunnable, QThread, QThreadPool, QTimer, Signal, Slot
+from PySide6.QtCore import QObject, QRunnable, QThread, QThreadPool, QTimer, Signal, Slot
 from PySide6.QtWidgets import QApplication, QCheckBox
 
 # Import shared orchestrator components
@@ -17,6 +16,7 @@ from core.adapters import create_process_backend
 from core.controller import CrawlerOrchestrator
 from core.health_check import ValidationService
 from cli.constants import keys as KEYS
+from ui.crawler_worker import CrawlerWorker
 
 
 class ValidationWorker(QRunnable):
@@ -71,19 +71,18 @@ class CrawlerManager(QObject):
         self.step_count = 0
         self.last_action = "None"
         self.current_screenshot = None
-        self.crawler_process = None
+        
+        # CrawlerWorker - in-process QThread for easier debugging
+        self.crawler_worker: Optional[CrawlerWorker] = None
+        
         self._shutdown_flag_file_path = self.config.SHUTDOWN_FLAG_PATH
         self.shutdown_timer = QTimer(self)
         self.shutdown_timer.setSingleShot(True)
         self.shutdown_timer.timeout.connect(self.force_stop_crawler_on_timeout)
-        self._stdout_buffer = ""  # Buffer for incomplete lines
         
         # Initialize shared orchestrator
         backend = create_process_backend(use_qt=True)  # UI uses Qt backend
         self.orchestrator = CrawlerOrchestrator(self.config, backend)
-        
-
-
         
         # Initialize thread pool for async validation
         self.thread_pool = QThreadPool()
@@ -93,8 +92,8 @@ class CrawlerManager(QObject):
         self._connect_orchestrator_signals()
     
     def is_crawler_running(self) -> bool:
-        """Check if the crawler process is currently running."""
-        return self.crawler_process is not None and self.crawler_process.state() == QProcess.ProcessState.Running
+        """Check if the crawler worker is currently running."""
+        return self.crawler_worker is not None and self.crawler_worker.isRunning()
 
     def _connect_orchestrator_signals(self):
         """Connect orchestrator output callbacks to UI signals."""
@@ -412,19 +411,13 @@ class CrawlerManager(QObject):
                 f"Warning: Could not clean up crawler flags: {e}", 'orange'
             )
 
+
         if hasattr(self.main_controller, 'log_output'):
             self.main_controller.log_message("Starting crawler...", 'blue')
         else:
             pass
 
-        if not self.crawler_process or self.crawler_process.state() == QProcess.ProcessState.NotRunning:
-            # Configure and start the process
-            self.crawler_process = QProcess()
-            self.crawler_process.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
-            self.crawler_process.readyReadStandardOutput.connect(self.read_stdout)
-            self.crawler_process.finished.connect(self.handle_process_finished)
-            self.crawler_process.errorOccurred.connect(self.handle_process_error)
-            
+        if not self.crawler_worker or not self.crawler_worker.isRunning():
             # Reset tracking variables
             self.step_count = 0
             self.last_action = "None"
@@ -432,7 +425,6 @@ class CrawlerManager(QObject):
             
             # Update UI
             self.main_controller.step_label.setText("Step: 0")
-            # Action history clear removed
             self.main_controller.status_label.setText("Status: Starting...")
             self.main_controller.progress_bar.setValue(0)
             
@@ -442,7 +434,6 @@ class CrawlerManager(QObject):
             
             if hasattr(self.main_controller, 'start_stop_btn'):
                 self.main_controller.start_stop_btn.setText("Stop Crawler")
-                # Optional: set red styling
                 self.main_controller.start_stop_btn.setStyleSheet("background-color: #ffcccc; color: #cc0000;")
                 self.main_controller.start_stop_btn.setEnabled(True)
 
@@ -452,124 +443,56 @@ class CrawlerManager(QObject):
             except Exception:
                 pass
             
-            # Use the same Python executable that's running this script
-            python_exe = sys.executable
-            # Determine project root and set working directory
-            from pathlib import Path
-            from utils.paths import find_project_root
-            project_root = str(find_project_root(Path(self.config.BASE_DIR)))
-            self.crawler_process.setWorkingDirectory(project_root)
-            
             # Auto-hide settings panel on start
             if hasattr(self.main_controller, 'left_panel') and hasattr(self.main_controller, 'toggle_settings_btn'):
                 self.main_controller.left_panel.setVisible(False)
                 self.main_controller.toggle_settings_btn.setText("Show Settings")
             
-            # Choose entrypoint dynamically:
-            # - Prefer package module (traverser_ai_api.main) if importable with -m
-            # - Otherwise fall back to running a known script file (traverser_ai_api/main.py, main.py, run_cli.py)
-            try:
-                import importlib.util
-            except Exception:
-                importlib = None  # type: ignore
+            # Create the CrawlerWorker with the config
+            self.crawler_worker = CrawlerWorker(self.config, parent=self)
             
-            module_to_run = None
-            script_to_run = None
-            
-            try:
-                if importlib and importlib.util.find_spec("traverser_ai_api.main"):
-                    module_to_run = "traverser_ai_api.main"
-            except Exception:
-                pass
-            
-            if module_to_run is None:
-                possible_scripts = [
-                    os.path.join(project_root, "traverser_ai_api", "main.py"),
-                    os.path.join(project_root, "main.py"),
-                    os.path.join(project_root, "run_cli.py"),
-                ]
-                for p in possible_scripts:
-                    if os.path.isfile(p):
-                        script_to_run = p
-                        break
-            
-            # Build command arguments
-            cmd_args = ["-u"]
-            
-            # Check if traffic capture is enabled
-            enable_traffic_capture = False
+            # Check feature flags from UI checkboxes
             if "ENABLE_TRAFFIC_CAPTURE" in self.main_controller.config_widgets:
                 checkbox = self.main_controller.config_widgets["ENABLE_TRAFFIC_CAPTURE"]
                 if isinstance(checkbox, QCheckBox):
-                    enable_traffic_capture = checkbox.isChecked()
+                    self.crawler_worker.enable_traffic_capture = checkbox.isChecked()
             
-            # Check if MobSF analysis is enabled
-            enable_mobsf_analysis = False
             if "ENABLE_MOBSF_ANALYSIS" in self.main_controller.config_widgets:
                 checkbox = self.main_controller.config_widgets["ENABLE_MOBSF_ANALYSIS"]
                 if isinstance(checkbox, QCheckBox):
-                    enable_mobsf_analysis = checkbox.isChecked()
+                    self.crawler_worker.enable_mobsf_analysis = checkbox.isChecked()
             
-            # Check if video recording is enabled
-            enable_video_recording = False
             if "ENABLE_VIDEO_RECORDING" in self.main_controller.config_widgets:
                 checkbox = self.main_controller.config_widgets["ENABLE_VIDEO_RECORDING"]
                 if isinstance(checkbox, QCheckBox):
-                    enable_video_recording = checkbox.isChecked()
+                    self.crawler_worker.enable_video_recording = checkbox.isChecked()
             
-            # Check if AI run report is enabled
-            enable_ai_run_report = False
             if "ENABLE_AI_RUN_REPORT" in self.main_controller.config_widgets:
                 checkbox = self.main_controller.config_widgets["ENABLE_AI_RUN_REPORT"]
                 if isinstance(checkbox, QCheckBox):
-                    enable_ai_run_report = checkbox.isChecked()
+                    self.crawler_worker.enable_ai_run_report = checkbox.isChecked()
             
-            if module_to_run:
-                cmd_args.extend(["-m", module_to_run, "crawler", "start"])
-                if enable_traffic_capture:
-                    cmd_args.append("--enable-traffic-capture")
-                if enable_mobsf_analysis:
-                    cmd_args.append("--enable-mobsf-analysis")
-                if enable_video_recording:
-                    cmd_args.append("--enable-video-recording")
-                if enable_ai_run_report:
-                    cmd_args.append("--enable-ai-run-report")
-                # Command constructed based on user selected options
-                # Start Python in unbuffered mode to stream stdout in real-time
-                # Add 'crawler start' command to launch the crawler
-                self.crawler_process.start(python_exe, cmd_args)
-            elif script_to_run:
-                cmd_args.extend([script_to_run, "crawler", "start"])
-                if enable_traffic_capture:
-                    cmd_args.append("--enable-traffic-capture")
-                if enable_mobsf_analysis:
-                    cmd_args.append("--enable-mobsf-analysis")
-                if enable_video_recording:
-                    cmd_args.append("--enable-video-recording")
-                if enable_ai_run_report:
-                    cmd_args.append("--enable-ai-run-report")
-                # Command constructed based on user selected options
-                # Run the script directly if module import is not available
-                # Add 'crawler start' command to launch the crawler
-                self.crawler_process.start(python_exe, cmd_args)
-            else:
-                self.main_controller.log_message(
-                    "ERROR: Could not locate crawler entrypoint (traverser_ai_api.main or run_cli.py).",
-                    'red'
-                )
-                return
+            # Connect worker signals to UI handlers
+            self.crawler_worker.step_started.connect(self._on_worker_step_started)
+            self.crawler_worker.screenshot_captured.connect(self._on_worker_screenshot_captured)
+            self.crawler_worker.status_changed.connect(self._on_worker_status_changed)
+            self.crawler_worker.error_occurred.connect(self._on_worker_error)
+            self.crawler_worker.action_executed.connect(self._on_worker_action_executed)
+            self.crawler_worker.finished_with_status.connect(self._on_worker_finished)
+            self.crawler_worker.log_message.connect(self._on_worker_log_message)
+            self.crawler_worker.finished.connect(self._on_thread_finished)
+            
+            # Start the worker thread
+            self.crawler_worker.start()
             
             # --- Update Control Buttons State ---
-            # Enable Pause/Resume button
             if hasattr(self.main_controller, 'pause_resume_btn'):
                 self.main_controller.pause_resume_btn.setEnabled(True)
                 self.main_controller.pause_resume_btn.setText("⏸️ Pause")
             
-            # Update Next Step button based on Step-by-Step checkbox
             if hasattr(self.main_controller, 'step_by_step_chk') and hasattr(self.main_controller, 'next_step_btn'):
                 is_step_mode = self.main_controller.step_by_step_chk.isChecked()
                 self.main_controller.next_step_btn.setEnabled(is_step_mode)
-            # ------------------------------------
 
             self.update_progress()
         else:
@@ -577,12 +500,12 @@ class CrawlerManager(QObject):
     
     @Slot()
     def stop_crawler(self) -> None:
-        """Stop the crawler process, trying graceful shutdown first."""
-        if self.crawler_process and self.crawler_process.state() == QProcess.ProcessState.Running:
+        """Stop the crawler worker, trying graceful shutdown first."""
+        if self.crawler_worker and self.crawler_worker.isRunning():
             self.main_controller.log_message("Stopping crawler... (waiting for current step to finish)", 'blue')
             self.main_controller.status_label.setText("Status: Stopping...")
             
-            # Disable button to prevent double clicks during checking
+            # Disable button to prevent double clicks
             if hasattr(self.main_controller, 'start_stop_btn'):
                 self.main_controller.start_stop_btn.setEnabled(False)
                 self.main_controller.start_stop_btn.setText("Stopping...")
@@ -593,57 +516,99 @@ class CrawlerManager(QObject):
             if hasattr(self.main_controller, 'next_step_btn'):
                 self.main_controller.next_step_btn.setEnabled(False)
 
-            try:
-                with open(self._shutdown_flag_file_path, 'w') as f:
-                    f.write("shutdown requested")
-                
-                # Start a timer to force termination if graceful shutdown takes too long
-                self.shutdown_timer.start(30000)  # 30 seconds timeout
-            except Exception as e:
-                self.main_controller.log_message(f"Error creating shutdown flag: {e}", 'red')
-                # Fallback to termination
-                self.crawler_process.terminate()
-                self.main_controller.log_message("Terminated crawler process.", 'orange')
+            # Request graceful stop via worker
+            self.crawler_worker.request_stop()
+            
+            # Start a timer to force termination if graceful shutdown takes too long
+            self.shutdown_timer.start(30000)  # 30 seconds timeout
         else:
-            self.main_controller.log_message("No crawler process running.", 'orange')
+            self.main_controller.log_message("No crawler running.", 'orange')
     
     @Slot()
     def force_stop_crawler_on_timeout(self) -> None:
-        """Force stop the crawler process if it doesn't respond to graceful shutdown."""
-        if self.crawler_process and self.crawler_process.state() == QProcess.ProcessState.Running:
+        """Force stop the crawler worker if it doesn't respond to graceful shutdown."""
+        if self.crawler_worker and self.crawler_worker.isRunning():
             self.main_controller.log_message("Crawler did not exit gracefully. Forcing termination...", 'red')
-            self.crawler_process.kill()
+            self.crawler_worker.terminate()
+            self.crawler_worker.wait(5000)  # Wait up to 5 seconds for thread to finish
         else:
-            self.main_controller.log_message("Crawler process already exited.", 'green')
+            self.main_controller.log_message("Crawler already stopped.", 'green')
     
-    @Slot(int, QProcess.ExitStatus)
-    def handle_process_finished(self, exit_code: int, exit_status: QProcess.ExitStatus):
-        """Handle the crawler process finishing."""
+    # =========================================================================
+    # Worker Signal Handlers (for CrawlerWorker QThread)
+    # =========================================================================
+    
+    @Slot(int)
+    def _on_worker_step_started(self, step: int) -> None:
+        """Handle step started signal from worker."""
+        self.step_count = step
+        self.step_updated.emit(step)
+        self.main_controller.step_label.setText(f"Step: {step}")
+        self.update_progress()
+    
+    @Slot(str, bool)
+    def _on_worker_screenshot_captured(self, path: str, blocked: bool) -> None:
+        """Handle screenshot captured signal from worker."""
+        if path and os.path.exists(path):
+            self.current_screenshot = path
+            self.screenshot_updated.emit(path)
+            self.main_controller.update_screenshot(path)
+        elif blocked:
+            # Screenshot blocked by FLAG_SECURE
+            self.main_controller.log_message("Screenshot blocked (FLAG_SECURE)", 'orange')
+    
+    @Slot(str)
+    def _on_worker_status_changed(self, message: str) -> None:
+        """Handle status change signal from worker."""
+        self.main_controller.status_label.setText(f"Status: {message}")
+    
+    @Slot(str)
+    def _on_worker_error(self, message: str) -> None:
+        """Handle error signal from worker."""
+        self.main_controller.log_message(f"Error: {message}", 'red')
+        logging.error(f"Crawler error: {message}")
+    
+    @Slot(str)
+    def _on_worker_action_executed(self, action_desc: str) -> None:
+        """Handle action executed signal from worker."""
+        self.last_action = action_desc
+        self.action_updated.emit(action_desc)
+    
+    @Slot(str)
+    def _on_worker_finished(self, status: str) -> None:
+        """Handle finished signal from worker with status."""
         self.shutdown_timer.stop()
+        
+        # Clean up shutdown flag if present
         if self._shutdown_flag_file_path and os.path.exists(self._shutdown_flag_file_path):
             try:
                 os.remove(self._shutdown_flag_file_path)
-                self.main_controller.log_message("Removed shutdown flag.", 'blue')
-            except Exception as e:
-                self.main_controller.log_message(f"Warning: Could not remove shutdown flag: {e}", 'orange')
+            except Exception:
+                pass
         
-        status_text = f"Finished. Exit code: {exit_code}"
-        if exit_status == QProcess.ExitStatus.CrashExit:
-            status_text = f"Crashed. Exit code: {exit_code}"
+        status_text = f"Finished: {status}"
+        self.main_controller.log_message(f"Crawler {status_text}", 'blue')
+        self.main_controller.status_label.setText(f"Status: {status_text}")
         
-        final_msg = f"Status: {status_text}"
-        if hasattr(self.main_controller, 'log_output'):
-            self.main_controller.log_message(f"Crawler process {status_text}", 'blue')
-        else:
+        # Play audio alert
+        try:
+            if hasattr(self.main_controller, '_audio_alert'):
+                if status == "COMPLETED":
+                    self.main_controller._audio_alert('finish')
+                else:
+                    self.main_controller._audio_alert('error')
+        except Exception:
             pass
-        
-        if hasattr(self.main_controller, 'status_label'):
-            self.main_controller.status_label.setText(final_msg)
+    
+    @Slot()
+    def _on_thread_finished(self) -> None:
+        """Handle QThread finished signal - reset UI state."""
+        self.shutdown_timer.stop()
         
         if hasattr(self.main_controller, 'start_stop_btn'):
             self.main_controller.start_stop_btn.setEnabled(True)
             self.main_controller.start_stop_btn.setText("Start Crawler")
-            self.main_controller.start_stop_btn.setStyleSheet("") # Reset style
+            self.main_controller.start_stop_btn.setStyleSheet("")
         
         # Disable control buttons
         if hasattr(self.main_controller, 'pause_resume_btn'):
@@ -654,239 +619,47 @@ class CrawlerManager(QObject):
         # Stop the session timer
         if hasattr(self.main_controller, '_stop_session_timer'):
             self.main_controller._stop_session_timer()
-
-        # Auto-show settings panel on finish/stop
+        
+        # Auto-show settings panel
         if hasattr(self.main_controller, 'left_panel') and hasattr(self.main_controller, 'toggle_settings_btn'):
             self.main_controller.left_panel.setVisible(True)
             self.main_controller.toggle_settings_btn.setText("Hide Settings")
-
-
-        # Enable report generation after finish
+        
+        # Enable report generation
         try:
             if hasattr(self.main_controller, 'generate_report_btn') and self.main_controller.generate_report_btn:
                 self.main_controller.generate_report_btn.setEnabled(True)
         except Exception:
             pass
-        # This is the primary mechanism for detecting crawler completion
-        try:
-            if hasattr(self.main_controller, '_audio_alert'):
-                # Success: Normal exit with exit code 0
-                if exit_status == QProcess.ExitStatus.NormalExit and exit_code == 0:
-                    self.main_controller._audio_alert('finish')
-                # Error: Crash or non-zero exit code
-                else:
-                    self.main_controller._audio_alert('error')
-        except Exception:
-            pass
-
-        self.crawler_process = None
+        
+        self.crawler_worker = None
     
-    @Slot(QProcess.ProcessError)
-    def handle_process_error(self, error: QProcess.ProcessError):
-        """Handle crawler process errors."""
-        try:
-            error_name = {
-                QProcess.ProcessError.FailedToStart: "Failed to start",
-                QProcess.ProcessError.Crashed: "Crashed",
-                QProcess.ProcessError.Timedout: "Timed out",
-                QProcess.ProcessError.ReadError: "Read error",
-                QProcess.ProcessError.WriteError: "Write error",
-                QProcess.ProcessError.UnknownError: "Unknown error"
-            }.get(error, f"Error code: {error}")
-        except Exception:
-            error_name = f"Error code: {error}"
+    @Slot(str)
+    def _on_worker_log_message(self, message: str) -> None:
+        """Handle log message signal from worker."""
+        # Parse log level and color
+        color = 'white'
+        log_message = message
         
-        error_message = f"Crawler process error: {error_name}"
-        output_details = ""
+        prefixes = {
+            'INFO:': 'blue',
+            'WARNING:': 'orange',
+            'ERROR:': 'red',
+            'CRITICAL:': 'red',
+            'DEBUG:': 'gray',
+        }
         
-        try:
-            if self.crawler_process:
-                output_details = bytes(self.crawler_process.readAllStandardOutput().data()).decode('utf-8', errors='replace')
-        except Exception as e:
-            logging.error(f"Could not read process output: {e}")
-            
-        if output_details:
-            error_message += f"\nProcess output: {output_details}"
+        for prefix, p_color in prefixes.items():
+            if message.startswith(prefix):
+                log_message = message[len(prefix):].lstrip()
+                color = p_color
+                break
         
-        self.main_controller.log_message(error_message, 'red')
-        logging.error(error_message)
-        
-        # Cleanup
-        if self.crawler_process:
-            try:
-                if self.crawler_process.state() == QProcess.ProcessState.Running:
-                    self.crawler_process.kill()
-                    self.main_controller.log_message("Killed crawler process.", 'orange')
-            except Exception as e:
-                logging.error(f"Error killing process: {e}")
-        
-        self.crawler_process = None
-        
-        # Reset unified button state
-        self.main_controller.start_stop_btn.setEnabled(True)
-        self.main_controller.start_stop_btn.setText("Start Crawler")
-        self.main_controller.start_stop_btn.setProperty("running", False)
-        # Force style update
-        self.main_controller.start_stop_btn.style().unpolish(self.main_controller.start_stop_btn)
-        self.main_controller.start_stop_btn.style().polish(self.main_controller.start_stop_btn)
-        self.main_controller.status_label.setText(f"Status: Error ({error_name})")
-        self.main_controller.progress_bar.setRange(0, 100)
-        self.main_controller.progress_bar.setValue(0)
-        
-        # Disable control buttons
-        if hasattr(self.main_controller, 'pause_resume_btn'):
-            self.main_controller.pause_resume_btn.setEnabled(False)
-        if hasattr(self.main_controller, 'next_step_btn'):
-            self.main_controller.next_step_btn.setEnabled(False)
-        
-        # Stop the session timer
-        if hasattr(self.main_controller, '_stop_session_timer'):
-            self.main_controller._stop_session_timer()
+        if log_message and log_message != "None":
+            self.main_controller.log_message(log_message, color)
     
-    @Slot()
-    def read_stdout(self) -> None:
-        """Handle stdout from the crawler process."""
-        if not self.crawler_process:
-            return
-        
-        raw_data = self.crawler_process.readAllStandardOutput().data()
-        if not raw_data:
-            return
-            
-        try:
-            # Append new data to buffer
-            new_data = bytes(raw_data).decode('utf-8', errors='replace')
-            self._stdout_buffer += new_data
-            
-            # Process complete lines only
-            while '\n' in self._stdout_buffer:
-                line, self._stdout_buffer = self._stdout_buffer.split('\n', 1)
-                line = line.strip()
-                
-                # If we have a very large buffer without newlines (unlikely), force clear/process to avoid memory issues
-                if len(self._stdout_buffer) > 100000:
-                    self._stdout_buffer = ""
-                
-                if not line or line.strip() == "None":
-                    continue
-                    
-                # Process the complete line
-                self._process_log_line(line)
-        except Exception as e:
-            self.main_controller.log_message(f"Error processing crawler output: {e}", 'red')
-            logging.error(f"Error processing crawler output: {e}")
-            self._stdout_buffer = "" # Reset buffer on error
-
-    def _process_log_line(self, line: str) -> None:
-        """Process a single complete log line."""
-        try:
-             # Check for JSON IPC (New Robust Protocol via stdout)
-             if line.startswith('JSON_IPC:'):
-                 try:
-                     raw_json = line[len('JSON_IPC:'):]
-                     event = json.loads(raw_json)
-                     self._handle_json_event(event)
-                 except Exception as e:
-                     logging.error(f"Failed to parse JSON IPC: {e}")
-                 return # Skip legacy processing for IPC lines
-
-             # Process the line (legacy logic for mixed outputs)
-             output = line 
-             
-             # Legacy UI control messages -> Ignored (handled via JSON_IPC)
-             if any(line.startswith(p) for p in ['UI_STEP:', 'UI_ACTION:', 'UI_SCREENSHOT:', 'UI_STATUS:', 'UI_END:', 'UI_AI_PROMPT:', 'UI_AI_RESPONSE:']):
-                 return 
-
-             # Skip tracebacks and stack traces
-             skip_patterns = [
-                'Traceback (most recent call last):',
-                'File "',
-                '    at ',
-                'Stacktrace:',
-                'The above error is caused by',
-             ]
-             if not any(pattern in line for pattern in skip_patterns):
-                # Log normal messages
-                color = 'white'
-                message = line
-                prefixes = {
-                    '[INFO]': 'blue', 'INFO:': 'blue',
-                    '[WARNING]': 'orange', 'WARNING:': 'orange',
-                    '[ERROR]': 'red', 'ERROR:': 'red',
-                    '[CRITICAL]': 'red', 'CRITICAL:': 'red',
-                }
-                for prefix, p_color in prefixes.items():
-                    if line.startswith(prefix):
-                        message = line[len(prefix):].lstrip()
-                        color = p_color
-                        break
-                self.main_controller.log_message(message, color)
-
-        except Exception as e:
-            logging.error(f"Error processing log line: {e}")
-
-    def _handle_json_event(self, event: Dict[str, Any]) -> None:
-        """Handle structured JSON event from child process."""
-        if event.get('type') != 'ui_event':
-            return
-            
-        kind = event.get('kind')
-        data = event.get('data')
-        
-        if kind == 'ai_prompt':
-            # Update AI Service
-            if hasattr(self.main_controller, 'ai_service') and self.main_controller.ai_service:
-                prompt_str = data if isinstance(data, str) else json.dumps(data)
-                self.main_controller.ai_service.record_prompt(prompt_str)
-                
-        elif kind == 'ai_response':
-            if hasattr(self.main_controller, 'ai_service') and self.main_controller.ai_service:
-                response_str = json.dumps(data) if isinstance(data, dict) else str(data)
-                self.main_controller.ai_service.record_response_for_latest(response_str)
-        
-        elif kind == 'step':
-            try:
-                self.step_count = int(data)
-                self.main_controller.step_label.setText(f"Step: {self.step_count}")
-                self.update_progress()
-            except (ValueError, TypeError):
-                pass
-                
-        elif kind == 'action':
-            if isinstance(data, dict):
-                self.last_action = data.get('action', '')
-            else:
-                self.last_action = str(data)
-                
-        elif kind == 'status':
-            self.main_controller.status_label.setText(f"Status: {str(data)}")
-            
-        elif kind == 'screenshot':
-            if isinstance(data, dict):
-                path = data.get('path')
-                blocked = data.get('blocked', False)
-                if path and os.path.exists(path):
-                    self.current_screenshot = path
-                    self.main_controller.update_screenshot(path, is_blocked=blocked)
-                    
-        elif kind == 'log':
-            if isinstance(data, dict):
-                level = data.get('level', 'INFO')
-                message = data.get('message', '')
-                
-                # Map level to color
-                color_map = {
-                    'INFO': 'blue',
-                    'WARNING': 'orange',
-                    'ERROR': 'red',
-                    'CRITICAL': 'red'
-                }
-                color = color_map.get(level.upper(), 'white')
-                self.main_controller.log_message(message, color)
-            else:
-                self.main_controller.log_message(str(data))
-
-
+    # NOTE: Legacy QProcess stdout parsing methods (read_stdout, _process_log_line, 
+    # _handle_json_event) have been removed - now using QThread signals directly.
 
     @Slot()
     def open_session_folder(self) -> None:
