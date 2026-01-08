@@ -80,19 +80,13 @@ logger = logging.getLogger(__name__)
 # Constants and Enums
 # ============================================================================
 
-class PauseMode(Enum):
-    """Pause mode enumeration."""
-    CONTINUOUS = "continuous"  # Run without pausing
-    STEP_BY_STEP = "step_by_step"  # Pause after each step
-    MANUAL_PAUSE = "manual_pause"  # Paused via pause flag
-
-
 class CrawlerState(Enum):
     """Represents the current state of the crawler."""
     UNINITIALIZED = auto()
     INITIALIZING = auto()
     RUNNING = auto()
-    PAUSED = auto()
+    PAUSED_MANUAL = auto()  # Paused via pause flag
+    PAUSED_STEP = auto()    # Paused after step (step-by-step mode)
     STOPPING = auto()
     STOPPED = auto()
     ERROR = auto()
@@ -259,8 +253,6 @@ class CrawlerLoop:
         self.current_run_id = run_id
         
         self.state = CrawlerState.UNINITIALIZED
-        self.pause_mode = PauseMode.CONTINUOUS
-        self.waiting_for_continue = False
         
         # Specialized components (internally managed for now, could be injected)
         self.stuck_detector = StuckDetector(config)
@@ -345,8 +337,7 @@ class CrawlerLoop:
                 return
 
         # Check initial pause mode
-        self._update_pause_mode()
-        if self.pause_mode == PauseMode.STEP_BY_STEP:
+        if self.flag_controller.is_step_by_step_flag_present():
             logger.info("Starting in STEP-BY-STEP mode")
             self.listener.on_status_change("Status: Starting in step-by-step mode")
 
@@ -385,7 +376,7 @@ class CrawlerLoop:
                 
                 if not self.run_step():
                     logger.info("Crawler stopped (run_step returned False)")
-                    status = RunStatus.INTERRUPTED if self._check_shutdown_flag() else RunStatus.FAILED
+                    status = RunStatus.INTERRUPTED if self.flag_controller.is_shutdown_flag_present() else RunStatus.FAILED
                     self._update_run_status(status)
                     self.listener.on_status_change("Crawler stopped")
                     break
@@ -414,9 +405,6 @@ class CrawlerLoop:
         Execute a single crawler exploration step.
         """
         try:
-            # 0. Update Pause Mode
-            self._update_pause_mode()
-
             # 1. Check Flags (Shutdown / Manual Pause)
             if not self._check_continue_conditions():
                 return False
@@ -495,90 +483,67 @@ class CrawlerLoop:
         Handle end-of-step logic (pausing if needed).
         Returns True if execution should continue, False if shutdown requested.
         """
-        if self.pause_mode == PauseMode.STEP_BY_STEP:
-             return self._wait_for_step_continue()
+        # Check Step-By-Step Mode
+        if self.flag_controller.is_step_by_step_flag_present():
+            # Transition to PAUSED_STEP
+            self.state = CrawlerState.PAUSED_STEP
+            logger.info(f"Step {self.step_count} completed. Waiting for continue signal...")
+            self.listener.on_status_change(f"Paused at step {self.step_count} (Step-By-Step)")
+            
+            # Wait loop
+            while True:
+                # Check shutdown
+                if self.flag_controller.is_shutdown_flag_present():
+                    self.state = CrawlerState.STOPPING
+                    return False
+                
+                # Check if Step-By-Step disabled
+                if not self.flag_controller.is_step_by_step_flag_present():
+                    logger.info("Step-By-Step mode disabled. Resuming...")
+                    self.listener.on_status_change("Status: Resuming...")
+                    self.state = CrawlerState.RUNNING
+                    return True
+
+                # Check Continue
+                if self.flag_controller.is_continue_flag_present():
+                    self.flag_controller.remove_continue_flag()
+                    logger.info("Continue signal received. Resuming...")
+                    self.state = CrawlerState.RUNNING 
+                    return True
+                
+                time.sleep(0.2)
+        
         return True
 
-    def _check_shutdown_flag(self) -> bool:
-        return self.flag_controller.is_shutdown_flag_present()
 
-    def _check_pause_flag(self) -> bool:
-        return self.flag_controller.is_pause_flag_present()
-    
-    def _check_step_by_step_flag(self) -> bool:
-        return self.flag_controller.is_step_by_step_flag_present()
-    
-    def _check_continue_flag(self) -> bool:
-        return self.flag_controller.is_continue_flag_present()
-
-    def _clear_continue_flag(self) -> None:
-        self.flag_controller.remove_continue_flag()
-
-    def _update_pause_mode(self) -> None:
-        """Update pause mode logic based on flags."""
-        if self._check_step_by_step_flag():
-            if self.pause_mode != PauseMode.STEP_BY_STEP:
-                self.pause_mode = PauseMode.STEP_BY_STEP
-                logger.info("Switched to STEP-BY-STEP mode")
-                self.listener.on_status_change("Status: Step-by-step mode ENABLED")
-        elif self._check_pause_flag():
-            self.pause_mode = PauseMode.MANUAL_PAUSE
-        else:
-            if self.pause_mode != PauseMode.CONTINUOUS:
-                self.pause_mode = PauseMode.CONTINUOUS
-                logger.info("Switched to CONTINUOUS mode")
-                self.listener.on_status_change("Status: Step-by-step mode DISABLED")
-
-    def _wait_for_step_continue(self) -> bool:
-        """
-        Wait until continue flag is set, or shutdown/mode change.
-        Returns True to continue, False to stop (shutdown).
-        """
-        if not self.waiting_for_continue:
-            self.waiting_for_continue = True
-            logger.info(f"Step {self.step_count} completed. Waiting for continue signal...")
-            self.listener.on_status_change(f"Paused at step {self.step_count} - Waiting (Step-By-Step)")
-        
-        while True:
-            # Check shutdown
-            if self._check_shutdown_flag():
-                return False
-            
-            # Check if mode changed to continuous (flag removed)
-            if not self._check_step_by_step_flag():
-                self.waiting_for_continue = False
-                self._update_pause_mode()
-                return True
-                
-            # Check continue signal
-            if self._check_continue_flag():
-                self._clear_continue_flag()
-                self.waiting_for_continue = False
-                self.listener.on_status_change("Resuming execution...")
-                return True
-                
-            time.sleep(0.2)
-
-    def _wait_while_paused(self) -> None:
-        if self._check_pause_flag():
-            self.listener.on_status_change("Paused")
-            self.state = CrawlerState.PAUSED
-            while self._check_pause_flag() and not self._check_shutdown_flag():
-                # Allow stepping through manual pause
-                if self._check_continue_flag():
-                     self._clear_continue_flag()
-                     break
-                time.sleep(0.5)
-            self.state = CrawlerState.RUNNING
-            self.listener.on_status_change("Resuming")
 
     def _check_continue_conditions(self) -> bool:
-        if self._check_shutdown_flag():
+        """Check flags and wait if paused. Returns False if execution should stop (shutdown)."""
+        # 1. Check Shutdown
+        if self.flag_controller.is_shutdown_flag_present():
+            self.state = CrawlerState.STOPPING
             return False
-        if self._check_pause_flag():
-            self._wait_while_paused()
-            if self._check_shutdown_flag():
-                return False
+
+        # 2. Check Manual Pause
+        if self.flag_controller.is_pause_flag_present():
+            self.state = CrawlerState.PAUSED_MANUAL
+            self.listener.on_status_change("Status: PAUSED (Manual)")
+            
+            while self.flag_controller.is_pause_flag_present():
+                if self.flag_controller.is_shutdown_flag_present():
+                    self.state = CrawlerState.STOPPING
+                    return False
+                
+                # Check for single step continue or unpause
+                if self.flag_controller.is_continue_flag_present():
+                     self.flag_controller.remove_continue_flag()
+                     break # Allow single step execution
+                     
+                time.sleep(0.5)
+            
+            self.state = CrawlerState.RUNNING
+            self.listener.on_status_change("Status: Resumed")
+            
         return True
 
     def _wait_with_check(self, seconds: float) -> bool:

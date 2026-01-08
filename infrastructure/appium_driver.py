@@ -7,7 +7,8 @@ Provides a high-level interface for Appium operations using AppiumHelper.
 import base64
 import logging
 import time
-from typing import Any, Dict, Optional, Tuple
+from functools import wraps
+from typing import Any, Dict, Optional, Tuple, Union
 
 from config.app_config import Config
 from infrastructure.appium_helper import AppiumHelper
@@ -27,9 +28,36 @@ from infrastructure.appium_error_handler import AppiumError
 logger = logging.getLogger(__name__)
 
 
+def require_helper(func):
+    """Decorator to ensure helper is initialized."""
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        if not self._ensure_helper():
+            logger.error(f"Cannot execute {func.__name__}: Helper not available")
+            return None if func.__name__.startswith('get_') else False
+        return func(self, *args, **kwargs)
+    return wrapper
+
+
 class AppiumDriver:
     """High-level Appium driver wrapper."""
     
+    # Gesture constants
+    SCROLL_DURATION = 0.8  # seconds
+    FLICK_DURATION = 0.2   # seconds
+    TEXT_INPUT_DELAY = 0.3  # seconds
+    TOAST_DEFAULT_TIMEOUT = 1200  # milliseconds
+    
+    # Coordinate ratios
+    SCROLL_DISTANCE_RATIO = 0.6
+    FLICK_DISTANCE_RATIO = 0.7
+    
+    # Default window size
+    DEFAULT_WINDOW_SIZE = {"width": 1080, "height": 1920}
+    
+    # Android key codes
+    ANDROID_KEY_HOME = 3
+
     def __init__(self, app_config: Config):
         """
         Initialize AppiumDriver.
@@ -74,6 +102,101 @@ class AppiumDriver:
                 implicit_wait=implicit_wait
             )
         return True
+
+    @property
+    def driver(self):
+        """Get the underlying Appium driver."""
+        return self.helper.get_driver() if self.helper else None
+
+    def _calculate_gesture_coordinates(
+        self, 
+        direction: str, 
+        distance_ratio: float = 0.6
+    ) -> Optional[Tuple[float, float, float, float]]:
+        """
+        Calculate start and end coordinates for gestures.
+        
+        Args:
+            direction: Gesture direction ('up', 'down', 'left', 'right')
+            distance_ratio: How much of the screen to traverse (0.0-1.0)
+        
+        Returns:
+            (start_x, start_y, end_x, end_y) or None if invalid
+        """
+        window_size = self.get_window_size()
+        width = window_size['width']
+        height = window_size['height']
+        
+        # Default ratios to match original scroll logic (0.2 to 0.8)
+        # distance_ratio 0.6 means traverse 60% of screen. 
+        # Center is 0.5. Start: 0.5 - 0.3 = 0.2. End: 0.5 + 0.3 = 0.8.
+        
+        half_dist = distance_ratio / 2
+        mid_w = width / 2
+        mid_h = height / 2
+        
+        direction_lower = direction.lower()
+        if direction_lower == 'up':
+            # Original: 0.2 to 0.8 (Top to Bottom)
+            # This logic: 0.5 - 0.3 = 0.2 start, 0.5 + 0.3 = 0.8 end.
+            return (mid_w, height * (0.5 - half_dist), mid_w, height * (0.5 + half_dist))
+        elif direction_lower == 'down':
+             # Original: 0.8 to 0.2 (Bottom to Top)
+            return (mid_w, height * (0.5 + half_dist), mid_w, height * (0.5 - half_dist))
+        elif direction_lower == 'left':
+             # Original: 0.8 to 0.2 (Right to Left)
+            return (width * (0.5 + half_dist), mid_h, width * (0.5 - half_dist), mid_h)
+        elif direction_lower == 'right':
+             # Original: 0.2 to 0.8 (Left to Right)
+            return (width * (0.5 - half_dist), mid_h, width * (0.5 + half_dist), mid_h)
+        
+        return None
+
+    def _extract_bbox_center(self, bbox: Dict[str, Any]) -> Tuple[Optional[int], Optional[int]]:
+        """Extract center coordinates from bounding box."""
+        top_left = bbox.get('top_left')
+        bottom_right = bbox.get('bottom_right')
+        
+        if top_left and bottom_right:
+            x = (top_left[0] + bottom_right[0]) / 2
+            y = (top_left[1] + bottom_right[1]) / 2
+            return int(x), int(y)
+        return None, None
+
+    def _interact_with_text_element(
+        self, 
+        target_identifier: str, 
+        text: str, 
+        clear_first: bool = False
+    ) -> bool:
+        """Internal method to handle text input operations."""
+        try:
+            element = self.helper.find_element(target_identifier, strategy='id')
+            
+            # Click to focus
+            try:
+                element.click()
+                time.sleep(self.TEXT_INPUT_DELAY)
+            except Exception as e:
+                logger.warning(f"Could not click element: {e}")
+            
+            # Clear if requested
+            if clear_first:
+                element.clear()
+            
+            # Send text
+            element.send_keys(text)
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error interacting with text element: {e}")
+            return False
+
+    def _is_flag_secure_error(self, error: Exception) -> bool:
+        """Check if error is due to FLAG_SECURE blocking."""
+        error_keywords = ['secure', 'flag_secure', 'screenshot blocked']
+        error_msg = str(error).lower()
+        return any(keyword in error_msg for keyword in error_keywords)
     
     def initialize_session(
         self,
@@ -147,19 +270,14 @@ class AppiumDriver:
                 self.cfg._path_manager.set_device_info(udid=selected_device.id, name=selected_device.name)
                 
                 # Get the session path (it will be generated with the correct device info)
-                session_path = self.cfg._path_manager.get_session_path(force_regenerate=False)
-                if session_path:
-                    pass
-                else:
-                    # Path not created yet, this is OK - it will be created when needed
-                    pass
+                self.cfg._path_manager.get_session_path(force_regenerate=False)
             
             # Build capabilities for Android
             capabilities = build_android_capabilities(
                 selected_device,
                 app_package=app_package,
                 app_activity=app_activity,
-                app=None,  # Could be added as parameter
+                app=None,
                 additional_caps={
                     'appium:noReset': True,
                 }
@@ -216,58 +334,63 @@ class AppiumDriver:
             logger.error(f"Unexpected error initializing session: {e}", exc_info=True)
             return False
     
+    @require_helper
     def validate_session(self) -> bool:
-        """Validate that the current session is still active."""
-        if not self._ensure_helper():
-            return False
+        """
+        Validate that the current session is still active.
         
+        Returns:
+            True if session is valid, False otherwise
+        """
         try:
             is_valid = self.helper.validate_session()
             if not is_valid:
-                self._session_initialized = False
-                self._session_info = None
+                self._invalidate_session()
             return is_valid
         except Exception as e:
             logger.error(f"Error validating session: {e}")
-            self._session_initialized = False
+            self._invalidate_session()
             return False
+
+    def _invalidate_session(self):
+        """Mark session as invalid and clear session info."""
+        self._session_initialized = False
+        self._session_info = None
     
+    @require_helper
     def get_page_source(self) -> Optional[str]:
         """Get page source."""
-        if not self._ensure_helper():
-            return None
-        
         try:
             return self.helper.get_page_source()
         except Exception as e:
             logger.error(f"Error getting page source: {e}")
             return None
     
+    @require_helper
     def get_screenshot_as_base64(self) -> Optional[str]:
         """Get screenshot as base64 string."""
-        if not self._ensure_helper():
-            logger.error("Screenshot failed: Helper not available")
-            return None
-        
         try:
             screenshot = self.helper.take_screenshot()
             if not screenshot:
                 logger.warning("Screenshot returned empty/None")
                 return None
-            # Screenshot is already base64 from Appium-Python-Client
+            
+            # Clean up data URI if present
             if screenshot.startswith("data:image"):
                 screenshot = screenshot.split(",", 1)[1]
-            self._last_screenshot_was_blocked = False  # Screenshot succeeded
+            
+            self._last_screenshot_was_blocked = False
             return screenshot
+            
         except Exception as e:
-            error_msg = str(e).lower()
-            if "secure" in error_msg:
-                logger.warning("Screenshot blocked by FLAG_SECURE (app has secure flag)")
-                self._last_screenshot_was_blocked = True  # Mark screenshot as blocked
-                return None  
+            # Check for FLAG_SECURE blocking
+            if self._is_flag_secure_error(e):
+                logger.warning("Screenshot blocked by FLAG_SECURE")
+                self._last_screenshot_was_blocked = True
+                return None
             
             logger.error(f"Error getting screenshot: {e}")
-            self._last_screenshot_was_blocked = False  # Not blocked, just an error
+            self._last_screenshot_was_blocked = False
             return None
     
     def get_screenshot_bytes(self) -> Optional[bytes]:
@@ -281,85 +404,54 @@ class AppiumDriver:
                 return None
         return None
     
+    @require_helper
     def tap(
         self,
-        target_identifier: Optional[str],
-        bbox: Optional[Dict[str, Any]] = None
+        target_identifier: Optional[str] = None,
+        bbox: Optional[Dict[str, Any]] = None,
+        x: Optional[int] = None,
+        y: Optional[int] = None
     ) -> bool:
         """
         Tap element or coordinates.
-        
-        Args:
-            target_identifier: Element identifier (optional if bbox provided)
-            bbox: Bounding box with 'top_left' and 'bottom_right' (optional if target_identifier provided)
-            
-        Returns:
-            True if tap successful
+        Priority: coordinates (x,y) > bbox > identifier
         """
-        if not self._ensure_helper():
-            return False
-        
         try:
-            # Prioritize bbox if provided (e.g. for OCR or visual targets)
-            if bbox:
-                top_left = bbox.get('top_left')
-                bottom_right = bbox.get('bottom_right')
-                
-                if top_left and bottom_right:
-                    try:
-                        x = int((top_left[0] + bottom_right[0]) / 2)
-                        y = int((top_left[1] + bottom_right[1]) / 2)
-                        
-                        # Appium tap takes a list of tuples: [(x, y)]
-                        # Use helper.driver to access the underlying Selenium/Appium driver
-                        if self.helper and self.helper.driver:
-                            self.helper.driver.tap([(x, y)])
-                            return True
-                        else:
-                            logger.error("Helper or driver not initialized for coordinate tap")
-                            return False
-                    except Exception as e:
-                        logger.error(f"Error tapping coordinates: {e}")
-                        # Fallback to identifier if coordinates fail
+            # Get tap coordinates
+            tap_x, tap_y = None, None
             
-            # Use element lookup
-            if target_identifier:
+            if x is not None and y is not None:
+                tap_x, tap_y = x, y
+            elif bbox:
+                tap_x, tap_y = self._extract_bbox_center(bbox)
+            elif target_identifier:
                 return self.helper.tap_element(target_identifier, strategy='id')
+            else:
+                logger.error("tap() requires coordinates, bbox, or identifier")
+                return False
             
-            logger.error("tap() called without valid bbox or target_identifier")
+            # Execute tap at coordinates
+            if tap_x is not None and tap_y is not None:
+                if self.driver:
+                    self.driver.tap([(int(tap_x), int(tap_y))])
+                    return True
+                else:
+                    logger.error("Driver not available for tap")
+                    return False
+                
             return False
             
         except Exception as e:
-            logger.error(f"Error during tap: {e}", exc_info=True)
+            context = f"identifier='{target_identifier}'" if target_identifier else f"bbox={bbox}"
+            logger.error(f"Error during tap ({context}): {e}", exc_info=True)
             return False
     
+    @require_helper
     def input_text(self, target_identifier: str, text: str) -> bool:
-        """Input text into element.
-        
-        Clicks the element first to focus it, then sends keys.
-        """
-        if not self._ensure_helper():
-            return False
-        
-        try:
-            # Find the element first
-            element = self.helper.find_element(target_identifier, strategy='id')
-            
-            # Click to focus the element
-            try:
-                element.click()
-                import time
-                time.sleep(0.3)  # Brief delay for keyboard to appear
-            except Exception as click_err:
-                logger.warning(f"Could not click element before input: {click_err}")
-            
-            # Now send the text
-            element.send_keys(text)
-            return True
-        except Exception as e:
-            logger.error(f"Error during input_text: {e}")
-            return False
+        """Input text into element (appends to existing text)."""
+        return self._interact_with_text_element(target_identifier, text, clear_first=False)
     
+    @require_helper
     def scroll(self, direction: str) -> bool:
         """
         Scroll in specified direction.
@@ -370,38 +462,14 @@ class AppiumDriver:
         Returns:
             True if scroll successful
         """
-        if not self._ensure_helper():
-            return False
-        
         try:
-            # Get window size
-            window_size = self.helper.get_window_size()
-            width = window_size['width']
-            height = window_size['height']
-            
-            # Calculate scroll coordinates based on direction
-            direction_lower = direction.lower()
-            if direction_lower == 'up':
-                start_x, start_y = width / 2, height * 0.2
-                end_x, end_y = width / 2, height * 0.8
-            elif direction_lower == 'down':
-                start_x, start_y = width / 2, height * 0.8
-                end_x, end_y = width / 2, height * 0.2
-            elif direction_lower == 'left':
-                start_x, start_y = width * 0.8, height / 2
-                end_x, end_y = width * 0.2, height / 2
-            elif direction_lower == 'right':
-                start_x, start_y = width * 0.2, height / 2
-                end_x, end_y = width * 0.8, height / 2
-            else:
+            coords = self._calculate_gesture_coordinates(direction, distance_ratio=self.SCROLL_DISTANCE_RATIO)
+            if not coords:
                 logger.error(f"Invalid scroll direction: {direction}")
                 return False
             
-            # Perform swipe for scrolling (delegated to GestureHandler)
             if self.helper.gesture_handler:
-                self.helper.gesture_handler.perform_w3c_swipe(
-                    start_x, start_y, end_x, end_y, duration_sec=0.8
-                )
+                self.helper.gesture_handler.perform_w3c_swipe(*coords, duration_sec=self.SCROLL_DURATION)
                 return True
             
             return False
@@ -410,6 +478,7 @@ class AppiumDriver:
             logger.error(f"Error during scroll: {e}")
             return False
     
+    @require_helper
     def long_press(self, target_identifier: str, duration: int) -> bool:
         """
         Long press element.
@@ -421,9 +490,6 @@ class AppiumDriver:
         Returns:
             True if successful
         """
-        if not self._ensure_helper():
-            return False
-        
         try:
             # Find element and get its center
             element = self.helper.find_element(target_identifier, strategy='id')
@@ -440,32 +506,24 @@ class AppiumDriver:
             logger.error(f"Error during long_press: {e}")
             return False
     
+    @require_helper
     def press_back(self) -> bool:
         """Press back button."""
-        if not self._ensure_helper():
-            logger.error("Cannot press back: AppiumHelper not available")
-            return False
-        
         try:
-            driver = self.helper.get_driver()
-            if driver:
-                driver.back()
+            if self.driver:
+                self.driver.back()
                 return True
             return False
         except Exception as e:
-            logger.error(f"[ERROR] Error during press_back: {e}", exc_info=True)
+            logger.error(f"Error during press_back: {e}", exc_info=True)
             return False
 
+    @require_helper
     def press_home(self) -> bool:
         """Press home button."""
-        if not self._ensure_helper():
-            return False
-        
         try:
-            driver = self.helper.get_driver()
-            if driver:
-                # Use Appium's press_keycode for Android HOME key (3)
-                driver.press_keycode(3)
+            if self.driver:
+                self.driver.press_keycode(self.ANDROID_KEY_HOME)
                 return True
             return False
         except Exception as e:
@@ -476,57 +534,48 @@ class AppiumDriver:
         """Wait for toast to dismiss."""
         time.sleep(timeout_ms / 1000.0)
     
+    @require_helper
     def get_window_size(self) -> Dict[str, int]:
         """Get window size."""
-        if not self._ensure_helper():
-            return {"width": 1080, "height": 1920}  # Default fallback
-        
         try:
             return self.helper.get_window_size()
         except Exception as e:
             logger.error(f"Error getting window size: {e}")
-            return {"width": 1080, "height": 1920}
+            return self.DEFAULT_WINDOW_SIZE
     
-    def start_video_recording(self, **kwargs) -> bool:
+    @require_helper
+    def start_video_recording(self, max_retries: int = 2, **kwargs) -> bool:
         """
         Starts recording the screen using Appium's built-in method.
         
         Args:
+            max_retries: Number of retries for transient errors
             **kwargs: Optional recording options to pass to start_recording_screen()
             
         Returns:
             True if recording started successfully, False otherwise
         """
-        if not self._ensure_helper():
-            logger.error("Cannot start video recording: AppiumHelper not available")
+        if not self.driver:
+            logger.error("Cannot start video recording: Driver not available")
             return False
         
-        try:
-            driver = self.helper.get_driver()
-            if not driver:
-                logger.error("Cannot start video recording: Driver not available")
-                return False
-            
-            driver.start_recording_screen(**kwargs)
-            return True
-            
-        except Exception as e:
-            error_str = str(e)
-            # This is a benign error - Appium tries to stop a non-existent recording before starting
-            if "No such process" in error_str or "screenrecord" in error_str:
-                # Try starting again - sometimes it works on second attempt
-                try:
-                    driver = self.helper.get_driver()
-                    if driver:
-                        driver.start_recording_screen(**kwargs)
-                        return True
-                except Exception:
-                    pass
-                return False
-            else:
+        for attempt in range(max_retries):
+            try:
+                self.driver.start_recording_screen(**kwargs)
+                return True
+            except Exception as e:
+                error_str = str(e).lower()
+                # Retry for known transient errors
+                if attempt < max_retries - 1 and ('no such process' in error_str or 'screenrecord' in error_str):
+                    logger.debug(f"Retrying video recording start (attempt {attempt + 2}/{max_retries})")
+                    continue
+                
                 logger.error(f"Failed to start video recording: {e}")
                 return False
+        
+        return False
     
+    @require_helper
     def stop_video_recording(self) -> Optional[str]:
         """
         Stops recording the screen and returns the video data as base64 string.
@@ -534,17 +583,12 @@ class AppiumDriver:
         Returns:
             Video data as base64-encoded string, or None on error
         """
-        if not self._ensure_helper():
-            logger.error("Cannot stop video recording: AppiumHelper not available")
-            return None
-        
         try:
-            driver = self.helper.get_driver()
-            if not driver:
+            if not self.driver:
                 logger.error("Cannot stop video recording: Driver not available")
                 return None
             
-            video_data = driver.stop_recording_screen()
+            video_data = self.driver.stop_recording_screen()
             return video_data
             
         except Exception as e:
@@ -578,22 +622,18 @@ class AppiumDriver:
             logger.error(f"Failed to save video to {file_path}: {e}", exc_info=True)
             return False
     
+    @require_helper
     def get_current_package(self) -> Optional[str]:
         """Get current package name (Android only)."""
-        if not self._ensure_helper():
-            return None
-        
         try:
             return self.helper.get_current_package()
         except Exception as e:
             logger.warning(f"Error getting current package: {e}")
             return None
     
+    @require_helper
     def get_current_activity(self) -> Optional[str]:
         """Get current activity name (Android only)."""
-        if not self._ensure_helper():
-            return None
-        
         try:
             return self.helper.get_current_activity()
         except Exception as e:
@@ -606,36 +646,31 @@ class AppiumDriver:
         activity = self.get_current_activity()
         return package, activity
     
+    @require_helper
     def terminate_app(self, package_name: str) -> bool:
         """Terminate app."""
-        if not self._ensure_helper():
-            return False
-        
         try:
-            driver = self.helper.get_driver()
-            if driver:
-                driver.terminate_app(package_name)
+            if self.driver:
+                self.driver.terminate_app(package_name)
                 return True
             return False
         except Exception as e:
             logger.error(f"Error terminating app: {e}")
             return False
     
+    @require_helper
     def launch_app(self) -> bool:
         """Launch app."""
-        if not self._ensure_helper():
-            return False
-        
         try:
-            driver = self.helper.get_driver()
-            if driver:
-                driver.launch_app()
+            if self.driver:
+                self.driver.launch_app()
                 return True
             return False
         except Exception as e:
             logger.error(f"Error launching app: {e}")
             return False
     
+    @require_helper
     def start_activity(
         self,
         app_package: str,
@@ -653,19 +688,14 @@ class AppiumDriver:
         Returns:
             True if activity was started successfully, False otherwise
         """
-        if not self._ensure_helper():
-            return False
-        
         try:
             wait_ms = int(wait_after_launch * 1000)
-            success = self.helper.start_activity(app_package, app_activity, wait_ms)
-            if success:
-                pass
-            return success
+            return self.helper.start_activity(app_package, app_activity, wait_ms)
         except Exception as e:
             logger.error(f"Error starting activity: {e}")
             return False
     
+    @require_helper
     def double_tap(
         self,
         target_identifier: Optional[str],
@@ -673,17 +703,8 @@ class AppiumDriver:
     ) -> bool:
         """
         Double tap element or coordinates.
-        
-        Args:
-            target_identifier: Element identifier (optional if bbox provided)
-            bbox: Bounding box with 'top_left' and 'bottom_right' (optional if target_identifier provided)
-            
-        Returns:
-            True if double tap successful
+        Priority: element identifier (currently requires it)
         """
-        if not self._ensure_helper():
-            return False
-        
         try:
             # Only use element lookup
             if target_identifier:
@@ -704,6 +725,7 @@ class AppiumDriver:
             logger.error(f"Error during double_tap: {e}")
             return False
     
+    @require_helper
     def clear_text(self, target_identifier: str) -> bool:
         """
         Clear text from input element.
@@ -714,9 +736,6 @@ class AppiumDriver:
         Returns:
             True if clear successful
         """
-        if not self._ensure_helper():
-            return False
-        
         try:
             element = self.helper.find_element(target_identifier, strategy='id')
             
@@ -737,6 +756,7 @@ class AppiumDriver:
             logger.error(f"Error during clear_text: {e}")
             return False
     
+    @require_helper
     def replace_text(self, target_identifier: str, text: str) -> bool:
         """
         Replace existing text in input element.
@@ -750,32 +770,9 @@ class AppiumDriver:
         Returns:
             True if replace successful
         """
-        if not self._ensure_helper():
-            return False
-        
-        try:
-            # Find the element first
-            element = self.helper.find_element(target_identifier, strategy='id')
-            
-            # Click to focus the element
-            try:
-                element.click()
-                import time
-                time.sleep(0.3)  # Brief delay for keyboard to appear
-            except Exception as click_err:
-                logger.warning(f"Could not click element before replace: {click_err}")
-            
-            # Clear existing text
-            element.clear()
-            
-            # Send new text
-            element.send_keys(text)
-            return True
-            
-        except Exception as e:
-            logger.error(f"Error during replace_text: {e}")
-            return False
+        return self._interact_with_text_element(target_identifier, text, clear_first=True)
     
+    @require_helper
     def flick(self, direction: str) -> bool:
         """
         Perform a fast flick gesture in specified direction.
@@ -786,38 +783,14 @@ class AppiumDriver:
         Returns:
             True if flick successful
         """
-        if not self._ensure_helper():
-            return False
-        
         try:
-            # Get window size
-            window_size = self.helper.get_window_size()
-            width = window_size['width']
-            height = window_size['height']
-            
-            # Calculate flick coordinates based on direction
-            direction_lower = direction.lower()
-            if direction_lower == 'up':
-                start_x, start_y = width / 2, height * 0.7
-                end_x, end_y = width / 2, height * 0.1
-            elif direction_lower == 'down':
-                start_x, start_y = width / 2, height * 0.3
-                end_x, end_y = width / 2, height * 0.9
-            elif direction_lower == 'left':
-                start_x, start_y = width * 0.7, height / 2
-                end_x, end_y = width * 0.1, height / 2
-            elif direction_lower == 'right':
-                start_x, start_y = width * 0.3, height / 2
-                end_x, end_y = width * 0.9, height / 2
-            else:
+            coords = self._calculate_gesture_coordinates(direction, distance_ratio=self.FLICK_DISTANCE_RATIO)
+            if not coords:
                 logger.error(f"Invalid flick direction: {direction}")
                 return False
             
-            # Perform fast swipe for flicking (delegated to GestureHandler)
             if self.helper.gesture_handler:
-                self.helper.gesture_handler.perform_w3c_swipe(
-                    start_x, start_y, end_x, end_y, duration_sec=0.2
-                )
+                self.helper.gesture_handler.perform_w3c_swipe(*coords, duration_sec=self.FLICK_DURATION)
                 return True
             
             return False
@@ -825,7 +798,11 @@ class AppiumDriver:
         except Exception as e:
             logger.error(f"Error during flick: {e}")
             return False
+
+            
+
     
+    @require_helper
     def reset_app(self) -> bool:
         """
         Reset app to initial state.
@@ -833,13 +810,9 @@ class AppiumDriver:
         Returns:
             True if reset successful
         """
-        if not self._ensure_helper():
-            return False
-        
         try:
-            driver = self.helper.get_driver()
-            if driver:
-                driver.reset()
+            if self.driver:
+                self.driver.reset()
                 return True
             return False
         except Exception as e:
@@ -847,9 +820,12 @@ class AppiumDriver:
             return False
     
     def press_back_button(self) -> bool:
-        """Press back button (alias for press_back)."""
+        """Press back button (deprecated, use press_back instead)."""
+        import warnings
+        warnings.warn("press_back_button is deprecated, use press_back instead", DeprecationWarning)
         return self.press_back()
     
+    @require_helper
     def hide_keyboard(self) -> bool:
         """
         Hide the on-screen keyboard if it's visible.
@@ -857,13 +833,9 @@ class AppiumDriver:
         Returns:
             True if keyboard was hidden or wasn't visible, False on error
         """
-        if not self._ensure_helper():
-            return False
-        
         try:
-            driver = self.helper.get_driver()
-            if driver:
-                driver.hide_keyboard()
+            if self.driver:
+                self.driver.hide_keyboard()
                 return True
             return False
         except Exception as e:

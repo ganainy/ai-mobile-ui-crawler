@@ -95,21 +95,23 @@ class AgentAssistant:
     """
     
     def __init__(self,
-                app_config, # Type hint with your actual Config class
+                app_config: Config, 
                 model_alias_override: Optional[str] = None,
                 safety_settings_override: Optional[Dict] = None,
                 ui_callback=None,
-                tools=None):  # Added tools parameter
+                tools=None):
+        
+        self.cfg = app_config
+        
+        # Fix tools initialization: Use passed app_config instead of creating new one
         if tools is None:
-            app_config = Config()
             from infrastructure.appium_driver import AppiumDriver
-            tools = Tools(driver=AppiumDriver(app_config))
+            tools = Tools(driver=AppiumDriver(self.cfg))
         
         self.tools = tools
-        self.cfg = app_config
-        self.response_cache: Dict[str, Tuple[Dict[str, Any], float, int]] = {}
-        self.ui_callback = ui_callback  # Callback for UI updates
-
+        self.ui_callback = ui_callback
+        
+        # Removed unused response_cache
 
         # Determine which AI provider to use
         self.ai_provider = self.cfg.get('AI_PROVIDER', DEFAULT_AI_PROVIDER).lower()
@@ -117,32 +119,33 @@ class AgentAssistant:
         # Adapter provider override (for routing purposes without changing UI label)
         self._adapter_provider_override: Optional[str] = None
 
-        # Get the appropriate API key based on the provider using provider-agnostic utility
+        # Get the appropriate API key based on the provider
         is_valid, error_msg = validate_provider_config(self.cfg, self.ai_provider, ServiceURLs.OLLAMA)
         if not is_valid:
             raise ValueError(error_msg or f"Unsupported AI provider: {self.ai_provider}")
         
         self.api_key = get_provider_api_key(self.cfg, self.ai_provider, ServiceURLs.OLLAMA)
         if not self.api_key:
-            # This should not happen if validation passed, but add safety check
             config_key = get_provider_config_key(self.ai_provider) or "API_KEY"
             raise ValueError(f"{config_key} is not set in the provided application configuration.")
 
-        # Use DEFAULT_MODEL_TYPE directly as a provider-specific model identifier
+        # Validate and set model name
         model_id = model_alias_override or self.cfg.DEFAULT_MODEL_TYPE
-        if not model_id or str(model_id).strip() in ["", "No model selected"]:
+        self.model_name = str(model_id).strip() if model_id else ""
+        
+        if not self.model_name or self.model_name in ["", "No model selected", "None"]:
             raise ValueError("No model selected. Please choose a model in AI Settings (Default Model Type).")
+            
+        # Backward compatibility for model_alias/actual_model_name if needed by other modules
+        # but we standardize on self.model_name internally
+        self.model_alias = self.model_name 
+        self.actual_model_name = self.model_name
 
-        # Treat the selected value as the actual model name across providers
-        self.model_alias = str(model_id)
-        self.actual_model_name = str(model_id)
-
-        # Construct a minimal provider-agnostic model config. Adapters apply defaults.
+        # Construct a minimal provider-agnostic model config
         model_config_from_file = {
-            'name': self.actual_model_name,
-            'description': f"Direct model id '{self.actual_model_name}' for provider '{self.ai_provider}'",
+            'name': self.model_name,
+            'description': f"Direct model id '{self.model_name}' for provider '{self.ai_provider}'",
             'generation_config': {
-                # Keep conservative defaults; adapters may override or apply safer fallbacks
                 'temperature': DEFAULT_MODEL_TEMP,
                 'top_p': 0.95,
                 'max_output_tokens': DEFAULT_MAX_TOKENS
@@ -150,24 +153,23 @@ class AgentAssistant:
             'online': self.ai_provider in [DEFAULT_AI_PROVIDER, 'openrouter']
         }
 
-        # Initialize model using the adapter
+        # Initialize model
         self._initialize_model(model_config_from_file, safety_settings_override)
 
-        # Initialize provider-agnostic session
+        # Initialize session
         self._init_session(user_id=None)
         
-        # Define AI helper for text processing (simple prompt chain)
+        # Define AI helper for text processing
         def ai_helper(prompt: str) -> str:
             """Simple helper to invoke the AI model for a single text prompt."""
             try:
-                # Use the adapter's standard interface
                 response_text, _ = self.model_adapter.generate_response(prompt)
                 return response_text
             except Exception as e:
                 logging.error(f"AI Helper failed: {e}")
                 return ""
 
-        # Initialize action executor (handles all action execution logic)
+        # Initialize action executor
         self.action_executor = ActionExecutor(self.tools.driver, self.cfg, ai_helper=ai_helper)
         
         # Initialize prompt builder
@@ -179,16 +181,10 @@ class AgentAssistant:
     def _init_session(self, user_id: Optional[str] = None):
         """Initialize a new provider-agnostic session."""
         now = time.time()
-        # actual_model_name is always set in __init__ before this is called
-        # This fallback chain is defensive programming but should never execute
-        model = self.actual_model_name if hasattr(self, 'actual_model_name') else (self.model_alias if hasattr(self, 'model_alias') else self.cfg.get('DEFAULT_MODEL_TYPE', None))
-        if not model:
-            # This should never happen due to validation in __init__, but fail fast if it does
-            raise ValueError("No model available for session initialization")
         self.session = Session(
             session_id=str(uuid.uuid4()),
             provider=self.ai_provider,
-            model=str(model),
+            model=self.model_name,
             created_at=now,
             last_active=now,
             metadata={
@@ -261,80 +257,12 @@ class AgentAssistant:
             raise
 
     def _setup_ai_interaction_logger(self, force_recreate: bool = False):
-        """Initializes only the human-readable logger (JSONL removed).
+        """Get reference to the shared AI interaction logger.
         
-        Args:
-            force_recreate: If True, close existing handlers and recreate them.
+        The logger handlers are configured externally (e.g. in crawler_loop.py).
+        This method just ensures we have the reference.
         """
-        # Get the logger instance (shared across all AgentAssistant instances)
-        logger = logging.getLogger('AIInteractionReadableLogger')
-        
-        # Set self.ai_interaction_readable_logger to the logger instance
-        self.ai_interaction_readable_logger = logger
-        
-        # Clean up any closed or invalid handlers before checking
-        if logger.handlers:
-            for handler in list(logger.handlers):
-                try:
-                    # Check if handler is closed or invalid
-                    if isinstance(handler, logging.FileHandler):
-                        # Try to access the stream to see if it's closed
-                        if hasattr(handler, 'stream') and handler.stream:
-                            try:
-                                # Check if stream is closed
-                                if handler.stream.closed:
-                                    logger.removeHandler(handler)
-                                    continue
-                            except (AttributeError, ValueError):
-                                # Stream might be invalid, remove handler
-                                logger.removeHandler(handler)
-                                continue
-                except Exception:
-                    # If we can't check the handler, remove it to be safe
-                    try:
-                        logger.removeHandler(handler)
-                    except Exception:
-                        pass
-        
-        if logger.handlers and not force_recreate:
-            return  # Already configured
-
-        # Close existing file handlers if recreating
-        if force_recreate and logger.handlers:
-            for handler in list(logger.handlers):
-                if isinstance(handler, logging.FileHandler):
-                    try:
-                        handler.close()
-                    except Exception:
-                        pass
-                logger.removeHandler(handler)
-
-        # Use the LOG_DIR property which resolves the template properly
-        try:
-            target_log_dir = self.cfg.LOG_DIR if hasattr(self.cfg, 'LOG_DIR') else self.cfg.get('LOG_DIR', None)
-        except Exception as e:
-            # Only log warning if it's NOT the expected "APP_PACKAGE not set" error
-            if "APP_PACKAGE must be set" not in str(e):
-                logging.warning(f"Could not get LOG_DIR property: {e}, trying get() method")
-            target_log_dir = self.cfg.get('LOG_DIR', None)
-        
-        # Don't create directory here - it will be created when the file handler is created
-        # This allows path regeneration to work without directory locks
-        
-        # Configure logger settings
-        # Configure logger settings
-        logger.setLevel(logging.INFO)
-        logger.propagate = True  # Propagate to root logger (which writes to crawler.log)
-        
-        # We don't add specific handlers anymore - we rely on the root logger's handler
-        # which is configured in crawler_loop.py to write to the single log file.
-        
-        # Helper logic to ensure no old handlers remain
-        for handler in list(logger.handlers):
-            try:
-                logger.removeHandler(handler)
-            except Exception:
-                pass
+        self.ai_interaction_readable_logger = logging.getLogger('AIInteractionReadableLogger')
 
 
     def _prepare_image_part(self, screenshot_bytes: Optional[bytes]) -> Optional[Image.Image]:
@@ -374,238 +302,218 @@ class AgentAssistant:
             logging.error(f"Failed to prepare image part for AI: {e}", exc_info=True)
             return None
 
-    def get_next_action(self, screenshot_bytes: Optional[bytes], xml_context: str, 
-                                   action_history: Optional[List[Dict[str, Any]]] = None,
-                                   visited_screens: Optional[List[Dict[str, Any]]] = None,
-                                   current_screen_actions: Optional[List[Dict[str, Any]]] = None,
-                                   current_screen_id: Optional[int] = None,
-                                   current_screen_visit_count: int = 0, 
-                                   current_composite_hash: str = "", 
-                                   last_action_feedback: Optional[str] = None,
-                                   is_stuck: bool = False,
-                                   stuck_reason: Optional[str] = None,
-                                   ocr_results: Optional[List[Dict[str, Any]]] = None,
-                                   exploration_journal: Optional[List[Dict[str, str]]] = None,
-                                   is_synthetic_screenshot: bool = False) -> Optional[Tuple[Dict[str, Any], float, int, Optional[str], Optional[List[Dict[str, str]]]]]:
-        """Get the next action using direct LLM invocation.
+    def _extract_xml_string(self, xml_context: Union[str, Dict]) -> str:
+        """Extract XML string from various response formats."""
+        if isinstance(xml_context, str):
+            return xml_context
+        
+        if not isinstance(xml_context, dict):
+            return str(xml_context)
+        
+        # Try nested path: data.data.source
+        if 'data' in xml_context:
+            data = xml_context['data']
+            if isinstance(data, dict):
+                # Check for deeply nested structure
+                if 'data' in data and isinstance(data['data'], dict):
+                    return data['data'].get('source') or data['data'].get('xml') or str(xml_context)
+                # Check for direct structure
+                return data.get('source') or data.get('xml') or str(xml_context)
+        
+        return str(xml_context)
+
+    def _resolve_ocr_references(self, validated_data: Dict[str, Any], 
+                               ocr_results: Optional[List[Dict]]) -> None:
+        """Resolve OCR IDs to bounding boxes in-place."""
+        if not ocr_results or "actions" not in validated_data:
+            return
+        
+        for action_item in validated_data["actions"]:
+            target_id = action_item.get("target_identifier")
+            if not target_id or not str(target_id).startswith("ocr_"):
+                continue
+            
+            try:
+                idx = int(str(target_id).split("_")[1])
+                if 0 <= idx < len(ocr_results):
+                    item = ocr_results[idx]
+                    bounds = item.get('bounds')
+                    if bounds and len(bounds) == 4:
+                        action_item["target_bounding_box"] = {
+                            "top_left": [bounds[0], bounds[1]],
+                            "bottom_right": [bounds[2], bounds[3]]
+                        }
+            except (ValueError, IndexError):
+                pass
+    
+    def _prepare_context(self, screenshot_bytes, xml_context, ocr_results, 
+                        exploration_journal, **kwargs) -> Dict[str, Any]:
+        """Prepare context dictionary for AI prompt."""
+        
+        # Extract XML
+        xml_string_raw = self._extract_xml_string(xml_context)
+        
+        # Simplify XML
+        xml_string_simplified = xml_string_raw
+        if xml_string_raw:
+            try:
+                from utils.utils import xml_to_structured_json
+                xml_string_simplified = xml_to_structured_json(xml_string_raw)
+            except Exception as e:
+                logging.warning(f"XML simplification failed, using original: {e}")
+                xml_string_simplified = xml_string_raw
+
+        # Detect secure screens
+        is_secure_screen = False
+        if screenshot_bytes and len(screenshot_bytes) < 200:
+            try:
+                if b"IVBOR" in screenshot_bytes or len(screenshot_bytes) < 100:
+                    is_secure_screen = True
+            except Exception:
+                pass
+        
+        if is_secure_screen:
+            logging.warning("⚠️ SECURE SCREEN DETECTED: Visual context disabled.")
+            screenshot_bytes = None
+            warning_text = "SECURE VIEW DETECTED (FLAG_SECURE). SCREENSHOT IS BLACK. RELY ON XML HIERARCHY."
+            if isinstance(xml_string_simplified, dict):
+                xml_string_simplified["_WARNING"] = warning_text
+            elif isinstance(xml_string_simplified, str):
+                xml_string_simplified = f"<!-- ⚠️ {warning_text} -->\n" + xml_string_simplified
+
+        # Prepare image if enabled
+        self._current_prepared_image = None
+        enable_image_context = self.cfg.get('ENABLE_IMAGE_CONTEXT', False)
+        
+        if enable_image_context and screenshot_bytes:
+             try:
+                 from domain.providers.registry import ProviderRegistry
+                 provider_strategy = ProviderRegistry.get_by_name(self.ai_provider)
+                 if provider_strategy and provider_strategy.supports_image_context(self.cfg, self.model_name):
+                      self._current_prepared_image = self._prepare_image_part(screenshot_bytes)
+                      if self._current_prepared_image:
+                           logging.info(f"📸 Image prepared for AI: {self._current_prepared_image.size}")
+             except Exception as e:
+                  logging.warning(f"Error preparing image: {e}")
+        elif enable_image_context and not screenshot_bytes and not is_secure_screen:
+             logging.warning("📸 Image context enabled but no screenshot_bytes available")
+
+        # Build context dict
+        context = {
+            "screenshot_bytes": screenshot_bytes,
+            "xml_context": xml_string_simplified,
+            "_full_xml_context": xml_string_raw,
+            "ocr_context": ocr_results,
+            "exploration_journal": exploration_journal or [],
+            "app_package": self.cfg.get("APP_PACKAGE") or "",
+            "current_screen_actions": kwargs.get("current_screen_actions", []),
+            "current_screen_visit_count": kwargs.get("current_screen_visit_count", 0),
+            "current_composite_hash": kwargs.get("current_composite_hash", ""),
+            "last_action_feedback": kwargs.get("last_action_feedback", ""),
+            "is_stuck": kwargs.get("is_stuck", False),
+            "stuck_reason": kwargs.get("stuck_reason", ""),
+            "current_screen_id": kwargs.get("current_screen_id"),
+            "is_synthetic_screenshot": kwargs.get("is_synthetic_screenshot", False),
+        }
+        return context
+
+    def get_next_action(self, 
+                   screenshot_bytes: Optional[bytes],
+                   xml_context: str,
+                   ocr_results: Optional[List[Dict[str, Any]]] = None,
+                   exploration_journal: Optional[List[Dict[str, str]]] = None,
+                   current_screen_id: Optional[int] = None,
+                   current_screen_visit_count: int = 0,
+                   is_stuck: bool = False,
+                   **deprecated_kwargs) -> Optional[Tuple[Dict[str, Any], float, int, Optional[str]]]:
+        """Get next action from AI.
         
         Args:
-            screenshot_bytes: Screenshot image bytes (optional, for future vision support)
-            xml_context: XML representation of current screen
-            action_history: List of structured action history entries with success/failure info (DEPRECATED - use exploration_journal)
-            visited_screens: List of visited screens with visit counts (DEPRECATED - use exploration_journal)
-            current_screen_actions: List of actions already tried on current screen (DEPRECATED - use exploration_journal)
-            current_screen_id: ID of current screen (if known)
+            screenshot_bytes: Screenshot image bytes
+            xml_context: XML representation of screen
+            ocr_results: OCR detected elements
+            exploration_journal: AI-maintained exploration journal
+            current_screen_id: ID of current screen
             current_screen_visit_count: Number of times current screen has been visited
-            current_composite_hash: Hash of current screen state
-            last_action_feedback: Feedback from last action execution
-            is_stuck: Whether the crawler is detected to be stuck on the same screen
-            stuck_reason: Reason why the crawler is considered stuck
-            ocr_results: List of OCR detected elements (text, bounds, confidence)
-            exploration_journal: AI-maintained exploration journal (replaces action_history, visited_screens, current_screen_actions)
-            is_synthetic_screenshot: Whether the provided screenshot_bytes are generated from XML (FLAG_SECURE mode)
+            is_stuck: Whether the crawler is detected to be stuck
+            **deprecated_kwargs: Catches deprecated parameters (action_history, etc.)
             
         Returns:
-            Tuple of (action_data dict, confidence float, token_count int, ai_input_prompt str) or None on error
+            Tuple of (action_data dict, confidence float, token_count int, ai_input_prompt str structure) or None
         """
+        if deprecated_kwargs:
+            pass # Ignored parameters
+
         try:
-            # Get context sources - HYBRID (XML+OCR) is always enabled
-            context_source = self.cfg.CONTEXT_SOURCE or [ContextSource.HYBRID]
-            
-            # HYBRID is always on, so XML and OCR are always included
-            # IMAGE is optional based on whether it's in context_source
-            
-            # Prepare context for the chain - always include OCR
-            context = {
-                "screenshot_bytes": screenshot_bytes,
-                "xml_context": None,  # Will be set below
-                "ocr_context": ocr_results,  # Always included with HYBRID
-                "exploration_journal": exploration_journal or [],
-                "current_screen_actions": current_screen_actions or [],  # For stuck detection
-                "current_screen_id": current_screen_id,
-                "current_screen_visit_count": current_screen_visit_count or 0,
-                "current_composite_hash": current_composite_hash or "",
-                "last_action_feedback": last_action_feedback or "",
-                "is_stuck": is_stuck,
-                "stuck_reason": stuck_reason or "",
-                "app_package": self.cfg.get("APP_PACKAGE") or "",  # For credential store lookup
-                "is_synthetic_screenshot": is_synthetic_screenshot,  # New flag for prompt builder
-            }
+            # Prepare context
+            context = self._prepare_context(
+                screenshot_bytes=screenshot_bytes,
+                xml_context=xml_context,
+                ocr_results=ocr_results,
+                exploration_journal=exploration_journal,
+                current_screen_id=current_screen_id,
+                current_screen_visit_count=current_screen_visit_count,
+                is_stuck=is_stuck,
+                **deprecated_kwargs # Pass other kwargs if any are relevant
+            )
 
-            # Extract actual XML string and simplify it before sending to AI
-            xml_string_raw = xml_context
-            if isinstance(xml_context, dict):
-                # Handle nested MCP response structure: data.data.source or data.source
-                if 'data' in xml_context:
-                    data = xml_context['data']
-                    if isinstance(data, dict):
-                        # Check for nested data structure (data.data.source)
-                        if 'data' in data and isinstance(data['data'], dict):
-                            xml_string_raw = data['data'].get('source') or data['data'].get('xml') or str(xml_context)
-                        else:
-                            # Direct data.source
-                            xml_string_raw = data.get('source') or data.get('xml') or str(xml_context)
-                    else:
-                        xml_string_raw = str(xml_context)
-                else:
-                    xml_string_raw = str(xml_context)
-            elif not isinstance(xml_string_raw, str):
-                xml_string_raw = str(xml_string_raw)
-            
-            # Clean and simplify XML before sending to AI - ALWAYS do this since HYBRID is always on
-            xml_string_simplified = xml_string_raw
-            if xml_string_raw:
-                try:
-                    # UPDATED: Use structured JSON instead of XML string
-                    from utils.utils import xml_to_structured_json
-                    xml_string_simplified = xml_to_structured_json(xml_string_raw)
-                except Exception as e:
-                    logging.warning(f"XML simplification failed, using original: {e}")
-                    xml_string_simplified = xml_string_raw
-            
-            # Always set XML context since HYBRID is always on
-            context['xml_context'] = xml_string_simplified
-            context['_full_xml_context'] = xml_string_raw  # Store original for reference
-            
-            # Detect secure screen (placeholder black image)
-            is_secure_screen = False
-            if screenshot_bytes and len(screenshot_bytes) < 200:
-                try:
-                    import base64
-                    # This matches the 1x1 pixel returned by appium_driver for FLAG_SECURE
-                    placeholder = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=")
-                    if screenshot_bytes == placeholder:
-                        is_secure_screen = True
-                        logging.warning("⚠️ SECURE SCREEN DETECTED: Visual context disabled. Relying on XML.")
-                        screenshot_bytes = None # Disable image context effectively
-                        
-                        # Add explicit warning to XML context for the AI
-                        warning_text = "SECURE VIEW DETECTED (FLAG_SECURE). SCREENSHOT IS BLACK. RELY ON XML HIERARCHY FOR NAVIGATION."
-                        if isinstance(xml_string_simplified, dict):
-                            xml_string_simplified["_WARNING"] = warning_text
-                        elif isinstance(xml_string_simplified, str):
-                            xml_string_simplified = f"<!-- ⚠️ {warning_text} -->\n" + xml_string_simplified
-                except Exception as e:
-                    logging.warning(f"Error checking secure screen: {e}")
-
-            # Prepare image if ENABLE_IMAGE_CONTEXT is enabled
-            # Store it in self so the LLM wrapper can access it
-            self._current_prepared_image = None
-            enable_image_context = self.cfg.get('ENABLE_IMAGE_CONTEXT', False)
-            
-            # Log image context status
-            if enable_image_context and not is_secure_screen:
-                logging.info(f"📸 Image context is ENABLED (screenshot_bytes: {len(screenshot_bytes) if screenshot_bytes else 0} bytes)")
-            elif is_secure_screen:
-                logging.info("📸 Image context disabled (Secure Screen)")
-            else:
-                logging.debug("Image context is disabled")
-            
-            if enable_image_context and screenshot_bytes:
-                try:
-                    # Check if provider/model supports image context before preparing
-                    from domain.providers.registry import ProviderRegistry
-                    provider_strategy = ProviderRegistry.get_by_name(self.ai_provider)
-                    if provider_strategy:
-                        model_name = self.actual_model_name if hasattr(self, 'actual_model_name') else self.model_alias
-                        if provider_strategy.supports_image_context(self.cfg, model_name):
-                            # Prepare the image using existing method
-                            prepared_image = self._prepare_image_part(screenshot_bytes)
-                            if prepared_image:
-                                self._current_prepared_image = prepared_image
-                                logging.info(f"📸 Image prepared for AI: {prepared_image.size[0]}x{prepared_image.size[1]}")
-                        else:
-                            pass
-                    else:
-                        logging.warning(f"📸 Provider '{self.ai_provider}' not found in registry")
-                except Exception as e:
-                    logging.warning(f"📸 Error preparing image for AI: {e}")
-            elif enable_image_context and not screenshot_bytes:
-                logging.warning("📸 Image context enabled but no screenshot_bytes available")
-
-            # --- Prompt Construction ---
-            # Use PromptBuilder to generate the text prompt
+            # Build Prompt
             from domain.prompts import build_action_decision_prompt
-            
-            # 1. Build the base prompt template (contains instructions and JSON schema)
             custom_prompt_part = self.cfg.get('CRAWLER_ACTION_DECISION_PROMPT')
             prompt_template = build_action_decision_prompt(custom_prompt_part)
-            
-            # 2. Format with context (inserts dynamic parts like XML, Journal)
             full_prompt = self.prompt_builder.format_prompt(prompt_template, context)
             
-            # 3. Store for analytics
+            # Store for analytics
             ai_input_prompt = {
                 'full_prompt': context.get('_full_ai_input_prompt', full_prompt),
                 'static_part': context.get('_static_prompt_part', ''),
                 'dynamic_part': context.get('_dynamic_prompt_parts', '')
             }
-            
-            # --- LLM Invocation ---
-            chain_result = None
+
+            # Invoke AI
             token_count = 0
+            chain_result = None
+            
             try:
-                # Log human-readable prompt
                 if self.ai_interaction_readable_logger:
                    self.ai_interaction_readable_logger.info("=== AI INPUT ===\n" + full_prompt)
                 
-                # Call model adapter directly
                 response_text, token_usage = self.model_adapter.generate_response(
                     prompt=full_prompt,
                     image=self._current_prepared_image
                 )
                 token_count = token_usage.get('total_tokens', 0) if token_usage else 0
                 
-                # Log raw response
                 if self.ai_interaction_readable_logger:
                     self.ai_interaction_readable_logger.info("=== AI OUTPUT ===\n" + response_text)
                 
-                # Parse JSON response
                 from utils.utils import parse_json_robust
                 chain_result = parse_json_robust(response_text)
                 
                 if not chain_result:
                      logging.warning(f"Failed to parse JSON from AI response: {response_text[:200]}")
-                
+            
             except Exception as e:
                 logging.error(f"Error invoking AI model: {e}")
                 return None
             finally:
                 self._current_prepared_image = None
             
-            # Validate and clean result
             if not chain_result:
                 return None
-                
+
+            # Validate and Clean
             validated_data = self._validate_and_clean_action_data(chain_result)
             
-            # Post-post-processing: Resolve OCR IDs
-            if validated_data and "actions" in validated_data:
-                for action_item in validated_data["actions"]:
-                    target_id = action_item.get("target_identifier")
-                    if target_id and str(target_id).startswith("ocr_") and ocr_results:
-                        try:
-                            idx = int(str(target_id).split("_")[1])
-                            if 0 <= idx < len(ocr_results):
-                                item = ocr_results[idx]
-                                bounds = item.get('bounds')
-                                if bounds and len(bounds) == 4:
-                                    bbox = {
-                                        "top_left": [bounds[0], bounds[1]],
-                                        "bottom_right": [bounds[2], bounds[3]]
-                                    }
-                                    action_item["target_bounding_box"] = bbox
-                        except (ValueError, IndexError):
-                            pass
+            # Resolve OCR references
+            self._resolve_ocr_references(validated_data, context.get('ocr_context'))
 
             return validated_data, 0.0, token_count, ai_input_prompt
             
         except ValidationError as e:
-            self._current_prepared_image = None
             logging.error(f"Validation error in action data: {e}")
             return None
         except Exception as e:
-            self._current_prepared_image = None
             logging.error(f"Error in get_next_action: {e}", exc_info=True)
             return None
 
@@ -614,31 +522,22 @@ class AgentAssistant:
         """Validate and clean action data from AI response.
         
         Handles both formats:
-        1. Multi-action format: {"actions": [...], "exploration_journal": "..."}
-        2. Legacy single-action format: {"action": "...", "target_identifier": "...", ...}
+        1. Multi-action format: {"actions": [...]}
+        2. Legacy single-action format: {"action": "...", ...}
         
         Returns:
             Validated ActionBatch as dictionary with 'actions' key (list)
         """
-        # Check if this is multi-action format (has 'actions' array)
-        if "actions" in action_data and isinstance(action_data.get("actions"), list):
-            # Multi-action format - validate as ActionBatch
-            batch = ActionBatch.model_validate(action_data)
-            return batch.model_dump()
+        # Already in batch format
+        if "actions" in action_data:
+            return ActionBatch.model_validate(action_data).model_dump()
         
-        # Legacy single-action format - wrap in batch
-        # Check for required fields of single action
+        # Legacy single-action format - convert to batch
         if "action" in action_data:
-            # Validate as single ActionData first
             single_action = ActionData.model_validate(action_data)
-            # Wrap in batch format
-            batch = ActionBatch(
-                actions=[single_action]
-            )
-            return batch.model_dump()
+            return ActionBatch(actions=[single_action]).model_dump()
         
-        # Neither format - this is an error
-        raise ValueError("Action data must contain either 'actions' array or 'action' field")
+        raise ValueError("Action data must contain 'actions' array or 'action' field")
 
     def _ensure_driver_initialized(self):
         if not self.tools:
