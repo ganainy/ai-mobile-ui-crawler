@@ -531,11 +531,11 @@ Implement adapter for Google Gemini API.
 Implement adapter for OpenRouter API.
 
 **Acceptance Criteria**
-- [ ] `OpenRouterAdapter` extends `ModelAdapter`
-- [ ] HTTP client with proper headers
-- [ ] Model name normalization
-- [ ] Token usage extraction
-- [ ] Unit tests with mocked API
+- [X] `OpenRouterAdapter` extends `ModelAdapter`
+- [X] HTTP client with proper headers
+- [X] Model name normalization
+- [X] Token usage extraction
+- [X] Unit tests with mocked API
 
 **Dependencies**: P3.1
 
