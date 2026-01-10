@@ -1182,10 +1182,10 @@ Scrolling log with level filtering.
 Live metrics display during crawl.
 
 **Acceptance Criteria**
-- [ ] `StatsDashboard` widget
-- [ ] Shows key metrics: steps, screens, errors
-- [ ] Updates in real-time
-- [ ] Progress bar for step/time limit
+- [X] `StatsDashboard` widget
+- [X] Shows key metrics: steps, screens, errors
+- [X] Updates in real-time
+- [X] Progress bar for step/time limit
 
 **Dependencies**: P7.1, P4.6
 
