@@ -758,15 +758,15 @@ Query last 15 steps from step_logs for AI context.
 
 ### P4.6 — Implement Runtime Statistics Collector
 
-**Description**  
+**Description**
 Track all 60+ metrics during crawl, persist to `run_stats`.
 
 **Acceptance Criteria**
-- [ ] `RuntimeStatsCollector` class
-- [ ] Tracks all metrics per spec categories
-- [ ] JSON storage for dict-type metrics
-- [ ] `save()` persists to DB
-- [ ] Unit tests
+- [X] `RuntimeStatsCollector` class
+- [X] Tracks all metrics per spec categories
+- [X] JSON storage for dict-type metrics
+- [X] `save()` persists to DB
+- [X] Unit tests
 
 **Dependencies**: P1.1
 
