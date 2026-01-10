@@ -1199,16 +1199,16 @@ Live metrics display during crawl.
 
 ### P7.8 — Implement Settings Panel
 
-**Description**  
+**Description**
 API keys, system prompt, crawl limits, test credentials.
 
 **Acceptance Criteria**
-- [ ] `SettingsPanel` widget
-- [ ] API key inputs (masked)
-- [ ] System prompt text area (replaceable)
-- [ ] Crawl limit inputs
-- [ ] Test credentials inputs
-- [ ] Save button persists to user_config.db
+- [X] `SettingsPanel` widget
+- [X] API key inputs (masked)
+- [X] System prompt text area (replaceable)
+- [X] Crawl limit inputs
+- [X] Test credentials inputs
+- [X] Save button persists to user_config.db
 
 **Dependencies**: P7.1, P1.2, P1.3
 

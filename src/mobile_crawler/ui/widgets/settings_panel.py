@@ -1,5 +1,7 @@
 """Settings panel widget for mobile-crawler GUI."""
 
+from typing import TYPE_CHECKING
+
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -15,7 +17,8 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
 
-from mobile_crawler.infrastructure.user_config_store import UserConfigStore
+if TYPE_CHECKING:
+    from mobile_crawler.infrastructure.user_config_store import UserConfigStore
 
 
 class SettingsPanel(QWidget):
@@ -28,7 +31,7 @@ class SettingsPanel(QWidget):
     # Signal emitted when settings are saved
     settings_saved = Signal()  # type: ignore
 
-    def __init__(self, config_store: UserConfigStore, parent=None):
+    def __init__(self, config_store: "UserConfigStore", parent=None):
         """Initialize settings panel widget.
         
         Args:

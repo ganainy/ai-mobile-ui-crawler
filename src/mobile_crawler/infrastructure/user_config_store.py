@@ -11,7 +11,7 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
-from mobile_crawler.config import get_app_data_dir
+from mobile_crawler.config.paths import get_app_data_dir
 
 
 class UserConfigStore:
