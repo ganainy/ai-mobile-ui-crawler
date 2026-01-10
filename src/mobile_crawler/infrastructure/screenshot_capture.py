@@ -24,19 +24,26 @@ class ScreenshotCaptureError(Exception):
 class ScreenshotCapture:
     """Handles screenshot capture and processing for Android devices."""
 
-    def __init__(self, driver: AppiumDriver, max_width: int = 800, max_height: int = 600):
+    def __init__(
+        self,
+        driver: AppiumDriver,
+        max_width: int = 800,
+        max_height: int = 600,
+        output_dir: Optional[Path] = None
+    ):
         """Initialize screenshot capture.
 
         Args:
             driver: Appium driver instance
             max_width: Maximum width for downscaled screenshots
             max_height: Maximum height for downscaled screenshots
+            output_dir: Directory to save screenshots (default: ./screenshots)
         """
         self.driver = driver
         self.max_width = max_width
         self.max_height = max_height
-        self.output_dir = Path("screenshots")
-        self.output_dir.mkdir(exist_ok=True)
+        self.output_dir = output_dir if output_dir else Path("screenshots")
+        self.output_dir.mkdir(parents=True, exist_ok=True)
 
     def capture_screenshot(self) -> Image.Image:
         """Capture a screenshot from the device.
@@ -64,6 +71,44 @@ class ScreenshotCapture:
 
         except Exception as e:
             raise ScreenshotCaptureError(f"Failed to capture screenshot: {e}") from e
+
+    def capture_full(self, filename: Optional[str] = None) -> Tuple[Image.Image, str, str]:
+        """Capture a screenshot and return image, path, and base64 encoding.
+
+        This method provides all data needed by the crawler loop in one call.
+
+        Args:
+            filename: Optional filename for the screenshot
+
+        Returns:
+            Tuple of (PIL Image, file path, base64 encoded string)
+
+        Raises:
+            ScreenshotCaptureError: If capture fails
+        """
+        try:
+            # Get screenshot as base64 string
+            screenshot_base64 = self.driver.get_driver().get_screenshot_as_base64()
+
+            # Convert base64 to PIL Image
+            image_data = base64.b64decode(screenshot_base64)
+            image = Image.open(io.BytesIO(image_data))
+
+            # Generate filename if not provided
+            if filename is None:
+                timestamp = int(time.time() * 1000)
+                filename = f"screenshot_{timestamp}.png"
+
+            filepath = self.output_dir / filename
+
+            # Save image to file
+            image.save(filepath)
+
+            logger.debug(f"Screenshot captured and saved: {filepath}")
+            return (image, str(filepath), screenshot_base64)
+
+        except Exception as e:
+            raise ScreenshotCaptureError(f"Failed to capture full screenshot: {e}") from e
 
     def capture_screenshot_to_file(self, filename: Optional[str] = None) -> Optional[str]:
         """Capture a screenshot and save to file.

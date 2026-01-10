@@ -66,12 +66,16 @@ class CrawlStateMachine:
         Returns:
             True if transition is valid
         """
+        # Allow staying in the same state (no-op transition)
+        if current == target:
+            return True
+            
         valid_transitions = {
             CrawlState.UNINITIALIZED: [CrawlState.INITIALIZING, CrawlState.ERROR],
             CrawlState.INITIALIZING: [CrawlState.RUNNING, CrawlState.ERROR],
             CrawlState.RUNNING: [CrawlState.PAUSED_MANUAL, CrawlState.STOPPING, CrawlState.ERROR],
-            CrawlState.PAUSED_MANUAL: [CrawlState.RUNNING, CrawlState.STOPPING],
-            CrawlState.STOPPING: [CrawlState.STOPPED],
+            CrawlState.PAUSED_MANUAL: [CrawlState.RUNNING, CrawlState.STOPPING, CrawlState.ERROR],
+            CrawlState.STOPPING: [CrawlState.STOPPED, CrawlState.ERROR],
             CrawlState.STOPPED: set(),  # Terminal state
             CrawlState.ERROR: set()     # Terminal state
         }

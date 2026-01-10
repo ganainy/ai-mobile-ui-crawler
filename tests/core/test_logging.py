@@ -125,7 +125,17 @@ class TestDatabaseSink:
 
             db_manager.close()
         finally:
-            db_path.unlink(missing_ok=True)
+            # On Windows, SQLite may hold file locks briefly after closing
+            import time
+            for _ in range(10):  # Try up to 10 times
+                try:
+                    db_path.unlink(missing_ok=True)
+                    break
+                except PermissionError:
+                    time.sleep(0.1)  # Wait 100ms before retry
+            else:
+                # If still can't delete, just leave it (temp file will be cleaned up eventually)
+                pass
 
 
 class TestLoggingService:

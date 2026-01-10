@@ -1286,6 +1286,168 @@ Achieve ≥80% code coverage.
 
 ---
 
+### P8.1.1 — Unit Tests for Core Module
+
+**Description**
+Test state machines, controllers, and core orchestration logic.
+
+**Acceptance Criteria**
+- [X] `tests/core/` directory with test files
+- [X] CrawlStateMachine transitions tested
+- [X] CrawlerLoop control methods tested
+- [X] Event emission tested
+- [X] Error handling tested
+- [X] Core coverage ≥90%
+
+**Dependencies**: P4.1-P4.8
+
+**Files**
+- `tests/core/test_crawl_state_machine.py`
+- `tests/core/test_crawler_loop.py`
+- `tests/core/test_crawl_controller.py`
+- `tests/core/test_event_listeners.py`
+
+**Estimated Hours**: 2
+
+---
+
+### P8.1.2 — Unit Tests for Infrastructure Module
+
+**Description**
+Test database, Appium driver, and external service integrations.
+
+**Acceptance Criteria**
+- [X] `tests/infrastructure/` directory complete
+- [X] Database operations tested (CRUD)
+- [X] Appium driver session management tested
+- [X] AI service mocking tested
+- [X] Error recovery tested
+- [X] Infrastructure coverage ≥85%
+
+**Dependencies**: P1.1-P1.7, P2.1-P2.7
+
+**Files**
+- `tests/infrastructure/test_database.py`
+- `tests/infrastructure/test_appium_driver.py`
+- `tests/infrastructure/test_ai_interaction_service.py`
+- `tests/infrastructure/test_repositories.py`
+
+**Estimated Hours**: 2.5
+
+---
+
+### P8.1.3 — Unit Tests for Domain Module
+
+**Description**
+Test business logic, models, and domain services.
+
+**Acceptance Criteria**
+- [X] `tests/domain/` directory with test files
+- [X] Action execution logic tested
+- [X] Model validation tested
+- [X] AI response parsing tested
+- [X] Domain coverage ≥90%
+
+**Dependencies**: P3.1-P3.7
+
+**Files**
+- `tests/domain/test_action_executor.py`
+- `tests/domain/test_models.py`
+- `tests/domain/test_prompt_builder.py`
+- `tests/domain/test_ai_adapters.py`
+
+**Estimated Hours**: 1.5
+
+---
+
+### P8.1.4 — Unit Tests for UI Module
+
+**Description**
+Test GUI widgets and Qt signal handling.
+
+**Acceptance Criteria**
+- [X] `tests/ui/` directory complete
+- [X] Widget interactions tested
+- [X] Signal emission tested
+- [X] Qt event handling tested
+- [X] UI coverage ≥80%
+
+**Dependencies**: P7.1-P7.10
+
+**Files**
+- `tests/ui/test_main_window.py`
+- `tests/ui/test_widgets.py`
+- `tests/ui/test_signal_adapter.py`
+
+**Estimated Hours**: 1.5
+
+---
+
+### P8.1.5 — Unit Tests for CLI Module
+
+**Description**
+Test command-line interface and argument parsing.
+
+**Acceptance Criteria**
+- [X] `tests/cli/` directory complete
+- [X] Command execution tested
+- [X] Argument validation tested
+- [X] Error output tested
+- [X] CLI coverage ≥90%
+
+**Dependencies**: P6.1-P6.6
+
+**Files**
+- `tests/cli/test_commands.py`
+- `tests/cli/test_main.py`
+
+**Estimated Hours**: 1
+
+---
+
+### P8.1.6 — Unit Tests for Config and Utils
+
+**Description**
+Test configuration management and utility functions.
+
+**Acceptance Criteria**
+- [X] `tests/config/` and `tests/utils/` directories
+- [X] Configuration loading tested
+- [X] Path resolution tested
+- [X] Utility functions tested
+- [X] Config/Utils coverage ≥85%
+
+**Dependencies**: P0.1-P0.5
+
+**Files**
+- `tests/config/test_config_manager.py`
+- `tests/utils/test_*.py`
+
+**Estimated Hours**: 1
+
+---
+
+### P8.1.7 — Test Coverage Analysis and Optimization
+
+**Description**
+Analyze coverage gaps and add missing tests.
+
+**Acceptance Criteria**
+- [X] Coverage report generated
+- [X] Missing test cases identified
+- [X] Coverage improved to ≥80% overall
+- [X] Test quality reviewed
+
+**Dependencies**: P8.1.1-P8.1.6
+
+**Files**
+- `tests/coverage_report/`
+- Updated test files
+
+**Estimated Hours**: 1
+
+---
+
 ### P8.2 — Integration Tests with Emulator
 
 **Description**  
@@ -1402,8 +1564,8 @@ Create or curate test APKs.
 | Phase 5 | 4 | 12 |
 | Phase 6 | 6 | 8 |
 | Phase 7 | 10 | 23.5 |
-| Phase 8 | 6 | 21 |
-| **Total** | **60** | **135.5 hours** |
+| Phase 8 | 12 | 23.5 |
+| **Total** | **66** | **138 hours** |
 
 ---
 

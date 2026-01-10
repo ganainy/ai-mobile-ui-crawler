@@ -74,8 +74,22 @@ class GestureHandler:
             True if successful, False otherwise
         """
         try:
-            actions = ActionChains(self.driver.get_driver())
-            actions.move_by_offset(x, y).click().move_by_offset(-x, -y).perform()
+            # Use W3C Actions with pointer input for mobile
+            driver = self.driver.get_driver()
+            actions = ActionChains(driver)
+            # W3C requires absolute positioning - use scroll_from_origin or similar
+            # For Android, we can use the driver's tap method if available
+            # Otherwise use W3C actions with proper absolute move_to
+            from selenium.webdriver.common.actions.action_builder import ActionBuilder
+            from selenium.webdriver.common.actions.pointer_input import PointerInput
+            from selenium.webdriver.common.actions import interaction
+            
+            pointer = PointerInput(interaction.POINTER_TOUCH, "finger")
+            actions = ActionBuilder(driver, mouse=pointer)
+            actions.pointer_action.move_to_location(x, y)
+            actions.pointer_action.click()
+            actions.perform()
+            
             time.sleep(duration)
             logger.info(f"Tapped at coordinates ({x}, {y})")
             return True

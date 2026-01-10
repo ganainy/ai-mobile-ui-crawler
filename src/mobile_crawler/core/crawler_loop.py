@@ -1,6 +1,7 @@
 """Main crawler loop orchestration."""
 
 import time
+from datetime import datetime
 from typing import List, Optional
 import threading
 
@@ -135,9 +136,12 @@ class CrawlerLoop:
 
             # Main crawl loop
             while self._should_continue(run_id, step_number, start_time):
-                # Check if paused
+                # Check if paused - wait in a loop until resumed or stopped
                 while self.state_machine.state == CrawlState.PAUSED_MANUAL:
                     time.sleep(0.1)  # Wait for resume or stop
+                    # Check if stop was requested while paused
+                    if self.state_machine.state == CrawlState.STOPPING:
+                        break
                 
                 # Check if stopping
                 if self.state_machine.state == CrawlState.STOPPING:
@@ -148,7 +152,8 @@ class CrawlerLoop:
                     if step_success:
                         step_number += 1
                     else:
-                        break
+                        # Step failed but don't exit - continue to next step unless stopping
+                        step_number += 1
                 except Exception as e:
                     # Fail the crawl
                     raise
@@ -159,6 +164,16 @@ class CrawlerLoop:
 
             self.state_machine.transition_to(CrawlState.STOPPING)
             self._emit_event("on_state_changed", run_id, "running", "stopping")
+
+            # Finalize run record with stats
+            total_steps = step_number - 1  # steps are 1-indexed
+            self.run_repository.update_run_stats(
+                run_id=run_id,
+                status='COMPLETED',
+                end_time=datetime.now(),
+                total_steps=total_steps,
+                unique_screens=total_steps  # Simplified: assume each step is unique screen
+            )
 
             self.state_machine.transition_to(CrawlState.STOPPED)
             self._emit_event("on_state_changed", run_id, "stopping", "stopped")
@@ -213,10 +228,8 @@ class CrawlerLoop:
         self._emit_event("on_step_started", run_id, step_number)
 
         try:
-            # Capture screenshot
-            screenshot_result = self.screenshot_capture.capture_screenshot()
-            screenshot_path = screenshot_result[1]  # Path to saved screenshot
-            screenshot_b64 = screenshot_result[2]   # Base64 encoded
+            # Capture screenshot (returns image, path, base64)
+            screenshot_image, screenshot_path, screenshot_b64 = self.screenshot_capture.capture_full()
 
             self._emit_event("on_screenshot_captured", run_id, step_number, screenshot_path)
 
@@ -282,7 +295,7 @@ class CrawlerLoop:
                     id=None,
                     run_id=run_id,
                     step_number=step_number,
-                    timestamp=time.time(),
+                    timestamp=datetime.now(),
                     from_screen_id=None,  # TODO: Implement screen tracking
                     to_screen_id=None,    # TODO: Implement screen tracking
                     action_type=ai_action.action,
@@ -308,6 +321,10 @@ class CrawlerLoop:
             # Emit step completed event
             step_duration_ms = (time.time() - step_start_time) * 1000
             self._emit_event("on_step_completed", run_id, step_number, actions_executed, step_duration_ms)
+
+            # Check if signup is completed - if so, stop the crawl
+            if ai_response.signup_completed:
+                step_success = False
 
             return step_success
 

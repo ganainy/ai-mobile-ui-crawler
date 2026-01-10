@@ -10,8 +10,8 @@ from mobile_crawler.core.crawl_state_machine import CrawlStateMachine
 from mobile_crawler.domain.models import ActionResult, AIAction, AIResponse, BoundingBox
 
 
-class TestEventListener(CrawlerEventListener):
-    """Test implementation of CrawlerEventListener."""
+class TestEventListener:
+    """Test implementation of CrawlerEventListener interface."""
 
     def __init__(self):
         self.events = []

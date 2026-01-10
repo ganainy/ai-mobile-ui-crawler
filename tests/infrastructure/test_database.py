@@ -15,9 +15,15 @@ def temp_db_path():
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
         path = Path(f.name)
     yield path
-    # Cleanup
-    if path.exists():
-        path.unlink()
+    # Cleanup with retry for Windows file locking
+    import time
+    for _ in range(10):
+        try:
+            if path.exists():
+                path.unlink()
+            break
+        except PermissionError:
+            time.sleep(0.1)
 
 
 @pytest.fixture

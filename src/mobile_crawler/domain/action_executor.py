@@ -88,7 +88,7 @@ class ActionExecutor:
         center_x, center_y = self._calculate_center(bounds)
 
         success, duration_ms, error = self._execute_with_timing(
-            self.gesture_handler.tap, center_x, center_y
+            self.gesture_handler.tap_at, center_x, center_y
         )
 
         return ActionResult(
@@ -115,7 +115,7 @@ class ActionExecutor:
 
         def input_action():
             # First tap to focus
-            self.gesture_handler.tap(center_x, center_y)
+            self.gesture_handler.tap_at(center_x, center_y)
             # Then send keys
             self.appium_driver.get_driver().press_keycode(66)  # Enter to clear if needed
             self.appium_driver.get_driver().find_element_by_xpath("//*").send_keys(text)
@@ -144,7 +144,7 @@ class ActionExecutor:
         center_x, center_y = self._calculate_center(bounds)
 
         success, duration_ms, error = self._execute_with_timing(
-            self.gesture_handler.long_press, center_x, center_y
+            self.gesture_handler.long_press_at, center_x, center_y
         )
 
         return ActionResult(
@@ -166,7 +166,7 @@ class ActionExecutor:
         center_x, center_y = self._get_screen_center()
 
         success, duration_ms, error = self._execute_with_timing(
-            self.gesture_handler.scroll, center_x, center_y, "up"
+            self.gesture_handler.scroll, "up"
         )
 
         return ActionResult(
@@ -188,7 +188,7 @@ class ActionExecutor:
         center_x, center_y = self._get_screen_center()
 
         success, duration_ms, error = self._execute_with_timing(
-            self.gesture_handler.scroll, center_x, center_y, "down"
+            self.gesture_handler.scroll, "down"
         )
 
         return ActionResult(
@@ -210,7 +210,7 @@ class ActionExecutor:
         center_x, center_y = self._get_screen_center()
 
         success, duration_ms, error = self._execute_with_timing(
-            self.gesture_handler.swipe, center_x, center_y, "left"
+            self.gesture_handler.scroll, "left"
         )
 
         return ActionResult(
@@ -232,7 +232,7 @@ class ActionExecutor:
         center_x, center_y = self._get_screen_center()
 
         success, duration_ms, error = self._execute_with_timing(
-            self.gesture_handler.swipe, center_x, center_y, "right"
+            self.gesture_handler.scroll, "right"
         )
 
         return ActionResult(

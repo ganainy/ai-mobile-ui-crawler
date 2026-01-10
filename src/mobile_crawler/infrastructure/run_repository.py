@@ -181,13 +181,22 @@ class RunRepository:
         conn.commit()
         return updated
 
-    def update_run_stats(self, run_id: int, total_steps: int, unique_screens: int) -> bool:
-        """Update just the statistics fields of a run.
+    def update_run_stats(
+        self,
+        run_id: int,
+        total_steps: int,
+        unique_screens: int,
+        status: str = None,
+        end_time: 'datetime' = None
+    ) -> bool:
+        """Update the statistics and optionally status/end_time of a run.
 
         Args:
             run_id: The run ID to update
             total_steps: New total steps count
             unique_screens: New unique screens count
+            status: Optional new status (e.g., 'COMPLETED', 'ERROR')
+            end_time: Optional end time
 
         Returns:
             True if run was updated, False if not found
@@ -195,10 +204,26 @@ class RunRepository:
         conn = self.db_manager.get_connection()
         cursor = conn.cursor()
 
-        cursor.execute("""
-            UPDATE runs SET total_steps = ?, unique_screens = ?
-            WHERE id = ?
-        """, (total_steps, unique_screens, run_id))
+        if status is not None and end_time is not None:
+            cursor.execute("""
+                UPDATE runs SET total_steps = ?, unique_screens = ?, status = ?, end_time = ?
+                WHERE id = ?
+            """, (total_steps, unique_screens, status, end_time.isoformat() if end_time else None, run_id))
+        elif status is not None:
+            cursor.execute("""
+                UPDATE runs SET total_steps = ?, unique_screens = ?, status = ?
+                WHERE id = ?
+            """, (total_steps, unique_screens, status, run_id))
+        elif end_time is not None:
+            cursor.execute("""
+                UPDATE runs SET total_steps = ?, unique_screens = ?, end_time = ?
+                WHERE id = ?
+            """, (total_steps, unique_screens, end_time.isoformat() if end_time else None, run_id))
+        else:
+            cursor.execute("""
+                UPDATE runs SET total_steps = ?, unique_screens = ?
+                WHERE id = ?
+            """, (total_steps, unique_screens, run_id))
 
         updated = cursor.rowcount > 0
         conn.commit()

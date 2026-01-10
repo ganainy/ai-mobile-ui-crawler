@@ -25,11 +25,12 @@ def appium_server() -> Generator[str, None, None]:
     except requests.RequestException:
         pass
 
-    # Start Appium server
+    # Start Appium server using npx
     appium_process = subprocess.Popen(
-        ["appium.cmd", "--address", "127.0.0.1", "--port", "4723"],
+        ["npx", "appium", "--address", "127.0.0.1", "--port", "4723", "--relaxed-security"],
         stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE
+        stderr=subprocess.PIPE,
+        shell=True  # Required on Windows
     )
 
     # Wait for server to start
@@ -148,6 +149,9 @@ You can create a simple test app using Android Studio or download sample apps fr
 def appium_driver(android_device: str, appium_server: str) -> Generator[AppiumDriver, None, None]:
     """Create an Appium driver instance for testing."""
     driver = AppiumDriver(android_device)
+    
+    # Connect to Appium server
+    driver.connect()
     
     yield driver
 
