@@ -962,15 +962,15 @@ Start crawl with options for device, package, model, limits.
 
 ### P6.3 — Implement `config` Commands
 
-**Description**  
+**Description**
 Set/get API keys and preferences.
 
 **Acceptance Criteria**
-- [ ] `crawler config set <key> <value>`
-- [ ] `crawler config get <key>`
-- [ ] `crawler config list`
-- [ ] Secrets stored encrypted
-- [ ] Unit tests
+- [X] `crawler config set <key> <value>`
+- [X] `crawler config get <key>`
+- [X] `crawler config list`
+- [X] Secrets stored encrypted
+- [X] Unit tests
 
 **Dependencies**: P6.1, P1.2, P1.3
 
@@ -984,14 +984,14 @@ Set/get API keys and preferences.
 
 ### P6.4 — Implement `report` Command
 
-**Description**  
+**Description**
 Generate report for past run.
 
 **Acceptance Criteria**
-- [ ] `crawler report <run_id>`
-- [ ] Optional: `--output <path>`
-- [ ] Works for completed and stopped runs
-- [ ] Unit tests
+- [X] `crawler report <run_id>`
+- [X] Optional: `--output <path>`
+- [X] Works for completed and stopped runs
+- [X] Unit tests
 
 **Dependencies**: P6.1, P5.3
 
@@ -1005,14 +1005,14 @@ Generate report for past run.
 
 ### P6.5 — Implement `list` Commands
 
-**Description**  
+**Description**
 List runs and devices.
 
 **Acceptance Criteria**
-- [ ] `crawler list runs` — shows past runs
-- [ ] `crawler list devices` — shows connected devices
-- [ ] JSON output with `--json` flag
-- [ ] Unit tests
+- [X] `crawler list runs` — shows past runs
+- [X] `crawler list devices` — shows connected devices
+- [X] JSON output with `--json` flag
+- [X] Unit tests
 
 **Dependencies**: P6.1, P1.4, P2.2
 
@@ -1026,14 +1026,14 @@ List runs and devices.
 
 ### P6.6 — Implement `delete` Command
 
-**Description**  
+**Description**
 Delete old runs with cascading cleanup.
 
 **Acceptance Criteria**
-- [ ] `crawler delete <run_id>`
-- [ ] Confirmation prompt (skip with `--yes`)
-- [ ] Deletes DB records and session folder
-- [ ] Unit tests
+- [X] `crawler delete <run_id>`
+- [X] Confirmation prompt (skip with `--yes`)
+- [X] Deletes DB records and session folder
+- [X] Unit tests
 
 **Dependencies**: P6.1, P1.4
 
@@ -1248,11 +1248,11 @@ List past runs, delete, generate report.
 Bridge core events to GUI without Qt in core.
 
 **Acceptance Criteria**
-- [ ] `CrawlerEventListener` protocol in core
-- [ ] `QtSignalAdapter` implements protocol
-- [ ] Emits Qt signals for GUI updates
-- [ ] Core has no Qt imports
-- [ ] Unit tests
+- [X] `CrawlerEventListener` protocol in core
+- [X] `QtSignalAdapter` implements protocol
+- [X] Emits Qt signals for GUI updates
+- [X] Core has no Qt imports
+- [X] Unit tests
 
 **Dependencies**: P7.1, P4.2
 
@@ -1272,10 +1272,10 @@ Bridge core events to GUI without Qt in core.
 Achieve ≥80% code coverage.
 
 **Acceptance Criteria**
-- [ ] All modules have corresponding test files
-- [ ] `pytest --cov` shows ≥80%
-- [ ] Edge cases covered
-- [ ] Mocks used appropriately
+- [X] All modules have corresponding test files
+- [X] `pytest --cov` shows ≥80%
+- [X] Edge cases covered
+- [X] Mocks used appropriately
 
 **Dependencies**: All previous phases
 

@@ -2,6 +2,7 @@
 
 import time
 from typing import List, Optional
+import threading
 
 from mobile_crawler.config.config_manager import ConfigManager
 from mobile_crawler.core.crawl_state_machine import CrawlState, CrawlStateMachine
@@ -48,6 +49,10 @@ class CrawlerLoop:
         self.run_repository = run_repository
         self.config_manager = config_manager
         self.event_listeners = event_listeners or []
+        
+        # Threading support
+        self._crawl_thread: Optional[threading.Thread] = None
+        self._current_run_id: Optional[int] = None
 
         # Configuration
         self.max_crawl_steps = self.config_manager.get('max_crawl_steps', 15)
@@ -61,6 +66,42 @@ class CrawlerLoop:
         """Remove an event listener."""
         if listener in self.event_listeners:
             self.event_listeners.remove(listener)
+
+    def start(self, run_id: int) -> None:
+        """Start the crawler loop in a background thread.
+        
+        Args:
+            run_id: The run ID to execute
+        """
+        if self._crawl_thread and self._crawl_thread.is_alive():
+            raise RuntimeError("Crawler is already running")
+        
+        self._current_run_id = run_id
+        self._crawl_thread = threading.Thread(target=self.run, args=(run_id,), daemon=True)
+        self._crawl_thread.start()
+
+    def pause(self) -> None:
+        """Pause the crawler."""
+        if self.state_machine.state == CrawlState.RUNNING:
+            self.state_machine.transition_to(CrawlState.PAUSED_MANUAL)
+
+    def resume(self) -> None:
+        """Resume the crawler."""
+        if self.state_machine.state == CrawlState.PAUSED_MANUAL:
+            self.state_machine.transition_to(CrawlState.RUNNING)
+
+    def stop(self) -> None:
+        """Stop the crawler."""
+        if self.state_machine.state in [CrawlState.RUNNING, CrawlState.PAUSED_MANUAL]:
+            self.state_machine.transition_to(CrawlState.STOPPING)
+
+    def is_running(self) -> bool:
+        """Check if the crawler is currently running.
+        
+        Returns:
+            True if crawler thread is active
+        """
+        return self._crawl_thread is not None and self._crawl_thread.is_alive()
 
     def run(self, run_id: int) -> None:
         """Run the crawler loop for the given run.
@@ -78,7 +119,7 @@ class CrawlerLoop:
                 raise ValueError(f"Run {run_id} not found")
 
             # Emit crawl started event
-            self._emit_event("on_crawl_started", run_id, run.target_package)
+            self._emit_event("on_crawl_started", run_id, run.app_package)
 
             # Transition to initializing
             self.state_machine.transition_to(CrawlState.INITIALIZING)
@@ -94,6 +135,14 @@ class CrawlerLoop:
 
             # Main crawl loop
             while self._should_continue(run_id, step_number, start_time):
+                # Check if paused
+                while self.state_machine.state == CrawlState.PAUSED_MANUAL:
+                    time.sleep(0.1)  # Wait for resume or stop
+                
+                # Check if stopping
+                if self.state_machine.state == CrawlState.STOPPING:
+                    break
+                    
                 try:
                     step_success = self._execute_step(run_id, step_number)
                     if step_success:
@@ -144,8 +193,8 @@ class CrawlerLoop:
         if elapsed_seconds >= self.max_crawl_duration_seconds:
             return False
 
-        # Check state
-        return self.state_machine.state == CrawlState.RUNNING
+        # Don't check state here - handled in main loop
+        return True
 
     def _execute_step(self, run_id: int, step_number: int) -> bool:
         """Execute a single step of the crawl.

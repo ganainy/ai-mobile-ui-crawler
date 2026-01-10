@@ -35,6 +35,76 @@ class AIInteractionService:
         self.ai_interaction_repository = ai_interaction_repository
         self.config_manager = config_manager
 
+    @classmethod
+    def from_config(cls, config_manager: ConfigManager) -> 'AIInteractionService':
+        """Create AI interaction service from configuration.
+        
+        Args:
+            config_manager: Configuration manager
+            
+        Returns:
+            Configured AI interaction service
+        """
+        # Import here to avoid circular imports
+        from mobile_crawler.domain.prompt_builder import PromptBuilder
+        from mobile_crawler.infrastructure.ai_interaction_repository import AIInteractionRepository
+        from mobile_crawler.infrastructure.database import DatabaseManager
+        from mobile_crawler.infrastructure.step_log_repository import StepLogRepository
+        
+        # Create model adapter based on provider
+        provider = config_manager.get('ai_provider', 'gemini')
+        model_name = config_manager.get('ai_model', 'gemini-1.5-flash')
+        
+        model_adapter = cls._create_model_adapter(provider, model_name, config_manager)
+        
+        # Create other dependencies
+        db = DatabaseManager()
+        step_log_repo = StepLogRepository(db)
+        prompt_builder = PromptBuilder(config_manager, step_log_repo)
+        ai_repo = AIInteractionRepository(db)
+        
+        return cls(model_adapter, prompt_builder, ai_repo, config_manager)
+    
+    @staticmethod
+    def _create_model_adapter(provider: str, model_name: str, config_manager: ConfigManager) -> ModelAdapter:
+        """Create model adapter based on provider.
+        
+        Args:
+            provider: AI provider name
+            model_name: Model name
+            config_manager: Configuration manager
+            
+        Returns:
+            Configured model adapter
+        """
+        if provider == 'mock':
+            # Import here to avoid import errors in production
+            from mobile_crawler.domain.providers.mock_adapter import MockAdapter
+            return MockAdapter()
+        elif provider == 'gemini':
+            from mobile_crawler.domain.providers.gemini_adapter import GeminiAdapter
+            api_key = config_manager.get('gemini_api_key')
+            if not api_key:
+                raise ValueError("Gemini API key not configured")
+            adapter = GeminiAdapter()
+            adapter.initialize({'model': model_name, 'api_key': api_key}, {})
+            return adapter
+        elif provider == 'openrouter':
+            from mobile_crawler.domain.providers.openrouter_adapter import OpenRouterAdapter
+            api_key = config_manager.get('openrouter_api_key')
+            if not api_key:
+                raise ValueError("OpenRouter API key not configured")
+            adapter = OpenRouterAdapter()
+            adapter.initialize({'model': model_name, 'api_key': api_key}, {})
+            return adapter
+        elif provider == 'ollama':
+            from mobile_crawler.domain.providers.ollama_adapter import OllamaAdapter
+            adapter = OllamaAdapter()
+            adapter.initialize({'model': model_name}, {})
+            return adapter
+        else:
+            raise ValueError(f"Unknown AI provider: {provider}")
+
     def get_next_actions(
         self,
         run_id: int,

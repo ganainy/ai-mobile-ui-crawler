@@ -15,7 +15,7 @@ def list(target: str, limit: int, output_format: str):
     try:
         from mobile_crawler.infrastructure.database import DatabaseManager
         from mobile_crawler.infrastructure.run_repository import RunRepository
-        from mobile_crawler.infrastructure.device_detection import DeviceDetector
+        from mobile_crawler.infrastructure.device_detection import DeviceDetection
         
         db_manager = DatabaseManager()
         
@@ -52,18 +52,18 @@ def list(target: str, limit: int, output_format: str):
                     click.echo(f"{run.id:<5} {run.device_id:<15} {run.app_package[:19]:<20} {run.status:<10} {run.total_steps:<6} {run.unique_screens:<7} {start_time}")
         
         elif target == 'devices':
-            device_detector = DeviceDetector()
-            devices = device_detector.get_connected_devices()
+            device_detection = DeviceDetection()
+            devices = device_detection.get_connected_devices()
             
             if output_format == 'json':
                 import json
                 devices_data = []
                 for device in devices[:limit]:
                     devices_data.append({
-                        'id': device.id,
-                        'name': device.name,
-                        'platform': device.platform,
-                        'version': device.version,
+                        'id': device.device_id,
+                        'name': device.model,
+                        'platform': 'Android',
+                        'version': device.android_version,
                         'status': device.status
                     })
                 click.echo(json.dumps(devices_data, indent=2))
@@ -78,7 +78,7 @@ def list(target: str, limit: int, output_format: str):
                 click.echo(f"{'ID':<20} {'Name':<20} {'Platform':<10} {'Version':<10} {'Status'}")
                 click.echo("-" * 60)
                 for device in devices[:limit]:
-                    click.echo(f"{device.id:<20} {device.name[:19]:<20} {device.platform:<10} {device.version:<10} {device.status}")
+                    click.echo(f"{device.device_id:<20} {device.model[:19]:<20} {'Android':<10} {device.android_version:<10} {device.status}")
                 
     except Exception as e:
         click.echo(f"Error listing {target}: {e}", err=True)

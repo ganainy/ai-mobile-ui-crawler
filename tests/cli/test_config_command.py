@@ -134,7 +134,7 @@ class TestConfigCommands:
         assert 'api_key: [ENCRYPTED]' in result.output
         assert 'token: [ENCRYPTED]' in result.output
 
-    @patch('mobile_crawler.cli.commands.config.ConfigManager')
+    @patch('mobile_crawler.config.config_manager.ConfigManager')
     def test_config_list_empty(self, mock_config_manager_cls):
         """Test listing when no configuration exists."""
         mock_config_manager = Mock()

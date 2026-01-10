@@ -7,6 +7,10 @@ import click
 
 from mobile_crawler.config import get_app_data_dir
 
+# Import built-in types to avoid naming conflicts
+_dict = dict
+_list = list
+
 
 @click.group()
 def config():
@@ -83,7 +87,7 @@ def get(key: str):
         # Try to get as regular setting first
         value = config_manager.get(key)
         if value is not None:
-            if isinstance(value, (dict, list)):
+            if isinstance(value, (_dict, _list)):
                 click.echo(json.dumps(value, indent=2))
             else:
                 click.echo(value)
@@ -127,7 +131,7 @@ def list():
         click.echo("Configuration Settings:")
         click.echo("-" * 40)
         for key, value in sorted(settings.items()):
-            if isinstance(value, (dict, list)):
+            if isinstance(value, (_dict, _list)):
                 click.echo(f"{key}: {json.dumps(value)}")
             else:
                 click.echo(f"{key}: {value}")

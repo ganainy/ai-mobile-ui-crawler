@@ -28,10 +28,12 @@ from mobile_crawler.cli.commands.crawl import crawl
 from mobile_crawler.cli.commands.config import config
 from mobile_crawler.cli.commands.report import report
 from mobile_crawler.cli.commands.list import list
+from mobile_crawler.cli.commands.delete import delete
 cli.add_command(crawl)
 cli.add_command(config)
 cli.add_command(report)
 cli.add_command(list)
+cli.add_command(delete)
 
 
 def run():

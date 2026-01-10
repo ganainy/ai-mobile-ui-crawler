@@ -194,7 +194,7 @@ def crawl(device: str, package: str, model: str, steps: Optional[int], duration:
         # Set up dependencies for CrawlerLoop
         state_machine = CrawlStateMachine()
         screenshot_capture = ScreenshotCapture()
-        ai_service = AIInteractionService(config_manager)
+        ai_service = AIInteractionService.from_config(config_manager)
         action_executor = ActionExecutor()
         step_log_repo = StepLogRepository(db_manager)
 
