@@ -1,50 +1,100 @@
-# [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+<!--
+Sync Impact Report
+==================
+- Version change: 0.0.0 → 1.0.0 (initial ratification)
+- Added Principles: I. Virtual Environment Isolation, II. Documentation Sync, III. Test-Driven Development, IV. Code Quality Gates
+- Added Sections: Environment Setup, Development Workflow
+- Templates requiring updates: ⚠ pending (tasks.md file paths reference src/ structure)
+- Follow-up TODOs: None
+-->
+
+# Mobile Crawler Constitution
 
 ## Core Principles
 
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+### I. Virtual Environment Isolation (NON-NEGOTIABLE)
+All development and execution MUST occur within a Python virtual environment (venv).
+- NEVER install packages globally or to the system Python
+- The project venv MUST be created at `.venv/` in the project root
+- All terminal commands MUST activate the venv before execution
+- Dependencies are managed exclusively via `pip install -e .` (editable mode) within the venv
+- Rationale: Prevents dependency conflicts, ensures reproducible builds, isolates project from system Python
 
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+### II. Documentation Sync (NON-NEGOTIABLE)
+Markdown documentation MUST be updated after every code change.
+- README.md MUST reflect current project state (features, installation, usage)
+- Docstrings MUST be present for all public modules, classes, and functions
+- `.github/prompts/speckit.product-spec.md` is the source of truth for requirements
+- Implementation plan and tasks MUST be updated when scope changes
+- Rationale: Documentation drift causes confusion; keeping docs current ensures onboarding efficiency and reduces ramp-up time
 
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+### III. Test-Driven Development (NON-NEGOTIABLE)
+Tests MUST be run after every code change.
+- `pytest` MUST pass before any change is considered complete
+- New functionality requires corresponding unit tests (≥80% coverage target)
+- Integration tests required for: database operations, Appium interactions, AI provider calls
+- Test command: `pytest -v --cov=mobile_crawler`
+- Rationale: Catching regressions immediately prevents cascading failures
 
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+### IV. Code Quality Gates
+All code MUST pass linting and formatting checks.
+- `ruff check .` MUST pass with no errors
+- `black --check .` MUST pass (or use `ruff format`)
+- Pre-commit hooks enforce these checks automatically
+- Rationale: Consistent code style improves readability and reduces review friction
 
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+## Environment Setup
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
+### Required Tools
+| Tool | Version | Purpose |
+|------|---------|---------|
+| Python | ≥3.9 | Runtime |
+| pip | Latest | Package management |
+| venv | Built-in | Virtual environment |
+| Appium | 2.x | Device automation |
+| ADB | Latest | Android debugging |
 
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
+### Virtual Environment Commands
+```bash
+# Create venv (one-time)
+python -m venv .venv
 
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
+# Activate venv (Windows PowerShell)
+.\.venv\Scripts\Activate.ps1
 
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
+# Activate venv (Windows cmd)
+.\.venv\Scripts\activate.bat
+
+# Activate venv (Unix/macOS)
+source .venv/bin/activate
+
+# Install project in editable mode
+pip install -e .
+
+# Install dev dependencies
+pip install pytest pytest-cov ruff black pre-commit
+```
+
+## Development Workflow
+
+### After Every Code Change
+1. **Run tests**: `pytest -v`
+2. **Run linter**: `ruff check . --fix`
+3. **Update docs**: If behavior changed, update relevant `.md` files
+4. **Commit**: Include test results confirmation in commit message
+
+### Before Starting New Feature
+1. Check implementation plan in `.github/prompts/speckit.implementation-plan.md`
+2. Verify task breakdown in `.github/prompts/speckit.tasks.md`
+3. Ensure venv is activated
+4. Run existing tests to confirm baseline
 
 ## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
 
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
+This constitution supersedes all other development practices for the Mobile Crawler project.
 
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+- **Amendments**: Require documented rationale, version bump, and updated Last Amended date
+- **Compliance**: All code contributions MUST adhere to these principles
+- **Exceptions**: NONE for principles marked NON-NEGOTIABLE
+
+**Version**: 1.0.0 | **Ratified**: 2026-01-10 | **Last Amended**: 2026-01-10

@@ -238,10 +238,10 @@ Create, read, update, delete operations for `runs` table with cascading deletes 
 Store and deduplicate screens using perceptual hashing with Hamming distance threshold of 5.
 
 **Acceptance Criteria**
-- [ ] `ScreenRepository` with `find_or_create()`
-- [ ] Visual hash comparison with threshold
-- [ ] Composite hash = activity + visual hash
-- [ ] Unit tests with sample images
+- [X] `ScreenRepository` with `find_or_create()`
+- [X] Visual hash comparison with threshold
+- [X] Composite hash = activity + visual hash
+- [X] Unit tests with sample images
 
 **Dependencies**: P1.1
 
@@ -260,10 +260,10 @@ Store and deduplicate screens using perceptual hashing with Hamming distance thr
 Store per-step action history in `step_logs` table.
 
 **Acceptance Criteria**
-- [ ] `StepLogRepository` with insert/query methods
-- [ ] `get_exploration_journal(run_id, limit=15)`
-- [ ] Foreign key references to screens
-- [ ] Unit tests
+- [X] `StepLogRepository` with insert/query methods
+- [X] `get_exploration_journal(run_id, limit=15)`
+- [X] Foreign key references to screens
+- [X] Unit tests
 
 **Dependencies**: P1.1, P1.5
 
