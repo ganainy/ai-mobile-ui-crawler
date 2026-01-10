@@ -622,13 +622,13 @@ Build requests, call adapters, parse responses, handle retries.
 Build system prompt with exploration journal and available actions.
 
 **Acceptance Criteria**
-- [ ] `PromptBuilder` class
-- [ ] Default system prompt defined
-- [ ] User can replace fully
-- [ ] Formats exploration journal (last 15 entries)
-- [ ] Lists available actions
-- [ ] Includes test credentials if provided
-- [ ] Unit tests
+- [X] `PromptBuilder` class
+- [X] Default system prompt defined
+- [X] User can replace fully
+- [X] Formats exploration journal (last 15 entries)
+- [X] Lists available actions
+- [X] Includes test credentials if provided
+- [X] Unit tests
 
 **Dependencies**: P0.1
 
