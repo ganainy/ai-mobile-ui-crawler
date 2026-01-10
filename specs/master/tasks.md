@@ -691,15 +691,15 @@ Main iteration: screenshot → AI → execute → log → repeat.
 
 ### P4.3 — Implement Stuck Detector
 
-**Description**  
+**Description**
 Detect when crawler is stuck on same screen consecutively.
 
 **Acceptance Criteria**
-- [ ] `StuckDetector` tracks consecutive visits
-- [ ] Threshold: >2 consecutive visits
-- [ ] Sets `is_stuck=True` and `stuck_reason`
-- [ ] Tracks `stuck_recovery_success`
-- [ ] Unit tests
+- [X] `StuckDetector` tracks consecutive visits
+- [X] Threshold: >2 consecutive visits
+- [X] Sets `is_stuck=True` and `stuck_reason`
+- [X] Tracks `stuck_recovery_success`
+- [X] Unit tests
 
 **Dependencies**: P1.5
 
