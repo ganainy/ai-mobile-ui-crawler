@@ -5,7 +5,6 @@ from typing import Any, Optional
 
 import click
 
-from mobile_crawler.config.config_manager import ConfigManager
 from mobile_crawler.config import get_app_data_dir
 
 
@@ -24,6 +23,8 @@ def set(key: str, value: str):
     KEY: Configuration key to set
     VALUE: Value to set (will be parsed as appropriate type)
     """
+    from mobile_crawler.config.config_manager import ConfigManager
+    
     try:
         # Ensure app data directory exists
         app_data_dir = get_app_data_dir()
@@ -72,6 +73,8 @@ def get(key: str):
 
     KEY: Configuration key to retrieve
     """
+    from mobile_crawler.config.config_manager import ConfigManager
+    
     try:
         # Initialize config manager
         config_manager = ConfigManager()
@@ -106,6 +109,8 @@ def get(key: str):
 @config.command()
 def list():
     """List all configuration settings."""
+    from mobile_crawler.config.config_manager import ConfigManager
+    
     try:
         # Initialize config manager
         config_manager = ConfigManager()

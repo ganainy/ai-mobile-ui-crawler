@@ -14,6 +14,7 @@ class TestConfigCommands:
 
     def test_config_command_help(self):
         """Test that config command shows help."""
+        from mobile_crawler.cli.main import cli
         runner = CliRunner()
         result = runner.invoke(cli, ['config', '--help'])
         assert result.exit_code == 0
@@ -22,8 +23,8 @@ class TestConfigCommands:
         assert 'get' in result.output
         assert 'list' in result.output
 
-    @patch('mobile_crawler.cli.commands.config.ConfigManager')
-    @patch('mobile_crawler.cli.commands.config.get_app_data_dir')
+    @patch('mobile_crawler.config.config_manager.ConfigManager')
+    @patch('mobile_crawler.config.paths.get_app_data_dir')
     def test_config_set_regular_value(self, mock_get_app_data_dir, mock_config_manager_cls):
         """Test setting a regular configuration value."""
         mock_config_manager = Mock()
@@ -37,8 +38,8 @@ class TestConfigCommands:
         assert 'Set config: max_steps = 100' in result.output
         mock_config_manager.set.assert_called_once_with('max_steps', 100)
 
-    @patch('mobile_crawler.cli.commands.config.ConfigManager')
-    @patch('mobile_crawler.cli.commands.config.get_app_data_dir')
+    @patch('mobile_crawler.config.config_manager.ConfigManager')
+    @patch('mobile_crawler.config.paths.get_app_data_dir')
     def test_config_set_secret_value(self, mock_get_app_data_dir, mock_config_manager_cls):
         """Test setting a secret value (API key)."""
         mock_config_manager = Mock()
@@ -52,8 +53,8 @@ class TestConfigCommands:
         assert 'Set encrypted secret: api_key' in result.output
         mock_config_manager.user_config_store.set_secret_plaintext.assert_called_once_with('api_key', 'secret123')
 
-    @patch('mobile_crawler.cli.commands.config.ConfigManager')
-    @patch('mobile_crawler.cli.commands.config.get_app_data_dir')
+    @patch('mobile_crawler.config.config_manager.ConfigManager')
+    @patch('mobile_crawler.config.paths.get_app_data_dir')
     def test_config_get_regular_value(self, mock_get_app_data_dir, mock_config_manager_cls):
         """Test getting a regular configuration value."""
         mock_config_manager = Mock()
@@ -63,13 +64,13 @@ class TestConfigCommands:
         mock_get_app_data_dir.return_value = Mock()
 
         runner = CliRunner()
-        result = runner.invoke(cli, ['config', 'get', 'test_key'])
+        result = runner.invoke(cli, ['config', 'get', 'test_key_123'])
 
         assert result.exit_code == 0
         assert 'test_value' in result.output
-        mock_config_manager.get.assert_called_once_with('test_key')
+        mock_config_manager.get.assert_called_once_with('test_key_123')
 
-    @patch('mobile_crawler.cli.commands.config.ConfigManager')
+    @patch('mobile_crawler.config.config_manager.ConfigManager')
     def test_config_get_secret_value(self, mock_config_manager_cls):
         """Test getting a secret value."""
         mock_config_manager = Mock()
@@ -83,7 +84,7 @@ class TestConfigCommands:
         assert result.exit_code == 0
         assert '[ENCRYPTED] decrypted_secret' in result.output
 
-    @patch('mobile_crawler.cli.commands.config.ConfigManager')
+    @patch('mobile_crawler.config.config_manager.ConfigManager')
     def test_config_get_not_found(self, mock_config_manager_cls):
         """Test getting a non-existent configuration value."""
         mock_config_manager = Mock()
@@ -97,8 +98,8 @@ class TestConfigCommands:
         assert result.exit_code == 1
         assert 'Config key not found: nonexistent' in result.output
 
-    @patch('mobile_crawler.cli.commands.config.ConfigManager')
-    @patch('mobile_crawler.cli.commands.config.get_app_data_dir')
+    @patch('mobile_crawler.config.config_manager.ConfigManager')
+    @patch('mobile_crawler.config.paths.get_app_data_dir')
     def test_config_list_with_settings(self, mock_get_app_data_dir, mock_config_manager_cls):
         """Test listing configuration settings."""
         mock_config_manager = Mock()
