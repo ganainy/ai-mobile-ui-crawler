@@ -1,7 +1,7 @@
 """Domain models for the mobile crawler."""
 
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 
 @dataclass
@@ -31,3 +31,27 @@ class ActionResult:
     duration_ms: float
     error_message: Optional[str]
     navigated_away: bool  # Did screen change?
+
+
+@dataclass
+class BoundingBox:
+    """Bounding box for UI element targeting."""
+    top_left: Tuple[int, int]
+    bottom_right: Tuple[int, int]
+
+
+@dataclass
+class AIAction:
+    """Action recommended by AI."""
+    action: str
+    action_desc: str
+    target_bounding_box: BoundingBox
+    input_text: Optional[str]
+    reasoning: str
+
+
+@dataclass
+class AIResponse:
+    """Response from AI model."""
+    actions: List[AIAction]
+    signup_completed: bool

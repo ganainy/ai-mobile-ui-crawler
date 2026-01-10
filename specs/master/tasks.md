@@ -599,17 +599,18 @@ Filter models by vision capability for each provider.
 Build requests, call adapters, parse responses, handle retries.
 
 **Acceptance Criteria**
-- [ ] `AIInteractionService` with `get_next_actions(screenshot, journal, is_stuck)`
-- [ ] Builds request per spec schema
-- [ ] Validates response schema
-- [ ] Retry up to 2× on error
-- [ ] Logs to `ai_interactions` table
-- [ ] Unit tests
+- [X] `AIInteractionService` with `get_next_actions(screenshot, journal, is_stuck)`
+- [X] Builds request per spec schema
+- [X] Validates response schema
+- [X] Retry up to 2× on error
+- [X] Logs to `ai_interactions` table
+- [X] Unit tests
 
 **Dependencies**: P3.1, P3.7, P1.1
 
 **Files**
 - `src/infrastructure/ai_interaction_service.py`
+- `src/infrastructure/ai_interaction_repository.py`
 - `tests/infrastructure/test_ai_interaction_service.py`
 
 **Estimated Hours**: 3
