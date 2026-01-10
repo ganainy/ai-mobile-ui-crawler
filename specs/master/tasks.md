@@ -1160,11 +1160,11 @@ Start/Pause/Resume/Stop buttons with state management.
 Scrolling log with level filtering.
 
 **Acceptance Criteria**
-- [ ] `LogViewer` widget
-- [ ] Auto-scroll to bottom
-- [ ] Level filter dropdown
-- [ ] Color-coded levels
-- [ ] Clear button
+- [X] `LogViewer` widget
+- [X] Auto-scroll to bottom
+- [X] Level filter dropdown
+- [X] Color-coded levels
+- [X] Clear button
 
 **Dependencies**: P7.1, P0.4
 

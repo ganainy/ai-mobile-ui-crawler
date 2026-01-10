@@ -25,7 +25,9 @@ def cli():
 
 # Import and register commands
 from mobile_crawler.cli.commands.crawl import crawl
+from mobile_crawler.cli.commands.config import config
 cli.add_command(crawl)
+cli.add_command(config)
 
 
 def run():
