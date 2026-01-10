@@ -737,14 +737,14 @@ Domain-level screen state detection and management. Handles visual hashing, simi
 
 ### P4.5 — Implement Exploration Journal
 
-**Description**  
+**Description**
 Query last 15 steps from step_logs for AI context.
 
 **Acceptance Criteria**
-- [ ] `ExplorationJournal` with `get_entries(run_id, limit=15)`
-- [ ] Returns `JournalEntry` dataclass list
-- [ ] Derived from step_logs (no separate storage)
-- [ ] Unit tests
+- [X] `ExplorationJournal` with `get_entries(run_id, limit=15)`
+- [X] Returns `JournalEntry` dataclass list
+- [X] Derived from step_logs (no separate storage)
+- [X] Unit tests
 
 **Dependencies**: P1.6
 
