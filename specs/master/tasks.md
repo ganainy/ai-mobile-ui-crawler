@@ -649,11 +649,11 @@ Build system prompt with exploration journal and available actions.
 Explicit state machine with transitions: UNINITIALIZED → INITIALIZING → RUNNING ⇄ PAUSED_MANUAL → STOPPING → STOPPED / ERROR.
 
 **Acceptance Criteria**
-- [ ] `CrawlState` enum with all states
-- [ ] `CrawlStateMachine` with valid transitions
-- [ ] Invalid transitions raise exception
-- [ ] State change events emitted
-- [ ] Unit tests for all transitions
+- [X] `CrawlState` enum with all states
+- [X] `CrawlStateMachine` with valid transitions
+- [X] Invalid transitions raise exception
+- [X] State change events emitted
+- [X] Unit tests for all transitions
 
 **Dependencies**: P0.4
 
