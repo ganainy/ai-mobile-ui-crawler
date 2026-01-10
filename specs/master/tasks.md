@@ -487,12 +487,12 @@ Parse UiAutomator2 XML hierarchy to extract UI elements with bounds, resource ID
 Create abstract base class for AI provider adapters.
 
 **Acceptance Criteria**
-- [ ] `ModelAdapter` ABC with:
+- [X] `ModelAdapter` ABC with:
   - `initialize(model_config, safety_settings)`
   - `generate_response(prompt, image) -> (str, dict)`
   - `model_info` property
-- [ ] Type hints complete
-- [ ] Docstrings
+- [X] Type hints complete
+- [X] Docstrings
 
 **Dependencies**: P0.1
 
