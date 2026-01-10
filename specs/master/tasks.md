@@ -780,15 +780,15 @@ Track all 60+ metrics during crawl, persist to `run_stats`.
 
 ### P4.7 — Implement Pause/Resume/Stop Controls
 
-**Description**  
+**Description**
 Thread-safe control flags for crawl loop.
 
 **Acceptance Criteria**
-- [ ] `CrawlController` with `pause()`, `resume()`, `stop()`
-- [ ] Thread-safe flag management
-- [ ] Loop checks flags between steps
-- [ ] Events emitted on state change
-- [ ] Unit tests
+- [X] `CrawlController` with `pause()`, `resume()`, `stop()`
+- [X] Thread-safe flag management
+- [X] Loop checks flags between steps
+- [X] Events emitted on state change
+- [X] Unit tests
 
 **Dependencies**: P4.1
 
