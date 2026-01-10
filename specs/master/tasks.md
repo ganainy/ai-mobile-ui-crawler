@@ -851,13 +851,13 @@ Start/stop traffic capture via intent API, pull PCAP file.
 Extract APK, upload to MobSF, retrieve results.
 
 **Acceptance Criteria**
-- [ ] `MobSFManager` with `analyze(package)` 
-- [ ] Extracts APK from device via `adb pull`
-- [ ] Uploads to MobSF REST API
-- [ ] Downloads PDF + JSON results
-- [ ] Handles split APKs gracefully (error + continue)
-- [ ] Can run on past runs
-- [ ] Integration test
+- [X] `MobSFManager` with `analyze(package)` 
+- [X] Extracts APK from device via `adb pull`
+- [X] Uploads to MobSF REST API
+- [X] Downloads PDF + JSON results
+- [X] Handles split APKs gracefully (error + continue)
+- [X] Can run on past runs
+- [X] Integration test
 
 **Dependencies**: P2.1, P1.7
 
@@ -875,11 +875,11 @@ Extract APK, upload to MobSF, retrieve results.
 Generate PDF report using ReportLab.
 
 **Acceptance Criteria**
-- [ ] `ReportGenerator` with `generate(run_id) -> path`
-- [ ] Includes: summary stats, action timeline, screen coverage, error summary
-- [ ] Works for completed and stopped runs
-- [ ] Saves to session folder
-- [ ] Unit tests
+- [X] `ReportGenerator` with `generate(run_id) -> path`
+- [X] Includes: summary stats, action timeline, screen coverage, error summary
+- [X] Works for completed and stopped runs
+- [X] Saves to session folder
+- [X] Unit tests
 
 **Dependencies**: P1.4, P4.6
 
