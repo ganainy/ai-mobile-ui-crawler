@@ -825,15 +825,15 @@ Check all requirements before crawl starts.
 
 ### P5.1 — Implement PCAPdroid Manager
 
-**Description**  
+**Description**
 Start/stop traffic capture via intent API, pull PCAP file.
 
 **Acceptance Criteria**
-- [ ] `TrafficCaptureManager` with `start()`, `stop_and_pull()`
-- [ ] ADB shell commands per spec
-- [ ] Pulls file from device to session folder
-- [ ] Graceful handling if PCAPdroid not installed
-- [ ] Integration test
+- [X] `TrafficCaptureManager` with `start()`, `stop_and_pull()`
+- [X] ADB shell commands per spec
+- [X] Pulls file from device to session folder
+- [X] Graceful handling if PCAPdroid not installed
+- [X] Integration test
 
 **Dependencies**: P2.1, P1.7
 
