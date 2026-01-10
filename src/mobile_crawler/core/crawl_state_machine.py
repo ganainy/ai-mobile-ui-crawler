@@ -67,7 +67,7 @@ class CrawlStateMachine:
             True if transition is valid
         """
         valid_transitions = {
-            CrawlState.UNINITIALIZED: [CrawlState.INITIALIZING],
+            CrawlState.UNINITIALIZED: [CrawlState.INITIALIZING, CrawlState.ERROR],
             CrawlState.INITIALIZING: [CrawlState.RUNNING, CrawlState.ERROR],
             CrawlState.RUNNING: [CrawlState.PAUSED_MANUAL, CrawlState.STOPPING, CrawlState.ERROR],
             CrawlState.PAUSED_MANUAL: [CrawlState.RUNNING, CrawlState.STOPPING],

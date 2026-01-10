@@ -802,14 +802,14 @@ Thread-safe control flags for crawl loop.
 
 ### P4.8 — Implement Pre-Crawl Validation
 
-**Description**  
+**Description**
 Check all requirements before crawl starts.
 
 **Acceptance Criteria**
-- [ ] `PreCrawlValidator` with `validate() -> List[ValidationError]`
-- [ ] Checks: Appium reachable, device connected, app selected, model selected, API key present
-- [ ] Optional checks: MobSF, PCAPdroid, video (warn only)
-- [ ] Unit tests
+- [X] `PreCrawlValidator` with `validate() -> List[ValidationError]`
+- [X] Checks: Appium reachable, device connected, app selected, model selected, API key present
+- [X] Optional checks: MobSF, PCAPdroid, video (warn only)
+- [X] Unit tests
 
 **Dependencies**: P2.1, P2.2, P3.5, P1.3
 
