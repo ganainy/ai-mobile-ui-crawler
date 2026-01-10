@@ -1222,15 +1222,15 @@ API keys, system prompt, crawl limits, test credentials.
 
 ### P7.9 — Implement Run History View
 
-**Description**  
+**Description**
 List past runs, delete, generate report.
 
 **Acceptance Criteria**
-- [ ] `RunHistoryView` widget
-- [ ] Table with run metadata
-- [ ] Delete button with confirmation
-- [ ] Generate Report button (checkbox for optional)
-- [ ] Run MobSF button (for past runs)
+- [X] `RunHistoryView` widget
+- [X] Table with run metadata
+- [X] Delete button with confirmation
+- [X] Generate Report button (checkbox for optional)
+- [X] Run MobSF button (for past runs)
 
 **Dependencies**: P7.1, P1.4, P5.3
 
