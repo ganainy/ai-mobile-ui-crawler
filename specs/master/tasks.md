@@ -196,10 +196,10 @@ Implement SQLite schema for user preferences: `user_config`, `secrets` tables.
 Implement Fernet encryption for API keys with machine-bound key derivation via PBKDF2.
 
 **Acceptance Criteria**
-- [ ] `CredentialStore` class with `encrypt()` / `decrypt()`
-- [ ] Key derived from machine identifier (hostname + MAC)
-- [ ] Encrypted values stored as BLOB
-- [ ] Unit tests verify roundtrip
+- [X] `CredentialStore` class with `encrypt()` / `decrypt()`
+- [X] Key derived from machine identifier (hostname + MAC)
+- [X] Encrypted values stored as BLOB
+- [X] Unit tests verify roundtrip
 
 **Dependencies**: P1.2
 
