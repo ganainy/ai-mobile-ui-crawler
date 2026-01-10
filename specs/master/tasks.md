@@ -893,16 +893,16 @@ Generate PDF report using ReportLab.
 
 ### P5.4 — Implement Stale Run Cleanup
 
-**Description**  
+**Description**
 On startup, recover partial artifacts from crashed runs.
 
 **Acceptance Criteria**
-- [ ] `StaleRunCleaner` runs on app start
-- [ ] Finds runs with status=RUNNING but no process
-- [ ] Attempts to stop Appium recording, pull partial video
-- [ ] Attempts to stop PCAPdroid, pull partial PCAP
-- [ ] Marks run as ERROR
-- [ ] Unit tests
+- [X] `StaleRunCleaner` runs on app start
+- [X] Finds runs with status=RUNNING but no process
+- [X] Attempts to stop Appium recording, pull partial video
+- [X] Attempts to stop PCAPdroid, pull partial PCAP
+- [X] Marks run as ERROR
+- [X] Unit tests
 
 **Dependencies**: P1.4, P2.6, P5.1
 
@@ -922,10 +922,10 @@ On startup, recover partial artifacts from crashed runs.
 Create CLI entry point with Click.
 
 **Acceptance Criteria**
-- [ ] `run_cli.py` entry point
-- [ ] `crawler` command group
-- [ ] `--version` flag
-- [ ] Help text
+- [X] `run_cli.py` entry point
+- [X] `crawler` command group
+- [X] `--version` flag
+- [X] Help text
 
 **Dependencies**: P0.1
 
@@ -944,11 +944,11 @@ Create CLI entry point with Click.
 Start crawl with options for device, package, model, limits.
 
 **Acceptance Criteria**
-- [ ] `crawler crawl --device <id> --package <pkg> --model <name>`
-- [ ] Optional: `--steps`, `--duration`, `--provider`
-- [ ] JSON events to stdout
-- [ ] Human logs to stderr
-- [ ] Integration test
+- [X] `crawler crawl --device <id> --package <pkg> --model <name>`
+- [X] Optional: `--steps`, `--duration`, `--provider`
+- [X] JSON events to stdout
+- [X] Human logs to stderr
+- [X] Integration test
 
 **Dependencies**: P6.1, P4.2
 
@@ -1049,14 +1049,14 @@ Delete old runs with cascading cleanup.
 
 ### P7.1 — Set Up PySide6 Application
 
-**Description**  
+**Description**
 Create main window and application structure.
 
 **Acceptance Criteria**
-- [ ] `run_ui.py` entry point
-- [ ] `MainWindow` class with menu bar
-- [ ] Application icon
-- [ ] Closes cleanly
+- [X] `run_ui.py` entry point
+- [X] `MainWindow` class with menu bar
+- [X] Application icon
+- [X] Closes cleanly
 
 **Dependencies**: P0.1
 
@@ -1075,10 +1075,10 @@ Create main window and application structure.
 Dropdown with detected devices, refresh button.
 
 **Acceptance Criteria**
-- [ ] `DeviceSelector` widget
-- [ ] Refresh button updates list
-- [ ] Shows device model and ID
-- [ ] Emits `device_selected` signal
+- [X] `DeviceSelector` widget
+- [X] Refresh button updates list
+- [X] Shows device model and ID
+- [X] Emits `device_selected` signal
 
 **Dependencies**: P7.1, P2.2
 
@@ -1096,10 +1096,10 @@ Dropdown with detected devices, refresh button.
 Package input with validation.
 
 **Acceptance Criteria**
-- [ ] `AppSelector` widget with text input
-- [ ] Validates package format
-- [ ] Optional: list installed apps from device
-- [ ] Emits `app_selected` signal
+- [X] `AppSelector` widget with text input
+- [X] Validates package format
+- [X] Optional: list installed apps from device
+- [X] Emits `app_selected` signal
 
 **Dependencies**: P7.1, P2.1
 
@@ -1117,11 +1117,11 @@ Package input with validation.
 Provider dropdown, model list filtered to vision-capable.
 
 **Acceptance Criteria**
-- [ ] `AIModelSelector` widget
-- [ ] Provider dropdown (Gemini, OpenRouter, Ollama)
-- [ ] Model list updates on provider change
-- [ ] Only vision-capable models shown
-- [ ] Emits `model_selected` signal
+- [X] `AIModelSelector` widget
+- [X] Provider dropdown (Gemini, OpenRouter, Ollama)
+- [X] Model list updates on provider change
+- [X] Only vision-capable models shown
+- [X] Emits `model_selected` signal
 
 **Dependencies**: P7.1, P3.5
 
@@ -1135,14 +1135,14 @@ Provider dropdown, model list filtered to vision-capable.
 
 ### P7.5 — Implement Crawl Control Panel
 
-**Description**  
+**Description**
 Start/Pause/Resume/Stop buttons with state management.
 
 **Acceptance Criteria**
-- [ ] `CrawlControlPanel` widget
-- [ ] Button states reflect crawl state
-- [ ] Start disabled until pre-validation passes
-- [ ] Emits control signals
+- [X] `CrawlControlPanel` widget
+- [X] Button states reflect crawl state
+- [X] Start disabled until pre-validation passes
+- [X] Emits control signals
 
 **Dependencies**: P7.1, P4.7
 
