@@ -570,17 +570,17 @@ Implement adapter for local Ollama.
 
 ### P3.5 — Implement Vision Model Detection
 
-**Description**  
+**Description**
 Filter models by vision capability for each provider.
 
 **Acceptance Criteria**
-- [ ] `ProviderRegistry` fetches available models
-- [ ] Filters to vision-capable only
-- [ ] Gemini: check model name patterns
-- [ ] OpenRouter: check `modalities` metadata
-- [ ] Ollama: check for `projector`, `clip`, `vision` in show output
-- [ ] Caches results
-- [ ] Unit tests
+- [X] `ProviderRegistry` fetches available models
+- [X] Filters to vision-capable only
+- [X] Gemini: check model name patterns
+- [X] OpenRouter: check `modalities` metadata
+- [X] Ollama: check for `projector`, `clip`, `vision` in show output
+- [X] Caches results
+- [X] Unit tests
 
 **Dependencies**: P3.2, P3.3, P3.4
 
@@ -672,11 +672,11 @@ Explicit state machine with transitions: UNINITIALIZED → INITIALIZING → RUNN
 Main iteration: screenshot → AI → execute → log → repeat.
 
 **Acceptance Criteria**
-- [ ] `CrawlerLoop` class with `run()`
-- [ ] Respects `MAX_CRAWL_STEPS` and `MAX_CRAWL_DURATION_SECONDS`
-- [ ] Handles batch abort on failure
-- [ ] Emits events via `CrawlerEventListener` protocol
-- [ ] Integration test
+- [X] `CrawlerLoop` class with `run()`
+- [X] Respects `MAX_CRAWL_STEPS` and `MAX_CRAWL_DURATION_SECONDS`
+- [X] Handles batch abort on failure
+- [X] Emits events via `CrawlerEventListener` protocol
+- [X] Integration test
 
 **Dependencies**: P4.1, P2.3, P2.4, P3.6, P1.6
 
