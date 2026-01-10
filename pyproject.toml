@@ -58,6 +58,7 @@ include = ["mobile_crawler*"]
 minversion = "6.0"
 addopts = "-ra -q --strict-markers --cov=mobile_crawler --cov-report=html --cov-report=term-missing"
 testpaths = ["tests"]
+pythonpath = ["src"]
 markers = [
     "unit: marks tests as unit tests",
     "integration: marks tests as integration tests",

@@ -281,11 +281,11 @@ Store per-step action history in `step_logs` table.
 Create/delete `output_data/{device_id}_{app_package}_{DD_MM_HH_MM}/` folders with subdirectories.
 
 **Acceptance Criteria**
-- [ ] `SessionFolderManager` class
-- [ ] Creates all subdirectories (screenshots, logs, video, etc.)
-- [ ] Timestamp format: `DD_MM_HH_MM`
-- [ ] Delete folder with all contents
-- [ ] Unit tests
+- [X] `SessionFolderManager` class
+- [X] Creates all subdirectories (screenshots, logs, video, etc.)
+- [X] Timestamp format: `DD_MM_HH_MM`
+- [X] Delete folder with all contents
+- [X] Unit tests
 
 **Dependencies**: P0.1
 
@@ -417,11 +417,11 @@ Calculate coordinates from bounding boxes and execute gestures.
 Start/stop screen recording via Appium API, save to session folder.
 
 **Acceptance Criteria**
-- [ ] `VideoRecordingManager` with `start()`, `stop_and_save()`
-- [ ] Uses Appium's built-in recording
-- [ ] Decodes base64 and saves MP4
-- [ ] Handles partial save on crash
-- [ ] Integration test
+- [X] `VideoRecordingManager` with `start()`, `stop_and_save()`
+- [X] Uses Appium's built-in recording
+- [X] Decodes base64 and saves MP4
+- [X] Handles partial save on crash
+- [X] Integration test
 
 **Dependencies**: P2.1, P1.7
 
