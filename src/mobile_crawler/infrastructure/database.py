@@ -225,12 +225,24 @@ class DatabaseManager:
             )
         """)
 
+        # logs table for general logging
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS logs (
+                id INTEGER PRIMARY KEY,
+                timestamp TEXT NOT NULL,
+                level TEXT NOT NULL,
+                message TEXT NOT NULL,
+                extra_json TEXT
+            )
+        """)
+
         # Create indexes for performance
         conn.execute("CREATE INDEX IF NOT EXISTS idx_step_logs_run ON step_logs(run_id, step_number)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_screens_hash ON screens(composite_hash)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_transitions_run ON transitions(run_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_run_stats_run ON run_stats(run_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_ai_interactions_run ON ai_interactions(run_id, step_number)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_logs_timestamp ON logs(timestamp)")
 
         conn.commit()
 

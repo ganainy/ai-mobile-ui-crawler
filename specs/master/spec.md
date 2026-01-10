@@ -46,7 +46,7 @@
 }
 ```
 
-**Note**: Only screenshot-based analysis is supported. No XML hierarchy or OCR—the AI must derive all information from the image.
+**Note**: The AI receives screenshots for visual analysis. Separately, the system parses XML hierarchy via UiAutomator2 to extract element metadata (bounds, resource IDs) for precise action targeting.
 
 #### AI Decision Response (from model)
 
@@ -66,8 +66,8 @@
 ```
 
 - `actions`: Array of 1–12 sequential actions.
-- Each action requires `action`, `target_bounding_box` (pixel coordinates from screenshot), and `reasoning`.
-- `target_bounding_box`: AI-provided bounding box used to compute tap coordinates (center of box). This is the **only** targeting mechanism—no XML element IDs or accessibility identifiers.
+- Each action requires `action`, `target_bounding_box` (pixel coordinates), and `reasoning`.
+- `target_bounding_box`: Bounding box used to compute tap coordinates (center of box). Can be AI-provided from visual analysis OR derived from XML element bounds parsed via UiAutomator2. When XML elements are available, their bounds provide more accurate targeting than AI-estimated coordinates.
 - `signup_completed`: Boolean flag set `true` after successful registration.
 
 #### Action Execution Result
@@ -82,6 +82,32 @@ class ActionResult:
     error_message: Optional[str]
     navigated_away: bool  # Did screen change?
 ```
+
+#### UIElement (from XML hierarchy)
+
+```python
+@dataclass
+class UIElement:
+    """UI element extracted from UiAutomator2 XML hierarchy."""
+    element_id: str              # Unique identifier for this element
+    bounds: Tuple[int, int, int, int]  # (x1, y1, x2, y2) pixel coordinates
+    text: str                    # Visible text content
+    content_desc: str            # Accessibility content description
+    class_name: str              # Android widget class (e.g., android.widget.Button)
+    package: str                 # Package name
+    clickable: bool              # Is element clickable?
+    visible: bool                # Is element visible on screen?
+    enabled: bool                # Is element enabled for interaction?
+    resource_id: Optional[str]   # Android resource ID (may be None)
+    xpath: Optional[str]         # XPath to element in hierarchy
+    center_x: int                # Center X coordinate (derived from bounds)
+    center_y: int                # Center Y coordinate (derived from bounds)
+```
+
+UIElements are parsed from the XML hierarchy and used for:
+- Precise action targeting (tap at element center)
+- Element state detection (loading indicators, error states)
+- Screen comparison and deduplication
 
 ---
 
@@ -199,7 +225,7 @@ AI prompted with stuck context → returns: [{"action":"scroll_down","reasoning"
 12. **Crash recovery**: **Not supported**. If host crashes, run is marked as `ERROR`. Only pause/resume while process is alive.
 13. **Secrets encryption**: Uses Fernet symmetric encryption (AES-128-CBC); key derived from machine-bound identifier via PBKDF2.
 14. **Report generation**: PDF generated via ReportLab at crawl end. Users can also generate reports for paused/stopped runs on-demand (optional checkbox in UI).
-15. **Screenshot-only analysis**: No XML hierarchy or OCR support. AI must derive all UI information from screenshots only.
+15. **Hybrid XML + Images approach**: The tool uses **both** XML hierarchy data and screenshot images. XML provides precise element metadata (bounds, resource IDs, accessibility info) for accurate Appium action targeting. Screenshots provide visual context for AI decision-making. The AI receives the screenshot; the executor uses XML-derived coordinates for reliable taps.
 16. **FLAG_SECURE handling**: If screenshot is blocked, crawl stops with error. No blind mode—screenshots are required.
 17. **Run deletion**: Users can delete old runs; associated files (screenshots, video, PCAP, MobSF results) are deleted automatically.
 18. **Stale run cleanup**: On startup, attempt to recover partial video/PCAP from crashed runs before marking as `ERROR`.

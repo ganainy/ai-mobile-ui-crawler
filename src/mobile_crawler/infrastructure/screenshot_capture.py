@@ -35,6 +35,8 @@ class ScreenshotCapture:
         self.driver = driver
         self.max_width = max_width
         self.max_height = max_height
+        self.output_dir = Path("screenshots")
+        self.output_dir.mkdir(exist_ok=True)
 
     def capture_screenshot(self) -> Image.Image:
         """Capture a screenshot from the device.
@@ -62,6 +64,33 @@ class ScreenshotCapture:
 
         except Exception as e:
             raise ScreenshotCaptureError(f"Failed to capture screenshot: {e}") from e
+
+    def capture_screenshot_to_file(self, filename: Optional[str] = None) -> Optional[str]:
+        """Capture a screenshot and save to file.
+
+        Args:
+            filename: Optional filename for the screenshot
+
+        Returns:
+            Path to the saved screenshot file, or None if failed
+        """
+        try:
+            if filename is None:
+                timestamp = int(time.time() * 1000)
+                filename = f"screenshot_{timestamp}.png"
+
+            filepath = self.output_dir / filename
+
+            # Capture and save screenshot
+            image = self.capture_screenshot()
+            image.save(filepath)
+
+            logger.debug(f"Screenshot saved: {filepath}")
+            return str(filepath)
+
+        except Exception as e:
+            logger.error(f"Failed to capture screenshot to file: {e}")
+            return None
 
     def capture_and_downscale(self) -> Image.Image:
         """Capture screenshot and downscale to maximum dimensions.

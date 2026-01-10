@@ -24,8 +24,8 @@ All development and execution MUST occur within a Python virtual environment (ve
 Markdown documentation MUST be updated after every code change.
 - README.md MUST reflect current project state (features, installation, usage)
 - Docstrings MUST be present for all public modules, classes, and functions
-- `.github/prompts/speckit.product-spec.md` is the source of truth for requirements
-- Implementation plan and tasks MUST be updated when scope changes
+- `specs/master/spec.md` is the source of truth for requirements
+- Implementation plan (`specs/master/plan.md`) and tasks (`specs/master/tasks.md`) MUST be updated when scope changes
 - Rationale: Documentation drift causes confusion; keeping docs current ensures onboarding efficiency and reduces ramp-up time
 
 ### III. Test-Driven Development (NON-NEGOTIABLE)
