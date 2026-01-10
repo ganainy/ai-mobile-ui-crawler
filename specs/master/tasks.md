@@ -553,10 +553,10 @@ Implement adapter for OpenRouter API.
 Implement adapter for local Ollama.
 
 **Acceptance Criteria**
-- [ ] `OllamaAdapter` extends `ModelAdapter`
-- [ ] Uses `ollama` Python SDK
-- [ ] Handles local base URL
-- [ ] Unit tests with mocked client
+- [X] `OllamaAdapter` extends `ModelAdapter`
+- [X] Uses `ollama` Python SDK
+- [X] Handles local base URL
+- [X] Unit tests with mocked client
 
 **Dependencies**: P3.1
 
