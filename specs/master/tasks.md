@@ -509,11 +509,11 @@ Create abstract base class for AI provider adapters.
 Implement adapter for Google Gemini API.
 
 **Acceptance Criteria**
-- [ ] `GeminiAdapter` extends `ModelAdapter`
-- [ ] Uses `google-genai` SDK
-- [ ] Handles image encoding
-- [ ] Returns token usage in metadata
-- [ ] Unit tests with mocked API
+- [X] `GeminiAdapter` extends `ModelAdapter`
+- [X] Uses `google-genai` SDK
+- [X] Handles image encoding
+- [X] Returns token usage in metadata
+- [X] Unit tests with mocked API
 
 **Dependencies**: P3.1
 
