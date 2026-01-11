@@ -3,13 +3,25 @@
 import json
 import time
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Protocol
 
 from mobile_crawler.config.config_manager import ConfigManager
 from mobile_crawler.domain.model_adapters import ModelAdapter
 from mobile_crawler.domain.models import AIAction, AIResponse, BoundingBox
 from mobile_crawler.domain.prompt_builder import PromptBuilder
 from mobile_crawler.infrastructure.ai_interaction_repository import AIInteraction, AIInteractionRepository
+
+
+class AIEventListener(Protocol):
+    """Protocol for AI event listeners."""
+    
+    def on_ai_request_sent(self, run_id: int, step_number: int, request_data: dict) -> None:
+        """Called when AI request is sent."""
+        ...
+    
+    def on_ai_response_received(self, run_id: int, step_number: int, response_data: dict) -> None:
+        """Called when AI response is received."""
+        ...
 
 
 class AIInteractionService:
@@ -20,7 +32,8 @@ class AIInteractionService:
         model_adapter: ModelAdapter,
         prompt_builder: PromptBuilder,
         ai_interaction_repository: AIInteractionRepository,
-        config_manager: ConfigManager
+        config_manager: ConfigManager,
+        event_listener: Optional[AIEventListener] = None
     ):
         """Initialize AI interaction service.
 
@@ -29,18 +42,21 @@ class AIInteractionService:
             prompt_builder: Builder for creating prompts
             ai_interaction_repository: Repository for logging interactions
             config_manager: Configuration manager
+            event_listener: Optional event listener for AI events
         """
         self.model_adapter = model_adapter
         self.prompt_builder = prompt_builder
         self.ai_interaction_repository = ai_interaction_repository
         self.config_manager = config_manager
+        self.event_listener = event_listener
 
     @classmethod
-    def from_config(cls, config_manager: ConfigManager) -> 'AIInteractionService':
+    def from_config(cls, config_manager: ConfigManager, event_listener: Optional[AIEventListener] = None) -> 'AIInteractionService':
         """Create AI interaction service from configuration.
         
         Args:
             config_manager: Configuration manager
+            event_listener: Optional event listener for AI events
             
         Returns:
             Configured AI interaction service
@@ -63,7 +79,7 @@ class AIInteractionService:
         prompt_builder = PromptBuilder(config_manager, step_log_repo)
         ai_repo = AIInteractionRepository(db)
         
-        return cls(model_adapter, prompt_builder, ai_repo, config_manager)
+        return cls(model_adapter, prompt_builder, ai_repo, config_manager, event_listener)
     
     @staticmethod
     def _create_model_adapter(provider: str, model_name: str, config_manager: ConfigManager) -> ModelAdapter:
@@ -146,6 +162,10 @@ class AIInteractionService:
         }
         request_json = json.dumps(request_data)
         
+        # Emit request sent event
+        if self.event_listener:
+            self.event_listener.on_ai_request_sent(run_id, step_number, request_data)
+        
         last_exception = None
         
         for retry_count in range(max_retries + 1):
@@ -194,6 +214,32 @@ class AIInteractionService:
                 
                 self.ai_interaction_repository.create_ai_interaction(interaction)
                 
+                # Emit response received event
+                if self.event_listener:
+                    response_data = {
+                        "success": True,
+                        "response": response_text,
+                        "parsed_response": json.dumps({
+                            "actions": [
+                                {
+                                    "action": action.action,
+                                    "action_desc": action.action_desc,
+                                    "target_bounding_box": {
+                                        "top_left": list(action.target_bounding_box.top_left),
+                                        "bottom_right": list(action.target_bounding_box.bottom_right)
+                                    },
+                                    "input_text": action.input_text,
+                                    "reasoning": action.reasoning
+                                } for action in ai_response.actions
+                            ],
+                            "signup_completed": ai_response.signup_completed
+                        }),
+                        "tokens_input": usage_info.get('input_tokens') if usage_info else None,
+                        "tokens_output": usage_info.get('output_tokens') if usage_info else None,
+                        "latency_ms": latency_ms
+                    }
+                    self.event_listener.on_ai_response_received(run_id, step_number, response_data)
+                
                 return ai_response
                 
             except Exception as e:
@@ -218,6 +264,15 @@ class AIInteractionService:
                 )
                 
                 self.ai_interaction_repository.create_ai_interaction(interaction)
+                
+                # Emit error response event
+                if self.event_listener and retry_count == max_retries:
+                    error_response_data = {
+                        "success": False,
+                        "error_message": str(e),
+                        "retry_count": retry_count
+                    }
+                    self.event_listener.on_ai_response_received(run_id, step_number, error_response_data)
                 
                 if retry_count < max_retries:
                     continue

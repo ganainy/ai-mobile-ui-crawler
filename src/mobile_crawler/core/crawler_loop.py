@@ -248,13 +248,6 @@ class CrawlerLoop:
                 stuck_reason=stuck_reason
             )
 
-            # Emit AI events
-            self._emit_event("on_ai_request_sent", run_id, step_number, {"has_screenshot": True, "is_stuck": is_stuck})
-            self._emit_event("on_ai_response_received", run_id, step_number, {
-                "actions_count": len(ai_response.actions),
-                "signup_completed": ai_response.signup_completed
-            })
-
             # Execute actions
             actions_executed = 0
             for i, ai_action in enumerate(ai_response.actions):

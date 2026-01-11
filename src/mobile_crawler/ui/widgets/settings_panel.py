@@ -13,6 +13,8 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QPushButton,
     QMessageBox,
+    QRadioButton,
+    QButtonGroup,
 )
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
@@ -95,8 +97,15 @@ class SettingsPanel(QWidget):
         limits_group = QGroupBox("Crawl Limits")
         limits_layout = QVBoxLayout()
 
-        # Max Steps
+        # Radio buttons for limit type selection
+        self.limit_button_group = QButtonGroup()
+        
+        # Max Steps option
         max_steps_layout = QHBoxLayout()
+        self.steps_radio = QRadioButton()
+        self.steps_radio.setChecked(True)
+        self.limit_button_group.addButton(self.steps_radio, 0)
+        max_steps_layout.addWidget(self.steps_radio)
         max_steps_label = QLabel("Max Steps:")
         max_steps_layout.addWidget(max_steps_label)
         self.max_steps_input = QSpinBox()
@@ -104,18 +113,27 @@ class SettingsPanel(QWidget):
         self.max_steps_input.setValue(100)
         self.max_steps_input.setSingleStep(10)
         max_steps_layout.addWidget(self.max_steps_input)
+        max_steps_layout.addStretch()
         limits_layout.addLayout(max_steps_layout)
 
-        # Max Duration
+        # Max Duration option
         max_duration_layout = QHBoxLayout()
+        self.duration_radio = QRadioButton()
+        self.limit_button_group.addButton(self.duration_radio, 1)
+        max_duration_layout.addWidget(self.duration_radio)
         max_duration_label = QLabel("Max Duration (seconds):")
         max_duration_layout.addWidget(max_duration_label)
         self.max_duration_input = QSpinBox()
         self.max_duration_input.setRange(10, 3600)
         self.max_duration_input.setValue(300)
         self.max_duration_input.setSingleStep(30)
+        self.max_duration_input.setEnabled(False)  # Initially disabled
         max_duration_layout.addWidget(self.max_duration_input)
+        max_duration_layout.addStretch()
         limits_layout.addLayout(max_duration_layout)
+
+        # Connect radio button signals
+        self.steps_radio.toggled.connect(self._on_limit_type_changed)
 
         limits_group.setLayout(limits_layout)
         layout.addWidget(limits_group)
@@ -160,6 +178,21 @@ class SettingsPanel(QWidget):
         # Set the layout for this widget
         self.setLayout(layout)
 
+    def _on_limit_type_changed(self, checked: bool):
+        """Handle limit type radio button toggle.
+        
+        Args:
+            checked: Whether steps radio is checked
+        """
+        if checked:
+            # Steps is selected
+            self.max_steps_input.setEnabled(True)
+            self.max_duration_input.setEnabled(False)
+        else:
+            # Duration is selected
+            self.max_steps_input.setEnabled(False)
+            self.max_duration_input.setEnabled(True)
+
     def _load_settings(self):
         """Load settings from user_config.db."""
         # Load API keys
@@ -181,6 +214,13 @@ class SettingsPanel(QWidget):
 
         max_duration = self._config_store.get_setting("max_duration_seconds", default=300)
         self.max_duration_input.setValue(max_duration)
+
+        # Load limit type preference (default to steps)
+        limit_type = self._config_store.get_setting("limit_type", default="steps")
+        if limit_type == "duration":
+            self.duration_radio.setChecked(True)
+        else:
+            self.steps_radio.setChecked(True)
 
         # Load test credentials
         test_username = self._config_store.get_setting("test_username", default="")
@@ -223,6 +263,10 @@ class SettingsPanel(QWidget):
             # Save crawl limits
             self._config_store.set_setting("max_steps", self.max_steps_input.value(), "int")
             self._config_store.set_setting("max_duration_seconds", self.max_duration_input.value(), "int")
+            
+            # Save limit type preference
+            limit_type = "steps" if self.steps_radio.isChecked() else "duration"
+            self._config_store.set_setting("limit_type", limit_type, "string")
 
             # Save test credentials
             test_username = self.test_username_input.text().strip()

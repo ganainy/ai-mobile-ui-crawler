@@ -9,6 +9,8 @@ from PySide6.QtWidgets import (
     QSplitter,
     QMenuBar,
     QMenu,
+    QTabWidget,
+    QTabBar,
     QApplication
 )
 from PySide6.QtCore import Qt, QThread, Signal
@@ -43,6 +45,7 @@ from mobile_crawler.ui.widgets.log_viewer import LogViewer
 from mobile_crawler.ui.widgets.stats_dashboard import StatsDashboard
 from mobile_crawler.ui.widgets.settings_panel import SettingsPanel
 from mobile_crawler.ui.widgets.run_history_view import RunHistoryView
+from mobile_crawler.ui.widgets.ai_monitor_panel import AIMonitorPanel, StepDetailWidget
 
 # Signal adapter
 from mobile_crawler.ui.signal_adapter import QtSignalAdapter
@@ -91,6 +94,7 @@ class MainWindow(QMainWindow):
         self.stats_dashboard: StatsDashboard = None
         self.settings_panel: SettingsPanel = None
         self.run_history_view: RunHistoryView = None
+        self.ai_monitor_panel: AIMonitorPanel = None
         
         # Signal adapter for thread-safe event bridging
         self.signal_adapter: QtSignalAdapter = QtSignalAdapter()
@@ -212,12 +216,18 @@ class MainWindow(QMainWindow):
         self.signal_adapter.action_executed.connect(self._on_action_executed)
         self.signal_adapter.step_completed.connect(self._on_step_completed)
         self.signal_adapter.crawl_completed.connect(self._on_crawl_completed)
+        self.signal_adapter.ai_request_sent.connect(self.ai_monitor_panel.add_request)
+        self.signal_adapter.ai_response_received.connect(self.ai_monitor_panel.add_response)
         
         # Bottom panel: Run history
         bottom_panel = self._create_bottom_panel()
         main_layout.addWidget(bottom_panel)
         
         self.setCentralWidget(central_widget)
+        
+        # Auto-refresh devices on startup
+        if self.device_selector:
+            self.device_selector._refresh_devices()
         
         # Load initial data
         if self.run_history_view:
@@ -354,7 +364,7 @@ class MainWindow(QMainWindow):
         
         state_machine = CrawlStateMachine()
         screenshot_capture = ScreenshotCapture(driver=appium_driver)
-        ai_service = AIInteractionService.from_config(config_manager)
+        ai_service = AIInteractionService.from_config(config_manager, event_listener=self.signal_adapter)
         gesture_handler = GestureHandler(appium_driver)
         action_executor = ActionExecutor(appium_driver, gesture_handler)
         step_log_repo = StepLogRepository(self._services['database_manager'])
@@ -575,16 +585,35 @@ class MainWindow(QMainWindow):
         return panel
 
     def _create_right_panel(self) -> QWidget:
-        """Create the right panel with log viewer."""
+        """Create the right panel with tabbed log viewer and AI monitor."""
         panel = QWidget()
         layout = QVBoxLayout(panel)
-        
-        # Instantiate widget
+
+        # Create tab widget and store reference
+        self.right_tab_widget = QTabWidget()
+
+        # Instantiate widgets
         self.log_viewer = LogViewer()
         self.log_viewer.setObjectName("logViewer")
-        
-        layout.addWidget(self.log_viewer)
-        
+
+        self.ai_monitor_panel = AIMonitorPanel()
+        self.ai_monitor_panel.setObjectName("aiMonitorPanel")
+
+        # Connect show step details signal
+        self.ai_monitor_panel.show_step_details.connect(self._on_show_step_details)
+
+        # Add tabs
+        self.right_tab_widget.addTab(self.log_viewer, "Logs")
+        self.right_tab_widget.addTab(self.ai_monitor_panel, "AI Monitor")
+
+        # Enable closeable tabs but hide close button on main tabs
+        self.right_tab_widget.setTabsClosable(True)
+        self.right_tab_widget.tabBar().setTabButton(0, QTabBar.ButtonPosition.RightSide, None)
+        self.right_tab_widget.tabBar().setTabButton(1, QTabBar.ButtonPosition.RightSide, None)
+        self.right_tab_widget.tabCloseRequested.connect(self._on_tab_close_requested)
+
+        layout.addWidget(self.right_tab_widget)
+
         return panel
 
     def _create_bottom_panel(self) -> QWidget:
@@ -627,6 +656,49 @@ class MainWindow(QMainWindow):
                 # Show warning but don't prevent saving
                 pass
         self._update_start_button_state()
+
+    def _on_show_step_details(self, step_number: int, timestamp, success: bool,
+                                prompt: str, response: str, actions: list, error_msg):
+        """Handle request to show step details in a new tab.
+
+        Args:
+            step_number: Step number
+            timestamp: When interaction occurred
+            success: Whether interaction succeeded
+            prompt: Complete prompt text
+            response: Complete response text
+            actions: Parsed action details
+            error_msg: Error message if failed
+        """
+        from datetime import datetime
+        
+        # Create detail widget
+        detail_widget = StepDetailWidget(
+            step_number=step_number,
+            timestamp=timestamp if isinstance(timestamp, datetime) else datetime.now(),
+            success=success,
+            full_prompt=prompt,
+            full_response=response,
+            parsed_actions=actions or [],
+            error_message=error_msg
+        )
+
+        # Add as new tab
+        tab_title = f"Step {step_number}"
+        tab_index = self.right_tab_widget.addTab(detail_widget, tab_title)
+        
+        # Switch to the new tab
+        self.right_tab_widget.setCurrentIndex(tab_index)
+
+    def _on_tab_close_requested(self, index: int):
+        """Handle tab close request.
+
+        Args:
+            index: Tab index to close
+        """
+        # Don't allow closing the main tabs (Logs and AI Monitor)
+        if index > 1:  # Only allow closing detail tabs
+            self.right_tab_widget.removeTab(index)
 
     def _on_device_selected(self, device) -> None:
         """Handle device selection.

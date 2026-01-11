@@ -60,12 +60,7 @@ class ProviderRegistry:
 
         except Exception as e:
             logger.error(f"Failed to fetch Gemini models: {e}")
-            # Return fallback list with known vision models
-            return [
-                {'id': 'gemini-1.5-pro', 'name': 'Gemini 1.5 Pro', 'provider': 'google', 'supports_vision': True},
-                {'id': 'gemini-1.5-flash', 'name': 'Gemini 1.5 Flash', 'provider': 'google', 'supports_vision': True},
-                {'id': 'gemini-1.0-pro', 'name': 'Gemini 1.0 Pro', 'provider': 'google', 'supports_vision': True},
-            ]
+            raise RuntimeError(f"Failed to fetch Gemini models from API. Please check your API key and internet connection: {e}") from e
 
     def fetch_openrouter_models(self, api_key: str) -> List[Dict[str, Any]]:
         """Fetch available OpenRouter models.

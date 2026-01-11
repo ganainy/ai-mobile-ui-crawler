@@ -266,6 +266,8 @@ class AIModelSelector(QWidget):
     def _refresh_models(self):
         """Refresh model list for current provider."""
         if self._current_provider:
+            # Clear all cache to force fresh fetch
+            self.vision_detector._registry.clear_cache()
             self._update_model_list(self._current_provider)
 
     def current_provider(self) -> str:
