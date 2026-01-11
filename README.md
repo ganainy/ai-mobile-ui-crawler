@@ -1,13 +1,14 @@
 # Mobile Crawler
 
-AI-Powered Android Exploration Tool
+AI-Powered Android Exploration Tool (Image-Only Mode)
 
 ## Overview
 
-Mobile Crawler is an automated exploration tool for Android mobile applications using AI-driven visual analysis and intelligent action decisions. It captures screenshots, analyzes them via pluggable AI providers, translates analysis into device commands, and executes them via Appium.
+Mobile Crawler is an automated exploration tool for Android mobile applications using AI-driven **visual-only analysis** and intelligent action decisions. It operates in **image-only mode**, meaning it uses screenshots and coordinate-based actions without accessing XML page source or DOM hierarchy. The crawler captures screenshots, analyzes them via pluggable AI providers (VLM), translates analysis into device commands, and executes them via Appium.
 
 ## Features
 
+- **Image-Only Operation**: Operates purely on visual feedback (screenshots) with coordinate-based actions - no XML/DOM access
 - **AI-Driven Exploration**: Uses vision-capable AI models (Gemini, OpenRouter, Ollama) to analyze screenshots and determine next actions
 - **Multiple Interfaces**: Both GUI and CLI interfaces for different use cases
 - **Comprehensive Logging**: Detailed action logs, statistics, and reporting
@@ -50,8 +51,14 @@ pip install -e ".[dev]"
 - Database connection management with WAL mode and foreign keys
 - Comprehensive test coverage for all database operations
 
+### ✅ Completed (Phase 2 - Image-Only Mode)
+- **Image-Only Architecture**: Removed all XML/DOM access, now operates purely on screenshots and coordinates
+- **ADB Text Input**: Implemented ADB-based text input handler to avoid DOM access
+- **Coordinate-Based Actions**: All actions use visual coordinates from VLM, no element selectors
+- **Updated Prompts**: System prompts explicitly request coordinate-based actions
+
 ### 🔄 In Progress
-- Phase 1 remaining: ScreenRepository, StepLogRepository, SessionFolderManager
+- Additional testing and validation of image-only mode
 
 ## Usage
 

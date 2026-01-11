@@ -6,20 +6,26 @@ from typing import Optional, Tuple
 from mobile_crawler.domain.models import ActionResult
 from mobile_crawler.infrastructure.appium_driver import AppiumDriver
 from mobile_crawler.infrastructure.gesture_handler import GestureHandler
+from mobile_crawler.infrastructure.adb_input_handler import ADBInputHandler
 
 
 class ActionExecutor:
-    """Executes actions on mobile devices via Appium."""
+    """
+    Executes actions on mobile devices via Appium.
+    """
 
-    def __init__(self, appium_driver: AppiumDriver, gesture_handler: GestureHandler):
+    def __init__(self, appium_driver: AppiumDriver, gesture_handler: GestureHandler,
+                 adb_input_handler: Optional[ADBInputHandler] = None):
         """Initialize action executor.
 
         Args:
             appium_driver: Appium driver instance
             gesture_handler: Gesture handler instance
+            adb_input_handler: ADB input handler for text input (optional, created if not provided)
         """
         self.appium_driver = appium_driver
         self.gesture_handler = gesture_handler
+        self.adb_input_handler = adb_input_handler or ADBInputHandler()
         self._last_action_time = 0
         self._action_delay_ms = 2000  # 2s between actions for visual observability
 
@@ -105,7 +111,10 @@ class ActionExecutor:
         )
 
     def input(self, bounds: Tuple[int, int, int, int], text: str) -> ActionResult:
-        """Execute input action: tap then send keys.
+        """Execute input action: tap then send text via ADB (image-only mode).
+
+        This method uses ADB shell input text command instead of Appium's
+        send_keys to avoid accessing the DOM/XML page source.
 
         Args:
             bounds: Bounding box (x1, y1, x2, y2)
@@ -118,11 +127,14 @@ class ActionExecutor:
         center_x, center_y = self._calculate_center(bounds)
 
         def input_action():
-            # First tap to focus
+            # First tap to focus on the input field
             self.gesture_handler.tap_at(center_x, center_y)
-            # Then send keys
-            self.appium_driver.get_driver().press_keycode(66)  # Enter to clear if needed
-            self.appium_driver.get_driver().find_element_by_xpath("//*").send_keys(text)
+            # Wait a moment for focus to be established
+            time.sleep(0.5)
+            # Clear existing text using backspace via ADB
+            self.adb_input_handler.clear_text_field()
+            # Send text via ADB (image-only, no DOM access)
+            self.adb_input_handler.input_text(text)
 
         success, duration_ms, error = self._execute_with_timing(input_action)
 

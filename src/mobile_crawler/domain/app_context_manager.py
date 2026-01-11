@@ -95,6 +95,9 @@ class AppContextManager:
 
         Returns:
             Package name of current foreground app
+        
+        Note: Image-only mode - does NOT use page_source or XML parsing.
+        Uses ADB shell dumpsys as fallback if current_package is not available.
         """
         driver = self.appium_driver.get_driver()
 
@@ -105,15 +108,36 @@ class AppContextManager:
         except (AttributeError, KeyError):
             pass
 
-        # Fallback: parse from page source XML
+        # Fallback: use ADB shell dumpsys 
         try:
-            page_source = driver.page_source
-            # Parse the root element's package attribute
-            import xml.etree.ElementTree as ET
-            root = ET.fromstring(page_source)
-            return root.get('package', '')
+            import subprocess
+            device_id = self.appium_driver.device_id
+            result = subprocess.run(
+                ['adb', '-s', device_id, 'shell', 'dumpsys', 'window', 'windows'],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            if result.returncode == 0:
+                # Parse package from dumpsys output
+                # Look for mFocusedAppWindow or mCurrentFocus lines
+                for line in result.stdout.split('\n'):
+                    if 'mCurrentFocus' in line or 'mFocusedAppWindow' in line:
+                        # Format: mCurrentFocus=Window{... u0 com.package.name/...
+                        # Extract package name
+                        parts = line.split()
+                        for part in parts:
+                            if '/' in part and '.' in part:
+                                # Likely package/activity format
+                                pkg_activity = part.split('/')[0]
+                                # Clean up any trailing characters
+                                pkg = pkg_activity.strip('}{')
+                                if pkg and '.' in pkg:
+                                    return pkg
         except Exception:
-            return ''
+            pass
+
+        return ''
 
     def get_stats(self) -> dict:
         """Get context management statistics.

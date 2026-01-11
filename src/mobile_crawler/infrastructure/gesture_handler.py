@@ -4,15 +4,66 @@ import time
 import logging
 from typing import Dict, List, Optional, Tuple, Any
 from enum import Enum
+from dataclasses import dataclass
 
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.by import By
 from selenium.common.exceptions import WebDriverException
 
 from mobile_crawler.infrastructure.appium_driver import AppiumDriver
-from mobile_crawler.infrastructure.element_finder import UIElement
 
 logger = logging.getLogger(__name__)
+
+
+# UIElement dataclass for backward compatibility
+# NOTE: In image-only mode, UIElement is not used for main execution
+# This is kept for backward compatibility with code that may use element-based methods
+@dataclass
+class UIElement:
+    """Represents a UI element found on screen.
+    
+    NOTE: In image-only mode, this is not populated by the main crawler flow.
+    Kept for backward compatibility with gesture_handler methods that accept UIElement.
+    """
+    element_id: Optional[str]
+    bounds: Tuple[int, int, int, int]  # (left, top, right, bottom)
+    text: Optional[str]
+    content_desc: Optional[str]
+    class_name: Optional[str]
+    package: Optional[str]
+    clickable: bool
+    visible: bool
+    enabled: bool
+    resource_id: Optional[str]
+    xpath: Optional[str]
+    center_x: int
+    center_y: int
+
+    @property
+    def width(self) -> int:
+        """Get element width."""
+        return self.bounds[2] - self.bounds[0]
+
+    @property
+    def height(self) -> int:
+        """Get element height."""
+        return self.bounds[3] - self.bounds[1]
+
+    @property
+    def area(self) -> int:
+        """Get element area."""
+        return self.width * self.height
+
+    def contains_point(self, x: int, y: int) -> bool:
+        """Check if point (x, y) is within element bounds."""
+        left, top, right, bottom = self.bounds
+        return left <= x <= right and top <= y <= bottom
+
+    def distance_to_point(self, x: int, y: int) -> float:
+        """Calculate distance from element center to point."""
+        dx = self.center_x - x
+        dy = self.center_y - y
+        return (dx ** 2 + dy ** 2) ** 0.5
 
 
 class GestureType(Enum):
