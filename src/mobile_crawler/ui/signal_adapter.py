@@ -35,6 +35,7 @@ class QtSignalAdapter(QObject):
     crawl_completed = Signal(int, int, float, str)  # run_id, total_steps, total_duration_ms, reason
     error_occurred = Signal(int, int, object)  # run_id, step_number, error
     state_changed = Signal(int, str, str)  # run_id, old_state, new_state
+    screen_processed = Signal(int, int, int, bool, int, int)  # run_id, step, screen_id, is_new, visit_count, total
 
     def on_crawl_started(self, run_id: int, target_package: str) -> None:
         """Called when a crawl starts."""
@@ -77,3 +78,15 @@ class QtSignalAdapter(QObject):
     def on_state_changed(self, run_id: int, old_state: str, new_state: str) -> None:
         """Called when crawler state changes."""
         self.state_changed.emit(run_id, old_state, new_state)
+
+    def on_screen_processed(
+        self,
+        run_id: int,
+        step_number: int,
+        screen_id: int,
+        is_new: bool,
+        visit_count: int,
+        total_screens: int
+    ) -> None:
+        """Called when a screen is processed."""
+        self.screen_processed.emit(run_id, step_number, screen_id, is_new, visit_count, total_screens)

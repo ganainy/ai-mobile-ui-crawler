@@ -27,6 +27,7 @@ class ScreenshotCapture:
     def __init__(
         self,
         driver: AppiumDriver,
+        run_id: int,
         max_width: int = 800,
         max_height: int = 600,
         output_dir: Optional[Path] = None,
@@ -38,9 +39,10 @@ class ScreenshotCapture:
 
         Args:
             driver: Appium driver instance
+            run_id: Run ID to create run-specific subdirectory (required)
             max_width: Maximum width for downscaled screenshots
             max_height: Maximum height for downscaled screenshots
-            output_dir: Directory to save screenshots (default: ./screenshots)
+            output_dir: Directory to save screenshots (default: ./screenshots/run_{id})
             ai_max_width: Maximum width for AI-optimized images
             ai_max_height: Maximum height for AI-optimized images
             ai_jpeg_quality: JPEG quality for AI images (1-95, lower = smaller file)
@@ -48,7 +50,13 @@ class ScreenshotCapture:
         self.driver = driver
         self.max_width = max_width
         self.max_height = max_height
-        self.output_dir = output_dir if output_dir else Path("screenshots")
+        
+        # Create run-specific directory
+        if output_dir is None:
+            self.output_dir = Path("screenshots") / f"run_{run_id}"
+        else:
+            self.output_dir = output_dir
+        
         self.output_dir.mkdir(parents=True, exist_ok=True)
         
         # AI compression settings

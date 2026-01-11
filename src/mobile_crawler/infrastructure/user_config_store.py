@@ -275,15 +275,19 @@ class UserConfigStore:
             key: Secret key
 
         Returns:
-            Decrypted plaintext, or None if not found
-
-        Raises:
-            cryptography.fernet.InvalidToken: If decryption fails
+            Decrypted plaintext, or None if not found or decryption fails
         """
         encrypted = self.get_secret(key)
         if encrypted is None:
             return None
-        return self.decrypt_secret(encrypted)
+        
+        try:
+            return self.decrypt_secret(encrypted)
+        except Exception:
+            # Decryption failed (e.g., key changed, corrupted data)
+            # Delete the corrupted secret and return None
+            self.delete_secret(key)
+            return None
 
     def get_secret(self, key: str) -> Optional[bytes]:
         """Get an encrypted secret value.

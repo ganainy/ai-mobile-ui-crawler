@@ -128,7 +128,10 @@ class AIInteractionService:
         screenshot_b64: str,
         screenshot_path: Optional[str],
         is_stuck: bool = False,
-        stuck_reason: Optional[str] = None
+        stuck_reason: Optional[str] = None,
+        current_screen_id: Optional[int] = None,
+        current_screen_is_new: Optional[bool] = None,
+        total_unique_screens: Optional[int] = None
     ) -> AIResponse:
         """Get next actions from AI model.
 
@@ -139,6 +142,9 @@ class AIInteractionService:
             screenshot_path: Path to screenshot file
             is_stuck: Whether the crawler is currently stuck
             stuck_reason: Reason for being stuck
+            current_screen_id: ID of the current screen (for novelty context)
+            current_screen_is_new: Whether the current screen is newly discovered
+            total_unique_screens: Total unique screens discovered so far
 
         Returns:
             AIResponse with actions and signup completion status
@@ -148,9 +154,15 @@ class AIInteractionService:
         """
         max_retries = self.config_manager.get('ai_retry_count', 2)
         
-        # Build the user prompt
+        # Build the user prompt with screen context
         user_prompt = self.prompt_builder.build_user_prompt(
-            screenshot_b64, run_id, is_stuck, stuck_reason
+            screenshot_b64=screenshot_b64,
+            run_id=run_id,
+            is_stuck=is_stuck,
+            stuck_reason=stuck_reason,
+            current_screen_id=current_screen_id,
+            current_screen_is_new=current_screen_is_new,
+            total_unique_screens=total_unique_screens
         )
         
         # Get system prompt

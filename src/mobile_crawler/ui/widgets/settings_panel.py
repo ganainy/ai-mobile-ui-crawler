@@ -195,14 +195,18 @@ class SettingsPanel(QWidget):
 
     def _load_settings(self):
         """Load settings from user_config.db."""
-        # Load API keys
+        # Load API keys (None if not found or decryption fails)
         gemini_key = self._config_store.get_secret_plaintext("gemini_api_key")
         if gemini_key:
             self.gemini_api_key_input.setText(gemini_key)
+        else:
+            self.gemini_api_key_input.setText("")  # Clear field if no valid key
 
         openrouter_key = self._config_store.get_secret_plaintext("openrouter_api_key")
         if openrouter_key:
             self.openrouter_api_key_input.setText(openrouter_key)
+        else:
+            self.openrouter_api_key_input.setText("")  # Clear field if no valid key
 
         # Load system prompt
         system_prompt = self._config_store.get_setting("system_prompt", default="")

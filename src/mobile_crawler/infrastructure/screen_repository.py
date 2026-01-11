@@ -99,6 +99,33 @@ class ScreenRepository:
 
         return self._row_to_screen(row)
 
+    def get_screens_by_run(self, run_id: int) -> List[Screen]:
+        """Get all screens discovered in a specific run.
+
+        Args:
+            run_id: The run ID to get screens for
+
+        Returns:
+            List of Screen objects discovered in the run
+        """
+        conn = self.db_manager.get_connection()
+        cursor = conn.cursor()
+
+        # Get screens that were first seen in this run
+        # OR screens that were visited in step_logs for this run
+        cursor.execute("""
+            SELECT DISTINCT s.* FROM screens s
+            LEFT JOIN step_logs sl ON (sl.to_screen_id = s.id OR sl.from_screen_id = s.id)
+            WHERE s.first_seen_run_id = ? OR sl.run_id = ?
+            ORDER BY s.id
+        """, (run_id, run_id))
+
+        screens = []
+        for row in cursor.fetchall():
+            screens.append(self._row_to_screen(row))
+
+        return screens
+
     def update_screen(self, screen: Screen) -> bool:
         """Update an existing screen.
 

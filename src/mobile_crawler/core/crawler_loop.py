@@ -11,8 +11,11 @@ from mobile_crawler.core.crawl_state_machine import CrawlState, CrawlStateMachin
 from mobile_crawler.core.crawler_event_listener import CrawlerEventListener
 from mobile_crawler.domain.action_executor import ActionExecutor
 from mobile_crawler.domain.models import ActionResult
+from mobile_crawler.domain.screen_tracker import ScreenTracker, ScreenState
 from mobile_crawler.infrastructure.ai_interaction_service import AIInteractionService
 from mobile_crawler.infrastructure.appium_driver import AppiumDriver
+from mobile_crawler.infrastructure.database import DatabaseManager
+from mobile_crawler.infrastructure.run_exporter import RunExporter
 from mobile_crawler.infrastructure.run_repository import RunRepository
 from mobile_crawler.infrastructure.screenshot_capture import ScreenshotCapture
 from mobile_crawler.infrastructure.step_log_repository import StepLog, StepLogRepository
@@ -33,6 +36,7 @@ class CrawlerLoop:
         run_repository: RunRepository,
         config_manager: ConfigManager,
         appium_driver: AppiumDriver,
+        screen_tracker: ScreenTracker,
         event_listeners: Optional[List[CrawlerEventListener]] = None
     ):
         """Initialize crawler loop.
@@ -46,6 +50,7 @@ class CrawlerLoop:
             run_repository: Repository for runs
             config_manager: Configuration manager
             appium_driver: Appium driver for device control
+            screen_tracker: Screen tracker for deduplication and novelty detection
             event_listeners: List of event listeners
         """
         self.state_machine = crawl_state_machine
@@ -56,6 +61,7 @@ class CrawlerLoop:
         self.run_repository = run_repository
         self.config_manager = config_manager
         self.appium_driver = appium_driver
+        self.screen_tracker = screen_tracker
         self.event_listeners = event_listeners or []
         
         # Threading support
@@ -64,6 +70,9 @@ class CrawlerLoop:
         
         # Target app package (set when run starts)
         self._target_package: Optional[str] = None
+        
+        # Current screen state (updated after each step)
+        self._current_screen_state: Optional[ScreenState] = None
 
         # Configuration
         self.max_crawl_steps = self.config_manager.get('max_crawl_steps', 15)
@@ -146,6 +155,9 @@ class CrawlerLoop:
             # Initialize crawl
             start_time = time.time()
             step_number = 1
+            
+            # Start screen tracking for this run
+            self.screen_tracker.start_run(run_id)
 
             # Transition to running
             self.state_machine.transition_to(CrawlState.RUNNING)
@@ -182,15 +194,28 @@ class CrawlerLoop:
             self.state_machine.transition_to(CrawlState.STOPPING)
             self._emit_event("on_state_changed", run_id, "running", "stopping")
 
-            # Finalize run record with stats
+            # End screen tracking and get final stats
+            screen_stats = self.screen_tracker.get_run_stats()
+            self.screen_tracker.end_run()
+            
+            # Finalize run record with actual screen stats
             total_steps = step_number - 1  # steps are 1-indexed
             self.run_repository.update_run_stats(
                 run_id=run_id,
                 status='COMPLETED',
                 end_time=datetime.now(),
                 total_steps=total_steps,
-                unique_screens=total_steps  # Simplified: assume each step is unique screen
+                unique_screens=screen_stats.get('unique_screens', total_steps)
             )
+            
+            # Export run data to JSON
+            try:
+                db_manager = DatabaseManager()
+                run_exporter = RunExporter(db_manager)
+                export_path = run_exporter.export_run(run_id)
+                logger.info(f"Run data exported to: {export_path}")
+            except Exception as export_error:
+                logger.warning(f"Failed to export run data: {export_error}")
 
             self.state_machine.transition_to(CrawlState.STOPPED)
             self._emit_event("on_state_changed", run_id, "stopping", "stopped")
@@ -320,20 +345,52 @@ class CrawlerLoop:
             screenshot_image, screenshot_path, screenshot_b64, scale_factor = self.screenshot_capture.capture_full()
 
             self._emit_event("on_screenshot_captured", run_id, step_number, screenshot_path)
+            
+            # Track this screen for deduplication and novelty detection
+            # Store previous screen ID for transition tracking in step logs
+            previous_screen_id = self._current_screen_state.screen_id if self._current_screen_state else None
+            
+            self._current_screen_state = self.screen_tracker.process_screen(
+                image=screenshot_image,
+                step_number=step_number,
+                screenshot_path=screenshot_path,
+                activity_name=None  # TODO: Get current activity from Appium
+            )
+            
+            logger.info(
+                f"Step {step_number}: Screen {self._current_screen_state.screen_id} "
+                f"({'NEW' if self._current_screen_state.is_new else 'revisited'}, "
+                f"visit #{self._current_screen_state.visit_count}, "
+                f"total unique: {self._current_screen_state.total_screens_discovered})"
+            )
+            
+            # Emit screen processed event for UI updates
+            self._emit_event(
+                "on_screen_processed",
+                run_id,
+                step_number,
+                self._current_screen_state.screen_id,
+                self._current_screen_state.is_new,
+                self._current_screen_state.visit_count,
+                self._current_screen_state.total_screens_discovered
+            )
 
-            # Check if we're stuck (simplified - would need more complex logic)
-            is_stuck = False
-            stuck_reason = None
-            # TODO: Implement stuck detection logic
+            # Check if we're stuck using screen tracker
+            is_stuck, stuck_reason = self.screen_tracker.is_stuck(threshold=3)
+            if is_stuck:
+                logger.warning(f"Stuck detected: {stuck_reason}")
 
-            # Get AI actions
+            # Get AI actions with screen context for novelty signals
             ai_response = self.ai_interaction_service.get_next_actions(
                 run_id=run_id,
                 step_number=step_number,
                 screenshot_b64=screenshot_b64,
                 screenshot_path=screenshot_path,
                 is_stuck=is_stuck,
-                stuck_reason=stuck_reason
+                stuck_reason=stuck_reason,
+                current_screen_id=self._current_screen_state.screen_id,
+                current_screen_is_new=self._current_screen_state.is_new,
+                total_unique_screens=self._current_screen_state.total_screens_discovered
             )
 
             # Execute actions
@@ -377,14 +434,16 @@ class CrawlerLoop:
                 actions_executed += 1
                 self._emit_event("on_action_executed", run_id, step_number, i, result)
 
-                # Log step action
+                # Log step action with screen tracking
+                # from_screen_id is the screen before action, to_screen_id will be updated after action
+                current_screen_id = self._current_screen_state.screen_id if self._current_screen_state else None
                 step_log = StepLog(
                     id=None,
                     run_id=run_id,
                     step_number=step_number,
                     timestamp=datetime.now(),
-                    from_screen_id=None,  # TODO: Implement screen tracking
-                    to_screen_id=None,    # TODO: Implement screen tracking
+                    from_screen_id=previous_screen_id,
+                    to_screen_id=current_screen_id,
                     action_type=ai_action.action,
                     action_description=ai_action.action_desc,
                     target_bbox_json=str({

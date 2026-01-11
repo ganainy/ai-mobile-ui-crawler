@@ -58,3 +58,25 @@ class CrawlerEventListener(ABC):
     def on_state_changed(self, run_id: int, old_state: str, new_state: str) -> None:
         """Called when the crawler state changes."""
         pass
+
+    @abstractmethod
+    def on_screen_processed(
+        self,
+        run_id: int,
+        step_number: int,
+        screen_id: int,
+        is_new: bool,
+        visit_count: int,
+        total_screens: int
+    ) -> None:
+        """Called when a screen is processed by the screen tracker.
+        
+        Args:
+            run_id: Current run ID
+            step_number: Current step number
+            screen_id: ID of the processed screen
+            is_new: True if this screen was just discovered
+            visit_count: Number of times this screen has been visited in this run
+            total_screens: Total unique screens discovered in this run
+        """
+        pass

@@ -72,15 +72,15 @@ class ElementNotFoundError(ElementFinderError):
 class ElementFinder:
     """Handles finding and analyzing UI elements on Android screens."""
 
-    def __init__(self, driver: AppiumDriver, screenshot_capture: Optional[ScreenshotCapture] = None):
+    def __init__(self, driver: AppiumDriver, screenshot_capture: ScreenshotCapture):
         """Initialize element finder.
 
         Args:
             driver: Appium driver instance
-            screenshot_capture: Screenshot capture instance (optional)
+            screenshot_capture: Screenshot capture instance (required)
         """
         self.driver = driver
-        self.screenshot_capture = screenshot_capture or ScreenshotCapture(driver)
+        self.screenshot_capture = screenshot_capture
 
     def find_element_by_id(self, element_id: str, timeout: float = 5.0) -> Optional[UIElement]:
         """Find element by resource ID.

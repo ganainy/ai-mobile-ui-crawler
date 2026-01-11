@@ -13,6 +13,7 @@ from mobile_crawler.core.crawler_event_listener import CrawlerEventListener
 from mobile_crawler.domain.models import ActionResult
 from mobile_crawler.core.crawler_loop import CrawlerLoop
 from mobile_crawler.domain.action_executor import ActionExecutor
+from mobile_crawler.domain.screen_tracker import ScreenTracker
 from mobile_crawler.infrastructure.ai_interaction_service import AIInteractionService
 from mobile_crawler.infrastructure.appium_driver import AppiumDriver
 from mobile_crawler.infrastructure.database import DatabaseManager
@@ -142,6 +143,28 @@ class JSONEventListener(CrawlerEventListener):
         }
         print(json.dumps(event), flush=True)
 
+    def on_screen_processed(
+        self,
+        run_id: int,
+        step_number: int,
+        screen_id: int,
+        is_new: bool,
+        visit_count: int,
+        total_screens: int
+    ) -> None:
+        """Handle screen processed event."""
+        event = {
+            "event": "screen_processed",
+            "run_id": run_id,
+            "step_number": step_number,
+            "screen_id": screen_id,
+            "is_new": is_new,
+            "visit_count": visit_count,
+            "total_screens": total_screens,
+            "timestamp": datetime.now().isoformat()
+        }
+        print(json.dumps(event), flush=True)
+
 
 @click.command()
 @click.option('--device', required=True, help='Device ID to crawl')
@@ -199,10 +222,11 @@ def crawl(device: str, package: str, model: str, steps: Optional[int], duration:
 
         # Set up dependencies for CrawlerLoop
         state_machine = CrawlStateMachine()
-        screenshot_capture = ScreenshotCapture(driver=appium_driver)
+        screenshot_capture = ScreenshotCapture(driver=appium_driver, run_id=run_id)
         ai_service = AIInteractionService.from_config(config_manager)
         action_executor = ActionExecutor(appium_driver, GestureHandler(appium_driver))
         step_log_repo = StepLogRepository(db_manager)
+        screen_tracker = ScreenTracker(db_manager)
 
         # Create crawler loop
         crawler_loop = CrawlerLoop(
@@ -214,6 +238,7 @@ def crawl(device: str, package: str, model: str, steps: Optional[int], duration:
             run_repository=run_repo,
             config_manager=config_manager,
             appium_driver=appium_driver,
+            screen_tracker=screen_tracker,
             event_listeners=[JSONEventListener()]
         )
 

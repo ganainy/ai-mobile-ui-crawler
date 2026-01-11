@@ -37,6 +37,7 @@ from mobile_crawler.infrastructure.screenshot_capture import ScreenshotCapture
 from mobile_crawler.infrastructure.gesture_handler import GestureHandler
 from mobile_crawler.infrastructure.ai_interaction_service import AIInteractionService
 from mobile_crawler.domain.action_executor import ActionExecutor
+from mobile_crawler.domain.screen_tracker import ScreenTracker
 from mobile_crawler.infrastructure.step_log_repository import StepLogRepository
 from mobile_crawler.infrastructure.screen_repository import ScreenRepository
 from mobile_crawler.domain.models import ActionResult
@@ -270,7 +271,8 @@ class MainWindow(QMainWindow):
         self.signal_adapter.step_completed.connect(self._on_step_completed)
         self.signal_adapter.crawl_completed.connect(self._on_crawl_completed)
         self.signal_adapter.ai_request_sent.connect(self.ai_monitor_panel.add_request)
-        self.signal_adapter.ai_response_received.connect(self.ai_monitor_panel.add_response)
+        self.signal_adapter.ai_response_received.connect(self._on_ai_response_received)
+        self.signal_adapter.screen_processed.connect(self._on_screen_processed)
         
         # Bottom panel: Run history
         bottom_panel = self._create_bottom_panel()
@@ -308,6 +310,18 @@ class MainWindow(QMainWindow):
             run = self._create_run_record()
             run_id = self._services['run_repository'].create_run(run)
             self._current_run_id = run_id
+            
+            # Initialize statistics tracking
+            self._current_stats = CrawlStatistics(
+                run_id=run_id,
+                start_time=datetime.now()
+            )
+            
+            # Reset and configure stats dashboard
+            if self.stats_dashboard:
+                self.stats_dashboard.reset()
+                self.stats_dashboard.set_max_steps(self.settings_panel.get_max_steps())
+                self.stats_dashboard.set_max_duration(self.settings_panel.get_max_duration())
             
             # Create crawler loop
             crawler_loop = self._create_crawler_loop(config_manager, run_id)
@@ -416,11 +430,12 @@ class MainWindow(QMainWindow):
         appium_driver = self._services['appium_driver']
         
         state_machine = CrawlStateMachine()
-        screenshot_capture = ScreenshotCapture(driver=appium_driver)
+        screenshot_capture = ScreenshotCapture(driver=appium_driver, run_id=run_id)
         ai_service = AIInteractionService.from_config(config_manager, event_listener=self.signal_adapter)
         gesture_handler = GestureHandler(appium_driver)
         action_executor = ActionExecutor(appium_driver, gesture_handler)
         step_log_repo = StepLogRepository(self._services['database_manager'])
+        screen_tracker = ScreenTracker(self._services['database_manager'])
         
         # Attach signal adapter as event listener
         event_listeners = [self.signal_adapter]
@@ -434,6 +449,7 @@ class MainWindow(QMainWindow):
             run_repository=self._services['run_repository'],
             config_manager=config_manager,
             appium_driver=appium_driver,
+            screen_tracker=screen_tracker,
             event_listeners=event_listeners
         )
 
@@ -527,6 +543,27 @@ class MainWindow(QMainWindow):
         if self.log_viewer:
             self.log_viewer.append_log(LogLevel.INFO, message)
 
+    def _on_ai_response_received(self, run_id: int, step_number: int, response_data: dict) -> None:
+        """Handle AI response received event.
+        
+        Args:
+            run_id: Run ID
+            step_number: Step number
+            response_data: Response data dictionary
+        """
+        # Forward to AI monitor panel
+        if self.ai_monitor_panel:
+            self.ai_monitor_panel.add_response(run_id, step_number, response_data)
+        
+        # Update statistics tracking
+        if self._current_stats:
+            self._current_stats.ai_call_count += 1
+            
+            # Track response time if available
+            latency_ms = response_data.get('latency_ms')
+            if latency_ms is not None:
+                self._current_stats.ai_response_times_ms.append(latency_ms)
+
     def _on_action_executed(self, run_id: int, step_number: int, action_index: int, result) -> None:
         """Handle action executed event.
         
@@ -541,6 +578,13 @@ class MainWindow(QMainWindow):
         level = LogLevel.ACTION if result.success else LogLevel.WARNING
         if self.log_viewer:
             self.log_viewer.append_log(level, message)
+        
+        # Update statistics tracking
+        if self._current_stats:
+            if result.success:
+                self._current_stats.successful_actions += 1
+            else:
+                self._current_stats.failed_actions += 1
 
     def _on_step_completed(self, run_id: int, step_number: int, actions_count: int, duration_ms: float) -> None:
         """Handle step completed event.
@@ -575,6 +619,53 @@ class MainWindow(QMainWindow):
         # Update run history
         if self.run_history_view:
             self.run_history_view._load_runs()
+
+    def _on_screen_processed(
+        self,
+        run_id: int,
+        step_number: int,
+        screen_id: int,
+        is_new: bool,
+        visit_count: int,
+        total_screens: int
+    ) -> None:
+        """Handle screen processed event.
+        
+        Args:
+            run_id: Run ID
+            step_number: Step number
+            screen_id: ID of the processed screen
+            is_new: True if this is a newly discovered screen
+            visit_count: Number of times this screen has been visited
+            total_screens: Total unique screens discovered
+        """
+        # Log screen discovery
+        if is_new:
+            message = f"NEW Screen #{screen_id} discovered (total: {total_screens})"
+            if self.log_viewer:
+                self.log_viewer.append_log(LogLevel.INFO, message)
+        
+        # Update stats dashboard with screen metrics
+        if self.stats_dashboard and self._current_stats:
+            # Calculate total visits (accumulate)
+            self._current_stats.total_screen_visits += 1
+            
+            # Calculate screens per minute
+            elapsed_minutes = self._current_stats.elapsed_seconds() / 60.0
+            screens_per_min = total_screens / elapsed_minutes if elapsed_minutes > 0 else 0.0
+            
+            # Update the dashboard
+            self.stats_dashboard.update_stats(
+                total_steps=step_number,
+                successful_steps=self._current_stats.successful_actions,
+                failed_steps=self._current_stats.failed_actions,
+                unique_screens=total_screens,
+                total_visits=self._current_stats.total_screen_visits,
+                screens_per_minute=screens_per_min,
+                ai_calls=self._current_stats.ai_call_count,
+                avg_ai_response_time_ms=self._current_stats.avg_ai_response_time(),
+                duration_seconds=self._current_stats.elapsed_seconds()
+            )
 
     def _create_left_panel(self) -> QWidget:
         """Create the left panel with device/app/AI selectors and settings."""
@@ -1077,6 +1168,6 @@ def run():
     app.setOrganizationName("mobile-crawler")
     
     window = MainWindow()
-    window.show()
+    window.showFullScreen()
     
     sys.exit(app.exec())
