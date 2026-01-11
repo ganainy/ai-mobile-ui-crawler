@@ -1,71 +1,15 @@
-"""Gesture handling utilities for mobile device interactions.
-
-NOTE: In image-only mode, all gestures use coordinate-based actions only.
-No webdriver element finding or XML/DOM access is used.
-"""
+"""Gesture handling utilities for mobile device interactions."""
 
 import time
 import logging
 from typing import Dict, List, Optional, Tuple, Any
 from enum import Enum
-from dataclasses import dataclass
 
 from selenium.common.exceptions import WebDriverException
 
 from mobile_crawler.infrastructure.appium_driver import AppiumDriver
 
 logger = logging.getLogger(__name__)
-
-
-# UIElement dataclass for backward compatibility
-# NOTE: In image-only mode, UIElement is not used for main execution
-# This is kept for backward compatibility with code that may use element-based methods
-@dataclass
-class UIElement:
-    """Represents a UI element found on screen.
-    
-    NOTE: In image-only mode, this is not populated by the main crawler flow.
-    Kept for backward compatibility with gesture_handler methods that accept UIElement.
-    """
-    element_id: Optional[str]
-    bounds: Tuple[int, int, int, int]  # (left, top, right, bottom)
-    text: Optional[str]
-    content_desc: Optional[str]
-    class_name: Optional[str]
-    package: Optional[str]
-    clickable: bool
-    visible: bool
-    enabled: bool
-    resource_id: Optional[str]
-    xpath: Optional[str]
-    center_x: int
-    center_y: int
-
-    @property
-    def width(self) -> int:
-        """Get element width."""
-        return self.bounds[2] - self.bounds[0]
-
-    @property
-    def height(self) -> int:
-        """Get element height."""
-        return self.bounds[3] - self.bounds[1]
-
-    @property
-    def area(self) -> int:
-        """Get element area."""
-        return self.width * self.height
-
-    def contains_point(self, x: int, y: int) -> bool:
-        """Check if point (x, y) is within element bounds."""
-        left, top, right, bottom = self.bounds
-        return left <= x <= right and top <= y <= bottom
-
-    def distance_to_point(self, x: int, y: int) -> float:
-        """Calculate distance from element center to point."""
-        dx = self.center_x - x
-        dy = self.center_y - y
-        return (dx ** 2 + dy ** 2) ** 0.5
 
 
 class GestureType(Enum):
@@ -90,21 +34,6 @@ class GestureHandler:
             appium_driver: AppiumDriver instance
         """
         self.driver = appium_driver
-
-    def tap(self, element: UIElement, duration: float = 0.1) -> bool:
-        """Tap on an element using coordinates only.
-
-        NOTE: In image-only mode, this uses coordinate-based tapping only.
-        No webdriver element finding is performed.
-
-        Args:
-            element: UIElement to tap (only center_x, center_y are used)
-            duration: Duration of tap in seconds
-
-        Returns:
-            True if successful, False otherwise
-        """
-        return self.tap_at(element.center_x, element.center_y, duration)
 
     def tap_at(self, x: int, y: int, duration: float = 0.1) -> bool:
         """Tap at specific coordinates.
@@ -148,20 +77,6 @@ class GestureHandler:
             logger.error(f"Unexpected error tapping at ({x}, {y}): {e}")
             return False
 
-    def double_tap(self, element: UIElement) -> bool:
-        """Double tap on an element using coordinates only.
-
-        NOTE: In image-only mode, this uses coordinate-based double tapping only.
-        No webdriver element finding is performed.
-
-        Args:
-            element: UIElement to double tap (only center_x, center_y are used)
-
-        Returns:
-            True if successful, False otherwise
-        """
-        return self.double_tap_at(element.center_x, element.center_y)
-
     def double_tap_at(self, x: int, y: int) -> bool:
         """Double tap at specific coordinates.
 
@@ -173,28 +88,42 @@ class GestureHandler:
             True if successful, False otherwise
         """
         try:
-            actions = ActionChains(self.driver.get_driver())
-            actions.move_by_offset(x, y).double_click().move_by_offset(-x, -y).perform()
+            driver = self.driver.get_driver()
+            
+            from selenium.webdriver.common.actions.action_builder import ActionBuilder
+            from selenium.webdriver.common.actions.pointer_input import PointerInput
+            from selenium.webdriver.common.actions import interaction
+            
+            # Create a touch pointer
+            pointer = PointerInput(interaction.POINTER_TOUCH, "finger")
+            action_builder = ActionBuilder(driver, mouse=pointer)
+            
+            # First tap
+            action_builder.pointer_action.move_to_location(x, y)
+            action_builder.pointer_action.pointer_down()
+            action_builder.pointer_action.pause(0.05)
+            action_builder.pointer_action.pointer_up()
+            
+            # Short pause between taps
+            action_builder.pointer_action.pause(0.1)
+            
+            # Second tap
+            action_builder.pointer_action.move_to_location(x, y)
+            action_builder.pointer_action.pointer_down()
+            action_builder.pointer_action.pause(0.05)
+            action_builder.pointer_action.pointer_up()
+            
+            # Perform the action
+            action_builder.perform()
+            
             logger.info(f"Double tapped at coordinates ({x}, {y})")
             return True
         except WebDriverException as e:
             logger.error(f"Failed to double tap at ({x}, {y}): {e}")
             return False
-
-    def long_press(self, element: UIElement, duration: float = 2.0) -> bool:
-        """Long press on an element using coordinates only.
-
-        NOTE: In image-only mode, this uses coordinate-based long press only.
-        No webdriver element finding is performed.
-
-        Args:
-            element: UIElement to long press (only center_x, center_y are used)
-            duration: Duration of press in seconds
-
-        Returns:
-            True if successful, False otherwise
-        """
-        return self.long_press_at(element.center_x, element.center_y, duration)
+        except Exception as e:
+            logger.error(f"Unexpected error double tapping at ({x}, {y}): {e}")
+            return False
 
     def long_press_at(self, x: int, y: int, duration: float = 2.0) -> bool:
         """Long press at specific coordinates.
@@ -276,23 +205,6 @@ class GestureHandler:
         except WebDriverException as e:
             logger.error(f"Failed to swipe: {e}")
             return False
-
-    def drag(self, element: UIElement, end_x: int, end_y: int, duration: float = 0.5) -> bool:
-        """Drag an element to a new position using coordinates only.
-
-        NOTE: In image-only mode, this uses coordinate-based dragging only.
-        No webdriver element finding is performed.
-
-        Args:
-            element: UIElement to drag (only center_x, center_y are used)
-            end_x: Ending X coordinate
-            end_y: Ending Y coordinate
-            duration: Duration of drag in seconds
-
-        Returns:
-            True if successful, False otherwise
-        """
-        return self.drag_from_to(element.center_x, element.center_y, end_x, end_y, duration)
 
     def drag_from_to(self, start_x: int, start_y: int, end_x: int, end_y: int,
                      duration: float = 0.5) -> bool:
@@ -432,9 +344,3 @@ class GestureHandler:
         except (WebDriverException, KeyError, TypeError) as e:
             logger.error(f"Failed to perform pinch gesture: {e}")
             return False
-
-    # NOTE: webdriver-based methods removed in image-only mode:
-    # - wait_for_element_interaction (was webdriver-based)
-    # - _get_webdriver_element (was webdriver-based)
-    # - _elements_match (was webdriver-based)
-    # - _bounds_match (was webdriver-based)

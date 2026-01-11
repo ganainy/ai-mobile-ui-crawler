@@ -61,7 +61,7 @@ logs/
 Thumbs.db
 screenshots/
 
-# Reports and Analysis
-*.md
-
+# Reports and Analysis (but keep specs)
+.env*
+.env.local
 

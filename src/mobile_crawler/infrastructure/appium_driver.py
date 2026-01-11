@@ -2,12 +2,16 @@
 
 import subprocess
 import time
-from typing import Optional, Dict, Any
+import logging
+from typing import Optional, Dict, Any, Tuple
 from appium import webdriver
 from appium.webdriver.webdriver import WebDriver
 from appium.options.android import UiAutomator2Options
+from selenium.common.exceptions import WebDriverException
 
 from mobile_crawler.config import get_config
+
+logger = logging.getLogger(__name__)
 
 
 class AppiumDriverError(Exception):
@@ -238,6 +242,266 @@ class AppiumDriver:
             pass
         
         return None
+
+    # Gesture Methods
+
+    def tap_at(self, x: int, y: int, duration: float = 0.1) -> bool:
+        """Tap at specific coordinates.
+
+        Args:
+            x: X coordinate
+            y: Y coordinate
+            duration: Duration of tap in seconds
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            driver = self.get_driver()
+            
+            from selenium.webdriver.common.actions.action_builder import ActionBuilder
+            from selenium.webdriver.common.actions.pointer_input import PointerInput
+            from selenium.webdriver.common.actions import interaction
+            
+            # Create a touch pointer
+            pointer = PointerInput(interaction.POINTER_TOUCH, "finger")
+            action_builder = ActionBuilder(driver, mouse=pointer, duration=100)
+            
+            # Build tap sequence: move to location, press, release
+            action_builder.pointer_action.move_to_location(x, y)
+            action_builder.pointer_action.pointer_down()
+            action_builder.pointer_action.pause(0.05)  # Short pause for tap
+            action_builder.pointer_action.pointer_up()
+            
+            # Perform action
+            action_builder.perform()
+            
+            time.sleep(duration)
+            logger.info(f"Tapped at coordinates ({x}, {y})")
+            return True
+        except (WebDriverException, SessionLostError) as e:
+            logger.error(f"Failed to tap at ({x}, {y}): {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Unexpected error tapping at ({x}, {y}): {e}")
+            return False
+
+    def double_tap_at(self, x: int, y: int, interval: float = 0.1) -> bool:
+        """Double tap at specific coordinates.
+
+        Args:
+            x: X coordinate
+            y: Y coordinate
+            interval: Time between taps in seconds
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            driver = self.get_driver()
+            
+            from selenium.webdriver.common.actions.action_builder import ActionBuilder
+            from selenium.webdriver.common.actions.pointer_input import PointerInput
+            from selenium.webdriver.common.actions import interaction
+            
+            # Create a touch pointer
+            pointer = PointerInput(interaction.POINTER_TOUCH, "finger")
+            action_builder = ActionBuilder(driver, mouse=pointer)
+            
+            # First tap
+            action_builder.pointer_action.move_to_location(x, y)
+            action_builder.pointer_action.pointer_down()
+            action_builder.pointer_action.pause(0.05)
+            action_builder.pointer_action.pointer_up()
+            
+            # Short pause between taps
+            action_builder.pointer_action.pause(interval)
+            
+            # Second tap
+            action_builder.pointer_action.move_to_location(x, y)
+            action_builder.pointer_action.pointer_down()
+            action_builder.pointer_action.pause(0.05)
+            action_builder.pointer_action.pointer_up()
+            
+            # Perform action
+            action_builder.perform()
+            
+            logger.info(f"Double tapped at coordinates ({x}, {y})")
+            return True
+        except (WebDriverException, SessionLostError) as e:
+            logger.error(f"Failed to double tap at ({x}, {y}): {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Unexpected error double tapping at ({x}, {y}): {e}")
+            return False
+
+    def long_press_at(self, x: int, y: int, duration: float = 2.0) -> bool:
+        """Long press at specific coordinates.
+
+        Args:
+            x: X coordinate
+            y: Y coordinate
+            duration: Duration of press in seconds
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            driver = self.get_driver()
+            
+            from selenium.webdriver.common.actions.action_builder import ActionBuilder
+            from selenium.webdriver.common.actions.pointer_input import PointerInput
+            from selenium.webdriver.common.actions import interaction
+            
+            # Create a touch pointer
+            pointer = PointerInput(interaction.POINTER_TOUCH, "finger")
+            action_builder = ActionBuilder(driver, mouse=pointer)
+            
+            # Build long press sequence: move, press, hold, release
+            action_builder.pointer_action.move_to_location(x, y)
+            action_builder.pointer_action.pointer_down()
+            action_builder.pointer_action.pause(duration)  # Hold for specified duration
+            action_builder.pointer_action.pointer_up()
+            action_builder.perform()
+            
+            logger.info(f"Long pressed at coordinates ({x}, {y}) for {duration}s")
+            return True
+        except (WebDriverException, SessionLostError) as e:
+            logger.error(f"Failed to long press at ({x}, {y}): {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Unexpected error long pressing at ({x}, {y}): {e}")
+            return False
+
+    def input_text(self, element, text: str, clear: bool = True) -> bool:
+        """Input text into an element.
+
+        Args:
+            element: Appium WebElement
+            text: Text to input
+            clear: Whether to clear the field before typing
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            if clear:
+                element.clear()
+            element.send_keys(text)
+            logger.info(f"Input text: {text}")
+            return True
+        except (WebDriverException, SessionLostError) as e:
+            logger.error(f"Failed to input text: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Unexpected error inputting text: {e}")
+            return False
+
+    def swipe(self, start_x: int, start_y: int, end_x: int, end_y: int,
+              duration: float = 0.5) -> bool:
+        """Swipe from one point to another.
+
+        Args:
+            start_x: Starting X coordinate
+            start_y: Starting Y coordinate
+            end_x: Ending X coordinate
+            end_y: Ending Y coordinate
+            duration: Duration of swipe in seconds
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            driver = self.get_driver()
+            
+            from selenium.webdriver.common.actions.action_builder import ActionBuilder
+            from selenium.webdriver.common.actions.pointer_input import PointerInput
+            from selenium.webdriver.common.actions import interaction
+            
+            pointer = PointerInput(interaction.POINTER_TOUCH, "finger")
+            actions = ActionBuilder(driver, mouse=pointer)
+            
+            # Move to start position (absolute coordinates)
+            actions.pointer_action.move_to_location(start_x, start_y)
+            actions.pointer_action.pointer_down()
+            # Pause briefly before moving
+            actions.pointer_action.pause(0.05)
+            # Move to end position (absolute coordinates)
+            actions.pointer_action.move_to_location(end_x, end_y)
+            actions.pointer_action.pointer_up()
+            actions.perform()
+
+            # Add delay for swipe to complete
+            time.sleep(duration)
+            logger.info(f"Swiped from ({start_x}, {start_y}) to ({end_x}, {end_y})")
+            return True
+        except (WebDriverException, SessionLostError) as e:
+            logger.error(f"Failed to swipe: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Unexpected error swiping: {e}")
+            return False
+
+    def drag(self, start_x: int, start_y: int, end_x: int, end_y: int,
+             duration: float = 1.0) -> bool:
+        """Drag from one point to another.
+
+        Args:
+            start_x: Starting X coordinate
+            start_y: Starting Y coordinate
+            end_x: Ending X coordinate
+            end_y: Ending Y coordinate
+            duration: Duration of drag in seconds
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            driver = self.get_driver()
+            
+            from selenium.webdriver.common.actions.action_builder import ActionBuilder
+            from selenium.webdriver.common.actions.pointer_input import PointerInput
+            from selenium.webdriver.common.actions import interaction
+            
+            pointer = PointerInput(interaction.POINTER_TOUCH, "finger")
+            actions = ActionBuilder(driver, mouse=pointer)
+            
+            # Move to start position (absolute coordinates)
+            actions.pointer_action.move_to_location(start_x, start_y)
+            actions.pointer_action.pointer_down()
+            actions.pointer_action.pause(0.05)
+            # Move to end position (absolute coordinates)
+            actions.pointer_action.move_to_location(end_x, end_y)
+            actions.pointer_action.pointer_up()
+            actions.perform()
+            
+            time.sleep(duration)
+            logger.info(f"Dragged from ({start_x}, {start_y}) to ({end_x}, {end_y})")
+            return True
+        except (WebDriverException, SessionLostError) as e:
+            logger.error(f"Failed to drag from ({start_x}, {start_y}) to ({end_x}, {end_y}): {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Unexpected error dragging: {e}")
+            return False
+
+    def back(self) -> bool:
+        """Press the back button.
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            driver = self.get_driver()
+            driver.back()
+            logger.info("Pressed back button")
+            return True
+        except (WebDriverException, SessionLostError) as e:
+            logger.error(f"Failed to press back: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Unexpected error pressing back: {e}")
+            return False
 
     def __enter__(self):
         """Context manager entry."""

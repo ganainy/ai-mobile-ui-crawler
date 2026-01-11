@@ -562,15 +562,6 @@ class MainWindow(QMainWindow):
         # Forward to AI monitor panel
         if self.ai_monitor_panel:
             self.ai_monitor_panel.add_response(run_id, step_number, response_data)
-        
-        # Update statistics tracking
-        if self._current_stats:
-            self._current_stats.ai_call_count += 1
-            
-            # Track response time if available
-            latency_ms = response_data.get('latency_ms')
-            if latency_ms is not None:
-                self._current_stats.ai_response_times_ms.append(latency_ms)
 
     def _on_action_executed(self, run_id: int, step_number: int, action_index: int, result) -> None:
         """Handle action executed event.
@@ -586,13 +577,6 @@ class MainWindow(QMainWindow):
         level = LogLevel.ACTION if result.success else LogLevel.WARNING
         if self.log_viewer:
             self.log_viewer.append_log(level, message)
-        
-        # Update statistics tracking
-        if self._current_stats:
-            if result.success:
-                self._current_stats.successful_actions += 1
-            else:
-                self._current_stats.failed_actions += 1
 
     def _on_step_completed(self, run_id: int, step_number: int, actions_count: int, duration_ms: float) -> None:
         """Handle step completed event.
@@ -657,6 +641,9 @@ class MainWindow(QMainWindow):
         if self.stats_dashboard and self._current_stats:
             # Calculate total visits (accumulate)
             self._current_stats.total_screen_visits += 1
+            
+            # Update unique screen hashes to keep stats consistent
+            self._current_stats.unique_screen_hashes.add(str(screen_id))
             
             # Calculate screens per minute
             elapsed_minutes = self._current_stats.elapsed_seconds() / 60.0
@@ -954,7 +941,6 @@ class MainWindow(QMainWindow):
         self.signal_adapter.crawl_started.connect(self._on_crawl_started_stats)
         self.signal_adapter.step_completed.connect(self._on_step_completed_stats)
         self.signal_adapter.action_executed.connect(self._on_action_executed_stats)
-        self.signal_adapter.screenshot_captured.connect(self._on_screenshot_captured_stats)
         self.signal_adapter.ai_response_received.connect(self._on_ai_response_stats)
         self.signal_adapter.crawl_completed.connect(self._on_crawl_completed_stats)
 
