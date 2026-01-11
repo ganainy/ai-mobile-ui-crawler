@@ -23,7 +23,7 @@ class TestGeminiAdapter:
             assert adapter._model_config == model_config
 
     def test_generate_response_text_only(self):
-        """Test generating response with text only."""
+        """Test generating response with text only (no screenshot in user prompt)."""
         adapter = GeminiAdapter()
         adapter._client = Mock()
         adapter._model_config = {'model_name': 'gemini-1.5-flash'}
@@ -37,7 +37,8 @@ class TestGeminiAdapter:
         mock_response.usage_metadata.total_token_count = 15
         adapter._client.models.generate_content.return_value = mock_response
         
-        response, metadata = adapter.generate_response("Hello")
+        # Call with system_prompt and user_prompt (no screenshot)
+        response, metadata = adapter.generate_response("System prompt", "User prompt")
         
         assert response == "Test response"
         assert metadata['token_usage']['input_tokens'] == 10
@@ -49,13 +50,18 @@ class TestGeminiAdapter:
         contents = call_args[1]['contents']
         assert len(contents) == 1
         assert len(contents[0].parts) == 1
-        assert contents[0].parts[0].text == "Hello"
+        # Full prompt should combine system and user prompts
+        assert "System prompt" in contents[0].parts[0].text
+        assert "User prompt" in contents[0].parts[0].text
 
     def test_generate_response_with_image(self):
-        """Test generating response with image."""
+        """Test generating response with image in user prompt JSON."""
+        import base64
+        import json
+        
         adapter = GeminiAdapter()
         adapter._client = Mock()
-        adapter._model_config = {}
+        adapter._model_config = {'model': 'gemini-2.0-flash'}
         
         mock_response = Mock()
         mock_response.candidates = [Mock()]
@@ -66,15 +72,20 @@ class TestGeminiAdapter:
         mock_response.usage_metadata.total_token_count = 30
         adapter._client.models.generate_content.return_value = mock_response
         
+        # Create user_prompt JSON with base64 screenshot
         dummy_image_bytes = b"fake image data"
-        response, metadata = adapter.generate_response("Describe image", dummy_image_bytes)
+        screenshot_b64 = base64.b64encode(dummy_image_bytes).decode()
+        user_prompt = json.dumps({"screenshot": screenshot_b64, "other_data": "test"})
+        
+        response, metadata = adapter.generate_response("Describe image", user_prompt)
         
         assert response == "Image response"
         call_args = adapter._client.models.generate_content.call_args
         contents = call_args[1]['contents']
         assert len(contents) == 1
         assert len(contents[0].parts) == 2
-        assert contents[0].parts[0].text == "Describe image"
+        # Check text part contains both prompts
+        assert "Describe image" in contents[0].parts[0].text
         # Check image part
         image_part = contents[0].parts[1]
         assert image_part.inline_data.data == dummy_image_bytes

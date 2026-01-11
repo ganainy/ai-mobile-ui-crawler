@@ -19,8 +19,8 @@
 
 **Purpose**: MainWindow scaffolding and service initialization
 
-- [ ] T001 Create service factory method in src/mobile_crawler/ui/main_window.py
-- [ ] T002 [P] Add widget imports and type hints in src/mobile_crawler/ui/main_window.py
+- [x] T001 Create service factory method in src/mobile_crawler/ui/main_window.py
+- [x] T002 [P] Add widget imports and type hints in src/mobile_crawler/ui/main_window.py
 
 ---
 
@@ -29,13 +29,13 @@
 **Purpose**: Widget instantiation and layout - MUST complete before user story wiring
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
-- [ ] T003 Instantiate all widgets with dependencies in src/mobile_crawler/ui/main_window.py
-- [ ] T004 Create QSplitter layout structure (left/center/right panels) in src/mobile_crawler/ui/main_window.py
-- [ ] T005 Add left panel with DeviceSelector, AppSelector, AIModelSelector, SettingsPanel in src/mobile_crawler/ui/main_window.py
-- [ ] T006 Add center panel with CrawlControlPanel, StatsDashboard in src/mobile_crawler/ui/main_window.py
-- [ ] T007 [P] Add right panel with LogViewer in src/mobile_crawler/ui/main_window.py
-- [ ] T008 Add bottom panel with RunHistoryView in src/mobile_crawler/ui/main_window.py
-- [ ] T009 Create QtSignalAdapter instance and attach to CrawlerLoop in src/mobile_crawler/ui/main_window.py
+- [x] T003 Instantiate all widgets with dependencies in src/mobile_crawler/ui/main_window.py
+- [x] T004 Create QSplitter layout structure (left/center/right panels) in src/mobile_crawler/ui/main_window.py
+- [x] T005 Add left panel with DeviceSelector, AppSelector, AIModelSelector, SettingsPanel in src/mobile_crawler/ui/main_window.py
+- [x] T006 Add center panel with CrawlControlPanel, StatsDashboard in src/mobile_crawler/ui/main_window.py
+- [x] T007 [P] Add right panel with LogViewer in src/mobile_crawler/ui/main_window.py
+- [x] T008 Add bottom panel with RunHistoryView in src/mobile_crawler/ui/main_window.py
+- [x] T009 Create QtSignalAdapter instance and attach to CrawlerLoop in src/mobile_crawler/ui/main_window.py
 
 **Checkpoint**: All widgets visible in main window. Foundation ready for signal wiring.
 
@@ -49,12 +49,12 @@
 
 ### Implementation for User Story 1
 
-- [ ] T010 [US1] Connect AIModelSelector.model_selected signal to MainWindow._on_model_selected in src/mobile_crawler/ui/main_window.py
-- [ ] T011 [US1] Implement _on_model_selected slot to store provider/model config in src/mobile_crawler/ui/main_window.py
-- [ ] T012 [US1] Connect SettingsPanel api_key_changed to validate and store key in src/mobile_crawler/ui/main_window.py
-- [ ] T013 [US1] Implement _update_start_button_state method in src/mobile_crawler/ui/main_window.py
-- [ ] T014 [US1] Wire ProviderRegistry to AIModelSelector for model list population in src/mobile_crawler/ui/main_window.py
-- [ ] T015 [US1] Wire UserConfigStore to persist API keys and preferences between sessions in src/mobile_crawler/ui/main_window.py
+- [x] T010 [US1] Connect AIModelSelector.model_selected signal to MainWindow._on_model_selected in src/mobile_crawler/ui/main_window.py
+- [x] T011 [US1] Implement _on_model_selected slot to store provider/model config in src/mobile_crawler/ui/main_window.py
+- [x] T012 [US1] Connect SettingsPanel api_key_changed to validate and store key in src/mobile_crawler/ui/main_window.py
+- [x] T013 [US1] Implement _update_start_button_state method in src/mobile_crawler/ui/main_window.py
+- [x] T014 [US1] Wire ProviderRegistry to AIModelSelector for model list population in src/mobile_crawler/ui/main_window.py
+- [x] T015 [US1] Wire UserConfigStore to persist API keys and preferences between sessions in src/mobile_crawler/ui/main_window.py
 
 **Checkpoint**: User Story 1 complete. Can configure AI provider and see models.
 
@@ -68,11 +68,11 @@
 
 ### Implementation for User Story 2
 
-- [ ] T016 [US2] Connect DeviceSelector.device_selected signal to MainWindow._on_device_selected in src/mobile_crawler/ui/main_window.py
-- [ ] T017 [US2] Implement _on_device_selected slot to update AppSelector device in src/mobile_crawler/ui/main_window.py
-- [ ] T018 [US2] Connect AppSelector.app_selected signal to MainWindow._on_app_selected in src/mobile_crawler/ui/main_window.py
-- [ ] T019 [US2] Implement _on_app_selected slot to store selected package in src/mobile_crawler/ui/main_window.py
-- [ ] T020 [US2] Update _update_start_button_state to check device + app + AI configured in src/mobile_crawler/ui/main_window.py
+- [x] T016 [US2] Connect DeviceSelector.device_selected signal to MainWindow._on_device_selected in src/mobile_crawler/ui/main_window.py
+- [x] T017 [US2] Implement _on_device_selected slot to update AppSelector device in src/mobile_crawler/ui/main_window.py
+- [x] T018 [US2] Connect AppSelector.app_selected signal to MainWindow._on_app_selected in src/mobile_crawler/ui/main_window.py
+- [x] T019 [US2] Implement _on_app_selected slot to store selected package in src/mobile_crawler/ui/main_window.py
+- [x] T020 [US2] Update _update_start_button_state to check device + app + AI configured in src/mobile_crawler/ui/main_window.py
 
 **Checkpoint**: User Story 2 complete. Can select device and app. Start button enables when ready.
 
@@ -86,15 +86,15 @@
 
 ### Implementation for User Story 3
 
-- [ ] T021 [US3] Connect CrawlControlPanel.start_requested to MainWindow._start_crawl in src/mobile_crawler/ui/main_window.py
-- [ ] T022 [US3] Implement _start_crawl slot with QThread worker in src/mobile_crawler/ui/main_window.py
-- [ ] T023 [US3] Create CrawlerWorker QThread class in src/mobile_crawler/ui/main_window.py
-- [ ] T024 [US3] Connect QtSignalAdapter.step_started to LogViewer.log_message in src/mobile_crawler/ui/main_window.py
-- [ ] T025 [US3] Connect QtSignalAdapter.action_executed to LogViewer.log_message in src/mobile_crawler/ui/main_window.py
-- [ ] T026 [US3] Connect QtSignalAdapter.step_completed to StatsDashboard.update_stats in src/mobile_crawler/ui/main_window.py
-- [ ] T027 [US3] Add QTimer for elapsed time updates in StatsDashboard in src/mobile_crawler/ui/main_window.py
-- [ ] T028 [US3] Connect QtSignalAdapter.crawl_completed to MainWindow._on_crawl_completed in src/mobile_crawler/ui/main_window.py
-- [ ] T029 [US3] Update button states on crawl start (disable selectors, enable Pause/Stop) in src/mobile_crawler/ui/main_window.py
+- [x] T021 [US3] Connect CrawlControlPanel.start_requested to MainWindow._start_crawl in src/mobile_crawler/ui/main_window.py
+- [x] T022 [US3] Implement _start_crawl slot with QThread worker in src/mobile_crawler/ui/main_window.py
+- [x] T023 [US3] Create CrawlerWorker QThread class in src/mobile_crawler/ui/main_window.py
+- [x] T024 [US3] Connect QtSignalAdapter.step_started to LogViewer.log_message in src/mobile_crawler/ui/main_window.py
+- [x] T025 [US3] Connect QtSignalAdapter.action_executed to LogViewer.log_message in src/mobile_crawler/ui/main_window.py
+- [x] T026 [US3] Connect QtSignalAdapter.step_completed to StatsDashboard.update_stats in src/mobile_crawler/ui/main_window.py
+- [x] T027 [US3] Add QTimer for elapsed time updates in StatsDashboard in src/mobile_crawler/ui/main_window.py
+- [x] T028 [US3] Connect QtSignalAdapter.crawl_completed to MainWindow._on_crawl_completed in src/mobile_crawler/ui/main_window.py
+- [x] T029 [US3] Update button states on crawl start (disable selectors, enable Pause/Stop) in src/mobile_crawler/ui/main_window.py
 
 **Checkpoint**: User Story 3 complete. Can run full crawl with real-time monitoring.
 
@@ -108,14 +108,14 @@
 
 ### Implementation for User Story 4
 
-- [ ] T030 [US4] Connect CrawlControlPanel.pause_requested to MainWindow._pause_crawl in src/mobile_crawler/ui/main_window.py
-- [ ] T031 [US4] Connect CrawlControlPanel.resume_requested to MainWindow._resume_crawl in src/mobile_crawler/ui/main_window.py
-- [ ] T032 [US4] Connect CrawlControlPanel.stop_requested to MainWindow._stop_crawl in src/mobile_crawler/ui/main_window.py
-- [ ] T033 [US4] Implement _pause_crawl slot to call CrawlerLoop.pause() in src/mobile_crawler/ui/main_window.py
-- [ ] T034 [US4] Implement _resume_crawl slot to call CrawlerLoop.resume() in src/mobile_crawler/ui/main_window.py
-- [ ] T035 [US4] Implement _stop_crawl slot to call CrawlerLoop.stop() in src/mobile_crawler/ui/main_window.py
-- [ ] T036 [US4] Update button visibility on state changes (show Resume when paused) in src/mobile_crawler/ui/main_window.py
-- [ ] T037 [US4] Connect QtSignalAdapter.state_changed to update control panel state in src/mobile_crawler/ui/main_window.py
+- [x] T030 [US4] Connect CrawlControlPanel.pause_requested to MainWindow._pause_crawl in src/mobile_crawler/ui/main_window.py
+- [x] T031 [US4] Connect CrawlControlPanel.resume_requested to MainWindow._resume_crawl in src/mobile_crawler/ui/main_window.py
+- [x] T032 [US4] Connect CrawlControlPanel.stop_requested to MainWindow._stop_crawl in src/mobile_crawler/ui/main_window.py
+- [x] T033 [US4] Implement _pause_crawl slot to call CrawlerLoop.pause() in src/mobile_crawler/ui/main_window.py
+- [x] T034 [US4] Implement _resume_crawl slot to call CrawlerLoop.resume() in src/mobile_crawler/ui/main_window.py
+- [x] T035 [US4] Implement _stop_crawl slot to call CrawlerLoop.stop() in src/mobile_crawler/ui/main_window.py
+- [x] T036 [US4] Update button visibility on state changes (show Resume when paused) in src/mobile_crawler/ui/main_window.py
+- [x] T037 [US4] Connect QtSignalAdapter.state_changed to update control panel state in src/mobile_crawler/ui/main_window.py
 
 **Checkpoint**: User Story 4 complete. Full crawl control available.
 
@@ -129,9 +129,9 @@
 
 ### Implementation for User Story 5
 
-- [ ] T038 [US5] Load run history from RunRepository on MainWindow init in src/mobile_crawler/ui/main_window.py
-- [ ] T039 [US5] Connect _on_crawl_completed to refresh RunHistoryView in src/mobile_crawler/ui/main_window.py
-- [ ] T040 [US5] Connect RunHistoryView.run_selected to display run details in src/mobile_crawler/ui/main_window.py
+- [x] T038 [US5] Load run history from RunRepository on MainWindow init in src/mobile_crawler/ui/main_window.py
+- [x] T039 [US5] Connect _on_crawl_completed to refresh RunHistoryView in src/mobile_crawler/ui/main_window.py
+- [x] T040 [US5] Connect RunHistoryView.run_selected to display run details in src/mobile_crawler/ui/main_window.py
 
 **Checkpoint**: User Story 5 complete. History viewing functional.
 
@@ -141,12 +141,12 @@
 
 **Purpose**: Verify UI behavior with pytest-qt
 
-- [ ] T041 [P] Create test fixture for MainWindow with mocked services in tests/ui/test_main_window.py
-- [ ] T042 [P] Test window launches with all widgets visible in tests/ui/test_main_window.py
-- [ ] T043 [P] Test Start button disabled when not configured in tests/ui/test_main_window.py
-- [ ] T044 [P] Test Start button enabled when device+app+AI configured in tests/ui/test_main_window.py
-- [ ] T045 [P] Test signal connections work (device_selected updates AppSelector) in tests/ui/test_main_window.py
-- [ ] T046 [P] Test button state changes on crawl start/pause/stop in tests/ui/test_main_window.py
+- [X] T041 [P] Create test fixture for MainWindow with mocked services in tests/ui/test_main_window.py
+- [X] T042 [P] Test window launches with all widgets visible in tests/ui/test_main_window.py
+- [X] T043 [P] Test Start button disabled when not configured in tests/ui/test_main_window.py
+- [X] T044 [P] Test Start button enabled when device+app+AI configured in tests/ui/test_main_window.py
+- [X] T045 [P] Test signal connections work (device_selected updates AppSelector) in tests/ui/test_main_window.py
+- [X] T046 [P] Test button state changes on crawl start/pause/stop in tests/ui/test_main_window.py
 
 **Checkpoint**: All GUI tests pass with pytest.
 
@@ -156,11 +156,11 @@
 
 **Purpose**: Error handling, documentation, cleanup
 
-- [ ] T047 [P] Add error dialogs for Appium not running in src/mobile_crawler/ui/main_window.py
-- [ ] T048 [P] Add error dialogs for invalid API key in src/mobile_crawler/ui/main_window.py
-- [ ] T049 [P] Add error dialogs for no devices found in src/mobile_crawler/ui/main_window.py
-- [ ] T050 [P] Update quickstart.md with final usage instructions in specs/001-wire-gui-widgets/quickstart.md
-- [ ] T051 Run quickstart.md validation to verify complete workflow
+- [x] T047 [P] Add error dialogs for Appium not running in src/mobile_crawler/ui/main_window.py
+- [x] T048 [P] Add error dialogs for invalid API key in src/mobile_crawler/ui/main_window.py
+- [x] T049 [P] Add error dialogs for no devices found in src/mobile_crawler/ui/main_window.py
+- [x] T050 [P] Update quickstart.md with final usage instructions in specs/001-wire-gui-widgets/quickstart.md
+- [x] T051 Run quickstart.md validation to verify complete workflow
 
 ---
 

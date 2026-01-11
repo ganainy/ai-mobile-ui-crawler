@@ -237,10 +237,30 @@ class AIInteractionService:
         Raises:
             ValueError: If response format is invalid
         """
+        if not response_text:
+            raise ValueError("Empty response from AI model")
+        
+        # Strip markdown code fences if present
+        cleaned_text = response_text.strip()
+        if cleaned_text.startswith("```"):
+            # Remove opening fence (```json or ```)
+            lines = cleaned_text.split('\n')
+            if lines[0].startswith("```"):
+                lines = lines[1:]  # Remove first line with ```
+            # Remove closing fence
+            if lines and lines[-1].strip() == "```":
+                lines = lines[:-1]
+            cleaned_text = '\n'.join(lines).strip()
+        
+        if not cleaned_text:
+            raise ValueError("Empty response after stripping code fences")
+        
         try:
-            data = json.loads(response_text)
+            data = json.loads(cleaned_text)
         except json.JSONDecodeError as e:
-            raise ValueError(f"Invalid JSON response: {e}")
+            # Log first 200 chars of response for debugging
+            preview = cleaned_text[:200] if len(cleaned_text) > 200 else cleaned_text
+            raise ValueError(f"Invalid JSON response: {e}. Response preview: {preview!r}")
         
         # Validate required fields
         if "actions" not in data:

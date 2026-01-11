@@ -1,6 +1,8 @@
 """App selection widget for mobile-crawler GUI."""
 
 import re
+from typing import TYPE_CHECKING
+
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -15,33 +17,45 @@ from PySide6.QtCore import Signal, QObject
 
 from mobile_crawler.infrastructure.appium_driver import AppiumDriver
 
+if TYPE_CHECKING:
+    from mobile_crawler.infrastructure.user_config_store import UserConfigStore
 
-class AppSelector(QObject):
+
+class AppSelector(QWidget):
     """Widget for selecting Android app package.
 
     Provides a text input for package name with validation.
     Optionally lists installed apps from device.
     Emits a signal when an app is selected.
+    Persists last selected app package across sessions.
+
+    Args:
+        appium_driver: AppiumDriver instance for listing installed apps
+        config_store: UserConfigStore instance for persisting app package
+        parent: Parent widget
     """
 
     # Signal emitted when an app is selected
     app_selected = Signal(str)  # type: ignore
 
-    def __init__(self, appium_driver: AppiumDriver, parent=None):
+    def __init__(self, appium_driver: AppiumDriver, config_store: "UserConfigStore", parent=None):
         """Initialize app selector widget.
 
         Args:
             appium_driver: AppiumDriver instance for listing installed apps
+            config_store: UserConfigStore instance for persisting app package
             parent: Parent widget
         """
         super().__init__(parent)
         self.appium_driver = appium_driver
+        self._config_store = config_store
         self._current_package: str = None
         self._setup_ui()
+        self._load_selection()
 
     def _setup_ui(self):
         """Set up the user interface."""
-        layout = QVBoxLayout()
+        layout = QVBoxLayout(self)
 
         # Label
         label = QLabel("App Package:")
@@ -77,6 +91,12 @@ class AppSelector(QObject):
 
         layout.addStretch()
 
+    def _load_selection(self):
+        """Load previously saved app package from config store."""
+        saved_package = self._config_store.get_setting("last_app_package", default=None)
+        if saved_package:
+            self.package_input.setText(saved_package)
+
     def _on_text_changed(self, text: str):
         """Handle text input change.
 
@@ -93,6 +113,8 @@ class AppSelector(QObject):
             self.status_label.setText(f"Package: {text}")
             self.status_label.setStyleSheet("color: green; font-style: italic;")
             self._current_package = text
+            # Save app package to config store
+            self._config_store.set_setting("last_app_package", text, "string")
             self.app_selected.emit(text)
         else:
             self.status_label.setText("Invalid package format")
@@ -108,6 +130,8 @@ class AppSelector(QObject):
         if text and self._validate_package(text):
             self.package_input.setText(text)
             self._current_package = text
+            # Save app package to config store
+            self._config_store.set_setting("last_app_package", text, "string")
             self.app_selected.emit(text)
 
     def _validate_package(self, package: str) -> bool:
@@ -133,13 +157,21 @@ class AppSelector(QObject):
         self.status_label.setStyleSheet("color: orange; font-style: italic;")
 
         try:
-            if not self.appium_driver.session:
+            if not self.appium_driver.is_connected():
+                # Show a more helpful message about needing a device connection
+                QMessageBox.warning(
+                    self,
+                    "No Device Session",
+                    "No active device session.\n\n"
+                    "Please select a device from the Device Selector first.\n"
+                    "The device must be connected and authorized."
+                )
                 self.status_label.setText("No device connected")
                 self.status_label.setStyleSheet("color: red; font-style: italic;")
                 return
 
             # Get list of installed packages
-            packages = self.appium_driver.driver.execute_script(
+            packages = self.appium_driver.get_driver().execute_script(
                 "mobile: shell",
                 {"command": "pm", "args": ["list", "packages", "-3"]}
             )
@@ -174,9 +206,21 @@ class AppSelector(QObject):
                 self.apps_combo.setVisible(False)
 
         except Exception as e:
+            error_msg = str(e).lower()
+            if "connection refused" in error_msg or "connection failed" in error_msg or "appium" in error_msg:
+                QMessageBox.critical(
+                    self.parent(), 
+                    "Appium Not Running", 
+                    "Cannot connect to Appium server. Please:\n\n"
+                    "1. Start Appium server: npx appium -p 4723\n"
+                    "2. Ensure Appium is running on port 4723\n"
+                    "3. Check that no firewall is blocking the connection\n\n"
+                    f"Error: {e}"
+                )
+            else:
+                QMessageBox.critical(self.parent(), "App List Error", str(e))
             self.status_label.setText(f"Error: {e}")
             self.status_label.setStyleSheet("color: red; font-style: italic;")
-            QMessageBox.critical(self.parent(), "App List Error", str(e))
 
     def current_package(self) -> str:
         """Get the currently selected package.
@@ -205,11 +249,3 @@ class AppSelector(QObject):
         self.status_label.setText("Enter package name")
         self.status_label.setStyleSheet("color: gray; font-style: italic;")
         self._current_package = None
-
-    def get_widget(self) -> QWidget:
-        """Get the underlying QWidget for embedding.
-
-        Returns:
-            The QWidget containing the app selector UI
-        """
-        return self.parent() if hasattr(self, 'parent') and isinstance(self.parent(), QWidget) else None

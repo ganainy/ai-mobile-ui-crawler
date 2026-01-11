@@ -1,5 +1,7 @@
 """Device selection widget for mobile-crawler GUI."""
 
+from typing import TYPE_CHECKING
+
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -17,32 +19,44 @@ from mobile_crawler.infrastructure.device_detection import (
     DeviceDetectionError
 )
 
+if TYPE_CHECKING:
+    from mobile_crawler.infrastructure.user_config_store import UserConfigStore
 
-class DeviceSelector(QObject):
+
+class DeviceSelector(QWidget):
     """Widget for selecting Android devices.
 
     Provides a dropdown with detected devices and a refresh button.
     Emits a signal when a device is selected.
+    Persists last selected device across sessions.
+
+    Args:
+        device_detection: DeviceDetection instance for finding devices
+        config_store: UserConfigStore instance for persisting device selection
+        parent: Parent widget
     """
 
     # Signal emitted when a device is selected
     device_selected = Signal(object)  # type: ignore
 
-    def __init__(self, device_detection: DeviceDetection, parent=None):
+    def __init__(self, device_detection: DeviceDetection, config_store: "UserConfigStore", parent=None):
         """Initialize device selector widget.
 
         Args:
             device_detection: DeviceDetection instance for finding devices
+            config_store: UserConfigStore instance for persisting device selection
             parent: Parent widget
         """
         super().__init__(parent)
         self.device_detection = device_detection
+        self._config_store = config_store
         self._current_device: AndroidDevice = None
         self._setup_ui()
+        self._load_selection()
 
     def _setup_ui(self):
         """Set up the user interface."""
-        layout = QVBoxLayout()
+        layout = QVBoxLayout(self)
 
         # Label
         label = QLabel("Select Device:")
@@ -69,6 +83,14 @@ class DeviceSelector(QObject):
         layout.addWidget(self.status_label)
 
         layout.addStretch()
+
+    def _load_selection(self):
+        """Load previously saved device selection from config store."""
+        saved_device_id = self._config_store.get_setting("last_device_id", default=None)
+        if saved_device_id:
+            self._saved_device_id = saved_device_id
+        else:
+            self._saved_device_id = None
 
     def _refresh_devices(self):
         """Refresh the list of available devices."""
@@ -102,12 +124,37 @@ class DeviceSelector(QObject):
             self.status_label.setText("No devices available")
             self.status_label.setStyleSheet("color: red; font-style: italic;")
             self._current_device = None
+            # Show error dialog for no devices found
+            QMessageBox.warning(
+                self.parent(), 
+                "No Devices Found", 
+                "No Android devices were detected. Please:\n\n"
+                "1. Ensure USB debugging is enabled on your device\n"
+                "2. Connect your device via USB\n"
+                "3. Accept the USB debugging authorization prompt\n"
+                "4. Or start an Android emulator\n\n"
+                "Then click 'Refresh' to try again."
+            )
             return
 
         # Add devices to dropdown
         for device in devices:
             display_text = device.display_name
             self.device_combo.addItem(display_text, device)
+
+        # Try to restore saved selection first
+        if hasattr(self, '_saved_device_id') and self._saved_device_id:
+            for i in range(self.device_combo.count()):
+                device = self.device_combo.itemData(i)
+                if device and device.device_id == self._saved_device_id:
+                    self.device_combo.setCurrentIndex(i)
+                    self._update_status_text(device)
+                    self._saved_device_id = None  # Clear after use
+                    return
+            # Saved device not found - show message
+            self.status_label.setText(f"Previously selected device not found: {self._saved_device_id}")
+            self.status_label.setStyleSheet("color: orange; font-style: italic;")
+            self._saved_device_id = None
 
         # Restore selection if possible
         if current_device_id:
@@ -176,20 +223,12 @@ class DeviceSelector(QObject):
         device = self.device_combo.itemData(index)
         if device:
             self._update_status_text(device)
+            # Save device selection to config store
+            self._config_store.set_setting("last_device_id", device.device_id, "string")
             self.device_selected.emit(device)
         else:
             self._current_device = None
             self.status_label.setText("Select a device")
             self.status_label.setStyleSheet("color: gray; font-style: italic;")
-
-    def get_widget(self) -> QWidget:
-        """Get the underlying QWidget for embedding.
-
-        Returns:
-            The QWidget containing the device selector UI
-        """
-        # Return the widget that contains all UI elements
-        # We need to find the parent widget
-        # Since we inherit from QObject, we need to create a container widget
-        # Let's create a container widget
-        return self.parent() if hasattr(self, 'parent') and isinstance(self.parent(), QWidget) else None
+            # Clear saved device ID when no device selected
+            self._config_store.delete_setting("last_device_id")

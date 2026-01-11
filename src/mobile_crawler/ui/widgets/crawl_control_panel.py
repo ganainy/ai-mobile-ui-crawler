@@ -10,7 +10,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Signal
 
-from mobile_crawler.core.crawl_controller import CrawlController
+from mobile_crawler.core.crawl_controller import CrawlController, CrawlControlState
 from mobile_crawler.core.crawl_state_machine import CrawlState
 
 
@@ -49,6 +49,7 @@ class CrawlControlPanel(QWidget):
 
         # Start button
         self.start_button = QPushButton("Start Crawl")
+        self.start_button.setObjectName("startButton")
         self.start_button.setEnabled(False)  # Disabled until validation passes
         self.start_button.setMinimumWidth(120)
         self.start_button.clicked.connect(self.start_requested.emit)
@@ -56,6 +57,7 @@ class CrawlControlPanel(QWidget):
 
         # Pause button
         self.pause_button = QPushButton("Pause")
+        self.pause_button.setObjectName("pauseButton")
         self.pause_button.setEnabled(False)
         self.pause_button.setMinimumWidth(100)
         self.pause_button.clicked.connect(self.pause_requested.emit)
@@ -63,6 +65,7 @@ class CrawlControlPanel(QWidget):
 
         # Resume button
         self.resume_button = QPushButton("Resume")
+        self.resume_button.setObjectName("resumeButton")
         self.resume_button.setEnabled(False)
         self.resume_button.setVisible(False)  # Hidden by default
         self.resume_button.setMinimumWidth(100)
@@ -71,6 +74,7 @@ class CrawlControlPanel(QWidget):
 
         # Stop button
         self.stop_button = QPushButton("Stop")
+        self.stop_button.setObjectName("stopButton")
         self.stop_button.setEnabled(False)
         self.stop_button.setMinimumWidth(100)
         self.stop_button.clicked.connect(self.stop_requested.emit)
@@ -162,6 +166,6 @@ class CrawlControlPanel(QWidget):
         self._validation_passed = passed
 
         # Enable/disable start button based on validation and current state
-        current_state = self.crawl_controller.get_state()
-        if current_state in [CrawlState.UNINITIALIZED, CrawlState.STOPPED, CrawlState.ERROR]:
+        current_state = self.crawl_controller.state
+        if current_state in [CrawlControlState.STOPPED]:
             self.start_button.setEnabled(passed)

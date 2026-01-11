@@ -48,24 +48,34 @@ class TestOllamaAdapter:
         with patch('mobile_crawler.domain.providers.ollama_adapter.ollama.chat') as mock_chat:
             mock_chat.return_value = mock_response
             
-            response, metadata = adapter.generate_response("Hello")
+            response, metadata = adapter.generate_response("System prompt", "User prompt")
             
             assert response == "Test response from Ollama"
             assert metadata['token_usage']['input_tokens'] is None
             assert metadata['token_usage']['output_tokens'] is None
             assert metadata['token_usage']['total_tokens'] is None
-            mock_chat.assert_called_once_with(
-                model='llama3.2',
-                messages=[{'role': 'user', 'content': 'Hello'}],
-                options={'num_predict': 1000}
-            )
+            mock_chat.assert_called_once()
+            call_args = mock_chat.call_args
+            content = call_args[1]['messages'][0]['content']
+            assert 'System prompt' in content
+            assert 'User prompt' in content
 
-    def test_generate_response_with_image_raises_error(self):
-        """Test that providing image raises NotImplementedError."""
+    def test_generate_response_combines_prompts(self):
+        """Test that system and user prompts are combined."""
         adapter = OllamaAdapter()
+        adapter._model_config = {'model_name': 'llama3.2'}
         
-        with pytest.raises(NotImplementedError, match="Image support not implemented"):
-            adapter.generate_response("Describe image", b"fake image")
+        mock_response = {'message': {'content': 'Test'}}
+        
+        with patch('mobile_crawler.domain.providers.ollama_adapter.ollama.chat') as mock_chat:
+            mock_chat.return_value = mock_response
+            
+            adapter.generate_response("Be helpful", "{\"screenshot\": \"abc\"}")
+            
+            call_args = mock_chat.call_args
+            content = call_args[1]['messages'][0]['content']
+            assert 'Be helpful' in content
+            assert 'screenshot' in content
 
     def test_model_info(self):
         """Test model info property."""

@@ -51,26 +51,37 @@ class TestOpenRouterAdapter:
         mock_response.raise_for_status.return_value = None
         adapter._session.post.return_value = mock_response
         
-        response, metadata = adapter.generate_response("Hello")
+        response, metadata = adapter.generate_response("System prompt", "User prompt")
         
         assert response == "Test response"
         assert metadata['token_usage']['input_tokens'] == 10
         assert metadata['token_usage']['output_tokens'] == 5
         assert metadata['token_usage']['total_tokens'] == 15
-        adapter._session.post.assert_called_once_with(
-            'https://openrouter.ai/api/v1/chat/completions',
-            json={
-                'model': 'anthropic/claude-3-haiku',
-                'messages': [{'role': 'user', 'content': 'Hello'}]
-            }
-        )
+        adapter._session.post.assert_called_once()
+        call_args = adapter._session.post.call_args
+        assert 'System prompt' in call_args[1]['json']['messages'][0]['content']
+        assert 'User prompt' in call_args[1]['json']['messages'][0]['content']
 
-    def test_generate_response_with_image_raises_error(self):
-        """Test that providing image raises NotImplementedError."""
+    def test_generate_response_combines_prompts(self):
+        """Test that system and user prompts are combined."""
         adapter = OpenRouterAdapter()
+        adapter._session = Mock()
+        adapter._model_config = {'model_name': 'anthropic/claude-3-haiku'}
         
-        with pytest.raises(NotImplementedError, match="Image support not implemented"):
-            adapter.generate_response("Describe image", b"fake image")
+        mock_response = Mock()
+        mock_response.json.return_value = {
+            'choices': [{'message': {'content': 'Test'}}],
+            'usage': {'prompt_tokens': 10, 'completion_tokens': 5, 'total_tokens': 15}
+        }
+        mock_response.raise_for_status.return_value = None
+        adapter._session.post.return_value = mock_response
+        
+        adapter.generate_response("Be helpful", "{\"screenshot\": \"abc\"}")
+        
+        call_args = adapter._session.post.call_args
+        content = call_args[1]['json']['messages'][0]['content']
+        assert 'Be helpful' in content
+        assert 'screenshot' in content
 
     def test_model_info(self):
         """Test model info property."""

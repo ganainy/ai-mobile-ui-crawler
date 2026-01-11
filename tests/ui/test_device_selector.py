@@ -24,11 +24,25 @@ def qapp():
 
 
 @pytest.fixture
-def device_selector(qapp):
+def mock_config_store():
+    """Create mock UserConfigStore for tests."""
+    mock_store = Mock()
+    mock_store.get_setting.return_value = None
+    mock_store.set_setting.return_value = None
+    mock_store.delete_setting.return_value = None
+    return mock_store
+
+
+@pytest.fixture
+def device_selector(qapp, mock_config_store):
     """Create DeviceSelector instance for tests."""
     mock_detection = Mock(spec=DeviceDetection)
     parent_widget = QWidget()
-    selector = DeviceSelector(device_detection=mock_detection, parent=parent_widget)
+    selector = DeviceSelector(
+        device_detection=mock_detection,
+        config_store=mock_config_store,
+        parent=parent_widget
+    )
     yield selector
     # Cleanup
     selector.deleteLater()

@@ -21,12 +21,12 @@ class ModelAdapter(ABC):
         pass
 
     @abstractmethod
-    def generate_response(self, prompt: str, image: Optional[bytes] = None) -> Tuple[str, Dict[str, Any]]:
+    def generate_response(self, system_prompt: str, user_prompt: str) -> Tuple[str, Dict[str, Any]]:
         """Generate a response from the AI model.
 
         Args:
-            prompt: Text prompt for the model
-            image: Optional image data as bytes
+            system_prompt: System prompt for the model
+            user_prompt: User prompt (may be JSON containing screenshot)
 
         Returns:
             Tuple of (response_text, metadata_dict)

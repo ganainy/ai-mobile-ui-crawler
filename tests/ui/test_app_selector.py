@@ -20,11 +20,25 @@ def qapp():
 
 
 @pytest.fixture
-def app_selector(qapp):
+def mock_config_store():
+    """Create mock UserConfigStore for tests."""
+    mock_store = Mock()
+    mock_store.get_setting.return_value = None
+    mock_store.set_setting.return_value = None
+    mock_store.delete_setting.return_value = None
+    return mock_store
+
+
+@pytest.fixture
+def app_selector(qapp, mock_config_store):
     """Create AppSelector instance for tests."""
     mock_driver = Mock(spec=AppiumDriver)
     parent_widget = QWidget()
-    selector = AppSelector(appium_driver=mock_driver, parent=parent_widget)
+    selector = AppSelector(
+        appium_driver=mock_driver,
+        config_store=mock_config_store,
+        parent=parent_widget
+    )
     yield selector
     # Cleanup
     selector.deleteLater()
@@ -143,6 +157,7 @@ class TestListInstalledApps:
         mock_driver = Mock(spec=AppiumDriver)
         mock_driver.session = Mock()
         mock_driver.driver = Mock()
+        mock_driver.get_driver = Mock(return_value=mock_driver.driver)
         mock_driver.driver.execute_script = Mock(return_value="package:com.example.app\npackage:com.test.app")
 
         app_selector.appium_driver = mock_driver
@@ -158,6 +173,7 @@ class TestListInstalledApps:
         """Test listing apps when no device is connected."""
         mock_driver = Mock(spec=AppiumDriver)
         mock_driver.session = None
+        mock_driver.is_connected = Mock(return_value=False)
 
         app_selector.appium_driver = mock_driver
         app_selector._list_installed_apps()
@@ -170,6 +186,7 @@ class TestListInstalledApps:
         mock_driver = Mock(spec=AppiumDriver)
         mock_driver.session = Mock()
         mock_driver.driver = Mock()
+        mock_driver.get_driver = Mock(return_value=mock_driver.driver)
         mock_driver.driver.execute_script = Mock(side_effect=Exception("ADB error"))
 
         app_selector.appium_driver = mock_driver
@@ -183,6 +200,7 @@ class TestListInstalledApps:
         mock_driver = Mock(spec=AppiumDriver)
         mock_driver.session = Mock()
         mock_driver.driver = Mock()
+        mock_driver.get_driver = Mock(return_value=mock_driver.driver)
         mock_driver.driver.execute_script = Mock(return_value="")
 
         app_selector.appium_driver = mock_driver

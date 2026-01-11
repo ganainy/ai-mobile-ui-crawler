@@ -15,6 +15,17 @@ class ProviderRegistry:
         """Initialize the provider registry."""
         self._cache: Dict[str, List[Dict[str, Any]]] = {}
 
+    def clear_cache(self, provider: Optional[str] = None) -> None:
+        """Clear the model cache.
+
+        Args:
+            provider: Optional provider name to clear. If None, clears all.
+        """
+        if provider:
+            self._cache.pop(provider, None)
+        else:
+            self._cache.clear()
+
     def fetch_gemini_models(self, api_key: str) -> List[Dict[str, Any]]:
         """Fetch available Gemini models.
 
@@ -149,14 +160,29 @@ class ProviderRegistry:
         Returns:
             True if model supports vision
         """
-        # All Gemini 1.x and 2.x models support vision
-        vision_patterns = [
-            'gemini-1.5',
-            'gemini-2.0',
-            'gemini-pro-vision',
-            'gemini-1.0-pro-vision',
+        model_lower = model_id.lower()
+        
+        # Exclude text-only models explicitly
+        text_only_patterns = [
+            'text-',
+            'embedding',
+            'aqa',
+            'tuning',
         ]
-        return any(pattern in model_id for pattern in vision_patterns)
+        if any(pattern in model_lower for pattern in text_only_patterns):
+            return False
+        
+        # All Gemini 1.x, 2.x, 3.x and Pro models support vision
+        vision_patterns = [
+            'gemini-1.',
+            'gemini-2.',
+            'gemini-3.',
+            'gemini-pro',
+            'gemini-flash',
+            'gemini-ultra',
+            'gemini-exp',
+        ]
+        return any(pattern in model_lower for pattern in vision_patterns)
 
     def _is_openrouter_vision_model(self, model: Dict[str, Any]) -> bool:
         """Check if an OpenRouter model supports vision.

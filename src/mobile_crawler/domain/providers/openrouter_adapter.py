@@ -30,25 +30,22 @@ class OpenRouterAdapter(ModelAdapter):
         })
         self._model_config = model_config
 
-    def generate_response(self, prompt: str, image: Optional[bytes] = None) -> Tuple[str, Dict[str, Any]]:
+    def generate_response(self, system_prompt: str, user_prompt: str) -> Tuple[str, Dict[str, Any]]:
         """Generate response from OpenRouter model.
 
         Args:
-            prompt: Text prompt
-            image: Optional image (not supported yet)
+            system_prompt: System prompt text
+            user_prompt: User prompt (may be JSON containing screenshot)
 
         Returns:
             Tuple of (response_text, metadata)
-
-        Raises:
-            NotImplementedError: If image is provided
         """
-        if image is not None:
-            raise NotImplementedError("Image support not implemented for OpenRouter")
+        # Combine prompts for non-vision models
+        full_prompt = f"{system_prompt}\n\n{user_prompt}"
 
         data = {
             'model': self._model_config.get('model_name', 'anthropic/claude-3-haiku'),
-            'messages': [{'role': 'user', 'content': prompt}]
+            'messages': [{'role': 'user', 'content': full_prompt}]
         }
 
         response = self._session.post('https://openrouter.ai/api/v1/chat/completions', json=data)

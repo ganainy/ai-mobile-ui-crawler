@@ -46,7 +46,7 @@ class MockAdapter(ModelAdapter):
         """Initialize the mock adapter."""
         pass
 
-    def generate_response(self, prompt: str, image_path: str = None) -> Tuple[str, Dict[str, Any]]:
+    def generate_response(self, system_prompt: str, user_prompt: str) -> Tuple[str, Dict[str, Any]]:
         """Generate a mock response in the expected AI response format."""
         self.call_count += 1
 

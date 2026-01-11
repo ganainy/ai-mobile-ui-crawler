@@ -1,5 +1,6 @@
 """Appium driver wrapper with session management and error handling."""
 
+import subprocess
 import time
 from typing import Optional, Dict, Any
 from appium import webdriver
@@ -61,7 +62,12 @@ class AppiumDriver:
 
             if self.app_package:
                 options.app_package = self.app_package
-                options.app_activity = self._get_launch_activity()
+                # Try to get the actual launch activity via ADB
+                launch_activity = self._get_launch_activity()
+                if launch_activity:
+                    options.app_activity = launch_activity
+                # Use wildcard to accept any activity that starts
+                options.app_wait_activity = '*'
 
             # Connect to Appium server
             self._driver = webdriver.Remote(
@@ -172,20 +178,66 @@ class AppiumDriver:
 
         return info
 
-    def _get_launch_activity(self) -> str:
-        """Get the launch activity for the app package.
+    def _get_launch_activity(self) -> Optional[str]:
+        """Get the launch activity for the app package using ADB.
 
         Returns:
-            Launch activity name
-
-        Note:
-            This is a simplified implementation. In a real scenario,
-            you might need to query the Android manifest or use
-            package manager to determine the correct launch activity.
+            Launch activity name or None if not found
         """
-        # For now, return a common launcher activity
-        # This should be made configurable or auto-detected
-        return f"{self.app_package}.MainActivity"
+        if not self.app_package:
+            return None
+        
+        try:
+            # Query package manager for the launcher activity
+            # Using: adb -s <device> shell cmd package resolve-activity --brief <package>
+            result = subprocess.run(
+                ['adb', '-s', self.device_id, 'shell', 'cmd', 'package', 
+                 'resolve-activity', '--brief', '-c', 'android.intent.category.LAUNCHER', 
+                 self.app_package],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            
+            if result.returncode == 0 and result.stdout.strip():
+                lines = result.stdout.strip().split('\n')
+                # The activity is typically on the second line in format: package/activity
+                for line in lines:
+                    if '/' in line:
+                        parts = line.strip().split('/')
+                        if len(parts) == 2:
+                            return parts[1]  # Return the activity part
+            
+            # Fallback: try dumpsys package
+            result = subprocess.run(
+                ['adb', '-s', self.device_id, 'shell', 'dumpsys', 'package', self.app_package],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            
+            if result.returncode == 0:
+                # Look for the MAIN/LAUNCHER activity
+                lines = result.stdout.split('\n')
+                in_activity_resolver = False
+                for i, line in enumerate(lines):
+                    if 'android.intent.action.MAIN' in line:
+                        # Look for the activity in nearby lines
+                        for j in range(max(0, i-5), min(len(lines), i+5)):
+                            if self.app_package in lines[j] and '/' in lines[j]:
+                                # Extract activity from line like "pkg/activity"
+                                match_line = lines[j].strip()
+                                if '/' in match_line:
+                                    for part in match_line.split():
+                                        if '/' in part and self.app_package in part:
+                                            activity = part.split('/')[1]
+                                            if activity:
+                                                return activity
+                                            
+        except Exception:
+            pass
+        
+        return None
 
     def __enter__(self):
         """Context manager entry."""

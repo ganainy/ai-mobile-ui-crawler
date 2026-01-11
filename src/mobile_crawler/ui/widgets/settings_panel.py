@@ -193,14 +193,21 @@ class SettingsPanel(QWidget):
     def _on_save_clicked(self):
         """Handle save button click."""
         try:
-            # Save API keys (encrypted)
+            # Validate API keys before saving
             gemini_key = self.gemini_api_key_input.text().strip()
+            if gemini_key and not self._validate_api_key(gemini_key, "Gemini"):
+                return
+
+            openrouter_key = self.openrouter_api_key_input.text().strip()
+            if openrouter_key and not self._validate_api_key(openrouter_key, "OpenRouter"):
+                return
+
+            # Save API keys (encrypted)
             if gemini_key:
                 self._config_store.set_secret_plaintext("gemini_api_key", gemini_key)
             else:
                 self._config_store.delete_secret("gemini_api_key")
 
-            openrouter_key = self.openrouter_api_key_input.text().strip()
             if openrouter_key:
                 self._config_store.set_secret_plaintext("openrouter_api_key", openrouter_key)
             else:
@@ -305,3 +312,39 @@ class SettingsPanel(QWidget):
         self.max_duration_input.setValue(300)
         self.test_username_input.clear()
         self.test_password_input.clear()
+
+    def _validate_api_key(self, api_key: str, provider_name: str) -> bool:
+        """Validate API key format and optionally test connectivity.
+        
+        Args:
+            api_key: The API key to validate
+            provider_name: Name of the provider for error messages
+            
+        Returns:
+            True if valid, False otherwise
+        """
+        # Basic format validation
+        if len(api_key) < 20:
+            QMessageBox.warning(
+                self,
+                f"Invalid {provider_name} API Key",
+                f"The {provider_name} API key appears to be too short.\n\n"
+                f"Please check that you have entered a valid API key."
+            )
+            return False
+        
+        if not api_key.startswith(('sk-', 'AIza', 'pk-')) and provider_name != "OpenRouter":
+            # Allow more flexible validation for OpenRouter
+            if len(api_key) < 30:
+                QMessageBox.warning(
+                    self,
+                    f"Invalid {provider_name} API Key",
+                    f"The {provider_name} API key format appears invalid.\n\n"
+                    f"Please check that you have entered a valid API key."
+                )
+                return False
+        
+        # For more thorough validation, we could make a test API call here
+        # But for now, basic format validation is sufficient
+        
+        return True

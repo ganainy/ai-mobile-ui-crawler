@@ -26,25 +26,22 @@ class OllamaAdapter(ModelAdapter):
         
         self._model_config = model_config
 
-    def generate_response(self, prompt: str, image: Optional[bytes] = None) -> Tuple[str, Dict[str, Any]]:
+    def generate_response(self, system_prompt: str, user_prompt: str) -> Tuple[str, Dict[str, Any]]:
         """Generate response from Ollama model.
 
         Args:
-            prompt: Text prompt
-            image: Optional image (not supported yet)
+            system_prompt: System prompt text
+            user_prompt: User prompt (may be JSON containing screenshot)
 
         Returns:
             Tuple of (response_text, metadata)
-
-        Raises:
-            NotImplementedError: If image is provided
         """
-        if image is not None:
-            raise NotImplementedError("Image support not implemented for Ollama")
+        # Combine prompts for non-vision models
+        full_prompt = f"{system_prompt}\n\n{user_prompt}"
 
         response = ollama.chat(
             model=self._model_config.get('model_name', 'llama3.2'),
-            messages=[{'role': 'user', 'content': prompt}],
+            messages=[{'role': 'user', 'content': full_prompt}],
             options={'num_predict': 1000}  # Limit output length
         )
 
