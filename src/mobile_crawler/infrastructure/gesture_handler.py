@@ -1,4 +1,8 @@
-"""Gesture handling utilities for mobile device interactions."""
+"""Gesture handling utilities for mobile device interactions.
+
+NOTE: In image-only mode, all gestures use coordinate-based actions only.
+No webdriver element finding or XML/DOM access is used.
+"""
 
 import time
 import logging
@@ -6,8 +10,6 @@ from typing import Dict, List, Optional, Tuple, Any
 from enum import Enum
 from dataclasses import dataclass
 
-from selenium.webdriver.common.action_chains import ActionChains
-from selenium.webdriver.common.by import By
 from selenium.common.exceptions import WebDriverException
 
 from mobile_crawler.infrastructure.appium_driver import AppiumDriver
@@ -90,28 +92,19 @@ class GestureHandler:
         self.driver = appium_driver
 
     def tap(self, element: UIElement, duration: float = 0.1) -> bool:
-        """Tap on an element.
+        """Tap on an element using coordinates only.
+
+        NOTE: In image-only mode, this uses coordinate-based tapping only.
+        No webdriver element finding is performed.
 
         Args:
-            element: UIElement to tap
+            element: UIElement to tap (only center_x, center_y are used)
             duration: Duration of tap in seconds
 
         Returns:
             True if successful, False otherwise
         """
-        try:
-            webdriver_element = self._get_webdriver_element(element)
-            if webdriver_element:
-                webdriver_element.click()
-                time.sleep(duration)
-                logger.info(f"Tapped element at ({element.center_x}, {element.center_y})")
-                return True
-            else:
-                # Fallback to coordinate tapping
-                return self.tap_at(element.center_x, element.center_y, duration)
-        except WebDriverException as e:
-            logger.error(f"Failed to tap element: {e}")
-            return False
+        return self.tap_at(element.center_x, element.center_y, duration)
 
     def tap_at(self, x: int, y: int, duration: float = 0.1) -> bool:
         """Tap at specific coordinates.
@@ -156,27 +149,18 @@ class GestureHandler:
             return False
 
     def double_tap(self, element: UIElement) -> bool:
-        """Double tap on an element.
+        """Double tap on an element using coordinates only.
+
+        NOTE: In image-only mode, this uses coordinate-based double tapping only.
+        No webdriver element finding is performed.
 
         Args:
-            element: UIElement to double tap
+            element: UIElement to double tap (only center_x, center_y are used)
 
         Returns:
             True if successful, False otherwise
         """
-        try:
-            webdriver_element = self._get_webdriver_element(element)
-            if webdriver_element:
-                actions = ActionChains(self.driver.get_driver())
-                actions.double_click(webdriver_element).perform()
-                logger.info(f"Double tapped element at ({element.center_x}, {element.center_y})")
-                return True
-            else:
-                # Fallback to coordinate double tapping
-                return self.double_tap_at(element.center_x, element.center_y)
-        except WebDriverException as e:
-            logger.error(f"Failed to double tap element: {e}")
-            return False
+        return self.double_tap_at(element.center_x, element.center_y)
 
     def double_tap_at(self, x: int, y: int) -> bool:
         """Double tap at specific coordinates.
@@ -198,28 +182,19 @@ class GestureHandler:
             return False
 
     def long_press(self, element: UIElement, duration: float = 2.0) -> bool:
-        """Long press on an element.
+        """Long press on an element using coordinates only.
+
+        NOTE: In image-only mode, this uses coordinate-based long press only.
+        No webdriver element finding is performed.
 
         Args:
-            element: UIElement to long press
+            element: UIElement to long press (only center_x, center_y are used)
             duration: Duration of press in seconds
 
         Returns:
             True if successful, False otherwise
         """
-        try:
-            webdriver_element = self._get_webdriver_element(element)
-            if webdriver_element:
-                actions = ActionChains(self.driver.get_driver())
-                actions.click_and_hold(webdriver_element).pause(duration).release().perform()
-                logger.info(f"Long pressed element at ({element.center_x}, {element.center_y}) for {duration}s")
-                return True
-            else:
-                # Fallback to coordinate long press
-                return self.long_press_at(element.center_x, element.center_y, duration)
-        except WebDriverException as e:
-            logger.error(f"Failed to long press element: {e}")
-            return False
+        return self.long_press_at(element.center_x, element.center_y, duration)
 
     def long_press_at(self, x: int, y: int, duration: float = 2.0) -> bool:
         """Long press at specific coordinates.
@@ -303,10 +278,13 @@ class GestureHandler:
             return False
 
     def drag(self, element: UIElement, end_x: int, end_y: int, duration: float = 0.5) -> bool:
-        """Drag an element to a new position.
+        """Drag an element to a new position using coordinates only.
+
+        NOTE: In image-only mode, this uses coordinate-based dragging only.
+        No webdriver element finding is performed.
 
         Args:
-            element: UIElement to drag
+            element: UIElement to drag (only center_x, center_y are used)
             end_x: Ending X coordinate
             end_y: Ending Y coordinate
             duration: Duration of drag in seconds
@@ -314,22 +292,7 @@ class GestureHandler:
         Returns:
             True if successful, False otherwise
         """
-        try:
-            webdriver_element = self._get_webdriver_element(element)
-            if webdriver_element:
-                actions = ActionChains(self.driver.get_driver())
-                actions.drag_and_drop_by_offset(webdriver_element,
-                                              end_x - element.center_x,
-                                              end_y - element.center_y).perform()
-                time.sleep(duration)
-                logger.info(f"Dragged element from ({element.center_x}, {element.center_y}) to ({end_x}, {end_y})")
-                return True
-            else:
-                # Fallback to coordinate drag
-                return self.drag_from_to(element.center_x, element.center_y, end_x, end_y, duration)
-        except WebDriverException as e:
-            logger.error(f"Failed to drag element: {e}")
-            return False
+        return self.drag_from_to(element.center_x, element.center_y, end_x, end_y, duration)
 
     def drag_from_to(self, start_x: int, start_y: int, end_x: int, end_y: int,
                      duration: float = 0.5) -> bool:
@@ -470,106 +433,8 @@ class GestureHandler:
             logger.error(f"Failed to perform pinch gesture: {e}")
             return False
 
-    def wait_for_element_interaction(self, element: UIElement, timeout: float = 5.0) -> bool:
-        """Wait for an element to be ready for interaction.
-
-        Args:
-            element: UIElement to wait for
-            timeout: Maximum time to wait in seconds
-
-        Returns:
-            True if element is ready, False otherwise
-        """
-        start_time = time.time()
-        while time.time() - start_time < timeout:
-            try:
-                webdriver_element = self._get_webdriver_element(element)
-                if webdriver_element and webdriver_element.is_displayed() and webdriver_element.is_enabled():
-                    return True
-                time.sleep(0.1)
-            except WebDriverException:
-                time.sleep(0.1)
-        return False
-
-    def _get_webdriver_element(self, element: UIElement) -> Optional[Any]:
-        """Get the WebDriver element from UIElement.
-
-        Args:
-            element: UIElement instance
-
-        Returns:
-            WebDriver element or None if not found
-        """
-        try:
-            # Try different strategies to find the element
-            strategies = []
-
-            if element.resource_id:
-                strategies.append((By.ID, element.resource_id))
-            if element.xpath:
-                strategies.append((By.XPATH, element.xpath))
-            if element.text:
-                strategies.append((By.XPATH, f"//*[@text='{element.text}']"))
-            if element.class_name:
-                strategies.append((By.CLASS_NAME, element.class_name))
-
-            for by, value in strategies:
-                try:
-                    found_element = self.driver.get_driver().find_element(by, value)
-                    # Verify the element matches our UIElement bounds (basic check)
-                    if self._elements_match(element, found_element):
-                        return found_element
-                except WebDriverException:
-                    continue
-
-            return None
-        except WebDriverException:
-            return None
-
-    def _elements_match(self, ui_element: UIElement, webdriver_element: Any) -> bool:
-        """Check if WebDriver element matches UIElement.
-
-        Args:
-            ui_element: UIElement to compare
-            webdriver_element: WebDriver element to compare
-
-        Returns:
-            True if elements match
-        """
-        try:
-            # Basic bounds check
-            location = webdriver_element.location
-            size = webdriver_element.size
-
-            wd_bounds = (
-                location['x'],
-                location['y'],
-                location['x'] + size['width'],
-                location['y'] + size['height']
-            )
-
-            # Allow some tolerance in bounds matching
-            tolerance = 10
-            return self._bounds_match(ui_element.bounds, wd_bounds, tolerance)
-        except (WebDriverException, KeyError):
-            return False
-
-    def _bounds_match(self, bounds1: Tuple[int, int, int, int],
-                     bounds2: Tuple[int, int, int, int], tolerance: int) -> bool:
-        """Check if two bounds rectangles match within tolerance.
-
-        Args:
-            bounds1: First bounds (left, top, right, bottom)
-            bounds2: Second bounds
-            tolerance: Pixel tolerance
-
-        Returns:
-            True if bounds match within tolerance
-        """
-        l1, t1, r1, b1 = bounds1
-        l2, t2, r2, b2 = bounds2
-
-        return (abs(l1 - l2) <= tolerance and
-                abs(t1 - t2) <= tolerance and
-                abs(r1 - r2) <= tolerance and
-                abs(b1 - b2) <= tolerance)
+    # NOTE: webdriver-based methods removed in image-only mode:
+    # - wait_for_element_interaction (was webdriver-based)
+    # - _get_webdriver_element (was webdriver-based)
+    # - _elements_match (was webdriver-based)
+    # - _bounds_match (was webdriver-based)
