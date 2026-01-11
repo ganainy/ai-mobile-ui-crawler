@@ -198,12 +198,24 @@ class GestureHandler:
             True if successful, False otherwise
         """
         try:
-            actions = ActionChains(self.driver.get_driver())
-            actions.move_by_offset(start_x, start_y).click_and_hold()
-            actions.pause(0.1)  # Brief hold before moving
-            actions.move_by_offset(end_x - start_x, end_y - start_y)
-            actions.release()
-            actions.move_by_offset(-end_x, -end_y).perform()
+            # Use W3C Actions with absolute coordinates for Appium compatibility
+            from selenium.webdriver.common.actions.action_builder import ActionBuilder
+            from selenium.webdriver.common.actions.pointer_input import PointerInput
+            from selenium.webdriver.common.actions import interaction
+            
+            driver = self.driver.get_driver()
+            pointer = PointerInput(interaction.POINTER_TOUCH, "finger")
+            actions = ActionBuilder(driver, mouse=pointer)
+            
+            # Move to start position (absolute coordinates required for first action)
+            actions.pointer_action.move_to_location(start_x, start_y)
+            actions.pointer_action.pointer_down()
+            # Pause briefly before moving
+            actions.pointer_action.pause(0.1)
+            # Move to end position (absolute coordinates)
+            actions.pointer_action.move_to_location(end_x, end_y)
+            actions.pointer_action.pointer_up()
+            actions.perform()
 
             # Add delay for swipe to complete
             time.sleep(duration)
@@ -257,12 +269,24 @@ class GestureHandler:
             True if successful, False otherwise
         """
         try:
-            actions = ActionChains(self.driver.get_driver())
-            actions.move_by_offset(start_x, start_y).click_and_hold()
-            actions.pause(0.1)
-            actions.move_by_offset(end_x - start_x, end_y - start_y)
-            actions.release()
-            actions.move_by_offset(-end_x, -end_y).perform()
+            # Use W3C Actions with absolute coordinates for Appium compatibility
+            from selenium.webdriver.common.actions.action_builder import ActionBuilder
+            from selenium.webdriver.common.actions.pointer_input import PointerInput
+            from selenium.webdriver.common.actions import interaction
+            
+            driver = self.driver.get_driver()
+            pointer = PointerInput(interaction.POINTER_TOUCH, "finger")
+            actions = ActionBuilder(driver, mouse=pointer)
+            
+            # Move to start position (absolute coordinates required for first action)
+            actions.pointer_action.move_to_location(start_x, start_y)
+            actions.pointer_action.pointer_down()
+            actions.pointer_action.pause(0.1)
+            # Move to end position (absolute coordinates)
+            actions.pointer_action.move_to_location(end_x, end_y)
+            actions.pointer_action.pointer_up()
+            actions.perform()
+            
             time.sleep(duration)
             logger.info(f"Dragged from ({start_x}, {start_y}) to ({end_x}, {end_y})")
             return True

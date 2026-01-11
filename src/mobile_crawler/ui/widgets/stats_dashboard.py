@@ -51,10 +51,10 @@ class StatsDashboard(QWidget):
         self.total_steps_label = QLabel("Total Steps: 0")
         stats_layout.addWidget(self.total_steps_label, 1, 0)
 
-        self.successful_steps_label = QLabel("Successful: 0")
+        self.successful_steps_label = QLabel("Actions OK: 0")
         stats_layout.addWidget(self.successful_steps_label, 1, 1)
 
-        self.failed_steps_label = QLabel("Failed: 0")
+        self.failed_steps_label = QLabel("Actions Failed: 0")
         stats_layout.addWidget(self.failed_steps_label, 2, 0)
 
         # Step progress bar
@@ -138,6 +138,20 @@ class StatsDashboard(QWidget):
         self.time_progress_bar.setRange(0, max_duration_seconds)
         self.time_progress_bar.setFormat(f"%v / {max_duration_seconds} seconds")
 
+    def set_progress_mode(self, mode: str):
+        """Set which progress bar to show based on crawl mode.
+        
+        Args:
+            mode: 'steps' to show step progress bar only,
+                  'duration' to show time progress bar only
+        """
+        if mode == 'steps':
+            self.step_progress_bar.setVisible(True)
+            self.time_progress_bar.setVisible(False)
+        else:
+            self.step_progress_bar.setVisible(False)
+            self.time_progress_bar.setVisible(True)
+
     def update_stats(
         self,
         total_steps: int = 0,
@@ -165,8 +179,8 @@ class StatsDashboard(QWidget):
         """
         # Update labels
         self.total_steps_label.setText(f"Total Steps: {total_steps}")
-        self.successful_steps_label.setText(f"Successful: {successful_steps}")
-        self.failed_steps_label.setText(f"Failed: {failed_steps}")
+        self.successful_steps_label.setText(f"Actions OK: {successful_steps}")
+        self.failed_steps_label.setText(f"Actions Failed: {failed_steps}")
         self.unique_screens_label.setText(f"Unique Screens: {unique_screens}")
         self.total_visits_label.setText(f"Total Visits: {total_visits}")
         self.screens_per_minute_label.setText(f"Screens/min: {screens_per_minute:.1f}")

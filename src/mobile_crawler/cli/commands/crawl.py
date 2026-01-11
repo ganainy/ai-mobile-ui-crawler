@@ -14,7 +14,9 @@ from mobile_crawler.domain.models import ActionResult
 from mobile_crawler.core.crawler_loop import CrawlerLoop
 from mobile_crawler.domain.action_executor import ActionExecutor
 from mobile_crawler.infrastructure.ai_interaction_service import AIInteractionService
+from mobile_crawler.infrastructure.appium_driver import AppiumDriver
 from mobile_crawler.infrastructure.database import DatabaseManager
+from mobile_crawler.infrastructure.gesture_handler import GestureHandler
 from mobile_crawler.infrastructure.run_repository import Run, RunRepository
 from mobile_crawler.infrastructure.screenshot_capture import ScreenshotCapture
 from mobile_crawler.infrastructure.step_log_repository import StepLogRepository
@@ -191,11 +193,15 @@ def crawl(device: str, package: str, model: str, steps: Optional[int], duration:
         )
         run_id = run_repo.create_run(run)
 
+        # Initialize Appium driver
+        appium_driver = AppiumDriver(device_id=device, app_package=package)
+        appium_driver.connect()
+
         # Set up dependencies for CrawlerLoop
         state_machine = CrawlStateMachine()
-        screenshot_capture = ScreenshotCapture()
+        screenshot_capture = ScreenshotCapture(driver=appium_driver)
         ai_service = AIInteractionService.from_config(config_manager)
-        action_executor = ActionExecutor()
+        action_executor = ActionExecutor(appium_driver, GestureHandler(appium_driver))
         step_log_repo = StepLogRepository(db_manager)
 
         # Create crawler loop
@@ -207,6 +213,7 @@ def crawl(device: str, package: str, model: str, steps: Optional[int], duration:
             step_log_repository=step_log_repo,
             run_repository=run_repo,
             config_manager=config_manager,
+            appium_driver=appium_driver,
             event_listeners=[JSONEventListener()]
         )
 

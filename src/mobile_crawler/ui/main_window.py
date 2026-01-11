@@ -1,6 +1,9 @@
 """Main window for the mobile-crawler GUI application."""
 
 import sys
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Optional, Set, List, Dict, Any
 from PySide6.QtWidgets import (
     QMainWindow,
     QWidget,
@@ -13,7 +16,7 @@ from PySide6.QtWidgets import (
     QTabBar,
     QApplication
 )
-from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtCore import Qt, QThread, Signal, QTimer
 
 # Service imports
 from mobile_crawler.infrastructure.device_detection import DeviceDetection
@@ -35,6 +38,8 @@ from mobile_crawler.infrastructure.gesture_handler import GestureHandler
 from mobile_crawler.infrastructure.ai_interaction_service import AIInteractionService
 from mobile_crawler.domain.action_executor import ActionExecutor
 from mobile_crawler.infrastructure.step_log_repository import StepLogRepository
+from mobile_crawler.infrastructure.screen_repository import ScreenRepository
+from mobile_crawler.domain.models import ActionResult
 
 # Widget imports
 from mobile_crawler.ui.widgets.device_selector import DeviceSelector
@@ -49,6 +54,42 @@ from mobile_crawler.ui.widgets.ai_monitor_panel import AIMonitorPanel, StepDetai
 
 # Signal adapter
 from mobile_crawler.ui.signal_adapter import QtSignalAdapter
+
+
+@dataclass
+class CrawlStatistics:
+    """Real-time statistics accumulator for active crawl session.
+    
+    Tracks crawl metrics including step counts, screen discovery,
+    and AI performance. Used for real-time dashboard updates.
+    """
+    run_id: int
+    start_time: datetime
+    total_steps: int = 0
+    successful_actions: int = 0
+    failed_actions: int = 0
+    unique_screen_hashes: Set[str] = field(default_factory=set)
+    total_screen_visits: int = 0
+    ai_call_count: int = 0
+    ai_response_times_ms: List[float] = field(default_factory=list)
+    last_step_number: int = 0  # Track last seen step to avoid double counting
+    
+    def avg_ai_response_time(self) -> float:
+        """Calculate average AI response time in milliseconds."""
+        if not self.ai_response_times_ms:
+            return 0.0
+        return sum(self.ai_response_times_ms) / len(self.ai_response_times_ms)
+    
+    def elapsed_seconds(self) -> float:
+        """Calculate elapsed time since start in seconds."""
+        return (datetime.now() - self.start_time).total_seconds()
+    
+    def screens_per_minute(self) -> float:
+        """Calculate screen discovery rate per minute."""
+        minutes = self.elapsed_seconds() / 60.0
+        if minutes <= 0:
+            return 0.0
+        return len(self.unique_screen_hashes) / minutes
 
 
 class CrawlerWorker(QThread):
@@ -99,6 +140,11 @@ class MainWindow(QMainWindow):
         # Signal adapter for thread-safe event bridging
         self.signal_adapter: QtSignalAdapter = QtSignalAdapter()
         
+        # Statistics tracking
+        self._current_stats: Optional[CrawlStatistics] = None
+        self._elapsed_timer: QTimer = QTimer(self)
+        self._elapsed_timer.timeout.connect(self._update_elapsed_time)
+        
         # Crawl configuration state
         self._selected_device = None
         self._selected_package = None
@@ -113,6 +159,7 @@ class MainWindow(QMainWindow):
         self._setup_window()
         self._setup_menu_bar()
         self._setup_central_widget()
+        self._connect_statistics_signals()
 
     def _create_services(self):
         """Create and return all service instances needed by widgets.
@@ -143,6 +190,10 @@ class MainWindow(QMainWindow):
         report_generator = ReportGenerator(db_manager)
         mobsf_manager = MobSFManager()
         
+        # Repository services for statistics
+        step_log_repository = StepLogRepository(db_manager)
+        screen_repository = ScreenRepository(db_manager)
+        
         return {
             'device_detection': device_detection,
             'appium_driver': appium_driver,
@@ -154,6 +205,8 @@ class MainWindow(QMainWindow):
             'report_generator': report_generator,
             'mobsf_manager': mobsf_manager,
             'database_manager': db_manager,
+            'step_log_repository': step_log_repository,
+            'screen_repository': screen_repository,
         }
 
     def _setup_window(self):
@@ -380,6 +433,7 @@ class MainWindow(QMainWindow):
             step_log_repository=step_log_repo,
             run_repository=self._services['run_repository'],
             config_manager=config_manager,
+            appium_driver=appium_driver,
             event_listeners=event_listeners
         )
 
@@ -795,6 +849,220 @@ class MainWindow(QMainWindow):
             "An automated testing tool for Android applications\n"
             "using AI vision models."
         )
+
+    def _connect_statistics_signals(self):
+        """Connect crawler events to statistics handlers."""
+        self.signal_adapter.crawl_started.connect(self._on_crawl_started_stats)
+        self.signal_adapter.step_completed.connect(self._on_step_completed_stats)
+        self.signal_adapter.action_executed.connect(self._on_action_executed_stats)
+        self.signal_adapter.screenshot_captured.connect(self._on_screenshot_captured_stats)
+        self.signal_adapter.ai_response_received.connect(self._on_ai_response_stats)
+        self.signal_adapter.crawl_completed.connect(self._on_crawl_completed_stats)
+
+    def _on_crawl_started_stats(self, run_id: int, target_package: str) -> None:
+        """Initialize statistics tracking when crawl starts.
+        
+        Creates a fresh CrawlStatistics object, resets the dashboard,
+        configures progress bars based on crawl mode, and starts the timer.
+        """
+        # Create new statistics object
+        self._current_stats = CrawlStatistics(
+            run_id=run_id,
+            start_time=datetime.now()
+        )
+        
+        # Reset and configure dashboard display
+        if self.stats_dashboard:
+            self.stats_dashboard.reset()
+            
+            # Get settings and configure limits
+            if self.settings_panel:
+                max_steps = self.settings_panel.get_max_steps()
+                max_duration = self.settings_panel.get_max_duration()
+                limit_mode = self.settings_panel.get_limit_mode()
+                
+                self.stats_dashboard.set_max_steps(max_steps)
+                self.stats_dashboard.set_max_duration(max_duration)
+                self.stats_dashboard.set_progress_mode(limit_mode)
+            else:
+                # Defaults
+                self.stats_dashboard.set_max_steps(100)
+                self.stats_dashboard.set_max_duration(300)
+                self.stats_dashboard.set_progress_mode('steps')
+        
+        # Start elapsed time timer (1-second interval)
+        self._elapsed_timer.start(1000)
+
+    def _on_step_completed_stats(self, run_id: int, step_number: int, 
+                                 actions_count: int, duration_ms: float) -> None:
+        """Update statistics when a step completes.
+        
+        Uses step_number to accurately count steps (avoids double-counting
+        from multiple actions per step).
+        """
+        if not self._current_stats or self._current_stats.run_id != run_id:
+            return
+        
+        # Use step_number directly as total steps (more accurate than incrementing)
+        self._current_stats.total_steps = step_number
+        self._current_stats.last_step_number = step_number
+        
+        # Update dashboard
+        self._update_dashboard_stats()
+
+    def _on_action_executed_stats(self, run_id: int, step_number: int, 
+                                   action_index: int, result: ActionResult) -> None:
+        """Update success/failure counts when action executes.
+        
+        Tracks action success/failure rates (a step may have multiple actions).
+        """
+        if not self._current_stats or self._current_stats.run_id != run_id:
+            return
+        
+        # Track action success vs failure
+        if result.success:
+            self._current_stats.successful_actions += 1
+        else:
+            self._current_stats.failed_actions += 1
+        
+        # Update dashboard
+        self._update_dashboard_stats()
+
+    def _on_screenshot_captured_stats(self, run_id: int, step_number: int, 
+                                       screenshot_path: str) -> None:
+        """Update screen discovery metrics when screenshot captured.
+        
+        Tracks unique screens by computing a perceptual hash from the screenshot.
+        This allows detecting when the same screen is revisited.
+        """
+        if not self._current_stats or self._current_stats.run_id != run_id:
+            return
+        
+        # Increment total visits
+        self._current_stats.total_screen_visits += 1
+        
+        # Compute perceptual hash to identify unique screens
+        if screenshot_path:
+            try:
+                import imagehash
+                from PIL import Image
+                import os
+                
+                if os.path.exists(screenshot_path):
+                    img = Image.open(screenshot_path)
+                    screen_hash = str(imagehash.phash(img))
+                    self._current_stats.unique_screen_hashes.add(screen_hash)
+            except Exception:
+                # If hashing fails, use step number as fallback identifier
+                self._current_stats.unique_screen_hashes.add(f"step_{step_number}")
+        
+        # Update dashboard
+        self._update_dashboard_stats()
+
+    def _on_ai_response_stats(self, run_id: int, step_number: int, 
+                              response_data: Dict[str, Any]) -> None:
+        """Update AI performance metrics when response received."""
+        if not self._current_stats or self._current_stats.run_id != run_id:
+            return
+        
+        # Extract response time (key is 'latency_ms' from AIInteractionService)
+        response_time = response_data.get('latency_ms', 0.0) or 0.0
+        
+        # Track AI calls
+        self._current_stats.ai_call_count += 1
+        self._current_stats.ai_response_times_ms.append(response_time)
+        
+        # Update dashboard
+        self._update_dashboard_stats()
+
+    def _update_dashboard_stats(self) -> None:
+        """Update dashboard display from current statistics.
+        
+        Reads values from the in-memory CrawlStatistics object and
+        pushes them to the StatsDashboard widget.
+        """
+        if not self._current_stats or not self.stats_dashboard:
+            return
+        
+        stats = self._current_stats
+        
+        self.stats_dashboard.update_stats(
+            total_steps=stats.total_steps,
+            successful_steps=stats.successful_actions,
+            failed_steps=stats.failed_actions,
+            unique_screens=len(stats.unique_screen_hashes),
+            total_visits=stats.total_screen_visits,
+            screens_per_minute=stats.screens_per_minute(),
+            ai_calls=stats.ai_call_count,
+            avg_ai_response_time_ms=stats.avg_ai_response_time(),
+            duration_seconds=stats.elapsed_seconds()
+        )
+
+    def _update_elapsed_time(self) -> None:
+        """Timer callback to update elapsed time (called every 1 second).
+        
+        Triggers a full dashboard update to refresh time-dependent metrics.
+        """
+        if not self._current_stats:
+            return
+        
+        # Full dashboard update includes elapsed time
+        self._update_dashboard_stats()
+
+    def _on_crawl_completed_stats(self, run_id: int, total_steps: int, 
+                                   total_duration_ms: float, reason: str) -> None:
+        """Finalize statistics when crawl completes.
+        
+        Stops the timer and preserves final statistics on the dashboard.
+        Does NOT clear statistics immediately to prevent UI flicker.
+        """
+        # Stop timer
+        self._elapsed_timer.stop()
+        
+        # Perform one final update with current in-memory values
+        # This ensures the final state is displayed correctly
+        if self._current_stats:
+            # Use the total_steps from the completion event for accuracy
+            self._current_stats.total_steps = total_steps
+            self._update_dashboard_stats()
+        
+        # Clear statistics object (but dashboard retains last values)
+        self._current_stats = None
+
+    def _query_final_statistics(self, run_id: int) -> Dict[str, Any]:
+        """Query database for accurate final statistics.
+        
+        Returns:
+            Dictionary with all statistics fields for update_stats()
+        """
+        step_repo = self._services.get('step_log_repository')
+        screen_repo = self._services.get('screen_repository')
+        
+        # Query step statistics
+        step_stats = step_repo.get_step_statistics(run_id) if step_repo else {}
+        
+        # Query screen counts
+        unique_screens = screen_repo.count_unique_screens_for_run(run_id) if screen_repo else 0
+        total_visits = step_repo.count_screen_visits_for_run(run_id) if step_repo else 0
+        
+        # Query AI metrics
+        ai_stats = step_repo.get_ai_statistics(run_id) if step_repo else {}
+        
+        # Calculate derived metrics
+        duration = (datetime.now() - self._current_stats.start_time).total_seconds() if self._current_stats else 0
+        screens_per_min = (unique_screens / (duration / 60.0)) if duration > 0 else 0.0
+        
+        return {
+            'total_steps': step_stats.get('total_steps', 0),
+            'successful_steps': step_stats.get('successful_steps', 0),
+            'failed_steps': step_stats.get('failed_steps', 0),
+            'unique_screens': unique_screens,
+            'total_visits': total_visits,
+            'screens_per_minute': screens_per_min,
+            'ai_calls': ai_stats.get('ai_calls', 0),
+            'avg_ai_response_time_ms': ai_stats.get('avg_response_time_ms', 0.0),
+            'duration_seconds': duration
+        }
 
     def closeEvent(self, event):
         """Handle window close event."""

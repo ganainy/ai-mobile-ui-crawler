@@ -29,7 +29,10 @@ class ScreenshotCapture:
         driver: AppiumDriver,
         max_width: int = 800,
         max_height: int = 600,
-        output_dir: Optional[Path] = None
+        output_dir: Optional[Path] = None,
+        ai_max_width: int = 1024,
+        ai_max_height: int = 1024,
+        ai_jpeg_quality: int = 75
     ):
         """Initialize screenshot capture.
 
@@ -38,12 +41,20 @@ class ScreenshotCapture:
             max_width: Maximum width for downscaled screenshots
             max_height: Maximum height for downscaled screenshots
             output_dir: Directory to save screenshots (default: ./screenshots)
+            ai_max_width: Maximum width for AI-optimized images
+            ai_max_height: Maximum height for AI-optimized images
+            ai_jpeg_quality: JPEG quality for AI images (1-95, lower = smaller file)
         """
         self.driver = driver
         self.max_width = max_width
         self.max_height = max_height
         self.output_dir = output_dir if output_dir else Path("screenshots")
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        
+        # AI compression settings
+        self.ai_max_width = ai_max_width
+        self.ai_max_height = ai_max_height
+        self.ai_jpeg_quality = ai_jpeg_quality
 
     def capture_screenshot(self) -> Image.Image:
         """Capture a screenshot from the device.
@@ -72,16 +83,25 @@ class ScreenshotCapture:
         except Exception as e:
             raise ScreenshotCaptureError(f"Failed to capture screenshot: {e}") from e
 
-    def capture_full(self, filename: Optional[str] = None) -> Tuple[Image.Image, str, str]:
-        """Capture a screenshot and return image, path, and base64 encoding.
+    def capture_full(self, filename: Optional[str] = None) -> Tuple[Image.Image, str, str, float]:
+        """Capture a screenshot and return image, path, AI-optimized base64, and scale factor.
 
         This method provides all data needed by the crawler loop in one call.
+        The base64 string is compressed for efficient AI processing:
+        - Downscaled to max 1024x1024 (configurable)
+        - Converted to JPEG at 75% quality (configurable)
+        - Typically reduces size by 80-90% vs raw PNG
+
+        IMPORTANT: The returned scale_factor must be used to convert AI coordinates
+        back to original screen coordinates: original_coord = ai_coord / scale_factor
 
         Args:
             filename: Optional filename for the screenshot
 
         Returns:
-            Tuple of (PIL Image, file path, base64 encoded string)
+            Tuple of (PIL Image, file path, AI-optimized base64 string, scale_factor)
+            - scale_factor: The factor used to downscale (e.g., 0.5 means image was halved)
+              Use this to convert AI coordinates back: screen_coord = ai_coord / scale_factor
 
         Raises:
             ScreenshotCaptureError: If capture fails
@@ -101,14 +121,60 @@ class ScreenshotCapture:
 
             filepath = self.output_dir / filename
 
-            # Save image to file
+            # Save original image to file (keep full quality for local storage)
             image.save(filepath)
 
-            logger.debug(f"Screenshot captured and saved: {filepath}")
-            return (image, str(filepath), screenshot_base64)
+            # Create AI-optimized version for base64 and get scale factor
+            ai_optimized_b64, scale_factor = self._compress_for_ai(image)
+
+            logger.debug(f"Screenshot captured and saved: {filepath}, scale_factor: {scale_factor}")
+            return (image, str(filepath), ai_optimized_b64, scale_factor)
 
         except Exception as e:
             raise ScreenshotCaptureError(f"Failed to capture full screenshot: {e}") from e
+
+    def _compress_for_ai(self, image: Image.Image) -> Tuple[str, float]:
+        """Compress image for AI processing to reduce tokens and latency.
+
+        Applies:
+        - Downscaling to max dimensions while preserving aspect ratio
+        - JPEG compression at configurable quality
+        - RGB conversion (removes alpha channel)
+
+        Args:
+            image: PIL Image to compress
+
+        Returns:
+            Tuple of (base64 encoded JPEG string, scale_factor used)
+        """
+        # Downscale if necessary
+        width, height = image.size
+        width_ratio = self.ai_max_width / width
+        height_ratio = self.ai_max_height / height
+        scale_factor = min(width_ratio, height_ratio, 1.0)  # Don't upscale
+
+        if scale_factor < 1.0:
+            new_width = int(width * scale_factor)
+            new_height = int(height * scale_factor)
+            image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+            logger.debug(f"AI image downscaled from {width}x{height} to {new_width}x{new_height} (scale: {scale_factor:.3f})")
+        else:
+            scale_factor = 1.0  # No scaling applied
+
+        # Convert to RGB (JPEG doesn't support alpha)
+        if image.mode in ('RGBA', 'LA', 'P'):
+            image = image.convert('RGB')
+
+        # Compress to JPEG
+        buffer = io.BytesIO()
+        image.save(buffer, format='JPEG', quality=self.ai_jpeg_quality, optimize=True)
+        compressed_data = buffer.getvalue()
+
+        # Encode to base64
+        compressed_b64 = base64.b64encode(compressed_data).decode('utf-8')
+
+        logger.debug(f"AI image compressed: {len(compressed_data)} bytes, {len(compressed_b64)} chars base64")
+        return compressed_b64, scale_factor
 
     def capture_screenshot_to_file(self, filename: Optional[str] = None) -> Optional[str]:
         """Capture a screenshot and save to file.

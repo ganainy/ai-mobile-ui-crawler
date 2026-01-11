@@ -300,3 +300,35 @@ class ScreenRepository:
             first_seen_run_id=row["first_seen_run_id"],
             first_seen_step=row["first_seen_step"]
         )
+
+    def count_unique_screens_for_run(self, run_id: int) -> int:
+        """Count unique screens discovered in a specific run."""
+        conn = self.db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT COUNT(DISTINCT id) 
+            FROM screens 
+            WHERE first_seen_run_id = ?
+        """, (run_id,))
+        
+        row = cursor.fetchone()
+        return row[0] if row else 0
+
+    def get_latest_screen_for_run(self, run_id: int) -> Optional[Screen]:
+        """Get the most recently discovered screen for a run."""
+        conn = self.db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT * FROM screens 
+            WHERE first_seen_run_id = ? 
+            ORDER BY first_seen_step DESC 
+            LIMIT 1
+        """, (run_id,))
+        
+        row = cursor.fetchone()
+        if not row:
+            return None
+        
+        return self._row_to_screen(row)

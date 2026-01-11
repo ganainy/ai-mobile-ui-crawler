@@ -1,6 +1,7 @@
 """Main crawler loop orchestration."""
 
 import time
+import logging
 from datetime import datetime
 from typing import List, Optional
 import threading
@@ -11,9 +12,12 @@ from mobile_crawler.core.crawler_event_listener import CrawlerEventListener
 from mobile_crawler.domain.action_executor import ActionExecutor
 from mobile_crawler.domain.models import ActionResult
 from mobile_crawler.infrastructure.ai_interaction_service import AIInteractionService
+from mobile_crawler.infrastructure.appium_driver import AppiumDriver
 from mobile_crawler.infrastructure.run_repository import RunRepository
 from mobile_crawler.infrastructure.screenshot_capture import ScreenshotCapture
 from mobile_crawler.infrastructure.step_log_repository import StepLog, StepLogRepository
+
+logger = logging.getLogger(__name__)
 
 
 class CrawlerLoop:
@@ -28,6 +32,7 @@ class CrawlerLoop:
         step_log_repository: StepLogRepository,
         run_repository: RunRepository,
         config_manager: ConfigManager,
+        appium_driver: AppiumDriver,
         event_listeners: Optional[List[CrawlerEventListener]] = None
     ):
         """Initialize crawler loop.
@@ -40,6 +45,7 @@ class CrawlerLoop:
             step_log_repository: Repository for step logs
             run_repository: Repository for runs
             config_manager: Configuration manager
+            appium_driver: Appium driver for device control
             event_listeners: List of event listeners
         """
         self.state_machine = crawl_state_machine
@@ -49,11 +55,15 @@ class CrawlerLoop:
         self.step_log_repository = step_log_repository
         self.run_repository = run_repository
         self.config_manager = config_manager
+        self.appium_driver = appium_driver
         self.event_listeners = event_listeners or []
         
         # Threading support
         self._crawl_thread: Optional[threading.Thread] = None
         self._current_run_id: Optional[int] = None
+        
+        # Target app package (set when run starts)
+        self._target_package: Optional[str] = None
 
         # Configuration
         self.max_crawl_steps = self.config_manager.get('max_crawl_steps', 15)
@@ -119,12 +129,19 @@ class CrawlerLoop:
             if not run:
                 raise ValueError(f"Run {run_id} not found")
 
+            # Store target package for app context validation
+            self._target_package = run.app_package
+
             # Emit crawl started event
             self._emit_event("on_crawl_started", run_id, run.app_package)
 
             # Transition to initializing
             self.state_machine.transition_to(CrawlState.INITIALIZING)
             self._emit_event("on_state_changed", run_id, "uninitialized", "initializing")
+
+            # Ensure we're in the target app before starting
+            if not self._ensure_app_foreground():
+                raise RuntimeError(f"Failed to bring target app {self._target_package} to foreground")
 
             # Initialize crawl
             start_time = time.time()
@@ -211,6 +228,72 @@ class CrawlerLoop:
         # Don't check state here - handled in main loop
         return True
 
+    def _ensure_app_foreground(self) -> bool:
+        """Ensure the target app is in the foreground.
+
+        Checks if the current foreground app matches the target package.
+        If not, attempts to bring the target app to foreground using:
+        1. activate_app() - brings app to foreground
+        2. If that fails, launches the app via ADB
+
+        Returns:
+            True if target app is now in foreground, False otherwise
+        """
+        if not self._target_package:
+            logger.warning("No target package set, skipping app foreground check")
+            return True
+
+        try:
+            driver = self.appium_driver.get_driver()
+            current_package = driver.current_package
+
+            if current_package == self._target_package:
+                logger.debug(f"Already in target app: {self._target_package}")
+                return True
+
+            logger.warning(f"Not in target app. Current: {current_package}, Target: {self._target_package}")
+
+            # Try to activate the app (brings it to foreground)
+            try:
+                driver.activate_app(self._target_package)
+                time.sleep(1.0)  # Wait for app to come to foreground
+                
+                # Verify we're now in the right app
+                if driver.current_package == self._target_package:
+                    logger.info(f"Successfully activated target app: {self._target_package}")
+                    return True
+            except Exception as e:
+                logger.warning(f"activate_app failed: {e}")
+
+            # Fallback: try ADB to launch the app
+            try:
+                import subprocess
+                device_id = self.appium_driver.device_id
+                
+                # Use monkey to start the app
+                result = subprocess.run(
+                    ['adb', '-s', device_id, 'shell', 'monkey', '-p', 
+                     self._target_package, '-c', 'android.intent.category.LAUNCHER', '1'],
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+                
+                if result.returncode == 0:
+                    time.sleep(2.0)  # Wait for app to launch
+                    if driver.current_package == self._target_package:
+                        logger.info(f"Successfully launched target app via ADB: {self._target_package}")
+                        return True
+            except Exception as e:
+                logger.warning(f"ADB app launch failed: {e}")
+
+            logger.error(f"Failed to bring target app to foreground: {self._target_package}")
+            return False
+
+        except Exception as e:
+            logger.error(f"Error checking app foreground: {e}")
+            return False
+
     def _execute_step(self, run_id: int, step_number: int) -> bool:
         """Execute a single step of the crawl.
 
@@ -224,12 +307,17 @@ class CrawlerLoop:
         step_start_time = time.time()
         step_success = True
 
+        # Ensure we're in the target app before each step
+        if not self._ensure_app_foreground():
+            logger.error(f"Cannot execute step {step_number}: target app not in foreground")
+            return False
+
         # Emit step started event
         self._emit_event("on_step_started", run_id, step_number)
 
         try:
-            # Capture screenshot (returns image, path, base64)
-            screenshot_image, screenshot_path, screenshot_b64 = self.screenshot_capture.capture_full()
+            # Capture screenshot (returns image, path, AI-optimized base64, and scale factor)
+            screenshot_image, screenshot_path, screenshot_b64, scale_factor = self.screenshot_capture.capture_full()
 
             self._emit_event("on_screenshot_captured", run_id, step_number, screenshot_path)
 
@@ -252,12 +340,18 @@ class CrawlerLoop:
             actions_executed = 0
             for i, ai_action in enumerate(ai_response.actions):
                 # Convert bounding box to tuple format expected by action executor
+                # IMPORTANT: Scale coordinates back to original screen dimensions
+                # AI sees downscaled image, so its coordinates are smaller
+                # screen_coord = ai_coord / scale_factor
                 bounds = (
-                    ai_action.target_bounding_box.top_left[0],
-                    ai_action.target_bounding_box.top_left[1],
-                    ai_action.target_bounding_box.bottom_right[0],
-                    ai_action.target_bounding_box.bottom_right[1]
+                    int(ai_action.target_bounding_box.top_left[0] / scale_factor),
+                    int(ai_action.target_bounding_box.top_left[1] / scale_factor),
+                    int(ai_action.target_bounding_box.bottom_right[0] / scale_factor),
+                    int(ai_action.target_bounding_box.bottom_right[1] / scale_factor)
                 )
+                
+                if scale_factor < 1.0:
+                    logger.debug(f"Scaled coordinates from AI: {ai_action.target_bounding_box} -> screen: {bounds} (scale: {scale_factor})")
 
                 # Execute action based on type
                 if ai_action.action == "click":

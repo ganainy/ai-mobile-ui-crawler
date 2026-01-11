@@ -339,6 +339,14 @@ class SettingsPanel(QWidget):
         """
         return self.max_duration_input.value()
 
+    def get_limit_mode(self) -> str:
+        """Get the current limit mode (steps or duration).
+        
+        Returns:
+            'steps' or 'duration'
+        """
+        return 'steps' if self.steps_radio.isChecked() else 'duration'
+
     def get_test_username(self) -> str:
         """Get the current test username value.
         

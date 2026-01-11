@@ -197,3 +197,79 @@ class StepLogRepository:
 
         cursor.execute("DELETE FROM step_logs WHERE run_id = ?", (run_id,))
         conn.commit()
+
+    def get_step_statistics(self, run_id: int) -> dict:
+        """Get aggregated step statistics for a run.
+        
+        Returns:
+            {
+                'total_steps': int,
+                'successful_steps': int,
+                'failed_steps': int
+            }
+        """
+        conn = self.db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT 
+                COUNT(*) as total_steps,
+                SUM(CASE WHEN execution_success = 1 THEN 1 ELSE 0 END) as successful,
+                SUM(CASE WHEN execution_success = 0 THEN 1 ELSE 0 END) as failed
+            FROM step_logs 
+            WHERE run_id = ?
+        """, (run_id,))
+        
+        row = cursor.fetchone()
+        if not row:
+            return {'total_steps': 0, 'successful_steps': 0, 'failed_steps': 0}
+        
+        return {
+            'total_steps': row[0] or 0,
+            'successful_steps': row[1] or 0,
+            'failed_steps': row[2] or 0
+        }
+
+    def get_ai_statistics(self, run_id: int) -> dict:
+        """Get AI performance statistics for a run.
+        
+        Returns:
+            {
+                'ai_calls': int,
+                'avg_response_time_ms': float
+            }
+        """
+        conn = self.db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT 
+                COUNT(*) as ai_calls,
+                AVG(ai_response_time_ms) as avg_response_time
+            FROM step_logs 
+            WHERE run_id = ? AND ai_response_time_ms IS NOT NULL
+        """, (run_id,))
+        
+        row = cursor.fetchone()
+        if not row:
+            return {'ai_calls': 0, 'avg_response_time_ms': 0.0}
+        
+        return {
+            'ai_calls': row[0] or 0,
+            'avg_response_time_ms': row[1] or 0.0
+        }
+
+    def count_screen_visits_for_run(self, run_id: int) -> int:
+        """Count total screen visits (including revisits) for a run."""
+        conn = self.db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT COUNT(*) 
+            FROM step_logs 
+            WHERE run_id = ? 
+                AND (from_screen_id IS NOT NULL OR to_screen_id IS NOT NULL)
+        """, (run_id,))
+        
+        row = cursor.fetchone()
+        return row[0] if row else 0
