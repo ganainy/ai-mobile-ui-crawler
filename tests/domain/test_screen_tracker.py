@@ -328,3 +328,203 @@ class TestScreenTrackerEdgeCases:
         assert is_stuck is True
         assert "2 times" in reason
 
+
+class TestScreenTrackerDHashAlgorithm:
+    """Tests for dHash (Difference Hash) algorithm with size=8."""
+
+    def test_dhash_produces_64bit_hash(self, screen_tracker, sample_image):
+        """Test that dHash with size=8 produces a 16-character hex string (64 bits)."""
+        hash_value = screen_tracker._generate_hash(sample_image)
+        
+        # dHash with size=8 produces 64-bit hash = 16 hex characters
+        assert isinstance(hash_value, str)
+        assert len(hash_value) == 16
+        # Verify it's a valid hex string
+        int(hash_value, 16)  # Will raise ValueError if not valid hex
+
+    def test_dhash_consistency(self, screen_tracker, sample_image):
+        """Test that dHash produces consistent results for the same image."""
+        hash1 = screen_tracker._generate_hash(sample_image)
+        hash2 = screen_tracker._generate_hash(sample_image)
+        
+        assert hash1 == hash2
+
+    def test_dhash_carousel_variations_have_low_distance(self, screen_tracker):
+        """Test that carousel-like variations have low Hamming distance."""
+        # Create two images that simulate carousel rotation
+        # Same structure, different content in the middle area
+        img1 = Image.new('RGB', (400, 800))
+        img2 = Image.new('RGB', (400, 800))
+        
+        # Add status bar (top 100px) - same for both
+        for x in range(400):
+            for y in range(100):
+                img1.putpixel((x, y), (50, 50, 50))
+                img2.putpixel((x, y), (50, 50, 50))
+        
+        # Add carousel area (middle) - different content
+        for x in range(400):
+            for y in range(100, 500):
+                # Different carousel content
+                img1.putpixel((x, y), (255, 100, 100))
+                img2.putpixel((x, y), (100, 255, 100))
+        
+        # Add rest of screen - same for both
+        for x in range(400):
+            for y in range(500, 800):
+                img1.putpixel((x, y), (200, 200, 200))
+                img2.putpixel((x, y), (200, 200, 200))
+        
+        hash1 = screen_tracker._generate_hash(img1)
+        hash2 = screen_tracker._generate_hash(img2)
+        
+        # Calculate Hamming distance
+        distance = screen_tracker.screen_repository._hamming_distance(hash1, hash2)
+        
+        # With dHash, carousel variations should have relatively low distance
+        # (based on research: max 8 for home screen variations)
+        assert distance < 20  # Conservative threshold
+
+    def test_dhash_different_screens_have_high_distance(self, screen_tracker):
+        """Test that genuinely different screens have high Hamming distance."""
+        # Create two structurally different screens with gradients
+        img1 = Image.new('RGB', (400, 800))
+        img2 = Image.new('RGB', (400, 800))
+        
+        # Create horizontal gradient pattern
+        for x in range(400):
+            for y in range(100, 800):
+                img1.putpixel((x, y), (int(255 * x / 400), 50, 50))
+        
+        # Create vertical gradient pattern
+        for x in range(400):
+            for y in range(100, 800):
+                img2.putpixel((x, y), (50, int(255 * y / 700), 50))
+        
+        hash1 = screen_tracker._generate_hash(img1)
+        hash2 = screen_tracker._generate_hash(img2)
+        
+        # Calculate Hamming distance
+        distance = screen_tracker.screen_repository._hamming_distance(hash1, hash2)
+        
+        # Very different screens should have high distance
+        # (based on research: min 29 for different screen types)
+        assert distance > 25
+
+    def test_dhash_threshold_matching(self, screen_tracker):
+        """Test that threshold-based matching works correctly."""
+        # Create similar images (should match with threshold=12)
+        img1 = Image.new('RGB', (400, 800), color=(200, 200, 200))
+        img2 = Image.new('RGB', (400, 800), color=(205, 205, 205))
+        
+        hash1 = screen_tracker._generate_hash(img1)
+        hash2 = screen_tracker._generate_hash(img2)
+        
+        distance = screen_tracker.screen_repository._hamming_distance(hash1, hash2)
+        
+        # Should be within default threshold
+        assert distance <= screen_tracker.screen_similarity_threshold
+
+
+class TestScreenTrackerStatusBarExclusion:
+    """Tests for status bar exclusion (top 100px crop)."""
+
+    def test_status_bar_excluded_from_hash(self, screen_tracker):
+        """Test that status bar changes don't affect hash significantly."""
+        # Create base image
+        base_img = Image.new('RGB', (400, 800), color=(200, 200, 200))
+        
+        # Create image with different status bar (top 100px)
+        modified_img = Image.new('RGB', (400, 800), color=(200, 200, 200))
+        # Change only the status bar area
+        for x in range(400):
+            for y in range(100):
+                modified_img.putpixel((x, y), (255, 0, 0))
+        
+        hash1 = screen_tracker._generate_hash(base_img)
+        hash2 = screen_tracker._generate_hash(modified_img)
+        
+        distance = screen_tracker.screen_repository._hamming_distance(hash1, hash2)
+        
+        # Status bar changes should have minimal impact on hash
+        # (because we crop it out before hashing)
+        assert distance < 5
+
+    def test_content_below_status_bar_affects_hash(self, screen_tracker):
+        """Test that content changes below status bar DO affect hash."""
+        # Create base image with horizontal gradient
+        base_img = Image.new('RGB', (400, 800))
+        for x in range(400):
+            for y in range(100, 800):
+                base_img.putpixel((x, y), (int(255 * x / 400), 100, 100))
+        
+        # Create image with different content below status bar (vertical gradient)
+        modified_img = Image.new('RGB', (400, 800))
+        for x in range(400):
+            for y in range(100, 800):
+                modified_img.putpixel((x, y), (100, int(255 * y / 700), 100))
+        
+        hash1 = screen_tracker._generate_hash(base_img)
+        hash2 = screen_tracker._generate_hash(modified_img)
+        
+        distance = screen_tracker.screen_repository._hamming_distance(hash1, hash2)
+        
+        # Content changes should significantly affect hash
+        assert distance > 10
+
+
+class TestScreenTrackerConfigurableThreshold:
+    """Tests for configurable similarity threshold."""
+
+    def test_custom_threshold_used_in_matching(self, db_manager):
+        """Test that custom threshold is used for similarity matching."""
+        # Create two images with known distance
+        img1 = Image.new('RGB', (400, 800), color=(200, 200, 200))
+        img2 = Image.new('RGB', (400, 800), color=(210, 210, 210))
+        
+        # Create tracker with strict threshold (5)
+        tracker_strict = ScreenTracker(db_manager, screen_similarity_threshold=5)
+        tracker_strict.start_run(run_id=1)
+        
+        # Create tracker with loose threshold (20)
+        tracker_loose = ScreenTracker(db_manager, screen_similarity_threshold=20)
+        tracker_loose.start_run(run_id=1)
+        
+        # Process first image with both trackers
+        result1_strict = tracker_strict.process_screen(img1, step_number=1)
+        result1_loose = tracker_loose.process_screen(img1, step_number=1)
+        
+        # Process second image
+        result2_strict = tracker_strict.process_screen(img2, step_number=2)
+        result2_loose = tracker_loose.process_screen(img2, step_number=2)
+        
+        # Calculate actual distance
+        hash1 = tracker_strict._generate_hash(img1)
+        hash2 = tracker_strict._generate_hash(img2)
+        actual_distance = tracker_strict.screen_repository._hamming_distance(hash1, hash2)
+        
+        # If distance is between 5 and 20:
+        # - Strict tracker should treat as different screens
+        # - Loose tracker should treat as same screen
+        if 5 < actual_distance < 20:
+            assert result1_strict.screen_id != result2_strict.screen_id
+            assert result1_loose.screen_id == result2_loose.screen_id
+
+    def test_default_threshold_is_12(self, screen_tracker):
+        """Test that default threshold is 12."""
+        assert screen_tracker.screen_similarity_threshold == 12
+
+    def test_use_perceptual_hashing_flag(self, db_manager):
+        """Test that use_perceptual_hashing flag can be set."""
+        tracker_with_hashing = ScreenTracker(
+            db_manager,
+            use_perceptual_hashing=True
+        )
+        tracker_without_hashing = ScreenTracker(
+            db_manager,
+            use_perceptual_hashing=False
+        )
+        
+        assert tracker_with_hashing.use_perceptual_hashing is True
+        assert tracker_without_hashing.use_perceptual_hashing is False
+

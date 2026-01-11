@@ -226,7 +226,15 @@ def crawl(device: str, package: str, model: str, steps: Optional[int], duration:
         ai_service = AIInteractionService.from_config(config_manager)
         action_executor = ActionExecutor(appium_driver, GestureHandler(appium_driver))
         step_log_repo = StepLogRepository(db_manager)
-        screen_tracker = ScreenTracker(db_manager)
+        
+        # Get screen deduplication configuration
+        screen_similarity_threshold = config_manager.get("screen_similarity_threshold", 12)
+        use_perceptual_hashing = config_manager.get("use_perceptual_hashing", True)
+        screen_tracker = ScreenTracker(
+            db_manager,
+            screen_similarity_threshold=screen_similarity_threshold,
+            use_perceptual_hashing=use_perceptual_hashing
+        )
 
         # Create crawler loop
         crawler_loop = CrawlerLoop(

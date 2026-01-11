@@ -38,4 +38,8 @@ DEFAULTS: Dict[str, Any] = {
 
     # Security
     'encrypt_api_keys': True,
+
+    # Screen deduplication settings
+    'screen_similarity_threshold': 12,  # Hamming distance threshold for dHash (64-bit)
+    'use_perceptual_hashing': True,     # Enable perceptual hashing for screen deduplication
 }

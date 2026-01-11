@@ -435,7 +435,15 @@ class MainWindow(QMainWindow):
         gesture_handler = GestureHandler(appium_driver)
         action_executor = ActionExecutor(appium_driver, gesture_handler)
         step_log_repo = StepLogRepository(self._services['database_manager'])
-        screen_tracker = ScreenTracker(self._services['database_manager'])
+        
+        # Get screen deduplication configuration
+        screen_similarity_threshold = config_manager.get("screen_similarity_threshold", 12)
+        use_perceptual_hashing = config_manager.get("use_perceptual_hashing", True)
+        screen_tracker = ScreenTracker(
+            self._services['database_manager'],
+            screen_similarity_threshold=screen_similarity_threshold,
+            use_perceptual_hashing=use_perceptual_hashing
+        )
         
         # Attach signal adapter as event listener
         event_listeners = [self.signal_adapter]

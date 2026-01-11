@@ -180,12 +180,12 @@ class ScreenRepository:
         conn.commit()
         return deleted
 
-    def find_similar_screens(self, composite_hash: str, max_distance: int = 5) -> List[Tuple[Screen, int]]:
+    def find_similar_screens(self, composite_hash: str, max_distance: int = 12) -> List[Tuple[Screen, int]]:
         """Find screens similar to the given hash using Hamming distance.
 
         Args:
             composite_hash: The hash to compare against
-            max_distance: Maximum Hamming distance (default 5 as per spec)
+            max_distance: Maximum Hamming distance (default 12 for dHash 64-bit)
 
         Returns:
             List of (Screen, distance) tuples for screens within max_distance

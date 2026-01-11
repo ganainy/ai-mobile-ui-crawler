@@ -417,3 +417,41 @@ class TestScreenRepository:
         # This should raise an exception due to UNIQUE constraint
         with pytest.raises(Exception):  # Could be sqlite3.IntegrityError
             screen_repository_with_run.create_screen(duplicate_screen)
+
+
+class TestScreenRepositoryThresholdConfiguration:
+    """Tests for threshold-based screen deduplication configuration."""
+
+    def test_threshold_configuration_is_respected(self, db_manager_with_run):
+        """Test that threshold configuration is properly set and used."""
+        from mobile_crawler.domain.screen_tracker import ScreenTracker
+
+        # Create trackers with different thresholds
+        tracker_strict = ScreenTracker(db_manager_with_run, screen_similarity_threshold=5)
+        tracker_loose = ScreenTracker(db_manager_with_run, screen_similarity_threshold=20)
+        tracker_default = ScreenTracker(db_manager_with_run)
+
+        # Verify thresholds are set correctly
+        assert tracker_strict.screen_similarity_threshold == 5
+        assert tracker_loose.screen_similarity_threshold == 20
+        assert tracker_default.screen_similarity_threshold == 12
+
+        # Verify that different trackers maintain their own threshold settings
+        assert tracker_strict.screen_similarity_threshold != tracker_loose.screen_similarity_threshold
+
+    def test_default_threshold_is_12(self, db_manager_with_run):
+        """Test that default threshold is 12."""
+        from mobile_crawler.domain.screen_tracker import ScreenTracker
+
+        tracker = ScreenTracker(db_manager_with_run)
+        assert tracker.screen_similarity_threshold == 12
+
+    def test_use_perceptual_hashing_flag(self, db_manager_with_run):
+        """Test that use_perceptual_hashing flag can be configured."""
+        from mobile_crawler.domain.screen_tracker import ScreenTracker
+
+        tracker_with = ScreenTracker(db_manager_with_run, use_perceptual_hashing=True)
+        tracker_without = ScreenTracker(db_manager_with_run, use_perceptual_hashing=False)
+
+        assert tracker_with.use_perceptual_hashing is True
+        assert tracker_without.use_perceptual_hashing is False

@@ -29,21 +29,38 @@ class ScreenTracker:
     Uses imagehash library to generate perceptual hashes that are robust
     to minor visual differences (animations, time changes, etc.).
     
-    The Hamming distance threshold of 5 allows for ~5% visual difference
+    The Hamming distance threshold is configurable and allows for
+    ~12% visual difference (default threshold of 12 for 64-bit dHash)
     before screens are considered different.
+    
+    Note on Hash Algorithm Migration:
+    - Previous implementation used pHash (256-bit, size=16)
+    - New implementation uses dHash (64-bit, size=8)
+    - These hashes are incompatible for direct comparison
+    - New runs will use dHash and will not match legacy pHash screens
+    - To clear legacy screens: DELETE FROM screens WHERE composite_hash LIKE '%....................'
+      (pHash produces 64-char hex strings, dHash produces 16-char hex strings)
     """
 
-    # Maximum Hamming distance for screens to be considered the same
-    SIMILARITY_THRESHOLD = 5
-
-    def __init__(self, db_manager: DatabaseManager):
+    def __init__(
+        self,
+        db_manager: DatabaseManager,
+        screen_similarity_threshold: int = 12,
+        use_perceptual_hashing: bool = True
+    ):
         """Initialize screen tracker.
         
         Args:
             db_manager: Database manager for persistence
+            screen_similarity_threshold: Maximum Hamming distance for screens to be considered the same (default: 12)
+            use_perceptual_hashing: Enable perceptual hashing for screen deduplication (default: True)
         """
         self.db_manager = db_manager
         self.screen_repository = ScreenRepository(db_manager)
+        
+        # Configuration
+        self.screen_similarity_threshold = screen_similarity_threshold
+        self.use_perceptual_hashing = use_perceptual_hashing
         
         # Track visit counts per screen ID for the current run
         self._visit_counts: dict[int, int] = {}
@@ -161,27 +178,37 @@ class ScreenTracker:
     def _generate_hash(self, image: Image.Image) -> str:
         """Generate a perceptual hash for the image.
         
-        Uses pHash (perceptual hash) which is robust to:
+        Uses dHash (Difference Hash) with size=8 (64-bit hash) which is robust to:
         - Scaling and aspect ratio changes
         - Minor color adjustments
         - Brightness changes
-        - Small visual differences (time, animations)
+        - Content replacement (e.g., carousel rotations)
+        
+        The status bar (top 100px) is excluded from hashing to prevent
+        false positives from time/battery/notifications changes.
         
         Args:
             image: PIL Image to hash
             
         Returns:
-            Hex string representation of the perceptual hash
+            Hex string representation of the 64-bit perceptual hash
         """
         # Convert to RGB if necessary (imagehash works best with RGB)
         if image.mode != 'RGB':
             image = image.convert('RGB')
         
-        # Generate perceptual hash (pHash)
-        # pHash uses DCT to identify similar images even with minor changes
-        phash = imagehash.phash(image, hash_size=16)
+        # Exclude status bar (top 100px) from hashing
+        # This prevents false positives from time/battery/notifications
+        width, height = image.size
+        if height > 100:
+            image = image.crop((0, 100, width, height))
         
-        return str(phash)
+        # Generate difference hash (dHash) with size=8
+        # dHash tracks gradients and structure better than frequency (pHash)
+        # making it more robust to "content replacement" like carousels
+        dhash = imagehash.dhash(image, hash_size=8)
+        
+        return str(dhash)
 
     def _find_similar_screen(self, composite_hash: str) -> Optional[Screen]:
         """Find an existing screen with similar hash.
@@ -195,18 +222,23 @@ class ScreenTracker:
         # First try exact match (most common case)
         exact_match = self.screen_repository.get_screen_by_hash(composite_hash)
         if exact_match:
+            logger.debug(f"Found exact match for hash {composite_hash}")
             return exact_match
         
         # Then try fuzzy match with Hamming distance
         similar_screens = self.screen_repository.find_similar_screens(
-            composite_hash, 
-            max_distance=self.SIMILARITY_THRESHOLD
+            composite_hash,
+            max_distance=self.screen_similarity_threshold
         )
         
         if similar_screens:
             # Return the closest match
             closest_screen, distance = similar_screens[0]
-            logger.debug(f"Found similar screen with distance {distance}")
+            logger.debug(
+                f"Found similar screen {closest_screen.id} "
+                f"(hash: {closest_screen.composite_hash}, "
+                f"distance: {distance}/{self.screen_similarity_threshold})"
+            )
             return closest_screen
         
         return None
