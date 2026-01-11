@@ -55,3 +55,4 @@ class AIResponse:
     """Response from AI model."""
     actions: List[AIAction]
     signup_completed: bool
+    latency_ms: float = 0.0  # AI response time in milliseconds

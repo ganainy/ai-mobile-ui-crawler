@@ -454,7 +454,7 @@ class CrawlerLoop:
                     execution_success=result.success,
                     error_message=str(result.error_message) if result.error_message else None,
                     action_duration_ms=result.duration_ms,
-                    ai_response_time_ms=None,  # TODO: Track AI response time
+                    ai_response_time_ms=ai_response.latency_ms,  # Use AI response time from response
                     ai_reasoning=ai_action.reasoning
                 )
                 self.step_log_repository.create_step_log(step_log)

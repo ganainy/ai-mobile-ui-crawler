@@ -74,27 +74,34 @@ class GestureHandler:
             True if successful, False otherwise
         """
         try:
-            # Use W3C Actions with pointer input for mobile
+            # Use W3C Actions API for Appium (TouchAction is deprecated)
             driver = self.driver.get_driver()
-            actions = ActionChains(driver)
-            # W3C requires absolute positioning - use scroll_from_origin or similar
-            # For Android, we can use the driver's tap method if available
-            # Otherwise use W3C actions with proper absolute move_to
+            
             from selenium.webdriver.common.actions.action_builder import ActionBuilder
             from selenium.webdriver.common.actions.pointer_input import PointerInput
             from selenium.webdriver.common.actions import interaction
             
+            # Create a touch pointer
             pointer = PointerInput(interaction.POINTER_TOUCH, "finger")
-            actions = ActionBuilder(driver, mouse=pointer)
-            actions.pointer_action.move_to_location(x, y)
-            actions.pointer_action.click()
-            actions.perform()
+            action_builder = ActionBuilder(driver, mouse=pointer, duration=100)
+            
+            # Build the tap sequence: move to location,  press, release
+            action_builder.pointer_action.move_to_location(x, y)
+            action_builder.pointer_action.pointer_down()
+            action_builder.pointer_action.pause(0.05)  # Short pause for tap
+            action_builder.pointer_action.pointer_up()
+            
+            # Perform the action
+            action_builder.perform()
             
             time.sleep(duration)
             logger.info(f"Tapped at coordinates ({x}, {y})")
             return True
         except WebDriverException as e:
             logger.error(f"Failed to tap at ({x}, {y}): {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Unexpected error tapping at ({x}, {y}): {e}")
             return False
 
     def double_tap(self, element: UIElement) -> bool:
@@ -175,12 +182,31 @@ class GestureHandler:
             True if successful, False otherwise
         """
         try:
-            actions = ActionChains(self.driver.get_driver())
-            actions.move_by_offset(x, y).click_and_hold().pause(duration).release().move_by_offset(-x, -y).perform()
+            # Use W3C Actions API for Appium
+            driver = self.driver.get_driver()
+            
+            from selenium.webdriver.common.actions.action_builder import ActionBuilder
+            from selenium.webdriver.common.actions.pointer_input import PointerInput
+            from selenium.webdriver.common.actions import interaction
+            
+            # Create a touch pointer
+            pointer = PointerInput(interaction.POINTER_TOUCH, "finger")
+            action_builder = ActionBuilder(driver, mouse=pointer)
+            
+            # Build long press sequence: move, press, hold, release
+            action_builder.pointer_action.move_to_location(x, y)
+            action_builder.pointer_action.pointer_down()
+            action_builder.pointer_action.pause(duration)  # Hold for specified duration
+            action_builder.pointer_action.pointer_up()
+            action_builder.perform()
+            
             logger.info(f"Long pressed at coordinates ({x}, {y}) for {duration}s")
             return True
         except WebDriverException as e:
             logger.error(f"Failed to long press at ({x}, {y}): {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Unexpected error long pressing at ({x}, {y}): {e}")
             return False
 
     def swipe(self, start_x: int, start_y: int, end_x: int, end_y: int,

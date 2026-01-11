@@ -192,6 +192,9 @@ class AIInteractionService:
                 # Parse and validate response
                 ai_response = self._parse_ai_response(response_text)
                 
+                # Set latency on the response
+                ai_response.latency_ms = latency_ms
+                
                 # Log successful interaction
                 interaction = AIInteraction(
                     id=None,
@@ -355,7 +358,8 @@ class AIInteractionService:
         
         return AIResponse(
             actions=actions,
-            signup_completed=data["signup_completed"]
+            signup_completed=data["signup_completed"],
+            latency_ms=0.0  # Will be set by caller
         )
 
     def _parse_action(self, action_data: dict) -> AIAction:

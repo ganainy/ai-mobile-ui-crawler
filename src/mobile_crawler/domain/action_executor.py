@@ -21,7 +21,7 @@ class ActionExecutor:
         self.appium_driver = appium_driver
         self.gesture_handler = gesture_handler
         self._last_action_time = 0
-        self._action_delay_ms = 500  # 0.5s between actions
+        self._action_delay_ms = 2000  # 2s between actions for visual observability
 
     def _ensure_delay(self):
         """Ensure minimum delay between actions."""
@@ -73,6 +73,10 @@ class ActionExecutor:
             success = False
             error = str(e)
         duration_ms = (time.time() - start_time) * 1000
+        
+        # Add post-action delay to ensure action is visible and completes
+        time.sleep(1.5)
+        
         return success, duration_ms, error
 
     def click(self, bounds: Tuple[int, int, int, int]) -> ActionResult:

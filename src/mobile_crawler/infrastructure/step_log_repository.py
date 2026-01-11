@@ -235,16 +235,17 @@ class StepLogRepository:
         
         Returns:
             {
-                'ai_calls': int,
+                'ai_calls': int (number of unique AI calls),
                 'avg_response_time_ms': float
             }
         """
         conn = self.db_manager.get_connection()
         cursor = conn.cursor()
         
+        # Count distinct step_numbers since one  AI call per step can produce multiple actions
         cursor.execute("""
             SELECT 
-                COUNT(*) as ai_calls,
+                COUNT(DISTINCT step_number) as ai_calls,
                 AVG(ai_response_time_ms) as avg_response_time
             FROM step_logs 
             WHERE run_id = ? AND ai_response_time_ms IS NOT NULL
