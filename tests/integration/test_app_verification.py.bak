@@ -1,0 +1,159 @@
+"""Main runner for test app action verification."""
+
+import pytest
+import logging
+import time
+from tests.integration.device_verifier.session import DeviceSession
+from tests.integration.device_verifier.cases.test_app_cases import get_test_app_cases
+from tests.integration.device_verifier.models import TestResult, TestStatus, ActionType
+from mobile_crawler.infrastructure.appium_driver import AppiumDriver
+from mobile_crawler.infrastructure.gesture_handler import GestureHandler
+
+logger = logging.getLogger(__name__)
+
+@pytest.fixture(scope="module")
+def device_session(android_device, appium_server):
+    """Create a device session for the test app."""
+    # Using the package name provided by the user.
+    session = DeviceSession(
+        device_id=android_device,
+        app_package="com.example.flutter_application_1",
+        appium_url=appium_server
+    )
+    session.connect()
+    yield session
+    session.disconnect()
+
+@pytest.fixture(scope="module")
+def gesture_handler(device_session):
+    """Create a gesture handler for the test app."""
+    class DriverWrapper:
+        def __init__(self, driver):
+            self._driver = driver
+        def get_driver(self):
+            return self._driver
+            
+    appium_driver = DriverWrapper(device_session.get_driver())
+    return GestureHandler(appium_driver)
+
+def test_app_actions(device_session, gesture_handler):
+    """Run all verification cases for the test app."""
+    cases = get_test_app_cases()
+    if not cases:
+        pytest.skip("No test app cases defined yet.")
+        
+    failures = []
+    for case in cases:
+        logger.info(f"Running verification case: {case.name}")
+        try:
+            # 1. Navigate to the screen via deep link
+            url = case.test_data.get("url")
+            if not url:
+                failures.append(f"{case.name}: No URL defined")
+                continue
+                
+            if not device_session.trigger_deep_link(url):
+                failures.append(f"{case.name}: Failed to trigger deep link {url}")
+                continue
+            
+            # Give some time for the screen to transition
+            time.sleep(2)
+            
+            # 2. Perform the action
+            x, y = case.coordinates or (540, 1200)
+            success = False
+            
+            if case.name == "test_app_tap":
+                success = gesture_handler.tap_at(x, y)
+            elif case.name == "test_app_double_tap":
+                success = gesture_handler.double_tap_at(x, y)
+            elif case.name == "test_app_long_press":
+                duration = case.test_data.get("press_duration", 1000) / 1000.0
+                success = gesture_handler.long_press_at(x, y, duration=duration)
+            elif case.name == "test_app_drag_drop":
+                ex, ey = case.test_data.get("end_coordinates")
+                success = gesture_handler.drag_from_to(x, y, ex, ey)
+            elif case.name == "test_app_swipe":
+                ex, ey = case.test_data.get("end_coordinates")
+                success = gesture_handler.swipe(x, y, ex, ey)
+            elif case.name == "test_app_scroll":
+                direction = case.test_data.get("direction", "down")
+                distance = case.test_data.get("distance", 500)
+                success = gesture_handler.scroll(direction, distance=distance)
+            elif case.name == "test_app_input":
+                text = case.test_data.get("text", "Hello")
+                try:
+                    driver = device_session.get_driver()
+                    # Try multiple locators for the input field
+                    element = None
+                    for locator in ["//android.widget.EditText", "//android.view.View[@focusable='true']", "//*[@class='android.widget.EditText']"]:
+                        try:
+                            element = driver.find_element("xpath", locator)
+                            if element: break
+                        except: continue
+                    
+                    if not element:
+                        raise Exception("Could not find input field")
+                        
+                    element.send_keys(text)
+                    # For Flutter, sometimes we need to tap the field first
+                    # but send_keys usually handles it. 
+                    # Try to trigger the 'done' action
+                    try:
+                        driver.execute_script('mobile: performEditorAction', {'action': 'done'})
+                    except:
+                        # Fallback: tap somewhere else or press enter via adb
+                        subprocess.run(['adb', '-s', device_session.device_id, 'shell', 'input', 'keyevent', '66'])
+                    success = True
+                except Exception as e:
+                    logger.error(f"Failed to input text: {e}")
+                    success = False
+            elif case.name in ["test_app_slider", "test_app_switch", "test_app_checkbox", "test_app_radio", "test_app_dropdown", "test_app_stepper"]:
+                if case.action_type == ActionType.TAP:
+                    success = gesture_handler.tap_at(x, y)
+                elif case.action_type == ActionType.SWIPE:
+                    ex, ey = case.test_data.get("end_coordinates", (x + 100, y))
+                    success = gesture_handler.swipe(x, y, ex, ey)
+                else:
+                    success = False
+            elif case.name == "test_app_alert":
+                success = gesture_handler.tap_at(x, y)
+                if success:
+                    try:
+                        time.sleep(1)
+                        driver = device_session.get_driver()
+                        for locator in ["//android.widget.Button[@text='OK']", "//android.widget.Button[@text='OKAY']", "id:android:id/button1"]:
+                            try:
+                                if ':' in locator:
+                                    strategy, value = locator.split(':', 1)
+                                    element = driver.find_element(strategy, value)
+                                else:
+                                    element = driver.find_element("xpath", locator)
+                                element.click()
+                                break
+                            except Exception:
+                                continue
+                    except Exception as e:
+                        logger.warning(f"Failed to clear alert: {e}")
+            else:
+                logger.warning(f"Action for {case.name} not implemented yet in runner.")
+                continue
+
+            if not success:
+                failures.append(f"{case.name}: Failed to perform action")
+                continue
+
+            # 3. Verify success indicator
+            expected_text = case.expected_result.get("text_visible", "Success")
+            found = device_session.wait_for_text(expected_text, timeout=5)
+            
+            if not found:
+                failures.append(f"{case.name}: Success indicator '{expected_text}' not found")
+            else:
+                logger.info(f"Successfully verified {case.name}")
+        except Exception as e:
+            failures.append(f"{case.name}: Unexpected error {e}")
+            logger.exception(f"Error in {case.name}")
+
+    if failures:
+        pytest.fail("\n".join(failures))

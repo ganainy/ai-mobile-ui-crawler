@@ -2,7 +2,7 @@
 
 import subprocess
 import time
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Tuple
 
 from appium import webdriver
 from appium.webdriver.webdriver import WebDriver
@@ -194,6 +194,18 @@ class DeviceSession:
 
         return info
 
+    def get_screen_dimensions(self) -> Tuple[int, int]:
+        """Get the screen dimensions (width, height) in pixels.
+        
+        Returns:
+            Tuple of (width, height)
+        """
+        if not self._driver:
+            raise SessionError("No active session to get dimensions")
+            
+        size = self._driver.get_window_size()
+        return size['width'], size['height']
+
     def _get_launch_activity(self) -> Optional[str]:
         """Get the launch activity for the app package using ADB.
 
@@ -250,6 +262,65 @@ class DeviceSession:
             pass
 
         return None
+
+    def wait_for_text(self, text: str, timeout: int = 10) -> bool:
+        """Wait for specific text to appear on the screen.
+
+        Args:
+            text: Text to search for
+            timeout: Timeout in seconds
+
+        Returns:
+            True if text is found within timeout, False otherwise
+        """
+        if not self._driver:
+            return False
+
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            try:
+                # Find element by text or content-desc (common in Flutter/Android)
+                xpath = f"//*[contains(@text, '{text}') or contains(@content-desc, '{text}')]"
+                element = self._driver.find_element("xpath", xpath)
+                if element and element.is_displayed():
+                    return True
+            except Exception:
+                # Ignore and retry
+                pass
+            time.sleep(1)
+        
+        return False
+
+    def trigger_deep_link(self, url: str) -> bool:
+        """Trigger a deep link on the device.
+
+        Args:
+            url: The deep link URL to trigger
+
+        Returns:
+            True if successful, False otherwise
+        """
+        if not self._driver:
+            return False
+
+        try:
+            # Try Appium native deep link
+            # For Android, mobile: deepLink is usually supported
+            self._driver.execute_script("mobile: deepLink", {
+                "url": url,
+                "package": self.app_package
+            })
+            return True
+        except Exception:
+            # Fallback to ADB
+            try:
+                cmd = ['adb', '-s', self.device_id, 'shell', 'am', 'start', '-a', 'android.intent.action.VIEW', '-d', url]
+                if self.app_package:
+                    cmd.append(self.app_package)
+                subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+                return True
+            except Exception:
+                return False
 
     def __enter__(self):
         """Context manager entry."""

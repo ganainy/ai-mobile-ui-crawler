@@ -99,22 +99,13 @@ class GestureHandler:
             action_builder = ActionBuilder(driver, mouse=pointer)
             
             # First tap
-            action_builder.pointer_action.move_to_location(x, y)
-            action_builder.pointer_action.pointer_down()
-            action_builder.pointer_action.pause(0.05)
-            action_builder.pointer_action.pointer_up()
+            self.tap_at(x, y, duration=0)
             
             # Short pause between taps
-            action_builder.pointer_action.pause(0.1)
+            time.sleep(0.1)
             
             # Second tap
-            action_builder.pointer_action.move_to_location(x, y)
-            action_builder.pointer_action.pointer_down()
-            action_builder.pointer_action.pause(0.05)
-            action_builder.pointer_action.pointer_up()
-            
-            # Perform the action
-            action_builder.perform()
+            return self.tap_at(x, y, duration=0)
             
             logger.info(f"Double tapped at coordinates ({x}, {y})")
             return True
