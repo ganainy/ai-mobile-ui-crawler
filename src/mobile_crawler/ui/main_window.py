@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QApplication
 )
 from PySide6.QtCore import Qt, QThread, Signal, QTimer
+from PySide6.QtGui import QIcon
 
 # Service imports
 from mobile_crawler.infrastructure.device_detection import DeviceDetection
@@ -33,6 +34,7 @@ from mobile_crawler.config.config_manager import ConfigManager
 from mobile_crawler.core.crawler_loop import CrawlerLoop
 from mobile_crawler.core.crawl_state_machine import CrawlStateMachine, CrawlState
 from mobile_crawler.core.log_sinks import LogLevel
+from mobile_crawler.core.stale_run_cleaner import StaleRunCleaner
 from mobile_crawler.infrastructure.screenshot_capture import ScreenshotCapture
 from mobile_crawler.infrastructure.gesture_handler import GestureHandler
 from mobile_crawler.infrastructure.ai_interaction_service import AIInteractionService
@@ -55,6 +57,9 @@ from mobile_crawler.ui.widgets.ai_monitor_panel import AIMonitorPanel, StepDetai
 
 # Signal adapter
 from mobile_crawler.ui.signal_adapter import QtSignalAdapter
+
+# Import resources
+import mobile_crawler.ui.resources.resources_rc
 
 
 @dataclass
@@ -126,6 +131,10 @@ class MainWindow(QMainWindow):
         """Initialize the main window."""
         super().__init__()
         self._services = self._create_services()
+        
+        # Cleanup stale runs on startup
+        stale_run_cleaner = StaleRunCleaner(self._services['database_manager'])
+        stale_run_cleaner.cleanup_stale_runs()
         
         # Widget instances (will be created in _setup_central_widget)
         self.device_selector: DeviceSelector = None
@@ -216,6 +225,8 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Mobile Crawler")
         self.setMinimumSize(1024, 768)
         self.resize(1280, 960)
+        # Set window icon
+        self.setWindowIcon(QIcon(":/resources/crawler_logo.ico"))
     def _setup_menu_bar(self):
         """Configure the menu bar."""
         menubar = self.menuBar()
@@ -1190,17 +1201,21 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         """Handle window close event."""
-        # Stop crawler if running
-        if self._crawler_loop:
-            self._crawler_loop.stop()
-            
-        # Wait for worker thread to finish safely
-        worker = self._crawler_worker
-        if worker and worker.isRunning():
-            worker.quit()
-            if not worker.wait(2000): # Wait up to 2s
-                worker.terminate()
-                worker.wait()
+        try:
+            # Stop crawler if running
+            if self._crawler_loop:
+                self._crawler_loop.stop()
+                
+            # Wait for worker thread to finish safely
+            worker = getattr(self, '_crawler_worker', None)
+            if worker and hasattr(worker, 'isRunning') and worker.isRunning():
+                worker.quit()
+                if not worker.wait(2000): # Wait up to 2s
+                    worker.terminate()
+                    worker.wait()
+        except Exception:
+            # Silently fail on close errors
+            pass
                 
         event.accept()
 
@@ -1211,6 +1226,13 @@ def run():
     app.setApplicationName("Mobile Crawler")
     app.setOrganizationName("mobile-crawler")
     
+    # Set application icon for taskbar using absolute file path
+    # IMPORTANT: Must be set BEFORE creating the window for Windows taskbar
+    import os
+    icon_path = os.path.join(os.path.dirname(__file__), 'resources', 'crawler_logo.ico')
+    app.setWindowIcon(QIcon(icon_path))
+    
+    # Create window after setting the app icon
     window = MainWindow()
     window.showMaximized()
     

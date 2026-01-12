@@ -141,7 +141,7 @@ class TestRunHistoryTable:
     def test_table_has_correct_columns(self, qt_app, mock_run_repository, mock_report_generator, mock_mobsf_manager):
         """Test that table has correct columns."""
         view = _create_run_history_view(mock_run_repository, mock_report_generator, mock_mobsf_manager)
-        assert view.table.columnCount() == 9
+        assert view.table.columnCount() == 10
         assert view.table.horizontalHeaderItem(0).text() == "ID"
         assert view.table.horizontalHeaderItem(1).text() == "Device"
         assert view.table.horizontalHeaderItem(2).text() == "Package"
@@ -151,6 +151,7 @@ class TestRunHistoryTable:
         assert view.table.horizontalHeaderItem(6).text() == "Steps"
         assert view.table.horizontalHeaderItem(7).text() == "Screens"
         assert view.table.horizontalHeaderItem(8).text() == "Model"
+        assert view.table.horizontalHeaderItem(9).text() == "Actions"
 
     def test_table_is_read_only(self, qt_app, mock_run_repository, mock_report_generator, mock_mobsf_manager):
         """Test that table is read-only."""

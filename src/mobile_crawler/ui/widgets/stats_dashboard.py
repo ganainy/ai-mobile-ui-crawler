@@ -39,8 +39,18 @@ class StatsDashboard(QWidget):
         layout = QVBoxLayout()
 
         # Group box for statistics
-        stats_group = QGroupBox("Statistics")
-        stats_layout = QGridLayout()
+        self.stats_group = QGroupBox("Statistics")
+        self.main_stats_layout = QVBoxLayout(self.stats_group)
+
+        # Placeholder for when no crawl is running
+        self.placeholder_label = QLabel("Statistics will be shown once the crawler starts")
+        self.placeholder_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.placeholder_label.setStyleSheet("color: #888; font-style: italic; padding: 40px;")
+        self.main_stats_layout.addWidget(self.placeholder_label)
+
+        # Container for actual statistics
+        self.stats_content = QWidget()
+        stats_layout = QGridLayout(self.stats_content)
 
         # Crawl Progress section
         progress_label = QLabel("Crawl Progress")
@@ -112,8 +122,10 @@ class StatsDashboard(QWidget):
         self.time_progress_bar.setFormat("%v / %m seconds")
         stats_layout.addWidget(self.time_progress_bar, 11, 1)
 
-        stats_group.setLayout(stats_layout)
-        layout.addWidget(stats_group)
+        self.stats_content.setVisible(False)
+        self.main_stats_layout.addWidget(self.stats_content)
+
+        layout.addWidget(self.stats_group)
         
         # Set the layout for this widget
         self.setLayout(layout)
@@ -177,6 +189,11 @@ class StatsDashboard(QWidget):
             avg_ai_response_time_ms: Average AI response time in ms
             duration_seconds: Elapsed time in seconds
         """
+        # Show stats content and hide placeholder if we have activity
+        if total_steps > 0 or ai_calls > 0 or duration_seconds > 0:
+            self.placeholder_label.setVisible(False)
+            self.stats_content.setVisible(True)
+        
         # Update labels
         self.total_steps_label.setText(f"Total Steps: {total_steps}")
         self.successful_steps_label.setText(f"Actions OK: {successful_steps}")
@@ -197,6 +214,8 @@ class StatsDashboard(QWidget):
 
     def reset(self):
         """Reset all statistics to initial state."""
+        self.placeholder_label.setVisible(True)
+        self.stats_content.setVisible(False)
         self.update_stats(
             total_steps=0,
             successful_steps=0,

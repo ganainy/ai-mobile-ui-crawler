@@ -70,7 +70,7 @@ class RunHistoryView(QWidget):
 
         # Table for run metadata
         self.table = QTableWidget()
-        self.table.setColumnCount(9)
+        self.table.setColumnCount(10)
         self.table.setHorizontalHeaderLabels([
             "ID",
             "Device",
@@ -80,7 +80,8 @@ class RunHistoryView(QWidget):
             "Status",
             "Steps",
             "Screens",
-            "Model"
+            "Model",
+            "Actions"
         ])
         
         # Configure table
@@ -132,9 +133,17 @@ class RunHistoryView(QWidget):
 
     def _load_runs(self):
         """Load all runs from repository into table."""
+        # Save current selection if any
+        selected_id = self.get_selected_run_id()
+        
         runs = self._run_repository.get_all_runs()
         
         self.table.setRowCount(len(runs))
+        
+        # Need session manager to resolve paths
+        # We'll create it on fly since it's lightweight, or we could inject it
+        from mobile_crawler.infrastructure.session_folder_manager import SessionFolderManager
+        session_manager = SessionFolderManager()
         
         for row, run in enumerate(runs):
             # ID
@@ -170,8 +179,12 @@ class RunHistoryView(QWidget):
                 status_item.setForeground(QColor("#0066CC"))  # Blue
             elif run.status == "STOPPED":
                 status_item.setForeground(QColor("#009900"))  # Green
+            elif run.status == "COMPLETED":
+                status_item.setForeground(QColor("#009900"))  # Green
             elif run.status == "ERROR":
                 status_item.setForeground(QColor("#CC0000"))  # Red
+            elif run.status == "INTERRUPTED":
+                status_item.setForeground(QColor("#DAA520"))  # Goldenrod/Orange
             self.table.setItem(row, 5, status_item)
             
             # Steps
@@ -188,6 +201,38 @@ class RunHistoryView(QWidget):
                 model_text = f"{run.ai_provider}/{run.ai_model}"
             model_item = QTableWidgetItem(model_text)
             self.table.setItem(row, 8, model_item)
+            
+            # Action Button (Open Folder)
+            # Only enable if folder exists
+            session_path = session_manager.get_session_path(run)
+            
+            open_btn = QPushButton("📂 Open")
+            open_btn.setToolTip("Open Run Folder")
+            if session_path:
+                open_btn.clicked.connect(lambda checked=False, path=session_path: self._open_folder(path))
+            else:
+                open_btn.setEnabled(False)
+                open_btn.setToolTip("Folder not found")
+                
+            self.table.setCellWidget(row, 9, open_btn)
+            
+        # Restore selection
+        if selected_id is not None:
+             for row in range(self.table.rowCount()):
+                item = self.table.item(row, 0)
+                if item and item.data(Qt.ItemDataRole.UserRole) == selected_id:
+                    self.table.selectRow(row)
+                    break
+
+    def _open_folder(self, path: str):
+        """Open folder in system file explorer."""
+        from PySide6.QtGui import QDesktopServices
+        from PySide6.QtCore import QUrl
+        
+        try:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(path))
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Could not open folder: {e}")
 
     def _on_selection_changed(self):
         """Handle table selection change."""
