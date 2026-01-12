@@ -286,9 +286,22 @@ class StepDetailWidget(QWidget):
 
                 # Format the rest of the prompt data WITHOUT base64
                 display_parts = []
+                # First handle priority fields
+                priority_keys = ['screen_dimensions', 'exploration_progress', 'ocr_grounding']
+                for key in priority_keys:
+                    if key in prompt_data:
+                        value = prompt_data[key]
+                        if isinstance(value, (list, dict)):
+                            display_parts.append(f"{key}: {json.dumps(value, indent=2)}")
+                        else:
+                            display_parts.append(f"{key}: {value}")
+                
+                # Then handle the rest
                 for key, value in prompt_data.items():
                     if key == 'screenshot':
                         display_parts.append(f"{key}: [Image displayed on left]")
+                    elif key in priority_keys:
+                        continue # Already added
                     elif isinstance(value, (list, dict)):
                         display_parts.append(f"{key}: {json.dumps(value, indent=2)}")
                     else:
@@ -356,14 +369,28 @@ class StepDetailWidget(QWidget):
                 actions_text += f"• Action: {action.get('action', 'unknown')}\n"
                 if 'action_desc' in action:
                     actions_text += f"  Description: {action['action_desc']}\n"
-                if 'target_bounding_box' in action:
-                    bbox = action['target_bounding_box']
-                    actions_text += f"  Target: [{bbox['top_left'][0]}, {bbox['top_left'][1]}] → [{bbox['bottom_right'][0]}, {bbox['bottom_right'][1]}]\n"
+                
+                # Check for label_id OR target_bounding_box
+                label_id = action.get('label_id')
+                bbox = action.get('target_bounding_box')
+                
+                if label_id is not None:
+                    actions_text += f"  Label ID: {label_id}\n"
+                elif bbox:
+                    # Sanity check for bbox content
+                    tl = bbox.get('top_left')
+                    br = bbox.get('bottom_right')
+                    if tl and br and len(tl) >= 2 and len(br) >= 2:
+                        actions_text += f"  Target: [{tl[0]}, {tl[1]}] → [{br[0]}, {br[1]}]\n"
+                    else:
+                        actions_text += f"  Target: {bbox}\n"
+                
                 if 'input_text' in action and action['input_text']:
                     actions_text += f"  Input: {action['input_text']}\n"
                 if 'reasoning' in action:
                     actions_text += f"  Reasoning: {action['reasoning']}\n"
                 actions_text += "\n"
+
 
             actions_display = QTextEdit()
             actions_display.setPlainText(actions_text.strip())

@@ -54,7 +54,8 @@ class PromptBuilder:
         current_screen_id: Optional[int] = None,
         current_screen_is_new: Optional[bool] = None,
         total_unique_screens: Optional[int] = None,
-        screen_dimensions: Optional[Dict[str, int]] = None
+        screen_dimensions: Optional[Dict[str, int]] = None,
+        ocr_grounding: Optional[List[Dict]] = None
     ) -> str:
         """Build the user prompt with current context.
 
@@ -67,6 +68,7 @@ class PromptBuilder:
             current_screen_is_new: Whether the current screen is newly discovered
             total_unique_screens: Total unique screens discovered so far
             screen_dimensions: Original screen dimensions {"width": W, "height": H}
+            ocr_grounding: List of detected text elements with labels and text
 
         Returns:
             JSON-formatted user prompt
@@ -94,6 +96,7 @@ class PromptBuilder:
         prompt_data = {
             "screenshot": screenshot_b64,
             "screen_dimensions": screen_dimensions or {"width": 1080, "height": 2400},
+            "ocr_grounding": ocr_grounding,
             "exploration_progress": exploration_progress,
             "exploration_journal": journal,
             "is_stuck": is_stuck,

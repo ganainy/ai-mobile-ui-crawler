@@ -216,7 +216,6 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Mobile Crawler")
         self.setMinimumSize(1024, 768)
         self.resize(1280, 960)
-
     def _setup_menu_bar(self):
         """Configure the menu bar."""
         menubar = self.menuBar()
@@ -400,6 +399,12 @@ class MainWindow(QMainWindow):
         if openrouter_key:
             config_manager.set('openrouter_api_key', openrouter_key)
         
+        # Set screen configuration
+        top_height = self.settings_panel.get_top_bar_height()
+        # Log to UI so user can see it's being picked up
+        self.signal_adapter.on_debug_log(0, 0, f"UI: Setting top_bar_height to {top_height}px")
+        config_manager.set('top_bar_height', top_height)
+        
         return config_manager
 
     def _create_run_record(self):
@@ -467,7 +472,8 @@ class MainWindow(QMainWindow):
             config_manager=config_manager,
             appium_driver=appium_driver,
             screen_tracker=screen_tracker,
-            event_listeners=event_listeners
+            event_listeners=event_listeners,
+            top_bar_height=config_manager.get('top_bar_height', 0)
         )
 
     def _on_crawl_finished(self) -> None:
@@ -1184,7 +1190,18 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         """Handle window close event."""
-        # Perform cleanup if needed
+        # Stop crawler if running
+        if self._crawler_loop:
+            self._crawler_loop.stop()
+            
+        # Wait for worker thread to finish safely
+        worker = self._crawler_worker
+        if worker and worker.isRunning():
+            worker.quit()
+            if not worker.wait(2000): # Wait up to 2s
+                worker.terminate()
+                worker.wait()
+                
         event.accept()
 
 
@@ -1195,6 +1212,6 @@ def run():
     app.setOrganizationName("mobile-crawler")
     
     window = MainWindow()
-    window.showFullScreen()
+    window.showMaximized()
     
     sys.exit(app.exec())

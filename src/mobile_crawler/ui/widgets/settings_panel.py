@@ -138,6 +138,24 @@ class SettingsPanel(QWidget):
         limits_group.setLayout(limits_layout)
         layout.addWidget(limits_group)
 
+        # Group box for Screen Configuration
+        screen_group = QGroupBox("Screen Configuration")
+        screen_layout = QVBoxLayout()
+
+        top_bar_layout = QHBoxLayout()
+        top_bar_label = QLabel("Exclude Top Bar (pixels):")
+        top_bar_layout.addWidget(top_bar_label)
+        self.top_bar_height_input = QSpinBox()
+        self.top_bar_height_input.setRange(0, 500)
+        self.top_bar_height_input.setValue(0)
+        self.top_bar_height_input.setToolTip("Exclude the Android status bar from OCR and AI analysis. Typically 80-120px.")
+        top_bar_layout.addWidget(self.top_bar_height_input)
+        top_bar_layout.addStretch()
+        screen_layout.addLayout(top_bar_layout)
+
+        screen_group.setLayout(screen_layout)
+        layout.addWidget(screen_group)
+
         # Group box for Test Credentials
         credentials_group = QGroupBox("Test Credentials")
         credentials_layout = QVBoxLayout()
@@ -219,6 +237,10 @@ class SettingsPanel(QWidget):
         max_duration = self._config_store.get_setting("max_duration_seconds", default=300)
         self.max_duration_input.setValue(max_duration)
 
+        # Load screen configuration
+        top_bar_height = self._config_store.get_setting("top_bar_height", default=0)
+        self.top_bar_height_input.setValue(top_bar_height)
+
         # Load limit type preference (default to steps)
         limit_type = self._config_store.get_setting("limit_type", default="steps")
         if limit_type == "duration":
@@ -271,6 +293,9 @@ class SettingsPanel(QWidget):
             # Save limit type preference
             limit_type = "steps" if self.steps_radio.isChecked() else "duration"
             self._config_store.set_setting("limit_type", limit_type, "string")
+
+            # Save screen configuration
+            self._config_store.set_setting("top_bar_height", self.top_bar_height_input.value(), "int")
 
             # Save test credentials
             test_username = self.test_username_input.text().strip()
@@ -350,6 +375,14 @@ class SettingsPanel(QWidget):
             'steps' or 'duration'
         """
         return 'steps' if self.steps_radio.isChecked() else 'duration'
+
+    def get_top_bar_height(self) -> int:
+        """Get the current top bar height value.
+        
+        Returns:
+            Current top bar height in pixels
+        """
+        return self.top_bar_height_input.value()
 
     def get_test_username(self) -> str:
         """Get the current test username value.

@@ -132,7 +132,8 @@ class AIInteractionService:
         current_screen_id: Optional[int] = None,
         current_screen_is_new: Optional[bool] = None,
         total_unique_screens: Optional[int] = None,
-        screen_dimensions: Optional[dict] = None
+        screen_dimensions: Optional[dict] = None,
+        ocr_grounding: Optional[list[dict]] = None
     ) -> AIResponse:
         """Get next actions from AI model.
 
@@ -147,6 +148,7 @@ class AIInteractionService:
             current_screen_is_new: Whether the current screen is newly discovered
             total_unique_screens: Total unique screens discovered so far
             screen_dimensions: Original screen dimensions {"width": W, "height": H}
+            ocr_grounding: List of detected text elements with labels and text
 
         Returns:
             AIResponse with actions and signup completion status
@@ -165,7 +167,8 @@ class AIInteractionService:
             current_screen_id=current_screen_id,
             current_screen_is_new=current_screen_is_new,
             total_unique_screens=total_unique_screens,
-            screen_dimensions=screen_dimensions
+            screen_dimensions=screen_dimensions,
+            ocr_grounding=ocr_grounding
         )
         
         # Get system prompt
@@ -215,7 +218,8 @@ class AIInteractionService:
                                 "target_bounding_box": {
                                     "top_left": list(action.target_bounding_box.top_left),
                                     "bottom_right": list(action.target_bounding_box.bottom_right)
-                                },
+                                } if action.target_bounding_box else None,
+                                "label_id": action.label_id,
                                 "input_text": action.input_text,
                                 "reasoning": action.reasoning
                             } for action in ai_response.actions
@@ -245,7 +249,8 @@ class AIInteractionService:
                                     "target_bounding_box": {
                                         "top_left": list(action.target_bounding_box.top_left),
                                         "bottom_right": list(action.target_bounding_box.bottom_right)
-                                    },
+                                    } if action.target_bounding_box else None,
+                                    "label_id": action.label_id,
                                     "input_text": action.input_text,
                                     "reasoning": action.reasoning
                                 } for action in ai_response.actions
@@ -377,11 +382,18 @@ class AIInteractionService:
         Raises:
             ValueError: If action format is invalid
         """
-        required_fields = ["action", "action_desc", "target_bounding_box", "reasoning"]
+        required_fields = ["action", "action_desc", "reasoning"]
         for field in required_fields:
             if field not in action_data:
                 raise ValueError(f"Action missing required field: {field}")
         
+        # Must have either target_bounding_box or label_id
+        if "target_bounding_box" not in action_data and "label_id" not in action_data:
+            # Back and scroll actions might not need targets in terms of elements, 
+            # but usually we want at least a box for clicks/inputs.
+            # back, scroll_up, scroll_down, etc. are currently treated as coordinate-independent or center-based. 
+            pass
+
         # Validate action type
         valid_actions = [
             "click", "input", "long_press", "scroll_up", "scroll_down", 
@@ -390,22 +402,34 @@ class AIInteractionService:
         if action_data["action"] not in valid_actions:
             raise ValueError(f"Invalid action type: {action_data['action']}")
         
-        # Parse bounding box
-        bbox_data = action_data["target_bounding_box"]
-        if "top_left" not in bbox_data or "bottom_right" not in bbox_data:
-            raise ValueError("Bounding box missing top_left or bottom_right")
+        # Parse bounding box if present
+        bounding_box = None
+        if "target_bounding_box" in action_data and action_data["target_bounding_box"]:
+            bbox_data = action_data["target_bounding_box"]
+            if "top_left" not in bbox_data or "bottom_right" not in bbox_data:
+                raise ValueError("Bounding box missing top_left or bottom_right")
+            
+            top_left = tuple(bbox_data["top_left"])
+            bottom_right = tuple(bbox_data["bottom_right"])
+            
+            if len(top_left) != 2 or len(bottom_right) != 2:
+                raise ValueError("Bounding box coordinates must be [x, y] pairs")
+            
+            bounding_box = BoundingBox(
+                top_left=top_left,
+                bottom_right=bottom_right
+            )
         
-        top_left = tuple(bbox_data["top_left"])
-        bottom_right = tuple(bbox_data["bottom_right"])
-        
-        if len(top_left) != 2 or len(bottom_right) != 2:
-            raise ValueError("Bounding box coordinates must be [x, y] pairs")
-        
-        bounding_box = BoundingBox(
-            top_left=top_left,
-            bottom_right=bottom_right
-        )
-        
+        # Parse label_id if present
+        label_id = action_data.get("label_id")
+        if label_id is not None:
+            label_id = int(label_id)
+
+        # Cross-validation: click/input/long_press MUST have either box or label
+        if action_data["action"] in ["click", "input", "long_press"]:
+            if not bounding_box and label_id is None:
+                 raise ValueError(f"Action {action_data['action']} requires target_bounding_box or label_id")
+
         # Validate input_text for input actions
         input_text = action_data.get("input_text")
         if action_data["action"] == "input" and input_text is None:
@@ -417,6 +441,7 @@ class AIInteractionService:
             action=action_data["action"],
             action_desc=action_data["action_desc"],
             target_bounding_box=bounding_box,
+            label_id=label_id,
             input_text=input_text,
             reasoning=action_data["reasoning"]
         )

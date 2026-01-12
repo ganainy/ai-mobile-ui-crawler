@@ -1,6 +1,7 @@
 """Main crawler loop orchestration."""
 
 import time
+import base64
 import logging
 from datetime import datetime
 from typing import List, Optional
@@ -20,6 +21,7 @@ from mobile_crawler.infrastructure.run_exporter import RunExporter
 from mobile_crawler.infrastructure.run_repository import RunRepository
 from mobile_crawler.infrastructure.screenshot_capture import ScreenshotCapture
 from mobile_crawler.infrastructure.step_log_repository import StepLog, StepLogRepository
+from mobile_crawler.domain.grounding.manager import GroundingManager
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +40,8 @@ class CrawlerLoop:
         config_manager: ConfigManager,
         appium_driver: AppiumDriver,
         screen_tracker: ScreenTracker,
-        event_listeners: Optional[List[CrawlerEventListener]] = None
+        event_listeners: Optional[List[CrawlerEventListener]] = None,
+        top_bar_height: int = 0
     ):
         """Initialize crawler loop.
 
@@ -65,6 +68,7 @@ class CrawlerLoop:
         self.screen_tracker = screen_tracker
         self.event_listeners = event_listeners or []
         self.overlay_renderer = OverlayRenderer()
+        self.grounding_manager = GroundingManager()
         
         # Threading support
         self._crawl_thread: Optional[threading.Thread] = None
@@ -83,6 +87,8 @@ class CrawlerLoop:
         # Configuration
         self.max_crawl_steps = self.config_manager.get('max_crawl_steps', 15)
         self.max_crawl_duration_seconds = self.config_manager.get('max_crawl_duration_seconds', 600)
+        # Use passed value or fallback to config
+        self.top_bar_height = top_bar_height or self.config_manager.get('top_bar_height', 0)
 
     def add_event_listener(self, listener: CrawlerEventListener) -> None:
         """Add an event listener."""
@@ -386,6 +392,28 @@ class CrawlerLoop:
             # Capture screenshot (returns image, path, AI-optimized base64, and scale factor)
             screenshot_image, screenshot_path, screenshot_b64, scale_factor = self.screenshot_capture.capture_full()
 
+            # Handle top bar exclusion if configured
+            self._emit_event("on_debug_log", run_id, step_number, 
+                f"Debug: top_bar_height configuration is {self.top_bar_height}px")
+            
+            if self.top_bar_height > 0:
+                w, h = screenshot_image.size
+                self._emit_event("on_debug_log", run_id, step_number, 
+                    f"Debug: Original screenshot size: {w}x{h}")
+                
+                if self.top_bar_height < h:
+                    # Crop the top bar from the image
+                    screenshot_image = screenshot_image.crop((0, self.top_bar_height, w, h))
+                    # Overwrite the saved screenshot with the cropped version
+                    screenshot_image.save(screenshot_path)
+                    # Update AI base64 and scale factor for the cropped version
+                    screenshot_b64, scale_factor = self.screenshot_capture._compress_for_ai(screenshot_image)
+                    self._emit_event("on_debug_log", run_id, step_number, 
+                        f"Top bar exclusion SUCCESS: cropped {self.top_bar_height}px from top. New size: {screenshot_image.size}")
+                else:
+                    self._emit_event("on_debug_log", run_id, step_number, 
+                        f"Warning: top_bar_height ({self.top_bar_height}) >= image height ({h})")
+
             self._emit_event("on_screenshot_captured", run_id, step_number, screenshot_path)
             
             # Track this screen for deduplication and novelty detection
@@ -399,12 +427,37 @@ class CrawlerLoop:
                 activity_name=None  # TODO: Get current activity from Appium
             )
             
+            # Grounding: Detect text and overlay markers
+            try:
+                ocr_start = time.time()
+                self._emit_event("on_debug_log", run_id, step_number, "Grounding: Running OCR text detection...")
+                
+                grounding_overlay = self.grounding_manager.process_screenshot(screenshot_path)
+                
+                ocr_duration = time.time() - ocr_start
+                self._emit_event("on_debug_log", run_id, step_number, 
+                    f"Grounding: Completed in {ocr_duration:.2f}s ({len(grounding_overlay.ocr_elements)} elements)")
+                
+                # Use the grounded screenshot for AI analysis
+                # We need to re-encode it as base64 if it changed, 
+                # but usually we want to send the one with markers to the VLM.
+                with open(grounding_overlay.marked_image_path, "rb") as image_file:
+                    screenshot_b64_grounded = base64.b64encode(image_file.read()).decode('utf-8')
+                
+                # Update loop variables to use grounded version
+                screenshot_b64 = screenshot_b64_grounded
+                # Keep original screenshot_path for reference, but AI gets grounded one
+            except Exception as e:
+                logger.warning(f"Grounding failed, falling back to raw screenshot: {e}")
+                grounding_overlay = None
+
             logger.info(
                 f"Step {step_number}: Screen {self._current_screen_state.screen_id} "
                 f"({'NEW' if self._current_screen_state.is_new else 'revisited'}, "
                 f"visit #{self._current_screen_state.visit_count}, "
                 f"total unique: {self._current_screen_state.total_screens_discovered})"
             )
+
             
             # Emit screen processed event for UI updates
             self._emit_event(
@@ -437,7 +490,8 @@ class CrawlerLoop:
                 current_screen_id=self._current_screen_state.screen_id,
                 current_screen_is_new=self._current_screen_state.is_new,
                 total_unique_screens=self._current_screen_state.total_screens_discovered,
-                screen_dimensions=screen_dimensions
+                screen_dimensions=screen_dimensions,
+                ocr_grounding=grounding_overlay.ocr_elements if grounding_overlay else None
             )
             
             # Save annotated screenshot for debugging (Phase 4)
@@ -450,19 +504,24 @@ class CrawlerLoop:
                     f"Screen: {original_width}x{original_height} (no scaling)")
                 
                 for idx, action in enumerate(ai_response.actions):
-                    # Use AI coordinates directly - no scaling needed
-                    tl = action.target_bounding_box.top_left
-                    br = action.target_bounding_box.bottom_right
-                    
-                    self._emit_event("on_debug_log", run_id, step_number,
-                        f"Action {idx+1}: coords [{tl[0]},{tl[1]}]->[{br[0]},{br[1]}]")
-                    
-                    actions_dicts.append({
-                        "target_bounding_box": {
+                    action_data = {}
+                    if action.label_id is not None:
+                        msg = f"Action {idx+1}: label [{action.label_id}]"
+                        action_data["label_id"] = action.label_id
+                    elif action.target_bounding_box:
+                        tl = action.target_bounding_box.top_left
+                        br = action.target_bounding_box.bottom_right
+                        msg = f"Action {idx+1}: coords [{tl[0]},{tl[1]}]->[{br[0]},{br[1]}]"
+                        action_data["target_bounding_box"] = {
                             "top_left": list(tl),
                             "bottom_right": list(br)
                         }
-                    })
+                    else:
+                        msg = f"Action {idx+1}: {action.action}"
+                    
+                    self._emit_event("on_debug_log", run_id, step_number, msg)
+                    actions_dicts.append(action_data)
+
                 
                 self.overlay_renderer.save_annotated(
                     image=screenshot_image,
@@ -476,14 +535,41 @@ class CrawlerLoop:
             actions_executed = 0
             
             for i, ai_action in enumerate(ai_response.actions):
-                # Use AI coordinates directly - no scaling needed
-                ai_tl = ai_action.target_bounding_box.top_left
-                ai_br = ai_action.target_bounding_box.bottom_right
-                bounds = (int(ai_tl[0]), int(ai_tl[1]), int(ai_br[0]), int(ai_br[1]))
+                # Resolve coordinates: from label_id OR target_bounding_box
+                bounds = None
                 
-                # Calculate tap center point
-                tap_x = (bounds[0] + bounds[2]) // 2
-                tap_y = (bounds[1] + bounds[3]) // 2
+                if ai_action.label_id is not None and grounding_overlay:
+                    if ai_action.label_id in grounding_overlay.label_map:
+                        center = grounding_overlay.label_map[ai_action.label_id]
+                        # Create a tiny bounding box around the center for consistency
+                        bounds = (center[0]-5, center[1]-5, center[0]+5, center[1]+5)
+                        self._emit_event("on_debug_log", run_id, step_number,
+                            f"Resolved Label {ai_action.label_id} to center {center}")
+                    else:
+                        logger.warning(f"AI provided unknown label_id: {ai_action.label_id}")
+
+                if not bounds and ai_action.target_bounding_box:
+                    ai_tl = ai_action.target_bounding_box.top_left
+                    ai_br = ai_action.target_bounding_box.bottom_right
+                    bounds = (int(ai_tl[0]), int(ai_tl[1]), int(ai_br[0]), int(ai_br[1]))
+                
+                # Apply top bar offset back to coordinates for device execution
+                if bounds and self.top_bar_height > 0:
+                    bounds = (
+                        bounds[0], 
+                        bounds[1] + self.top_bar_height, 
+                        bounds[2], 
+                        bounds[3] + self.top_bar_height
+                    )
+                
+                if not bounds:
+                    # Fallback for actions that don't need bounds (back, etc.)
+                    # or if resolution failed
+                    tap_x, tap_y = 0, 0
+                else:
+                    # Calculate tap center point
+                    tap_x = (bounds[0] + bounds[2]) // 2
+                    tap_y = (bounds[1] + bounds[3]) // 2
                 
                 self._emit_event("on_debug_log", run_id, step_number,
                     f"EXECUTE {ai_action.action}: tap at ({tap_x}, {tap_y}) [bounds: {bounds}]")
@@ -525,8 +611,8 @@ class CrawlerLoop:
                     action_type=ai_action.action,
                     action_description=ai_action.action_desc,
                     target_bbox_json=str({
-                        "top_left": list(ai_action.target_bounding_box.top_left),
-                        "bottom_right": list(ai_action.target_bounding_box.bottom_right)
+                        "top_left": list(ai_action.target_bounding_box.top_left) if ai_action.target_bounding_box else [bounds[0], bounds[1]],
+                        "bottom_right": list(ai_action.target_bounding_box.bottom_right) if ai_action.target_bounding_box else [bounds[2], bounds[3]]
                     }) if ai_action.action in ["click", "input", "long_press"] else None,
                     input_text=ai_action.input_text,
                     execution_success=result.success,

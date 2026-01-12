@@ -33,6 +33,7 @@ dependencies = [
     "psutil>=5.9.0",
     "pyyaml>=6.0.0",
     "pytesseract>=0.3.10",
+    "easyocr>=1.7.0",
 ]
 
 [project.optional-dependencies]

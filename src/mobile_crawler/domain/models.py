@@ -45,9 +45,10 @@ class AIAction:
     """Action recommended by AI."""
     action: str
     action_desc: str
-    target_bounding_box: BoundingBox
-    input_text: Optional[str]
-    reasoning: str
+    target_bounding_box: Optional[BoundingBox] = None
+    label_id: Optional[int] = None
+    input_text: Optional[str] = None
+    reasoning: str = ""
 
 
 @dataclass
