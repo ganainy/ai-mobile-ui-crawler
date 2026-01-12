@@ -12,6 +12,7 @@ from mobile_crawler.core.crawler_event_listener import CrawlerEventListener
 from mobile_crawler.domain.action_executor import ActionExecutor
 from mobile_crawler.domain.models import ActionResult
 from mobile_crawler.domain.screen_tracker import ScreenTracker, ScreenState
+from mobile_crawler.domain.overlay_renderer import OverlayRenderer
 from mobile_crawler.infrastructure.ai_interaction_service import AIInteractionService
 from mobile_crawler.infrastructure.appium_driver import AppiumDriver
 from mobile_crawler.infrastructure.database import DatabaseManager
@@ -63,6 +64,7 @@ class CrawlerLoop:
         self.appium_driver = appium_driver
         self.screen_tracker = screen_tracker
         self.event_listeners = event_listeners or []
+        self.overlay_renderer = OverlayRenderer()
         
         # Threading support
         self._crawl_thread: Optional[threading.Thread] = None
@@ -73,6 +75,10 @@ class CrawlerLoop:
         
         # Current screen state (updated after each step)
         self._current_screen_state: Optional[ScreenState] = None
+
+        # Step-by-step debug mode (Phase 5)
+        self._step_by_step_enabled = False
+        self._step_advance_event = threading.Event()
 
         # Configuration
         self.max_crawl_steps = self.config_manager.get('max_crawl_steps', 15)
@@ -122,6 +128,23 @@ class CrawlerLoop:
             True if crawler thread is active
         """
         return self._crawl_thread is not None and self._crawl_thread.is_alive()
+
+    def set_step_by_step_enabled(self, enabled: bool) -> None:
+        """Enable or disable step-by-step mode."""
+        self._step_by_step_enabled = enabled
+        logger.info(f"Step-by-step mode {'enabled' if enabled else 'disabled'}")
+
+    def is_step_by_step_enabled(self) -> bool:
+        """Check if step-by-step mode is enabled."""
+        return self._step_by_step_enabled
+
+    def advance_step(self) -> None:
+        """Advance to the next step when paused in step-by-step mode."""
+        if self.state_machine.state == CrawlState.PAUSED_STEP:
+            logger.info("Advancing to next step")
+            self._step_advance_event.set()
+        else:
+            logger.warning(f"Advance step requested but crawler is in state {self.state_machine.state}")
 
     def run(self, run_id: int) -> None:
         """Run the crawler loop for the given run.
@@ -178,6 +201,25 @@ class CrawlerLoop:
                     
                 try:
                     step_success = self._execute_step(run_id, step_number)
+                    
+                    # Handle step-by-step pause (Phase 5)
+                    if self._step_by_step_enabled and self.state_machine.state != CrawlState.STOPPING:
+                        self.state_machine.transition_to(CrawlState.PAUSED_STEP)
+                        self._emit_event("on_state_changed", run_id, "running", "paused_step")
+                        self._emit_event("on_step_paused", run_id, step_number)
+                        
+                        self._step_advance_event.clear()
+                        # Wait for UI to signal advance
+                        while not self._step_advance_event.is_set():
+                            if self.state_machine.state == CrawlState.STOPPING:
+                                break
+                            time.sleep(0.1)
+                            
+                        # If we were resumed, go back to running state
+                        if self.state_machine.state == CrawlState.PAUSED_STEP:
+                            self.state_machine.transition_to(CrawlState.RUNNING)
+                            self._emit_event("on_state_changed", run_id, "paused_step", "running")
+
                     if step_success:
                         step_number += 1
                     else:
@@ -380,6 +422,10 @@ class CrawlerLoop:
             if is_stuck:
                 logger.warning(f"Stuck detected: {stuck_reason}")
 
+            # Get screen dimensions (AI receives same size - no scaling)
+            original_width, original_height = screenshot_image.size
+            screen_dimensions = {"width": original_width, "height": original_height}
+
             # Get AI actions with screen context for novelty signals
             ai_response = self.ai_interaction_service.get_next_actions(
                 run_id=run_id,
@@ -390,25 +436,57 @@ class CrawlerLoop:
                 stuck_reason=stuck_reason,
                 current_screen_id=self._current_screen_state.screen_id,
                 current_screen_is_new=self._current_screen_state.is_new,
-                total_unique_screens=self._current_screen_state.total_screens_discovered
+                total_unique_screens=self._current_screen_state.total_screens_discovered,
+                screen_dimensions=screen_dimensions
             )
+            
+            # Save annotated screenshot for debugging (Phase 4)
+            try:
+                # AI receives full-size image - coordinates are used directly (no scaling)
+                actions_dicts = []
+                
+                # Emit debug log to UI
+                self._emit_event("on_debug_log", run_id, step_number, 
+                    f"Screen: {original_width}x{original_height} (no scaling)")
+                
+                for idx, action in enumerate(ai_response.actions):
+                    # Use AI coordinates directly - no scaling needed
+                    tl = action.target_bounding_box.top_left
+                    br = action.target_bounding_box.bottom_right
+                    
+                    self._emit_event("on_debug_log", run_id, step_number,
+                        f"Action {idx+1}: coords [{tl[0]},{tl[1]}]->[{br[0]},{br[1]}]")
+                    
+                    actions_dicts.append({
+                        "target_bounding_box": {
+                            "top_left": list(tl),
+                            "bottom_right": list(br)
+                        }
+                    })
+                
+                self.overlay_renderer.save_annotated(
+                    image=screenshot_image,
+                    actions=actions_dicts,
+                    original_path=screenshot_path
+                )
+            except Exception as e:
+                logger.warning(f"Failed to save annotated screenshot for step {step_number}: {e}")
 
             # Execute actions
             actions_executed = 0
+            
             for i, ai_action in enumerate(ai_response.actions):
-                # Convert bounding box to tuple format expected by action executor
-                # IMPORTANT: Scale coordinates back to original screen dimensions
-                # AI sees downscaled image, so its coordinates are smaller
-                # screen_coord = ai_coord / scale_factor
-                bounds = (
-                    int(ai_action.target_bounding_box.top_left[0] / scale_factor),
-                    int(ai_action.target_bounding_box.top_left[1] / scale_factor),
-                    int(ai_action.target_bounding_box.bottom_right[0] / scale_factor),
-                    int(ai_action.target_bounding_box.bottom_right[1] / scale_factor)
-                )
+                # Use AI coordinates directly - no scaling needed
+                ai_tl = ai_action.target_bounding_box.top_left
+                ai_br = ai_action.target_bounding_box.bottom_right
+                bounds = (int(ai_tl[0]), int(ai_tl[1]), int(ai_br[0]), int(ai_br[1]))
                 
-                if scale_factor < 1.0:
-                    logger.debug(f"Scaled coordinates from AI: {ai_action.target_bounding_box} -> screen: {bounds} (scale: {scale_factor})")
+                # Calculate tap center point
+                tap_x = (bounds[0] + bounds[2]) // 2
+                tap_y = (bounds[1] + bounds[3]) // 2
+                
+                self._emit_event("on_debug_log", run_id, step_number,
+                    f"EXECUTE {ai_action.action}: tap at ({tap_x}, {tap_y}) [bounds: {bounds}]")
 
                 # Execute action based on type
                 if ai_action.action == "click":

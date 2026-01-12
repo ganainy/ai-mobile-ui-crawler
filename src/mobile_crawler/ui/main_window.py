@@ -156,6 +156,7 @@ class MainWindow(QMainWindow):
         self._crawler_worker = None
         self._current_run_id = None
         self._crawler_loop = None
+        self._step_by_step_enabled = False  # Track UI checkbox state
         
         self._setup_window()
         self._setup_menu_bar()
@@ -263,6 +264,8 @@ class MainWindow(QMainWindow):
         self.control_panel.pause_requested.connect(self._pause_crawl)
         self.control_panel.resume_requested.connect(self._resume_crawl)
         self.control_panel.stop_requested.connect(self._stop_crawl)
+        self.control_panel.step_by_step_toggled.connect(self._on_step_by_step_toggled)
+        self.control_panel.next_step_requested.connect(self._on_next_step_requested)
         
         # Connect QtSignalAdapter signals
         self.signal_adapter.state_changed.connect(self._on_crawl_state_changed)
@@ -273,6 +276,8 @@ class MainWindow(QMainWindow):
         self.signal_adapter.ai_request_sent.connect(self.ai_monitor_panel.add_request)
         self.signal_adapter.ai_response_received.connect(self._on_ai_response_received)
         self.signal_adapter.screen_processed.connect(self._on_screen_processed)
+        self.signal_adapter.step_paused.connect(self._on_step_paused)
+        self.signal_adapter.debug_log.connect(self._on_debug_log)
         
         # Bottom panel: Run history
         bottom_panel = self._create_bottom_panel()
@@ -326,6 +331,10 @@ class MainWindow(QMainWindow):
             # Create crawler loop
             crawler_loop = self._create_crawler_loop(config_manager, run_id)
             self._crawler_loop = crawler_loop
+            
+            # Apply step-by-step mode if enabled in UI
+            if self._step_by_step_enabled:
+                crawler_loop.set_step_by_step_enabled(True)
             
             # Create and start worker thread
             self._crawler_worker = CrawlerWorker(crawler_loop, run_id)
@@ -479,6 +488,30 @@ class MainWindow(QMainWindow):
         self._crawler_worker = None
         self._current_run_id = None
         self._crawler_loop = None
+
+    def _on_step_by_step_toggled(self, enabled: bool) -> None:
+        """Handle step-by-step mode toggle."""
+        self._step_by_step_enabled = enabled
+        if self._crawler_loop:
+            self._crawler_loop.set_step_by_step_enabled(enabled)
+
+    def _on_next_step_requested(self) -> None:
+        """Handle request to advance to next step."""
+        if self._crawler_loop:
+            self._crawler_loop.advance_step()
+
+    def _on_step_paused(self, run_id: int, step_number: int) -> None:
+        """Handle step paused event."""
+        if self.log_viewer:
+            self.log_viewer.append_log(LogLevel.INFO, f"Step {step_number} finished. Paused for review.")
+        
+        if self.right_tab_widget:
+            self.right_tab_widget.setCurrentIndex(1)  # Index 1 is AI Monitor
+
+    def _on_debug_log(self, run_id: int, step_number: int, message: str) -> None:
+        """Handle debug log message from crawler."""
+        if self.log_viewer:
+            self.log_viewer.append_log(LogLevel.DEBUG, message)
 
     def _pause_crawl(self) -> None:
         """Pause the current crawl."""

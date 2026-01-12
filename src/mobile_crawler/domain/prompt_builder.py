@@ -53,7 +53,8 @@ class PromptBuilder:
         stuck_reason: Optional[str] = None,
         current_screen_id: Optional[int] = None,
         current_screen_is_new: Optional[bool] = None,
-        total_unique_screens: Optional[int] = None
+        total_unique_screens: Optional[int] = None,
+        screen_dimensions: Optional[Dict[str, int]] = None
     ) -> str:
         """Build the user prompt with current context.
 
@@ -65,6 +66,7 @@ class PromptBuilder:
             current_screen_id: ID of the current screen (for novelty context)
             current_screen_is_new: Whether the current screen is newly discovered
             total_unique_screens: Total unique screens discovered so far
+            screen_dimensions: Original screen dimensions {"width": W, "height": H}
 
         Returns:
             JSON-formatted user prompt
@@ -91,6 +93,7 @@ class PromptBuilder:
         # Format the user prompt
         prompt_data = {
             "screenshot": screenshot_b64,
+            "screen_dimensions": screen_dimensions or {"width": 1080, "height": 2400},
             "exploration_progress": exploration_progress,
             "exploration_journal": journal,
             "is_stuck": is_stuck,

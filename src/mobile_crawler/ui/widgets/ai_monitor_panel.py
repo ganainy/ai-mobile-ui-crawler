@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
     QTabWidget
 )
 from PySide6.QtCore import Qt, Signal, Slot, QTimer
-from PySide6.QtGui import QColor, QPixmap
+from PySide6.QtGui import QColor, QPixmap, QPainter, QPen, QFont
 from typing import Dict, Any, Optional, List
 import json
 import base64
@@ -143,6 +143,74 @@ class AIInteractionItem(QWidget):
             layout.addWidget(error_label)
 
 
+def draw_overlays_on_pixmap(pixmap: QPixmap, actions: List[dict]) -> QPixmap:
+    """Draw bounding box overlays on a pixmap using QPainter."""
+    if not actions:
+        return pixmap
+        
+    result = pixmap.copy()
+    painter = QPainter(result)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    
+    # High-contrast colors for overlays
+    colors = [
+        QColor("#00FF00"),  # Green
+        QColor("#0088FF"),  # Blue
+        QColor("#FF8800"),  # Orange
+        QColor("#FF00FF"),  # Magenta
+        QColor("#00FFFF")   # Cyan
+    ]
+    error_color = QColor("#FF0000")  # Red
+    
+    for i, action in enumerate(actions):
+        bbox = action.get('target_bounding_box')
+        if not bbox:
+            continue
+            
+        top_left = bbox.get('top_left')
+        bottom_right = bbox.get('bottom_right')
+        if not top_left or not bottom_right:
+            continue
+            
+        x1, y1 = top_left
+        x2, y2 = bottom_right
+        
+        # Simple bounds check for color
+        is_valid = x1 >= 0 and y1 >= 0 and x2 <= pixmap.width() and y2 <= pixmap.height()
+        color = colors[i % len(colors)] if is_valid else error_color
+        
+        pen = QPen(color)
+        pen.setWidth(2 if is_valid else 3)
+        if not is_valid:
+            pen.setStyle(Qt.PenStyle.DashLine)
+        painter.setPen(pen)
+        
+        # Draw rectangle
+        painter.drawRect(x1, y1, x2 - x1, y2 - y1)
+        
+        # Draw center point
+        cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
+        painter.setBrush(color)
+        painter.drawEllipse(cx - 3, cy - 3, 6, 6)
+        
+        # Draw action index label
+        label = str(i + 1)
+        font = QFont("Arial", 10, QFont.Weight.Bold)
+        painter.setFont(font)
+        
+        # Draw background for label
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(0, 0, 0, 180)) # Semi-transparent black
+        painter.drawRect(x1 + 2, y1 + 2, 20, 20)
+        
+        painter.setPen(color)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawText(x1 + 6, y1 + 16, label)
+        
+    painter.end()
+    return result
+
+
 class StepDetailWidget(QWidget):
     """Widget for displaying detailed step information in a tab."""
 
@@ -238,6 +306,10 @@ class StepDetailWidget(QWidget):
         screenshot_group = QGroupBox("Screenshot")
         screenshot_layout = QVBoxLayout(screenshot_group)
         if screenshot_pixmap:
+            # Draw overlays on the ORIGINAL sized pixmap before scaling for display
+            if self.parsed_actions:
+                screenshot_pixmap = draw_overlays_on_pixmap(screenshot_pixmap, self.parsed_actions)
+                
             screenshot_label = QLabel()
             # Scale to smaller size (max 200px width)
             scaled_pixmap = screenshot_pixmap.scaledToWidth(200, Qt.TransformationMode.SmoothTransformation)

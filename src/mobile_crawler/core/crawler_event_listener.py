@@ -80,3 +80,14 @@ class CrawlerEventListener(ABC):
             total_screens: Total unique screens discovered in this run
         """
         pass
+
+    @abstractmethod
+    def on_debug_log(self, run_id: int, step_number: int, message: str) -> None:
+        """Called to emit a debug log message to the UI.
+        
+        Args:
+            run_id: Current run ID
+            step_number: Current step number
+            message: Debug message to display
+        """
+        pass

@@ -145,35 +145,26 @@ class ScreenshotCapture:
         """Compress image for AI processing to reduce tokens and latency.
 
         Applies:
-        - Downscaling to max dimensions while preserving aspect ratio
         - JPEG compression at configurable quality
         - RGB conversion (removes alpha channel)
+        - NO dimension scaling - keeps original dimensions for accurate coordinates
 
         Args:
             image: PIL Image to compress
 
         Returns:
-            Tuple of (base64 encoded JPEG string, scale_factor used)
+            Tuple of (base64 encoded JPEG string, scale_factor which is always 1.0)
         """
-        # Downscale if necessary
         width, height = image.size
-        width_ratio = self.ai_max_width / width
-        height_ratio = self.ai_max_height / height
-        scale_factor = min(width_ratio, height_ratio, 1.0)  # Don't upscale
-
-        if scale_factor < 1.0:
-            new_width = int(width * scale_factor)
-            new_height = int(height * scale_factor)
-            image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
-            logger.debug(f"AI image downscaled from {width}x{height} to {new_width}x{new_height} (scale: {scale_factor:.3f})")
-        else:
-            scale_factor = 1.0  # No scaling applied
+        
+        # NO dimension scaling - keep original size for accurate AI coordinates
+        scale_factor = 1.0
 
         # Convert to RGB (JPEG doesn't support alpha)
         if image.mode in ('RGBA', 'LA', 'P'):
             image = image.convert('RGB')
 
-        # Compress to JPEG
+        # Compress to JPEG (reduces file size without changing dimensions)
         buffer = io.BytesIO()
         image.save(buffer, format='JPEG', quality=self.ai_jpeg_quality, optimize=True)
         compressed_data = buffer.getvalue()
@@ -181,7 +172,7 @@ class ScreenshotCapture:
         # Encode to base64
         compressed_b64 = base64.b64encode(compressed_data).decode('utf-8')
 
-        logger.debug(f"AI image compressed: {len(compressed_data)} bytes, {len(compressed_b64)} chars base64")
+        logger.debug(f"AI image: {width}x{height}, compressed to {len(compressed_data)} bytes, {len(compressed_b64)} chars base64")
         return compressed_b64, scale_factor
 
     def capture_screenshot_to_file(self, filename: Optional[str] = None) -> Optional[str]:

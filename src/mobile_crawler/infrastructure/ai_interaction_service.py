@@ -131,7 +131,8 @@ class AIInteractionService:
         stuck_reason: Optional[str] = None,
         current_screen_id: Optional[int] = None,
         current_screen_is_new: Optional[bool] = None,
-        total_unique_screens: Optional[int] = None
+        total_unique_screens: Optional[int] = None,
+        screen_dimensions: Optional[dict] = None
     ) -> AIResponse:
         """Get next actions from AI model.
 
@@ -145,6 +146,7 @@ class AIInteractionService:
             current_screen_id: ID of the current screen (for novelty context)
             current_screen_is_new: Whether the current screen is newly discovered
             total_unique_screens: Total unique screens discovered so far
+            screen_dimensions: Original screen dimensions {"width": W, "height": H}
 
         Returns:
             AIResponse with actions and signup completion status
@@ -162,7 +164,8 @@ class AIInteractionService:
             stuck_reason=stuck_reason,
             current_screen_id=current_screen_id,
             current_screen_is_new=current_screen_is_new,
-            total_unique_screens=total_unique_screens
+            total_unique_screens=total_unique_screens,
+            screen_dimensions=screen_dimensions
         )
         
         # Get system prompt

@@ -6,7 +6,8 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
-    QGroupBox
+    QGroupBox,
+    QCheckBox
 )
 from PySide6.QtCore import Signal
 
@@ -26,6 +27,8 @@ class CrawlControlPanel(QWidget):
     pause_requested = Signal()  # type: ignore
     resume_requested = Signal()  # type: ignore
     stop_requested = Signal()  # type: ignore
+    step_by_step_toggled = Signal(bool)  # type: ignore
+    next_step_requested = Signal()  # type: ignore
 
     def __init__(self, crawl_controller: CrawlController, parent=None):
         """Initialize crawl control panel widget.
@@ -80,8 +83,23 @@ class CrawlControlPanel(QWidget):
         self.stop_button.clicked.connect(self.stop_requested.emit)
         control_layout.addWidget(self.stop_button)
 
+        # Next Step button (for step-by-step mode)
+        self.next_step_button = QPushButton("Next Step")
+        self.next_step_button.setObjectName("nextStepButton")
+        self.next_step_button.setEnabled(False)
+        self.next_step_button.setVisible(False)
+        self.next_step_button.setMinimumWidth(100)
+        self.next_step_button.clicked.connect(self.next_step_requested.emit)
+        control_layout.addWidget(self.next_step_button)
+
         control_group.setLayout(control_layout)
         layout.addWidget(control_group)
+
+        # Step-by-step checkbox
+        self.step_by_step_checkbox = QCheckBox("Step-by-Step Mode")
+        self.step_by_step_checkbox.setObjectName("stepByStepCheckbox")
+        self.step_by_step_checkbox.toggled.connect(self.step_by_step_toggled.emit)
+        layout.addWidget(self.step_by_step_checkbox)
 
         # Status label
         self.status_label = QLabel("Ready")
@@ -104,6 +122,7 @@ class CrawlControlPanel(QWidget):
         self.pause_button.setEnabled(False)
         self.resume_button.setEnabled(False)
         self.stop_button.setEnabled(False)
+        self.next_step_button.setEnabled(False)
 
         # Update based on state
         if state == CrawlState.UNINITIALIZED:
@@ -135,6 +154,16 @@ class CrawlControlPanel(QWidget):
             self.stop_button.setEnabled(True)
             self.pause_button.setVisible(False)
             self.resume_button.setVisible(True)
+            self.next_step_button.setVisible(False)
+
+        elif state == CrawlState.PAUSED_STEP:
+            self.status_label.setText("Paused (Step-by-Step)")
+            self.status_label.setStyleSheet("color: purple; font-weight: bold;")
+            self.next_step_button.setEnabled(True)
+            self.stop_button.setEnabled(True)
+            self.pause_button.setVisible(True)
+            self.resume_button.setVisible(False)
+            self.next_step_button.setVisible(True)
 
         elif state == CrawlState.STOPPING:
             self.status_label.setText("Stopping...")
@@ -156,6 +185,7 @@ class CrawlControlPanel(QWidget):
             self.start_button.setEnabled(self._validation_passed)
             self.pause_button.setVisible(True)
             self.resume_button.setVisible(False)
+            self.next_step_button.setVisible(False)
 
     def set_validation_passed(self, passed: bool):
         """Set whether pre-crawl validation has passed.

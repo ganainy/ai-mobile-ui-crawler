@@ -44,11 +44,11 @@ Respond with a JSON object containing:
 Each action should have:
 - `action`: Action type from the list above
 - `action_desc`: Brief description of what the action does
-- `target_bounding_box`: Pixel coordinates {"top_left": [x,y], "bottom_right": [x,y]} - MUST be based on screenshot resolution
+- `target_bounding_box`: Pixel coordinates {"top_left": [x,y], "bottom_right": [x,y]} - MUST be based on screen_dimensions provided
 - `input_text`: Text to enter (only for "input" actions)
 - `reasoning`: Why this action advances exploration (mention screen discovery value)
 
-**CRITICAL**: All coordinates must be pixel values based on the screenshot dimensions. The system will automatically scale coordinates to the actual device resolution.
+**CRITICAL**: All coordinates must be in pixel values matching the `screen_dimensions` provided in the prompt (e.g., if screen_dimensions is {"width": 1080, "height": 2400}, your x coordinates must be 0-1080 and y coordinates must be 0-2400). Do NOT use normalized coordinates or assume a different resolution.
 
 ## Exploration Strategy (Ranked by Priority)
 

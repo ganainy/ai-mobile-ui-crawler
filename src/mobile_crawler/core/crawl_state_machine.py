@@ -10,6 +10,7 @@ class CrawlState(Enum):
     INITIALIZING = "initializing"
     RUNNING = "running"
     PAUSED_MANUAL = "paused_manual"
+    PAUSED_STEP = "paused_step"
     STOPPING = "stopping"
     STOPPED = "stopped"
     ERROR = "error"
@@ -73,8 +74,9 @@ class CrawlStateMachine:
         valid_transitions = {
             CrawlState.UNINITIALIZED: [CrawlState.INITIALIZING, CrawlState.ERROR],
             CrawlState.INITIALIZING: [CrawlState.RUNNING, CrawlState.ERROR],
-            CrawlState.RUNNING: [CrawlState.PAUSED_MANUAL, CrawlState.STOPPING, CrawlState.ERROR],
+            CrawlState.RUNNING: [CrawlState.PAUSED_MANUAL, CrawlState.PAUSED_STEP, CrawlState.STOPPING, CrawlState.ERROR],
             CrawlState.PAUSED_MANUAL: [CrawlState.RUNNING, CrawlState.STOPPING, CrawlState.ERROR],
+            CrawlState.PAUSED_STEP: [CrawlState.RUNNING, CrawlState.PAUSED_MANUAL, CrawlState.STOPPING, CrawlState.ERROR],
             CrawlState.STOPPING: [CrawlState.STOPPED, CrawlState.ERROR],
             CrawlState.STOPPED: set(),  # Terminal state
             CrawlState.ERROR: set()     # Terminal state

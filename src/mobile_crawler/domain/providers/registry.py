@@ -46,14 +46,39 @@ class ProviderRegistry:
             models = client.models.list()
 
             result = []
+            found_ids = set()
+            
             for model in models:
+                model_id = model.name
+                # Strip models/ prefix if present
+                if model_id.startswith('models/'):
+                    model_id = model_id.replace('models/', '')
+                    
                 model_info = {
-                    'id': model.name,
-                    'name': model.display_name or model.name,
+                    'id': model_id,
+                    'name': model.display_name or model_id,
                     'provider': 'google',
-                    'supports_vision': self._is_gemini_vision_model(model.name)
+                    'supports_vision': self._is_gemini_vision_model(model_id)
                 }
                 result.append(model_info)
+                found_ids.add(model_id)
+
+            # Manually ensure Gemini 3 preview models are present if not returned
+            gemini_3_models = [
+                {'id': 'gemini-3-pro-preview', 'name': 'Gemini 3 Pro (Preview)'},
+                {'id': 'gemini-3-flash-preview', 'name': 'Gemini 3 Flash (Preview)'},
+            ]
+
+            for g3 in gemini_3_models:
+                if g3['id'] not in found_ids:
+                    # Check if model supports vision (it does)
+                    if self._is_gemini_vision_model(g3['id']):
+                         result.append({
+                            'id': g3['id'],
+                            'name': g3['name'],
+                            'provider': 'google',
+                            'supports_vision': True
+                        })
 
             self._cache[cache_key] = result
             return result
@@ -171,7 +196,7 @@ class ProviderRegistry:
         vision_patterns = [
             'gemini-1.',
             'gemini-2.',
-            'gemini-3.',
+            'gemini-3', # Changed from gemini-3. to gemini-3 to match gemini-3-pro-preview
             'gemini-pro',
             'gemini-flash',
             'gemini-ultra',
