@@ -1,9 +1,10 @@
 """Tests for crawler loop."""
 
 import pytest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, patch, MagicMock
 from datetime import datetime
 
+from PIL import Image
 from mobile_crawler.core.crawler_event_listener import CrawlerEventListener
 from mobile_crawler.core.crawler_loop import CrawlerLoop
 from mobile_crawler.core.crawl_state_machine import CrawlStateMachine
@@ -55,7 +56,9 @@ class TestCrawlerLoop:
         # Setup mocks
         state_machine = CrawlStateMachine()
         screenshot_capture = Mock()
-        screenshot_capture.capture_screenshot.return_value = (Mock(), "/path/to/screenshot.png", "base64data")
+        mock_image = Image.new('RGB', (100, 100))
+        screenshot_capture.capture_full.return_value = (mock_image, "/path/to/screenshot.png", "base64data", 1.0)
+        screenshot_capture.capture_screenshot.return_value = mock_image
 
         ai_service = Mock()
         ai_response = AIResponse(
@@ -94,14 +97,23 @@ class TestCrawlerLoop:
 
         event_listener = TestEventListener()
 
+        session_folder_manager = Mock()
+        session_folder_manager.get_subfolder.return_value = "/tmp/screenshots"
+        screen_tracker = Mock()
+        screen_tracker.is_stuck.return_value = (False, None)
+        appium_driver = MagicMock()
+        appium_driver.get_driver().current_package = "com.example.app"
+
         # Create crawler loop
         crawler = CrawlerLoop(
             state_machine, screenshot_capture, ai_service, action_executor,
-            step_log_repo, run_repo, config_manager, [event_listener]
+            step_log_repo, run_repo, config_manager, 
+            appium_driver, screen_tracker, session_folder_manager, [event_listener]
         )
 
-        # Execute
-        crawler.run(1)
+        with patch.object(CrawlerLoop, "_ensure_app_foreground", return_value=True):
+            # Execute
+            crawler.run(1)
 
         # Verify state transitions
         assert state_machine.state.value == "stopped"
@@ -127,7 +139,9 @@ class TestCrawlerLoop:
         # Setup mocks
         state_machine = CrawlStateMachine()
         screenshot_capture = Mock()
-        screenshot_capture.capture_screenshot.return_value = (Mock(), "/path/to/screenshot.png", "base64data")
+        mock_image = Image.new('RGB', (100, 100))
+        screenshot_capture.capture_full.return_value = (mock_image, "/path/to/screenshot.png", "base64data", 1.0)
+        screenshot_capture.capture_screenshot.return_value = mock_image
 
         ai_service = Mock()
         ai_response = AIResponse(actions=[], signup_completed=False)  # No actions = continue
@@ -148,12 +162,23 @@ class TestCrawlerLoop:
 
         event_listener = TestEventListener()
 
+        session_folder_manager = Mock()
+        session_folder_manager.get_subfolder.return_value = "/tmp/screenshots"
+        appium_driver = MagicMock()
+        appium_driver.get_driver().current_package = "com.example.app"
+
+        screen_tracker = Mock()
+        screen_tracker.is_stuck.return_value = (False, None)
+        screen_tracker.process_screen.return_value = Mock(screen_id=1, is_new=True, visit_count=1, total_screens_discovered=1)
+
         crawler = CrawlerLoop(
             state_machine, screenshot_capture, ai_service, action_executor,
-            step_log_repo, run_repo, config_manager, [event_listener]
+            step_log_repo, run_repo, config_manager, 
+            appium_driver, screen_tracker, session_folder_manager, [event_listener]
         )
 
-        crawler.run(1)
+        with patch.object(CrawlerLoop, "_ensure_app_foreground", return_value=True):
+            crawler.run(1)
 
         # Should complete after 1 step
         crawl_completed_events = [e for e in event_listener.events if e[0] == "crawl_completed"]
@@ -166,7 +191,9 @@ class TestCrawlerLoop:
         # Setup mocks
         state_machine = CrawlStateMachine()
         screenshot_capture = Mock()
-        screenshot_capture.capture_screenshot.return_value = (Mock(), "/path/to/screenshot.png", "base64data")
+        mock_image = Image.new('RGB', (100, 100))
+        screenshot_capture.capture_full.return_value = (mock_image, "/path/to/screenshot.png", "base64data", 1.0)
+        screenshot_capture.capture_screenshot.return_value = mock_image
 
         ai_service = Mock()
         ai_response = AIResponse(
@@ -203,12 +230,23 @@ class TestCrawlerLoop:
 
         event_listener = TestEventListener()
 
+        session_folder_manager = Mock()
+        session_folder_manager.get_subfolder.return_value = "/tmp/screenshots"
+        appium_driver = MagicMock()
+        appium_driver.get_driver().current_package = "com.example.app"
+
+        screen_tracker = Mock()
+        screen_tracker.is_stuck.return_value = (False, None)
+        screen_tracker.process_screen.return_value = Mock(screen_id=1, is_new=True, visit_count=1, total_screens_discovered=1)
+
         crawler = CrawlerLoop(
             state_machine, screenshot_capture, ai_service, action_executor,
-            step_log_repo, run_repo, config_manager, [event_listener]
+            step_log_repo, run_repo, config_manager, 
+            appium_driver, screen_tracker, session_folder_manager, [event_listener]
         )
 
-        crawler.run(1)
+        with patch.object(CrawlerLoop, "_ensure_app_foreground", return_value=True):
+            crawler.run(1)
 
         # Should have completed the crawl (stopped after failed action)
         assert state_machine.state.value == "stopped"
@@ -224,7 +262,9 @@ class TestCrawlerLoop:
         # Setup mocks
         state_machine = CrawlStateMachine()
         screenshot_capture = Mock()
-        screenshot_capture.capture_screenshot.return_value = (Mock(), "/path/to/screenshot.png", "base64data")
+        mock_image = Image.new('RGB', (100, 100))
+        screenshot_capture.capture_full.return_value = (mock_image, "/path/to/screenshot.png", "base64data", 1.0)
+        screenshot_capture.capture_screenshot.return_value = mock_image
 
         ai_service = Mock()
         ai_service.get_next_actions.side_effect = Exception("AI service unavailable")
@@ -244,14 +284,25 @@ class TestCrawlerLoop:
 
         event_listener = TestEventListener()
 
+        session_folder_manager = Mock()
+        session_folder_manager.get_subfolder.return_value = "/tmp/screenshots"
+        appium_driver = MagicMock()
+        appium_driver.get_driver().current_package = "com.example.app"
+
+        screen_tracker = Mock()
+        screen_tracker.is_stuck.return_value = (False, None)
+        screen_tracker.process_screen.return_value = Mock(screen_id=1, is_new=True, visit_count=1, total_screens_discovered=1)
+
         crawler = CrawlerLoop(
             state_machine, screenshot_capture, ai_service, action_executor,
-            step_log_repo, run_repo, config_manager, [event_listener]
+            step_log_repo, run_repo, config_manager, 
+            appium_driver, screen_tracker, session_folder_manager, [event_listener]
         )
 
         # Should raise exception
-        with pytest.raises(Exception, match="AI service unavailable"):
-            crawler.run(1)
+        with patch.object(CrawlerLoop, "_ensure_app_foreground", return_value=True):
+            with pytest.raises(Exception, match="AI service unavailable"):
+                crawler.run(1)
 
         # Should be in error state
         assert state_machine.state.value == "error"
@@ -272,7 +323,7 @@ class TestCrawlerLoop:
 
         crawler = CrawlerLoop(
             state_machine, screenshot_capture, ai_service, action_executor,
-            step_log_repo, run_repo, config_manager
+            step_log_repo, run_repo, config_manager, Mock(), Mock(), Mock()
         )
 
         # Initially no listeners
@@ -305,7 +356,7 @@ class TestCrawlerLoop:
 
         crawler = CrawlerLoop(
             state_machine, screenshot_capture, ai_service, action_executor,
-            step_log_repo, run_repo, config_manager
+            step_log_repo, run_repo, config_manager, Mock(), Mock(), Mock()
         )
 
         with pytest.raises(ValueError, match="Run 999 not found"):

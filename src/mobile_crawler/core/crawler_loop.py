@@ -22,6 +22,7 @@ from mobile_crawler.infrastructure.run_repository import RunRepository
 from mobile_crawler.infrastructure.screenshot_capture import ScreenshotCapture
 from mobile_crawler.infrastructure.step_log_repository import StepLog, StepLogRepository
 from mobile_crawler.domain.grounding.manager import GroundingManager
+from mobile_crawler.infrastructure.session_folder_manager import SessionFolderManager
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +41,7 @@ class CrawlerLoop:
         config_manager: ConfigManager,
         appium_driver: AppiumDriver,
         screen_tracker: ScreenTracker,
+        session_folder_manager: SessionFolderManager,
         event_listeners: Optional[List[CrawlerEventListener]] = None,
         top_bar_height: int = 0
     ):
@@ -54,7 +56,8 @@ class CrawlerLoop:
             run_repository: Repository for runs
             config_manager: Configuration manager
             appium_driver: Appium driver for device control
-            screen_tracker: Screen tracker for deduplication and novelty detection
+            screen_tracker: ScreenTracker for deduplication and novelty detection
+            session_folder_manager: SessionFolderManager for artifact organization
             event_listeners: List of event listeners
         """
         self.state_machine = crawl_state_machine
@@ -66,6 +69,7 @@ class CrawlerLoop:
         self.config_manager = config_manager
         self.appium_driver = appium_driver
         self.screen_tracker = screen_tracker
+        self.session_folder_manager = session_folder_manager
         self.event_listeners = event_listeners or []
         self.overlay_renderer = OverlayRenderer()
         self.grounding_manager = GroundingManager()
@@ -167,6 +171,16 @@ class CrawlerLoop:
             if not run:
                 raise ValueError(f"Run {run_id} not found")
 
+            # Create session folder and persist path
+            session_path = self.session_folder_manager.create_session_folder(run_id)
+            self.run_repository.update_session_path(run_id, session_path)
+            run.session_path = session_path  # Update local object
+
+            # Update screenshot capture with the new session-specific path
+            from pathlib import Path
+            screenshots_dir = Path(self.session_folder_manager.get_subfolder(run, "screenshots"))
+            self.screenshot_capture.set_output_dir(screenshots_dir)
+
             # Store target package for app context validation
             self._target_package = run.app_package
 
@@ -229,8 +243,8 @@ class CrawlerLoop:
                     if step_success:
                         step_number += 1
                     else:
-                        # Step failed but don't exit - continue to next step unless stopping
-                        step_number += 1
+                        # Step failed or signup completed - exit the loop
+                        break
                 except Exception as e:
                     # Fail the crawl
                     raise
@@ -273,8 +287,9 @@ class CrawlerLoop:
         except Exception as e:
             # Handle initialization or other critical errors
             if self.state_machine.state != CrawlState.ERROR:
+                old_state = self.state_machine.state.value
                 self.state_machine.transition_to(CrawlState.ERROR)
-                self._emit_event("on_state_changed", run_id, self.state_machine.state.value, "error")
+                self._emit_event("on_state_changed", run_id, old_state, "error")
             self._emit_event("on_error", run_id, None, e)
             raise
 
@@ -479,6 +494,16 @@ class CrawlerLoop:
             original_width, original_height = screenshot_image.size
             screen_dimensions = {"width": original_width, "height": original_height}
 
+            # Emit AI request event
+            request_data = {
+                "screenshot_path": screenshot_path,
+                "is_stuck": is_stuck,
+                "stuck_reason": stuck_reason,
+                "current_screen_id": self._current_screen_state.screen_id,
+                "ocr_grounding": grounding_overlay.ocr_elements if grounding_overlay else None
+            }
+            self._emit_event("on_ai_request_sent", run_id, step_number, request_data)
+
             # Get AI actions with screen context for novelty signals
             ai_response = self.ai_interaction_service.get_next_actions(
                 run_id=run_id,
@@ -493,6 +518,13 @@ class CrawlerLoop:
                 screen_dimensions=screen_dimensions,
                 ocr_grounding=grounding_overlay.ocr_elements if grounding_overlay else None
             )
+
+            # Emit AI response event
+            self._emit_event("on_ai_response_received", run_id, step_number, {
+                "actions_count": len(ai_response.actions),
+                "signup_completed": ai_response.signup_completed,
+                "latency_ms": ai_response.latency_ms
+            })
             
             # Save annotated screenshot for debugging (Phase 4)
             try:
@@ -505,19 +537,34 @@ class CrawlerLoop:
                 
                 for idx, action in enumerate(ai_response.actions):
                     action_data = {}
-                    if action.label_id is not None:
-                        msg = f"Action {idx+1}: label [{action.label_id}]"
-                        action_data["label_id"] = action.label_id
-                    elif action.target_bounding_box:
+                    msg = f"Action {idx+1}: {action.action}"
+                    
+                    # 1. Priority: Use explicit bounding box from AI if provided
+                    if action.target_bounding_box:
                         tl = action.target_bounding_box.top_left
                         br = action.target_bounding_box.bottom_right
-                        msg = f"Action {idx+1}: coords [{tl[0]},{tl[1]}]->[{br[0]},{br[1]}]"
                         action_data["target_bounding_box"] = {
                             "top_left": list(tl),
                             "bottom_right": list(br)
                         }
-                    else:
-                        msg = f"Action {idx+1}: {action.action}"
+                        msg += f" coords [{tl[0]},{tl[1]}]->[{br[0]},{br[1]}]"
+                    
+                    # 2. Use label_id if provided
+                    if action.label_id is not None:
+                        action_data["label_id"] = action.label_id
+                        msg += f" label [{action.label_id}]"
+                        
+                        # Resolve label to bounding box for annotation if AI didn't provide coords
+                        if "target_bounding_box" not in action_data and grounding_overlay:
+                            for element in grounding_overlay.ocr_elements:
+                                if element["label"] == action.label_id:
+                                    b = element["bounds"] # [x1, y1, x2, y2]
+                                    action_data["target_bounding_box"] = {
+                                        "top_left": [b[0], b[1]],
+                                        "bottom_right": [b[2], b[3]]
+                                    }
+                                    msg += " (resolved from grounding)"
+                                    break
                     
                     self._emit_event("on_debug_log", run_id, step_number, msg)
                     actions_dicts.append(action_data)
