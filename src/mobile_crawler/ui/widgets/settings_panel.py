@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QRadioButton,
     QButtonGroup,
+    QCheckBox,
 )
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
@@ -156,6 +157,86 @@ class SettingsPanel(QWidget):
         screen_group.setLayout(screen_layout)
         layout.addWidget(screen_group)
 
+        # Group box for Traffic Capture
+        traffic_capture_group = QGroupBox("Traffic Capture (PCAPdroid)")
+        traffic_capture_layout = QVBoxLayout()
+
+        # Enable traffic capture checkbox
+        enable_layout = QHBoxLayout()
+        self.enable_traffic_capture_checkbox = QCheckBox("Enable Traffic Capture")
+        enable_layout.addWidget(self.enable_traffic_capture_checkbox)
+        enable_layout.addStretch()
+        traffic_capture_layout.addLayout(enable_layout)
+
+        # PCAPdroid API Key
+        pcapdroid_api_key_layout = QHBoxLayout()
+        pcapdroid_api_key_label = QLabel("PCAPdroid API Key:")
+        pcapdroid_api_key_layout.addWidget(pcapdroid_api_key_label)
+        self.pcapdroid_api_key_input = QLineEdit()
+        self.pcapdroid_api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.pcapdroid_api_key_input.setPlaceholderText("Enter PCAPdroid API key")
+        self.pcapdroid_api_key_input.setEnabled(False)
+        pcapdroid_api_key_layout.addWidget(self.pcapdroid_api_key_input)
+        traffic_capture_layout.addLayout(pcapdroid_api_key_layout)
+
+        # Connect checkbox to enable/disable fields
+        self.enable_traffic_capture_checkbox.toggled.connect(self._on_traffic_capture_toggled)
+
+        traffic_capture_group.setLayout(traffic_capture_layout)
+        layout.addWidget(traffic_capture_group)
+
+        # Group box for Video Recording
+        video_recording_group = QGroupBox("Video Recording")
+        video_recording_layout = QVBoxLayout()
+
+        # Enable video recording checkbox
+        enable_video_layout = QHBoxLayout()
+        self.enable_video_recording_checkbox = QCheckBox("Enable Video Recording")
+        enable_video_layout.addWidget(self.enable_video_recording_checkbox)
+        enable_video_layout.addStretch()
+        video_recording_layout.addLayout(enable_video_layout)
+
+        video_recording_group.setLayout(video_recording_layout)
+        layout.addWidget(video_recording_group)
+
+        # Group box for MobSF Analysis
+        mobsf_group = QGroupBox("MobSF Static Analysis")
+        mobsf_layout = QVBoxLayout()
+
+        # Enable MobSF analysis checkbox
+        enable_mobsf_layout = QHBoxLayout()
+        self.enable_mobsf_analysis_checkbox = QCheckBox("Enable MobSF Analysis")
+        enable_mobsf_layout.addWidget(self.enable_mobsf_analysis_checkbox)
+        enable_mobsf_layout.addStretch()
+        mobsf_layout.addLayout(enable_mobsf_layout)
+
+        # MobSF API URL
+        mobsf_url_layout = QHBoxLayout()
+        mobsf_url_label = QLabel("MobSF API URL:")
+        mobsf_url_layout.addWidget(mobsf_url_label)
+        self.mobsf_api_url_input = QLineEdit()
+        self.mobsf_api_url_input.setPlaceholderText("http://localhost:8000")
+        self.mobsf_api_url_input.setEnabled(False)  # Enabled when checkbox is checked
+        mobsf_url_layout.addWidget(self.mobsf_api_url_input)
+        mobsf_layout.addLayout(mobsf_url_layout)
+
+        # MobSF API Key
+        mobsf_api_key_layout = QHBoxLayout()
+        mobsf_api_key_label = QLabel("MobSF API Key:")
+        mobsf_api_key_layout.addWidget(mobsf_api_key_label)
+        self.mobsf_api_key_input = QLineEdit()
+        self.mobsf_api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.mobsf_api_key_input.setPlaceholderText("Enter MobSF API key")
+        self.mobsf_api_key_input.setEnabled(False)
+        mobsf_api_key_layout.addWidget(self.mobsf_api_key_input)
+        mobsf_layout.addLayout(mobsf_api_key_layout)
+
+        # Connect checkbox to enable/disable fields
+        self.enable_mobsf_analysis_checkbox.toggled.connect(self._on_mobsf_toggled)
+
+        mobsf_group.setLayout(mobsf_layout)
+        layout.addWidget(mobsf_group)
+
         # Group box for Test Credentials
         credentials_group = QGroupBox("Test Credentials")
         credentials_layout = QVBoxLayout()
@@ -211,6 +292,23 @@ class SettingsPanel(QWidget):
             self.max_steps_input.setEnabled(False)
             self.max_duration_input.setEnabled(True)
 
+    def _on_traffic_capture_toggled(self, checked: bool):
+        """Handle traffic capture checkbox toggle.
+        
+        Args:
+            checked: Whether traffic capture is enabled
+        """
+        self.pcapdroid_api_key_input.setEnabled(checked)
+
+    def _on_mobsf_toggled(self, checked: bool):
+        """Handle MobSF analysis checkbox toggle.
+        
+        Args:
+            checked: Whether MobSF analysis is enabled
+        """
+        self.mobsf_api_url_input.setEnabled(checked)
+        self.mobsf_api_key_input.setEnabled(checked)
+
     def _load_settings(self):
         """Load settings from user_config.db."""
         # Load API keys (None if not found or decryption fails)
@@ -256,6 +354,32 @@ class SettingsPanel(QWidget):
         if test_password:
             self.test_password_input.setText(test_password)
 
+        # Load traffic capture settings
+        enable_traffic_capture = self._config_store.get_setting("enable_traffic_capture", default=False)
+        self.enable_traffic_capture_checkbox.setChecked(enable_traffic_capture)
+        self._on_traffic_capture_toggled(enable_traffic_capture)
+
+
+        pcapdroid_api_key = self._config_store.get_secret_plaintext("pcapdroid_api_key")
+        if pcapdroid_api_key:
+            self.pcapdroid_api_key_input.setText(pcapdroid_api_key)
+
+        # Load video recording settings
+        enable_video_recording = self._config_store.get_setting("enable_video_recording", default=False)
+        self.enable_video_recording_checkbox.setChecked(enable_video_recording)
+
+        # Load MobSF settings
+        enable_mobsf_analysis = self._config_store.get_setting("enable_mobsf_analysis", default=False)
+        self.enable_mobsf_analysis_checkbox.setChecked(enable_mobsf_analysis)
+        self._on_mobsf_toggled(enable_mobsf_analysis)
+
+        mobsf_api_url = self._config_store.get_setting("mobsf_api_url", default="http://localhost:8000")
+        self.mobsf_api_url_input.setText(mobsf_api_url)
+
+        mobsf_api_key = self._config_store.get_secret_plaintext("mobsf_api_key")
+        if mobsf_api_key:
+            self.mobsf_api_key_input.setText(mobsf_api_key)
+
     def _on_save_clicked(self):
         """Handle save button click."""
         try:
@@ -267,6 +391,12 @@ class SettingsPanel(QWidget):
             openrouter_key = self.openrouter_api_key_input.text().strip()
             if openrouter_key and not self._validate_api_key(openrouter_key, "OpenRouter"):
                 return
+
+            # Validate MobSF API URL if MobSF is enabled
+            if self.enable_mobsf_analysis_checkbox.isChecked():
+                mobsf_url = self.mobsf_api_url_input.text().strip()
+                if mobsf_url and not self._validate_mobsf_url(mobsf_url):
+                    return
 
             # Save API keys (encrypted)
             if gemini_key:
@@ -309,6 +439,37 @@ class SettingsPanel(QWidget):
                 self._config_store.set_secret_plaintext("test_password", test_password)
             else:
                 self._config_store.delete_secret("test_password")
+
+            # Save traffic capture settings
+            enable_traffic_capture = self.enable_traffic_capture_checkbox.isChecked()
+            self._config_store.set_setting("enable_traffic_capture", enable_traffic_capture, "bool")
+
+
+            pcapdroid_api_key = self.pcapdroid_api_key_input.text().strip()
+            if pcapdroid_api_key:
+                self._config_store.set_secret_plaintext("pcapdroid_api_key", pcapdroid_api_key)
+            else:
+                self._config_store.delete_secret("pcapdroid_api_key")
+
+            # Save video recording settings
+            enable_video_recording = self.enable_video_recording_checkbox.isChecked()
+            self._config_store.set_setting("enable_video_recording", enable_video_recording, "bool")
+
+            # Save MobSF settings
+            enable_mobsf_analysis = self.enable_mobsf_analysis_checkbox.isChecked()
+            self._config_store.set_setting("enable_mobsf_analysis", enable_mobsf_analysis, "bool")
+
+            mobsf_api_url = self.mobsf_api_url_input.text().strip()
+            if mobsf_api_url:
+                self._config_store.set_setting("mobsf_api_url", mobsf_api_url, "string")
+            else:
+                self._config_store.set_setting("mobsf_api_url", "http://localhost:8000", "string")
+
+            mobsf_api_key = self.mobsf_api_key_input.text().strip()
+            if mobsf_api_key:
+                self._config_store.set_secret_plaintext("mobsf_api_key", mobsf_api_key)
+            else:
+                self._config_store.delete_secret("mobsf_api_key")
 
             # Emit signal
             self.settings_saved.emit()
@@ -392,6 +553,55 @@ class SettingsPanel(QWidget):
         """
         return self.test_username_input.text()
 
+    def get_enable_traffic_capture(self) -> bool:
+        """Get the current traffic capture enabled state.
+        
+        Returns:
+            True if traffic capture is enabled
+        """
+        return self.enable_traffic_capture_checkbox.isChecked()
+
+    def get_enable_video_recording(self) -> bool:
+        """Get the current video recording enabled state.
+        
+        Returns:
+            True if video recording is enabled
+        """
+        return self.enable_video_recording_checkbox.isChecked()
+
+    def get_enable_mobsf_analysis(self) -> bool:
+        """Get the current MobSF analysis enabled state.
+        
+        Returns:
+            True if MobSF analysis is enabled
+        """
+        return self.enable_mobsf_analysis_checkbox.isChecked()
+
+
+    def get_pcapdroid_api_key(self) -> str:
+        """Get the current PCAPdroid API key.
+        
+        Returns:
+            PCAPdroid API key
+        """
+        return self.pcapdroid_api_key_input.text().strip()
+
+    def get_mobsf_api_url(self) -> str:
+        """Get the current MobSF API URL.
+        
+        Returns:
+            MobSF API URL
+        """
+        return self.mobsf_api_url_input.text().strip()
+
+    def get_mobsf_api_key(self) -> str:
+        """Get the current MobSF API key.
+        
+        Returns:
+            MobSF API key
+        """
+        return self.mobsf_api_key_input.text().strip()
+
     def reset(self):
         """Reset all settings to default values."""
         self.gemini_api_key_input.clear()
@@ -435,5 +645,55 @@ class SettingsPanel(QWidget):
         
         # For more thorough validation, we could make a test API call here
         # But for now, basic format validation is sufficient
+        
+        return True
+
+    def _validate_mobsf_url(self, url: str) -> bool:
+        """Validate MobSF API URL format.
+        
+        Args:
+            url: The URL to validate
+            
+        Returns:
+            True if valid, False otherwise
+        """
+        if not url:
+            QMessageBox.warning(
+                self,
+                "Invalid MobSF API URL",
+                "MobSF API URL cannot be empty when MobSF analysis is enabled."
+            )
+            return False
+        
+        # Basic URL format validation
+        if not url.startswith(("http://", "https://")):
+            QMessageBox.warning(
+                self,
+                "Invalid MobSF API URL",
+                "MobSF API URL must start with http:// or https://\n\n"
+                f"Example: http://localhost:8000"
+            )
+            return False
+        
+        # Check for basic URL structure
+        try:
+            from urllib.parse import urlparse
+            parsed = urlparse(url)
+            if not parsed.netloc:
+                QMessageBox.warning(
+                    self,
+                    "Invalid MobSF API URL",
+                    "MobSF API URL appears to be malformed.\n\n"
+                    f"Example: http://localhost:8000"
+                )
+                return False
+        except Exception:
+            QMessageBox.warning(
+                self,
+                "Invalid MobSF API URL",
+                "MobSF API URL appears to be malformed.\n\n"
+                f"Example: http://localhost:8000"
+            )
+            return False
         
         return True
