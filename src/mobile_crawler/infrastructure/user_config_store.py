@@ -3,6 +3,7 @@
 import base64
 import platform
 import sqlite3
+import threading
 import uuid
 from pathlib import Path
 from typing import Any, Optional
@@ -10,8 +11,6 @@ from typing import Any, Optional
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-
-from mobile_crawler.config.paths import get_app_data_dir
 
 
 class UserConfigStore:
@@ -24,25 +23,33 @@ class UserConfigStore:
             db_path: Path to database file. If None, uses default location.
         """
         if db_path is None:
+            # Late import to avoid circular import with config module
+            from mobile_crawler.config.paths import get_app_data_dir
             app_data_dir = get_app_data_dir()
             db_path = app_data_dir / "user_config.db"
 
         self.db_path = db_path
-        self._connection: Optional[sqlite3.Connection] = None
+        # Thread-local storage for connections (SQLite connections are not thread-safe)
+        self._local = threading.local()
 
     def get_connection(self) -> sqlite3.Connection:
-        """Get database connection with row factory configured."""
-        if self._connection is None:
-            self._connection = sqlite3.connect(str(self.db_path))
-            self._connection.row_factory = sqlite3.Row
-            self._connection.execute("PRAGMA foreign_keys=ON")
-        return self._connection
+        """Get database connection with row factory configured.
+        
+        Uses thread-local storage to ensure each thread gets its own connection,
+        which is required for SQLite thread safety.
+        """
+        # Check if this thread already has a connection
+        if not hasattr(self._local, 'connection') or self._local.connection is None:
+            self._local.connection = sqlite3.connect(str(self.db_path), check_same_thread=False)
+            self._local.connection.row_factory = sqlite3.Row
+            self._local.connection.execute("PRAGMA foreign_keys=ON")
+        return self._local.connection
 
     def close(self):
-        """Close database connection."""
-        if self._connection:
-            self._connection.close()
-            self._connection = None
+        """Close database connection for current thread."""
+        if hasattr(self._local, 'connection') and self._local.connection:
+            self._local.connection.close()
+            self._local.connection = None
 
     def create_schema(self):
         """Create tables for user_config.db."""

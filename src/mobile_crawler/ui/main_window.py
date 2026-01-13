@@ -200,8 +200,18 @@ class MainWindow(QMainWindow):
         # History and reporting services
         run_repository = RunRepository(db_manager)
         report_generator = ReportGenerator(db_manager)
-        mobsf_manager = MobSFManager()
         session_folder_manager = SessionFolderManager()
+        
+        # Create config manager for feature managers
+        from mobile_crawler.config.config_manager import ConfigManager
+        config_manager = ConfigManager(user_config_store)
+        
+        # MobSF manager (initialized with config, will be fully configured when used)
+        mobsf_manager = MobSFManager(
+            config_manager=config_manager,
+            adb_client=None,  # Will be created when needed
+            session_folder_manager=session_folder_manager
+        )
         
         # Repository services for statistics
         step_log_repository = StepLogRepository(db_manager)
@@ -399,6 +409,7 @@ class MainWindow(QMainWindow):
         # Set current selections
         config_manager.set('ai_provider', self._ai_provider)
         config_manager.set('ai_model', self._ai_model)
+        config_manager.set('app_package', self._selected_package)
         
         # Set crawl limits from settings panel
         config_manager.set('max_crawl_steps', self.settings_panel.get_max_steps())
@@ -418,6 +429,44 @@ class MainWindow(QMainWindow):
         # Log to UI so user can see it's being picked up
         self.signal_adapter.on_debug_log(0, 0, f"UI: Setting top_bar_height to {top_height}px")
         config_manager.set('top_bar_height', top_height)
+        
+        # Set feature flags from settings panel
+        enable_traffic_capture = self.settings_panel.get_enable_traffic_capture()
+        enable_video_recording = self.settings_panel.get_enable_video_recording()
+        enable_mobsf_analysis = self.settings_panel.get_enable_mobsf_analysis()
+        
+        # Log feature flag values for debugging
+        self.signal_adapter.on_debug_log(0, 0, f"UI: Feature flags - traffic_capture={enable_traffic_capture}, video_recording={enable_video_recording}, mobsf_analysis={enable_mobsf_analysis}")
+        
+        config_manager.set('enable_traffic_capture', enable_traffic_capture)
+        config_manager.set('enable_video_recording', enable_video_recording)
+        config_manager.set('enable_mobsf_analysis', enable_mobsf_analysis)
+        
+        # Verify settings were stored correctly by reading them back
+        verified_traffic = config_manager.get('enable_traffic_capture', 'NOT_FOUND')
+        verified_video = config_manager.get('enable_video_recording', 'NOT_FOUND')
+        verified_mobsf = config_manager.get('enable_mobsf_analysis', 'NOT_FOUND')
+        self.signal_adapter.on_debug_log(0, 0, f"UI: Verified DB write - traffic={verified_traffic}, video={verified_video}, mobsf={verified_mobsf}")
+        
+        # Set PCAPdroid configuration (package and activity are fixed, no UI configuration needed)
+        config_manager.set('pcapdroid_package', 'com.emanuelef.remote_capture')
+        config_manager.set('pcapdroid_activity', 'com.emanuelef.remote_capture/.activities.CaptureCtrl')
+        
+        pcapdroid_api_key = self.settings_panel.get_pcapdroid_api_key()
+        if pcapdroid_api_key:
+            config_manager.set('pcapdroid_api_key', pcapdroid_api_key)
+        
+        # Set MobSF configuration
+        mobsf_api_url = self.settings_panel.get_mobsf_api_url()
+        if mobsf_api_url:
+            config_manager.set('mobsf_api_url', mobsf_api_url)
+        else:
+            # Use default if not set in UI
+            config_manager.set('mobsf_api_url', 'http://localhost:8000')
+        
+        mobsf_api_key = self.settings_panel.get_mobsf_api_key()
+        if mobsf_api_key:
+            config_manager.set('mobsf_api_key', mobsf_api_key)
         
         return config_manager
 

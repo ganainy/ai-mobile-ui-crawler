@@ -95,20 +95,20 @@ class PreCrawlValidator:
             if api_key_error:
                 errors.append(api_key_error)
 
-        # 6. Check MobSF server reachable (optional, warn only - only when any param is provided)
-        if has_any_param:
+        # 6. Check MobSF server reachable (only if MobSF analysis is enabled)
+        if self._config_manager.get("enable_mobsf_analysis", False):
             mobsf_warning = self._check_mobsf_reachable()
             if mobsf_warning:
                 errors.append(mobsf_warning)
 
-        # 7. Check PCAPdroid installed (optional, warn only - only when any param is provided)
-        if has_any_param:
-            pcapdroid_warning = self._check_pcapdroid_installed()
+        # 7. Check PCAPdroid installed (only if traffic capture is enabled)
+        if self._config_manager.get("enable_traffic_capture", False):
+            pcapdroid_warning = self._check_pcapdroid_installed(device_id)
             if pcapdroid_warning:
                 errors.append(pcapdroid_warning)
 
-        # 8. Check video recording available (optional, warn only - only when any param is provided)
-        if has_any_param:
+        # 8. Check video recording available (only if video recording is enabled)
+        if self._config_manager.get("enable_video_recording", False):
             video_warning = self._check_video_available()
             if video_warning:
                 errors.append(video_warning)
@@ -318,20 +318,45 @@ class PreCrawlValidator:
         return None
 
     def _check_mobsf_reachable(self) -> Optional[ValidationError]:
-        """Check if MobSF server is reachable (optional, warn only).
+        """Check if MobSF server is reachable (when MobSF analysis is enabled).
 
         Returns:
             ValidationError if MobSF not reachable (warning severity), None otherwise
         """
         try:
-            mobsf_url = self._config_manager.get("MOBSF_URL", "http://localhost:8000")
+            mobsf_url = self._config_manager.get("mobsf_api_url", "http://localhost:8000")
+            mobsf_api_key = self._config_manager.get("mobsf_api_key")
 
-            # This is a simple check - in production, you'd make an HTTP request
-            # For now, we'll just check if the URL is configured
             if not mobsf_url:
                 return ValidationError(
                     field="mobsf",
                     message="MobSF server URL not configured. Static analysis will be skipped.",
+                    severity="warning"
+                )
+
+            if not mobsf_api_key:
+                return ValidationError(
+                    field="mobsf",
+                    message="MobSF API key not configured. Static analysis will be skipped.",
+                    severity="warning"
+                )
+
+            # Try to reach MobSF server
+            try:
+                import requests
+                url = f"{mobsf_url.rstrip('/')}/api/v1/about"
+                headers = {"Authorization": mobsf_api_key}
+                response = requests.get(url, headers=headers, timeout=5)
+                if response.status_code != 200:
+                    return ValidationError(
+                        field="mobsf",
+                        message=f"MobSF server at {mobsf_url} is not reachable or API key is invalid. Static analysis will be skipped.",
+                        severity="warning"
+                    )
+            except requests.RequestException:
+                return ValidationError(
+                    field="mobsf",
+                    message=f"Cannot connect to MobSF server at {mobsf_url}. Static analysis will be skipped.",
                     severity="warning"
                 )
         except Exception as e:
@@ -344,32 +369,48 @@ class PreCrawlValidator:
 
         return None
 
-    def _check_pcapdroid_installed(self) -> Optional[ValidationError]:
-        """Check if PCAPdroid is installed on device (optional, warn only).
+    def _check_pcapdroid_installed(self, device_id: Optional[str]) -> Optional[ValidationError]:
+        """Check if PCAPdroid is installed on device (when traffic capture is enabled).
+
+        Args:
+            device_id: Target device identifier
 
         Returns:
             ValidationError if PCAPdroid not found (warning severity), None otherwise
         """
         try:
-            devices = self._device_detector.get_connected_devices()
-
-            if not devices:
+            if not device_id:
                 return ValidationError(
                     field="pcapdroid",
-                    message="No device connected. Cannot verify PCAPdroid installation.",
+                    message="No device specified. Cannot verify PCAPdroid installation.",
                     severity="warning"
                 )
 
-            # Check if PCAPdroid package exists on device
-            # This is a simplified check - in production, you'd use ADB to verify
-            pcapdroid_installed = self._config_manager.get("PCAPDROID_INSTALLED", False)
+            # Check if PCAPdroid package exists on device using ADB
+            import subprocess
+            pcapdroid_package = self._config_manager.get(
+                "pcapdroid_package", "com.emanuelef.android.apps.pcapdroid"
+            )
+            result = subprocess.run(
+                ["adb", "-s", device_id, "shell", "pm", "list", "packages", pcapdroid_package],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
 
-            if not pcapdroid_installed:
+            if result.returncode != 0 or pcapdroid_package not in result.stdout:
                 return ValidationError(
                     field="pcapdroid",
-                    message="PCAPdroid may not be installed on device. Traffic capture will be skipped.",
+                    message=f"PCAPdroid ({pcapdroid_package}) not found on device {device_id}. "
+                    "Install PCAPdroid from F-Droid to enable traffic capture.",
                     severity="warning"
                 )
+        except FileNotFoundError:
+            return ValidationError(
+                field="pcapdroid",
+                message="ADB not found in PATH. Cannot verify PCAPdroid installation.",
+                severity="warning"
+            )
         except Exception as e:
             logger.error(f"Error checking PCAPdroid: {e}")
             return ValidationError(

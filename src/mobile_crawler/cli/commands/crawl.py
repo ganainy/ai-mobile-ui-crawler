@@ -173,7 +173,10 @@ class JSONEventListener(CrawlerEventListener):
 @click.option('--steps', type=int, help='Maximum number of crawl steps')
 @click.option('--duration', type=int, help='Maximum crawl duration in seconds')
 @click.option('--provider', help='AI provider (gemini, openrouter, ollama)')
-def crawl(device: str, package: str, model: str, steps: Optional[int], duration: Optional[int], provider: Optional[str]) -> None:
+@click.option('--enable-traffic-capture', is_flag=True, help='Enable PCAPdroid traffic capture during crawl')
+@click.option('--enable-video-recording', is_flag=True, help='Enable video recording during crawl')
+@click.option('--enable-mobsf-analysis', is_flag=True, help='Enable MobSF static analysis after crawl')
+def crawl(device: str, package: str, model: str, steps: Optional[int], duration: Optional[int], provider: Optional[str], enable_traffic_capture: bool, enable_video_recording: bool, enable_mobsf_analysis: bool) -> None:
     """Start a crawl on the specified device and app."""
     try:
         # Ensure app data directory exists
@@ -192,6 +195,13 @@ def crawl(device: str, package: str, model: str, steps: Optional[int], duration:
         if provider:
             config_manager.set('ai_provider', provider)
         config_manager.set('ai_model', model)
+        config_manager.set('app_package', package)  # Set app package for features
+        if enable_traffic_capture:
+            config_manager.set('enable_traffic_capture', True)
+        if enable_video_recording:
+            config_manager.set('enable_video_recording', True)
+        if enable_mobsf_analysis:
+            config_manager.set('enable_mobsf_analysis', True)
 
         # Initialize database
         db_manager = DatabaseManager()

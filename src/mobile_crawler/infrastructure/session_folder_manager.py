@@ -45,7 +45,8 @@ class SessionFolderManager:
         os.makedirs(session_path, exist_ok=True)
         
         # Create standard subdirectories
-        subdirs = ["screenshots", "reports", "data"]
+        # Separate folders for different artifact types: pcap, videos, logs
+        subdirs = ["screenshots", "reports", "pcap", "videos", "logs", "data"]
         for subdir in subdirs:
             os.makedirs(os.path.join(session_path, subdir), exist_ok=True)
         

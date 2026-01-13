@@ -12,8 +12,10 @@ Mobile Crawler is an automated exploration tool for Android mobile applications 
 - **AI-Driven Exploration**: Uses vision-capable AI models (Gemini, OpenRouter, Ollama) to analyze screenshots and determine next actions
 - **Multiple Interfaces**: Both GUI and CLI interfaces for different use cases
 - **Comprehensive Logging**: Detailed action logs, statistics, and reporting
-- **External Integrations**: PCAPdroid traffic capture, MobSF security analysis, video recording
-- **Flexible Configuration**: Environment variables, database settings, and user preferences
+- **Network Traffic Capture**: PCAPdroid integration for capturing network traffic during crawl sessions
+- **Video Recording**: Automatic screen recording of crawl sessions using Appium's built-in recording
+- **Security Analysis**: MobSF integration for static security analysis of Android applications
+- **Flexible Configuration**: Environment variables, database settings, and user preferences with validation
 
 ## Installation
 
@@ -57,14 +59,36 @@ pip install -e ".[dev]"
 - **Coordinate-Based Actions**: All actions use visual coordinates from VLM, no element selectors
 - **Updated Prompts**: System prompts explicitly request coordinate-based actions
 
-### 🔄 In Progress
-- Additional testing and validation of image-only mode
+### ✅ Completed (Phase 3 - Feature Integrations)
+- **Traffic Capture**: PCAPdroid integration for network traffic analysis during crawl sessions
+- **Video Recording**: Appium-based screen recording with automatic saving to session directories
+- **MobSF Analysis**: Static security analysis with PDF/JSON report generation and security score tracking
+- **Configuration Management**: UI and CLI configuration with validation and persistence
+- **Prerequisite Validation**: Pre-crawl checks for feature dependencies (PCAPdroid, MobSF server, video support)
+- **Graceful Degradation**: Crawl continues successfully even if optional features fail
 
 ## Usage
 
 ### CLI
+
+Basic crawl:
 ```bash
-mobile-crawler-cli crawl --package com.example.app --device emulator-5554
+mobile-crawler-cli crawl --package com.example.app --device emulator-5554 --model gemini-1.5-pro --provider gemini
+```
+
+With optional features:
+```bash
+# Enable traffic capture
+mobile-crawler-cli crawl --package com.example.app --device emulator-5554 --model gemini-1.5-pro --provider gemini --enable-traffic-capture
+
+# Enable video recording
+mobile-crawler-cli crawl --package com.example.app --device emulator-5554 --model gemini-1.5-pro --provider gemini --enable-video-recording
+
+# Enable MobSF analysis
+mobile-crawler-cli crawl --package com.example.app --device emulator-5554 --model gemini-1.5-pro --provider gemini --enable-mobsf-analysis
+
+# Enable all features
+mobile-crawler-cli crawl --package com.example.app --device emulator-5554 --model gemini-1.5-pro --provider gemini --enable-traffic-capture --enable-video-recording --enable-mobsf-analysis
 ```
 
 ### GUI
@@ -78,6 +102,12 @@ mobile-crawler-gui
 - Android device or emulator
 - Appium server
 - AI provider API keys (Gemini, OpenRouter, or Ollama)
+
+### Optional Requirements (for additional features)
+
+- **PCAPdroid** (for traffic capture): Install from [F-Droid](https://f-droid.org/packages/com.emanuelef.remote_capture/)
+- **MobSF Server** (for security analysis): Running MobSF instance with API access
+- **ADB** (Android Debug Bridge): Required for PCAPdroid control and APK extraction
 
 ## Development
 

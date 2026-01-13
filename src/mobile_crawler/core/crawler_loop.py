@@ -23,6 +23,10 @@ from mobile_crawler.infrastructure.screenshot_capture import ScreenshotCapture
 from mobile_crawler.infrastructure.step_log_repository import StepLog, StepLogRepository
 from mobile_crawler.domain.grounding.manager import GroundingManager
 from mobile_crawler.infrastructure.session_folder_manager import SessionFolderManager
+from mobile_crawler.domain.traffic_capture_manager import TrafficCaptureManager
+from mobile_crawler.domain.video_recording_manager import VideoRecordingManager
+from mobile_crawler.infrastructure.mobsf_manager import MobSFManager
+from mobile_crawler.infrastructure.adb_client import ADBClient
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +91,11 @@ class CrawlerLoop:
         # Step-by-step debug mode (Phase 5)
         self._step_by_step_enabled = False
         self._step_advance_event = threading.Event()
+
+        # Feature managers (initialized on demand)
+        self._traffic_capture_manager: Optional[TrafficCaptureManager] = None
+        self._video_recording_manager: Optional[VideoRecordingManager] = None
+        self._mobsf_manager: Optional[MobSFManager] = None
 
         # Configuration
         self.max_crawl_steps = self.config_manager.get('max_crawl_steps', 15)
@@ -184,6 +193,10 @@ class CrawlerLoop:
             # Store target package for app context validation
             self._target_package = run.app_package
 
+            # Initialize and start feature managers if enabled
+            self._initialize_traffic_capture(run_id, session_path)
+            self._initialize_video_recording(run_id, session_path)
+
             # Emit crawl started event
             self._emit_event("on_crawl_started", run_id, run.app_package)
 
@@ -248,6 +261,13 @@ class CrawlerLoop:
                 except Exception as e:
                     # Fail the crawl
                     raise
+
+            # Stop feature managers before completing crawl
+            self._stop_traffic_capture(run_id, step_number)
+            self._stop_video_recording()
+
+            # Run MobSF analysis after crawl completion (if enabled)
+            self._run_mobsf_analysis(run_id, session_path)
 
             # Complete crawl
             total_duration_ms = (time.time() - start_time) * 1000
@@ -710,6 +730,317 @@ class CrawlerLoop:
             return f"Reached maximum duration ({self.max_crawl_duration_seconds}s)"
         
         return "Completed successfully"
+
+    def _initialize_traffic_capture(self, run_id: int, session_path: str) -> None:
+        """Initialize and start traffic capture if enabled.
+
+        Args:
+            run_id: Run ID
+            session_path: Session directory path
+        """
+        # Debug: Log the config value being checked
+        enable_traffic_capture = self.config_manager.get("enable_traffic_capture", False)
+        logger.info(f"Traffic capture enabled in config: {enable_traffic_capture}")
+        self._emit_event("on_debug_log", run_id, 0, f"Traffic capture enabled in config: {enable_traffic_capture}")
+        
+        if not enable_traffic_capture:
+            logger.info("Traffic capture is disabled, skipping initialization")
+            self._emit_event("on_debug_log", run_id, 0, "Traffic capture is DISABLED, skipping")
+            return
+
+        try:
+            import asyncio
+
+            # Log additional config values
+            app_package = self.config_manager.get("app_package", "")
+            pcapdroid_package = self.config_manager.get("pcapdroid_package", "")
+            pcapdroid_api_key = self.config_manager.get("pcapdroid_api_key", "")
+            logger.info(f"Traffic capture config - app_package: {app_package}, pcapdroid_package: {pcapdroid_package}, api_key_set: {bool(pcapdroid_api_key)}")
+            self._emit_event("on_debug_log", run_id, 0, f"Traffic capture config - app_package: {app_package}, pcapdroid: {pcapdroid_package}")
+
+            # Initialize ADB client
+            adb_client = ADBClient(
+                adb_executable=self.config_manager.get("adb_executable_path", "adb")
+            )
+
+            # Initialize traffic capture manager
+            self._traffic_capture_manager = TrafficCaptureManager(
+                config_manager=self.config_manager,
+                adb_client=adb_client,
+                session_folder_manager=self.session_folder_manager,
+            )
+            
+            # Verify the manager's enabled state
+            logger.info(f"TrafficCaptureManager created, traffic_capture_enabled: {self._traffic_capture_manager.traffic_capture_enabled}")
+            self._emit_event("on_debug_log", run_id, 0, f"TrafficCaptureManager created, enabled: {self._traffic_capture_manager.traffic_capture_enabled}")
+
+            # Start capture asynchronously
+            async def start_capture():
+                return await self._traffic_capture_manager.start_capture_async(
+                    run_id=run_id, step_num=1, session_path=session_path
+                )
+
+            success, message = asyncio.run(start_capture())
+            if success:
+                logger.info(f"Traffic capture started for run {run_id}: {message}")
+                self._emit_event("on_debug_log", run_id, 0, f"Traffic capture STARTED: {message}")
+            else:
+                logger.warning(f"Failed to start traffic capture for run {run_id}: {message}")
+                self._emit_event("on_debug_log", run_id, 0, f"Traffic capture FAILED: {message}")
+        except Exception as e:
+            logger.error(f"Error initializing traffic capture: {e}", exc_info=True)
+            # Don't fail the crawl if traffic capture fails
+            self._traffic_capture_manager = None
+
+    def _initialize_video_recording(self, run_id: int, session_path: str) -> None:
+        """Initialize and start video recording if enabled.
+
+        Args:
+            run_id: Run ID
+            session_path: Session directory path
+        """
+        # Debug: Log the config value being checked
+        enable_video_recording = self.config_manager.get("enable_video_recording", False)
+        logger.info(f"Video recording enabled in config: {enable_video_recording}")
+        self._emit_event("on_debug_log", run_id, 0, f"Video recording enabled in config: {enable_video_recording}")
+        
+        if not enable_video_recording:
+            logger.info("Video recording is disabled, skipping initialization")
+            self._emit_event("on_debug_log", run_id, 0, "Video recording is DISABLED, skipping")
+            return
+
+        try:
+            # Log additional config values
+            app_package = self.config_manager.get("app_package", "")
+            logger.info(f"Video recording config - app_package: {app_package}")
+            logger.debug(f"[DEBUG] Video recording initialization - app_package: {app_package}")
+            self._emit_event("on_debug_log", run_id, 0, f"[DEBUG] Video recording config - app_package: {app_package}")
+
+            # Check AppiumDriver availability
+            if not self.appium_driver:
+                logger.error("[DEBUG] AppiumDriver is None - cannot initialize video recording")
+                self._emit_event("on_debug_log", run_id, 0, "[DEBUG] Video recording FAILED: AppiumDriver is None")
+                return
+            
+            logger.debug(f"[DEBUG] AppiumDriver available: {self.appium_driver is not None}")
+            logger.debug(f"[DEBUG] AppiumDriver device_id: {getattr(self.appium_driver, 'device_id', 'N/A')}")
+            
+            # Check if driver is connected
+            driver = getattr(self.appium_driver, '_driver', None)
+            if driver is None:
+                logger.error("[DEBUG] Appium WebDriver not connected - cannot start video recording")
+                self._emit_event("on_debug_log", run_id, 0, "[DEBUG] Video recording FAILED: Appium WebDriver not connected")
+                return
+            
+            logger.debug(f"[DEBUG] Appium WebDriver connected: {driver is not None}")
+            logger.debug(f"[DEBUG] Appium WebDriver session_id: {getattr(driver, 'session_id', 'N/A')}")
+
+            # Initialize video recording manager
+            logger.debug("[DEBUG] Creating VideoRecordingManager...")
+            self._video_recording_manager = VideoRecordingManager(
+                appium_driver=self.appium_driver,
+                config_manager=self.config_manager,
+                session_folder_manager=self.session_folder_manager,
+            )
+            
+            # Verify the manager's enabled state
+            logger.info(f"VideoRecordingManager created, video_recording_enabled: {self._video_recording_manager.video_recording_enabled}")
+            logger.debug(f"[DEBUG] VideoRecordingManager.video_recording_enabled: {self._video_recording_manager.video_recording_enabled}")
+            self._emit_event("on_debug_log", run_id, 0, f"VideoRecordingManager created, enabled: {self._video_recording_manager.video_recording_enabled}")
+
+            # Start recording
+            logger.debug(f"[DEBUG] Calling start_recording(run_id={run_id}, step_num=1, session_path={session_path})...")
+            success = self._video_recording_manager.start_recording(
+                run_id=run_id, step_num=1, session_path=session_path
+            )
+            logger.debug(f"[DEBUG] start_recording() returned: {success}")
+            
+            if success:
+                logger.info(f"Video recording started for run {run_id}")
+                self._emit_event("on_debug_log", run_id, 0, "Video recording STARTED successfully")
+            else:
+                logger.warning(f"Failed to start video recording for run {run_id}")
+                logger.debug("[DEBUG] Video recording start failed - check logs above for details")
+                self._emit_event("on_debug_log", run_id, 0, "Video recording FAILED to start")
+                self._emit_event("on_debug_log", run_id, 0, "[DEBUG] Check Appium driver connection and device capabilities")
+        except Exception as e:
+            error_msg = f"Error initializing video recording: {e}"
+            logger.error(error_msg, exc_info=True)
+            logger.debug(f"[DEBUG] Exception in _initialize_video_recording: {type(e).__name__}: {str(e)}")
+            self._emit_event("on_debug_log", run_id, 0, f"[DEBUG] Video recording EXCEPTION: {error_msg}")
+            # Don't fail the crawl if video recording fails
+            self._video_recording_manager = None
+
+    def _stop_video_recording(self) -> None:
+        """Stop video recording and save video file."""
+        if not self._video_recording_manager:
+            return
+
+        try:
+            video_path = self._video_recording_manager.stop_recording_and_save()
+            if video_path:
+                logger.info(f"Video recording completed. Video file saved: {video_path}")
+            else:
+                logger.warning("Video recording stopped but video file not saved")
+        except Exception as e:
+            logger.error(f"Error stopping video recording: {e}", exc_info=True)
+            # Don't fail the crawl if video recording stop fails
+            # Try to save partial recording
+            try:
+                partial_path = self._video_recording_manager.save_partial_on_crash()
+                if partial_path:
+                    logger.info(f"Partial video recording saved: {partial_path}")
+            except Exception:
+                pass
+
+    def _run_mobsf_analysis(self, run_id: int, session_path: str) -> None:
+        """Run MobSF analysis after crawl completion if enabled.
+
+        Args:
+            run_id: Run ID
+            session_path: Session directory path
+        """
+        # Debug: Log the config value being checked
+        enable_mobsf_analysis = self.config_manager.get("enable_mobsf_analysis", False)
+        logger.info(f"MobSF analysis enabled in config: {enable_mobsf_analysis}")
+        self._emit_event("on_debug_log", run_id, 0, f"MobSF analysis enabled in config: {enable_mobsf_analysis}")
+        
+        if not enable_mobsf_analysis:
+            logger.info("MobSF analysis is disabled, skipping")
+            self._emit_event("on_debug_log", run_id, 0, "MobSF analysis is DISABLED, skipping")
+            return
+
+        try:
+            # Check MobSF server connectivity before starting
+            mobsf_api_url = self.config_manager.get("mobsf_api_url", "http://localhost:8000")
+            logger.debug(f"MobSF API URL: {mobsf_api_url}")
+            self._emit_event("on_debug_log", run_id, 0, f"[DEBUG] MobSF API URL: {mobsf_api_url}")
+            
+            # Try to verify server is reachable
+            import requests
+            try:
+                test_url = mobsf_api_url.rstrip("/") + "/api/v1/"
+                response = requests.get(test_url, timeout=5)
+                logger.debug(f"MobSF server connectivity check: {response.status_code}")
+                self._emit_event("on_debug_log", run_id, 0, f"[DEBUG] MobSF server reachable (status: {response.status_code})")
+            except requests.exceptions.ConnectionError as e:
+                logger.error(f"MobSF server not reachable at {mobsf_api_url}: {e}")
+                self._emit_event("on_debug_log", run_id, 0, f"[DEBUG] MobSF server NOT reachable: {e}")
+                self._emit_event("on_debug_log", run_id, 0, "[DEBUG] MobSF analysis will fail - server not running or unreachable")
+            except Exception as e:
+                logger.warning(f"Could not verify MobSF server connectivity: {e}")
+                self._emit_event("on_debug_log", run_id, 0, f"[DEBUG] MobSF server connectivity check failed: {e}")
+
+            # Initialize ADB client
+            adb_client = ADBClient(
+                adb_executable=self.config_manager.get("adb_executable_path", "adb")
+            )
+
+            # Initialize MobSF manager
+            logger.debug("Initializing MobSFManager...")
+            self._emit_event("on_debug_log", run_id, 0, "[DEBUG] Initializing MobSFManager...")
+            self._mobsf_manager = MobSFManager(
+                config_manager=self.config_manager,
+                adb_client=adb_client,
+                session_folder_manager=self.session_folder_manager,
+            )
+            logger.debug("MobSFManager initialized successfully")
+            self._emit_event("on_debug_log", run_id, 0, "[DEBUG] MobSFManager initialized successfully")
+
+            # Get package name from run
+            run = self.run_repository.get_run(run_id)
+            if not run:
+                logger.error(f"Run {run_id} not found for MobSF analysis")
+                self._emit_event("on_debug_log", run_id, 0, f"[DEBUG] MobSF analysis FAILED: Run {run_id} not found")
+                return
+
+            package_name = run.app_package
+            logger.debug(f"Starting MobSF analysis for package: {package_name}")
+            self._emit_event("on_debug_log", run_id, 0, f"[DEBUG] Starting MobSF analysis for package: {package_name}")
+
+            # Define log callback for CLI output
+            def log_callback(message: str, color: Optional[str] = None):
+                logger.info(message)
+                # Also emit to event listeners if needed
+                self._emit_event("on_mobsf_log", run_id, message)
+
+            # Perform complete scan
+            logger.debug("Calling perform_complete_scan...")
+            self._emit_event("on_debug_log", run_id, 0, "[DEBUG] Calling MobSF perform_complete_scan...")
+            success, summary = self._mobsf_manager.perform_complete_scan(
+                package_name=package_name,
+                run_id=run_id,
+                session_path=session_path,
+                log_callback=log_callback,
+            )
+            
+            logger.debug(f"MobSF analysis result: success={success}")
+            self._emit_event("on_debug_log", run_id, 0, f"[DEBUG] MobSF analysis result: success={success}")
+
+            if success:
+                logger.info(f"MobSF analysis completed successfully for run {run_id}")
+                self._emit_event("on_debug_log", run_id, 0, f"[DEBUG] MobSF analysis completed successfully for run {run_id}")
+                # Store security score in run_stats if available
+                if "security_score" in summary and isinstance(
+                    summary["security_score"], dict
+                ):
+                    score = summary["security_score"].get("score")
+                    if score:
+                        try:
+                            # Update run_stats with security score
+                            from mobile_crawler.infrastructure.database import DatabaseManager
+                            db_manager = DatabaseManager()
+                            conn = db_manager.get_connection()
+                            cursor = conn.cursor()
+                            cursor.execute(
+                                """
+                                INSERT OR REPLACE INTO run_stats (run_id, mobsf_security_score)
+                                VALUES (?, ?)
+                                """,
+                                (run_id, float(score) if isinstance(score, (int, float)) else None),
+                            )
+                            conn.commit()
+                            logger.info(f"MobSF security score stored: {score}")
+                        except Exception as e:
+                            logger.warning(f"Failed to store MobSF score: {e}")
+            else:
+                error_summary = summary.get('error', 'Unknown error')
+                logger.warning(f"MobSF analysis failed for run {run_id}: {error_summary}")
+                self._emit_event("on_debug_log", run_id, 0, f"[DEBUG] MobSF analysis FAILED: {error_summary}")
+        except Exception as e:
+            error_msg = f"Error running MobSF analysis: {e}"
+            logger.error(error_msg, exc_info=True)
+            self._emit_event("on_debug_log", run_id, 0, f"[DEBUG] MobSF analysis EXCEPTION: {error_msg}")
+            self._emit_event("on_debug_log", run_id, 0, "[DEBUG] MobSF analysis FAILED - check server status and logs")
+            # Don't fail the crawl if MobSF analysis fails
+            self._mobsf_manager = None
+
+    def _stop_traffic_capture(self, run_id: int, step_num: int) -> None:
+        """Stop traffic capture and pull PCAP file.
+
+        Args:
+            run_id: Run ID
+            step_num: Final step number
+        """
+        if not self._traffic_capture_manager:
+            return
+
+        try:
+            import asyncio
+
+            async def stop_capture():
+                return await self._traffic_capture_manager.stop_capture_and_pull_async(
+                    run_id, step_num
+                )
+
+            pcap_path = asyncio.run(stop_capture())
+            if pcap_path:
+                logger.info(f"Traffic capture completed. PCAP file saved: {pcap_path}")
+            else:
+                logger.warning(f"Traffic capture stopped but PCAP file not saved")
+        except Exception as e:
+            logger.error(f"Error stopping traffic capture: {e}", exc_info=True)
+            # Don't fail the crawl if traffic capture stop fails
 
     def _emit_event(self, event_method: str, *args, **kwargs) -> None:
         """Emit an event to all listeners.

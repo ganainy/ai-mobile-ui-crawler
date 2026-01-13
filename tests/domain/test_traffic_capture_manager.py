@@ -1,333 +1,216 @@
 """Tests for TrafficCaptureManager."""
 
-from unittest.mock import Mock, patch, MagicMock
-from subprocess import CompletedProcess
+import asyncio
+import os
+import tempfile
+from unittest.mock import Mock, patch, AsyncMock, MagicMock
+
 import pytest
 
-from mobile_crawler.domain.traffic_capture_manager import (
-    TrafficCaptureManager,
-    TrafficCaptureConfig,
-)
-import subprocess
-
-
-class TestTrafficCaptureConfig:
-    """Tests for TrafficCaptureConfig dataclass."""
-
-    def test_creation(self):
-        """Test TrafficCaptureConfig creation."""
-        config = TrafficCaptureConfig(
-            enabled=True,
-            pcapdroid_package="com.test.pcapdroid",
-            output_path="/test/path.pcap",
-        )
-
-        assert config.enabled is True
-        assert config.pcapdroid_package == "com.test.pcapdroid"
-        assert config.output_path == "/test/path.pcap"
-
-    def test_defaults(self):
-        """Test TrafficCaptureConfig with defaults."""
-        config = TrafficCaptureConfig(enabled=False)
-
-        assert config.enabled is False
-        assert config.pcapdroid_package == "com.emanuelef.android.apps.pcapdroid"
-        assert config.output_path is None
+from mobile_crawler.domain.traffic_capture_manager import TrafficCaptureManager
 
 
 class TestTrafficCaptureManager:
     """Tests for TrafficCaptureManager."""
 
-    def test_init(self):
-        """Test initialization."""
-        adb_client = Mock()
-        manager = TrafficCaptureManager(adb_client=adb_client)
+    @pytest.fixture
+    def mock_config_manager(self):
+        """Create a mock config manager with capture enabled."""
+        config = Mock()
+        config.get.side_effect = lambda key, default=None: {
+            "enable_traffic_capture": True,
+            "app_package": "com.test.app",
+            "pcapdroid_package": "com.emanuelef.android.apps.pcapdroid",
+            "pcapdroid_activity": "com.emanuelef.android.apps.pcapdroid/.activities.CaptureCtrl",
+            "pcapdroid_api_key": "test_api_key",
+            "device_pcap_dir": "/sdcard/Download/PCAPdroid",
+            "adb_executable_path": "adb",
+        }.get(key, default)
+        config.set = Mock()
+        return config
 
-        assert manager._adb_client is adb_client
-        assert manager._is_capturing is False
-        assert manager._pcapdroid_installed is None
-        assert manager._config is None
+    @pytest.fixture
+    def mock_config_manager_disabled(self):
+        """Create a mock config manager with capture disabled."""
+        config = Mock()
+        config.get.side_effect = lambda key, default=None: {
+            "enable_traffic_capture": False,
+            "app_package": "com.test.app",
+        }.get(key, default)
+        config.set = Mock()
+        return config
 
-    @patch("subprocess.run")
-    def test_is_installed_true(self, mock_run):
-        """Test is_installed when PCAPdroid is installed."""
-        mock_run.return_value = CompletedProcess(
-            args=["adb", "shell", "pm", "list", "packages"],
-            returncode=0,
-            stdout="com.emanuelef.android.apps.pcapdroid"
+    @pytest.fixture
+    def mock_adb_client(self):
+        """Create a mock ADB client."""
+        client = Mock()
+        client.execute_async = AsyncMock(return_value=("Success", 0))
+        return client
+
+    def test_init_with_capture_enabled(self, mock_config_manager, mock_adb_client):
+        """Test initialization with traffic capture enabled."""
+        manager = TrafficCaptureManager(
+            config_manager=mock_config_manager,
+            adb_client=mock_adb_client,
         )
-        manager = TrafficCaptureManager()
 
-        result = manager.is_installed()
+        assert manager.traffic_capture_enabled is True
+        assert manager._is_currently_capturing is False
+        assert manager.pcap_filename_on_device is None
+        assert manager.local_pcap_file_path is None
 
-        assert result is True
-        assert manager._pcapdroid_installed is True
-
-    @patch("subprocess.run")
-    def test_is_installed_false(self, mock_run):
-        """Test is_installed when PCAPdroid is not installed."""
-        mock_run.return_value = CompletedProcess(
-            args=["adb", "shell", "pm", "list", "packages"],
-            returncode=0,
-            stdout=""
+    def test_init_with_capture_disabled(self, mock_config_manager_disabled, mock_adb_client):
+        """Test initialization with traffic capture disabled."""
+        manager = TrafficCaptureManager(
+            config_manager=mock_config_manager_disabled,
+            adb_client=mock_adb_client,
         )
-        manager = TrafficCaptureManager()
 
-        result = manager.is_installed()
+        assert manager.traffic_capture_enabled is False
 
-        assert result is False
-        assert manager._pcapdroid_installed is False
-
-    @patch("subprocess.run")
-    def test_is_installed_cached(self, mock_run):
-        """Test that is_installed caches result."""
-        mock_run.return_value = CompletedProcess(
-            args=["adb", "shell", "pm", "list", "packages"],
-            returncode=0,
-            stdout="com.emanuelef.android.apps.pcapdroid"
+    def test_is_capturing_returns_internal_state(self, mock_config_manager, mock_adb_client):
+        """Test is_capturing returns the internal capturing state."""
+        manager = TrafficCaptureManager(
+            config_manager=mock_config_manager,
+            adb_client=mock_adb_client,
         )
-        manager = TrafficCaptureManager()
 
-        # First call
-        result1 = manager.is_installed()
-        assert result1 is True
-
-        # Second call should use cache
-        result2 = manager.is_installed()
-        assert result2 is True
-        # Should only call subprocess once
-        assert mock_run.call_count == 1
-
-    @patch("subprocess.run")
-    def test_is_installed_error(self, mock_run):
-        """Test is_installed handles errors gracefully."""
-        mock_run.side_effect = Exception("ADB error")
-        manager = TrafficCaptureManager()
-
-        result = manager.is_installed()
-
-        assert result is False
-        assert manager._pcapdroid_installed is False
-
-    def test_configure(self):
-        """Test configure method."""
-        config = TrafficCaptureConfig(enabled=True, output_path="/test.pcap")
-        manager = TrafficCaptureManager()
-
-        manager.configure(config)
-
-        assert manager._config is config
-
-    def test_start_disabled(self):
-        """Test start when capture is disabled."""
-        config = TrafficCaptureConfig(enabled=False)
-        manager = TrafficCaptureManager()
-        manager.configure(config)
-
-        result = manager.start()
-
-        assert result is False
-        assert manager._is_capturing is False
-
-    @patch("subprocess.run")
-    def test_start_not_installed(self, mock_run):
-        """Test start when PCAPdroid is not installed."""
-        mock_run.return_value = CompletedProcess(
-            args=["adb", "shell", "pm", "list", "packages"],
-            returncode=0,
-            stdout=""
-        )
-        config = TrafficCaptureConfig(enabled=True)
-        manager = TrafficCaptureManager()
-        manager.configure(config)
-
-        result = manager.start()
-
-        assert result is False
-        assert manager._is_capturing is False
-
-    @patch("subprocess.run")
-    def test_start_success(self, mock_run):
-        """Test successful start of traffic capture."""
-        # Configure ADB client mock to return string
-        adb_client = Mock()
-        adb_client.execute.return_value = "com.emanuelef.android.apps.pcapdroid"
-        
-        config = TrafficCaptureConfig(enabled=True)
-        manager = TrafficCaptureManager(adb_client=adb_client)
-        manager.configure(config)
-
-        result = manager.start()
-
-        assert result is True
-        assert manager._is_capturing is True
-
-    @patch("subprocess.run")
-    def test_start_failure(self, mock_run):
-        """Test start failure."""
-        mock_run.side_effect = Exception("ADB command failed")
-        config = TrafficCaptureConfig(enabled=True)
-        manager = TrafficCaptureManager(adb_client=Mock())
-        manager.configure(config)
-
-        result = manager.start()
-
-        assert result is False
-        assert manager._is_capturing is False
-
-    @patch("subprocess.run")
-    @patch("time.strftime")
-    def test_stop_and_pull_with_default_path(self, mock_strftime, mock_run):
-        """Test stop_and_pull generates default path."""
-        mock_strftime.return_value = "20260110_143000"
-        
-        # Configure ADB client mock to return string
-        adb_client = Mock()
-        adb_client.execute.return_value = "exists"
-        
-        config = TrafficCaptureConfig(enabled=True)
-        manager = TrafficCaptureManager(adb_client=adb_client)
-        manager.configure(config)
-        manager._is_capturing = True
-
-        result = manager.stop_and_pull()
-
-        assert result == "traffic_capture_20260110_143000.pcap"
-        assert manager._is_capturing is False
-
-    @patch("subprocess.run")
-    def test_stop_and_pull_with_custom_path(self, mock_run):
-        """Test stop_and_pull with custom output path."""
-        # Configure ADB client mock to return string
-        adb_client = Mock()
-        adb_client.execute.return_value = "exists"
-        
-        config = TrafficCaptureConfig(enabled=True, output_path="/custom/path.pcap")
-        manager = TrafficCaptureManager(adb_client=adb_client)
-        manager.configure(config)
-        manager._is_capturing = True
-
-        result = manager.stop_and_pull("/custom/path.pcap")
-
-        assert result == "/custom/path.pcap"
-        assert manager._is_capturing is False
-
-    @patch("subprocess.run")
-    def test_stop_and_pull_file_not_found(self, mock_run):
-        """Test stop_and_pull when PCAP file not found on device."""
-        mock_run.return_value = CompletedProcess(
-            args=["adb", "shell", "test"],
-            returncode=0,
-            stdout="not_exists"
-        )
-        config = TrafficCaptureConfig(enabled=True)
-        manager = TrafficCaptureManager(adb_client=Mock())
-        manager.configure(config)
-        manager._is_capturing = True
-
-        result = manager.stop_and_pull()
-
-        assert result is None
-        assert manager._is_capturing is False
-
-    @patch("subprocess.run")
-    def test_stop_and_pull_failure(self, mock_run):
-        """Test stop_and_pull handles errors."""
-        mock_run.side_effect = Exception("ADB error")
-        config = TrafficCaptureConfig(enabled=True)
-        manager = TrafficCaptureManager(adb_client=Mock())
-        manager.configure(config)
-        manager._is_capturing = True
-
-        result = manager.stop_and_pull()
-
-        assert result is None
-        assert manager._is_capturing is False
-
-    def test_is_capturing(self):
-        """Test is_capturing method."""
-        manager = TrafficCaptureManager()
         assert manager.is_capturing() is False
 
-        manager._is_capturing = True
+        manager._is_currently_capturing = True
         assert manager.is_capturing() is True
 
-    def test_get_status(self):
-        """Test get_status method."""
-        config = TrafficCaptureConfig(enabled=True)
-        manager = TrafficCaptureManager()
-        manager.configure(config)
-        manager._pcapdroid_installed = True
-        manager._is_capturing = True
+    def test_start_capture_async_when_enabled(self, mock_config_manager, mock_adb_client):
+        """Test starting capture when enabled."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = TrafficCaptureManager(
+                config_manager=mock_config_manager,
+                adb_client=mock_adb_client,
+            )
 
-        status = manager.get_status()
+            success, message = asyncio.run(manager.start_capture_async(
+                run_id=1, step_num=1, session_path=temp_dir
+            ))
 
-        assert status == {
-            "capturing": True,
-            "installed": True,
-            "enabled": True,
-        }
+            assert success is True
+            assert "successfully" in message
+            assert manager._is_currently_capturing is True
+            assert manager.pcap_filename_on_device is not None
+            assert manager.local_pcap_file_path is not None
 
-    def test_get_status_no_config(self):
-        """Test get_status when no config is set."""
-        manager = TrafficCaptureManager()
-        manager._pcapdroid_installed = False
-        manager._is_capturing = False
-
-        status = manager.get_status()
-
-        assert status == {
-            "capturing": False,
-            "installed": False,
-            "enabled": False,
-        }
-
-    @patch("subprocess.run")
-    def test_execute_adb_command_with_client(self, mock_run):
-        """Test _execute_adb_command uses ADB client when available."""
-        adb_client = Mock()
-        adb_client.execute.return_value = "test_output"
-        manager = TrafficCaptureManager(adb_client=adb_client)
-
-        result = manager._execute_adb_command("shell test")
-
-        assert result == "test_output"
-        adb_client.execute.assert_called_once_with("shell test")
-        # subprocess.run should not be called
-        mock_run.assert_not_called()
-
-    @patch("subprocess.run")
-    def test_execute_adb_command_without_client(self, mock_run):
-        """Test _execute_adb_command falls back to subprocess when no client."""
-        mock_run.return_value = CompletedProcess(
-            args=["adb", "shell", "test"],
-            returncode=0,
-            stdout="test_output"
+    def test_start_capture_async_when_disabled(self, mock_config_manager_disabled, mock_adb_client):
+        """Test starting capture when disabled returns False."""
+        manager = TrafficCaptureManager(
+            config_manager=mock_config_manager_disabled,
+            adb_client=mock_adb_client,
         )
-        manager = TrafficCaptureManager()
 
-        result = manager._execute_adb_command("shell test")
+        success, message = asyncio.run(manager.start_capture_async(run_id=1, step_num=1))
 
-        assert result == "test_output"
-        mock_run.assert_called_once()
+        assert success is False
+        assert "not enabled" in message
+        assert manager._is_currently_capturing is False
+        mock_adb_client.execute_async.assert_not_called()
 
-    @patch("subprocess.run")
-    def test_execute_adb_command_timeout(self, mock_run):
-        """Test _execute_adb_command handles timeout."""
-        from subprocess import TimeoutExpired
-        mock_run.side_effect = TimeoutExpired("adb", 30)
-        manager = TrafficCaptureManager()
+    def test_start_capture_async_already_capturing(self, mock_config_manager, mock_adb_client):
+        """Test starting capture when already capturing returns True without restarting."""
+        manager = TrafficCaptureManager(
+            config_manager=mock_config_manager,
+            adb_client=mock_adb_client,
+        )
+        manager._is_currently_capturing = True
 
-        result = manager._execute_adb_command("shell test")
+        success, message = asyncio.run(manager.start_capture_async(run_id=1, step_num=1))
+
+        assert success is True
+        assert "already started" in message
+        # Should not call ADB again
+        mock_adb_client.execute_async.assert_not_called()
+
+    def test_start_capture_async_no_app_package(self, mock_adb_client):
+        """Test starting capture fails without app_package configured."""
+        config = Mock()
+        config.get.side_effect = lambda key, default=None: {
+            "enable_traffic_capture": True,
+            "app_package": "",  # Empty app package
+        }.get(key, default)
+        config.set = Mock()
+
+        manager = TrafficCaptureManager(
+            config_manager=config,
+            adb_client=mock_adb_client,
+        )
+
+        success, message = asyncio.run(manager.start_capture_async(run_id=1, step_num=1))
+
+        assert success is False
+        assert "APP_PACKAGE not configured" in message
+
+    def test_stop_capture_when_not_capturing(self, mock_config_manager, mock_adb_client):
+        """Test stopping capture when not capturing returns None."""
+        manager = TrafficCaptureManager(
+            config_manager=mock_config_manager,
+            adb_client=mock_adb_client,
+        )
+
+        result = asyncio.run(manager.stop_capture_and_pull_async(run_id=1, step_num=1))
 
         assert result is None
 
-    @patch("subprocess.run")
-    def test_execute_adb_command_file_not_found(self, mock_run):
-        """Test _execute_adb_command handles ADB not found."""
-        mock_run.side_effect = FileNotFoundError()
-        manager = TrafficCaptureManager()
+    def test_generates_correct_filename(self, mock_config_manager, mock_adb_client):
+        """Test that filenames are generated with correct format."""
+        manager = TrafficCaptureManager(
+            config_manager=mock_config_manager,
+            adb_client=mock_adb_client,
+        )
 
-        result = manager._execute_adb_command("shell test")
+        # Run the async function to set the filename
+        with tempfile.TemporaryDirectory() as temp_dir:
+            asyncio.run(manager.start_capture_async(run_id=42, step_num=5, session_path=temp_dir))
+            filename = manager.pcap_filename_on_device
 
-        assert result is None
+        assert filename is not None
+        # Package name dots are preserved in filename
+        assert "com.test.app" in filename
+        assert "run42" in filename
+        assert "step5" in filename
+        assert filename.endswith(".pcap")
+
+    def test_output_dir_resolution_with_session_path(self, mock_config_manager, mock_adb_client):
+        """Test that output directory is correctly resolved when session_path is provided."""
+        manager = TrafficCaptureManager(
+            config_manager=mock_config_manager,
+            adb_client=mock_adb_client,
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            asyncio.run(manager.start_capture_async(run_id=1, step_num=1, session_path=temp_dir))
+            pcap_path = manager.local_pcap_file_path
+
+        assert pcap_path is not None
+        # Should be in the data subdirectory of session path
+        assert "data" in pcap_path
+
+
+class TestTrafficCaptureManagerADBFallback:
+    """Test ADB client fallback behavior."""
+
+    def test_fallback_to_temporary_adb_client(self):
+        """Test that manager creates temporary ADB client when none provided."""
+        config = Mock()
+        config.get.side_effect = lambda key, default=None: {
+            "enable_traffic_capture": True,
+            "app_package": "com.test.app",
+            "adb_executable_path": "adb",
+            "pcapdroid_activity": "com.emanuelef.android.apps.pcapdroid/.activities.CaptureCtrl",
+        }.get(key, default)
+        config.set = Mock()
+
+        manager = TrafficCaptureManager(
+            config_manager=config,
+            adb_client=None,  # No ADB client provided
+        )
+
+        # The manager should still be able to initialize
+        assert manager.adb_client is None
+        assert manager.traffic_capture_enabled is True

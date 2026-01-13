@@ -41,8 +41,10 @@ class ConfigManager:
             db_value = self.user_config_store.get_setting(key)
             if db_value is not None:
                 return db_value
-        except Exception:
-            # If DB access fails, continue to next source
+        except Exception as e:
+            # If DB access fails, log it and continue to next source
+            import logging
+            logging.getLogger(__name__).error(f"DB Read Error for key '{key}': {e}", exc_info=True)
             pass
 
         # 2. Check environment variables
