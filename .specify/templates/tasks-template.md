@@ -8,9 +8,9 @@ description: "Task list template for feature implementation"
 **Input**: Design documents from `/specs/[###-feature-name]/`
 **Prerequisites**: plan.md (required), spec.md (required for user stories), research.md, data-model.md, contracts/
 
-**Tests**: The examples below include test tasks. Tests are OPTIONAL - only include them if explicitly requested in the feature specification.
+**Tests**: Per the Test-Driven Development principle, tests are MANDATORY for all new features and code changes. Tests MUST be written FIRST, ensure they FAIL before implementation, then code is written to make them pass.
 
-**Organization**: Tasks are grouped by user story to enable independent implementation and testing of each story.
+**Organization**: Tasks are grouped by user story to enable independent implementation and testing of each story. Each user story follows the Red-Green-Refactor cycle.
 
 ## Format: `[ID] [P?] [Story] Description`
 
@@ -79,9 +79,9 @@ Examples of foundational tasks (adjust based on your project):
 
 **Independent Test**: [How to verify this story works on its own]
 
-### Tests for User Story 1 (OPTIONAL - only if tests requested) ⚠️
+### Tests for User Story 1 (MANDATORY - Test-Driven Development) ⚠️
 
-> **NOTE: Write these tests FIRST, ensure they FAIL before implementation**
+> **CRITICAL: Per the Test-Driven Development principle, these tests MUST be written FIRST, ensure they FAIL before implementation. This is NON-NEGOTIABLE.**
 
 - [ ] T010 [P] [US1] Contract test for [endpoint] in tests/contract/test_[name].py
 - [ ] T011 [P] [US1] Integration test for [user journey] in tests/integration/test_[name].py
@@ -105,7 +105,9 @@ Examples of foundational tasks (adjust based on your project):
 
 **Independent Test**: [How to verify this story works on its own]
 
-### Tests for User Story 2 (OPTIONAL - only if tests requested) ⚠️
+### Tests for User Story 2 (MANDATORY - Test-Driven Development) ⚠️
+
+> **CRITICAL: Per the Test-Driven Development principle, these tests MUST be written FIRST, ensure they FAIL before implementation. This is NON-NEGOTIABLE.**
 
 - [ ] T018 [P] [US2] Contract test for [endpoint] in tests/contract/test_[name].py
 - [ ] T019 [P] [US2] Integration test for [user journey] in tests/integration/test_[name].py
@@ -127,7 +129,9 @@ Examples of foundational tasks (adjust based on your project):
 
 **Independent Test**: [How to verify this story works on its own]
 
-### Tests for User Story 3 (OPTIONAL - only if tests requested) ⚠️
+### Tests for User Story 3 (MANDATORY - Test-Driven Development) ⚠️
+
+> **CRITICAL: Per the Test-Driven Development principle, these tests MUST be written FIRST, ensure they FAIL before implementation. This is NON-NEGOTIABLE.**
 
 - [ ] T024 [P] [US3] Contract test for [endpoint] in tests/contract/test_[name].py
 - [ ] T025 [P] [US3] Integration test for [user journey] in tests/integration/test_[name].py
@@ -146,7 +150,24 @@ Examples of foundational tasks (adjust based on your project):
 
 ---
 
-## Phase N: Polish & Cross-Cutting Concerns
+## Phase N: Data Migration (if applicable)
+
+**Purpose**: Migrate existing data when code changes affect data structures or APIs
+
+> **NOTE: This phase is MANDATORY when code changes affect data structures, database schemas, or APIs. Per the No Backward Compatibility principle, old data MUST be migrated to use the new code.**
+
+- [ ] TXXX [P] Create migration script for data structure changes
+- [ ] TXXX [P] Test migration script with sample data
+- [ ] TXXX [P] Add data validation after migration
+- [ ] TXXX Document migration process and rollback procedure
+- [ ] TXXX [P] Add migration logging and error handling
+- [ ] TXXX Test rollback procedure
+
+**Checkpoint**: All existing data successfully migrated and validated
+
+---
+
+## Phase N+1: Polish & Cross-Cutting Concerns
 
 **Purpose**: Improvements that affect multiple user stories
 
@@ -168,7 +189,10 @@ Examples of foundational tasks (adjust based on your project):
 - **User Stories (Phase 3+)**: All depend on Foundational phase completion
   - User stories can then proceed in parallel (if staffed)
   - Or sequentially in priority order (P1 → P2 → P3)
-- **Polish (Final Phase)**: Depends on all desired user stories being complete
+- **Data Migration (Phase N)**: Depends on all user stories being complete
+  - MANDATORY when code changes affect data structures, database schemas, or APIs
+  - Must be completed before Polish phase
+- **Polish (Phase N+1)**: Depends on all desired user stories AND data migration (if applicable) being complete
 
 ### User Story Dependencies
 
@@ -178,10 +202,11 @@ Examples of foundational tasks (adjust based on your project):
 
 ### Within Each User Story
 
-- Tests (if included) MUST be written and FAIL before implementation
+- Tests MANDATORY - MUST be written and FAIL before implementation (Red-Green-Refactor)
 - Models before services
 - Services before endpoints
 - Core implementation before integration
+- Full test suite MUST pass before story is complete
 - Story complete before moving to next priority
 
 ### Parallel Opportunities
@@ -217,7 +242,8 @@ Task: "Create [Entity2] model in src/models/[entity2].py"
 2. Complete Phase 2: Foundational (CRITICAL - blocks all stories)
 3. Complete Phase 3: User Story 1
 4. **STOP and VALIDATE**: Test User Story 1 independently
-5. Deploy/demo if ready
+5. If data structures changed: Complete Data Migration phase
+6. Deploy/demo if ready
 
 ### Incremental Delivery
 
@@ -225,7 +251,8 @@ Task: "Create [Entity2] model in src/models/[entity2].py"
 2. Add User Story 1 → Test independently → Deploy/Demo (MVP!)
 3. Add User Story 2 → Test independently → Deploy/Demo
 4. Add User Story 3 → Test independently → Deploy/Demo
-5. Each story adds value without breaking previous stories
+5. If any story changes data structures: Complete Data Migration phase
+6. Each story adds value without breaking previous stories
 
 ### Parallel Team Strategy
 
@@ -245,7 +272,9 @@ With multiple developers:
 - [P] tasks = different files, no dependencies
 - [Story] label maps task to specific user story for traceability
 - Each user story should be independently completable and testable
-- Verify tests fail before implementing
+- Verify tests fail before implementing (Red-Green-Refactor cycle)
 - Commit after each task or logical group
 - Stop at any checkpoint to validate story independently
+- **Data Migration**: MANDATORY when code changes affect data structures, schemas, or APIs
+- **No Backward Compatibility**: Old data MUST be migrated to use new code - no legacy support
 - Avoid: vague tasks, same file conflicts, cross-story dependencies that break independence

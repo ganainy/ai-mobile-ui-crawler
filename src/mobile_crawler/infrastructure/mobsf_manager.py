@@ -139,17 +139,18 @@ class MobSFManager:
                 error=str(e)
             )
 
-    def analyze_run(self, run_id: int, package: str, device_id: str) -> MobSFAnalysisResult:
+    def analyze_run(self, run: 'Run', device_id: str) -> MobSFAnalysisResult:
         """Analyze an APK for a past run.
-
+        
         Args:
-            run_id: Run ID for organizing results
-            package: Android package name
+            run: Run object for organizing results
             device_id: Device ID for ADB operations
-
+            
         Returns:
             MobSFAnalysisResult with report paths or error
         """
+        run_id = run.id
+        package = run.app_package
         if not self._session_folder_manager:
             logger.warning("Session folder manager not configured")
             return MobSFAnalysisResult(
@@ -161,10 +162,10 @@ class MobSFManager:
 
         # Move reports to run's session folder if successful
         if result.success and self._session_folder_manager:
-            session_folder = self._session_folder_manager.get_session_folder(run_id)
-            if session_folder and os.path.exists(session_folder):
+            reports_dir = self._session_folder_manager.get_subfolder(run, "reports")
+            if reports_dir and os.path.exists(reports_dir):
                 if result.report_path:
-                    new_pdf_path = os.path.join(session_folder, "mobsf_report.pdf")
+                    new_pdf_path = os.path.join(reports_dir, f"mobsf_report_{run_id}.pdf")
                     try:
                         os.rename(result.report_path, new_pdf_path)
                         result.report_path = new_pdf_path
@@ -172,7 +173,7 @@ class MobSFManager:
                         logger.warning(f"Failed to move PDF report: {e}")
 
                 if result.json_path:
-                    new_json_path = os.path.join(session_folder, "mobsf_report.json")
+                    new_json_path = os.path.join(reports_dir, f"mobsf_report_{run_id}.json")
                     try:
                         os.rename(result.json_path, new_json_path)
                         result.json_path = new_json_path

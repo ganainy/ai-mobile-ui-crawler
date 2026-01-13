@@ -8,16 +8,20 @@
 ## User Scenarios & Testing *(mandatory)*
 
 <!--
-  IMPORTANT: User stories should be PRIORITIZED as user journeys ordered by importance.
-  Each user story/journey must be INDEPENDENTLY TESTABLE - meaning if you implement just ONE of them,
-  you should still have a viable MVP (Minimum Viable Product) that delivers value.
+  IMPORTANT: Per the Test-Driven Development principle, user stories should be PRIORITIZED
+  as user journeys ordered by importance. Each user story/journey must be INDEPENDENTLY
+  TESTABLE - meaning if you implement just ONE of them, you should still have a viable MVP
+  (Minimum Viable Product) that delivers value.
   
   Assign priorities (P1, P2, P3, etc.) to each story, where P1 is the most critical.
   Think of each story as a standalone slice of functionality that can be:
   - Developed independently
-  - Tested independently
+  - Tested independently (tests written FIRST, then implementation)
   - Deployed independently
   - Demonstrated to users independently
+  
+  CRITICAL: Tests MUST be defined for each user story and MUST be executed before
+  implementation is considered complete. This is a NON-NEGOTIABLE requirement.
 -->
 
 ### User Story 1 - [Brief Title] (Priority: P1)

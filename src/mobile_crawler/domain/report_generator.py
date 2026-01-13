@@ -59,7 +59,13 @@ class ReportGenerator:
 
         # Determine output path
         if not output_path:
-            output_path = f"crawl_report_run_{run_id}.pdf"
+            filename = f"crawl_report_run_{run_id}.pdf"
+            if run.session_path and Path(run.session_path).exists():
+                reports_dir = Path(run.session_path) / "reports"
+                reports_dir.mkdir(parents=True, exist_ok=True)
+                output_path = str(reports_dir / filename)
+            else:
+                output_path = filename
 
         # Generate PDF
         doc = SimpleDocTemplate(output_path, pagesize=letter)

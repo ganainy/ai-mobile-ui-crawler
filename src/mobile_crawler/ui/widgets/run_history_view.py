@@ -358,7 +358,11 @@ class RunHistoryView(QWidget):
         
         if reply == QMessageBox.StandardButton.Yes:
             try:
-                self._mobsf_manager.analyze(package)
+                run = self._run_repository.get_run(run_id)
+                if not run:
+                    raise ValueError(f"Run {run_id} not found")
+                
+                self._mobsf_manager.analyze_run(run, run.device_id)
                 self.mobsf_completed.emit(run_id)
                 QMessageBox.information(
                     self,

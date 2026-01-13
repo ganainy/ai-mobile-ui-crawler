@@ -24,6 +24,7 @@ from mobile_crawler.infrastructure.device_detection import DeviceDetection
 from mobile_crawler.infrastructure.appium_driver import AppiumDriver
 from mobile_crawler.infrastructure.database import DatabaseManager
 from mobile_crawler.infrastructure.user_config_store import UserConfigStore
+from mobile_crawler.infrastructure.session_folder_manager import SessionFolderManager
 from mobile_crawler.infrastructure.run_repository import RunRepository
 from mobile_crawler.infrastructure.mobsf_manager import MobSFManager
 from mobile_crawler.domain.providers.registry import ProviderRegistry
@@ -200,6 +201,7 @@ class MainWindow(QMainWindow):
         run_repository = RunRepository(db_manager)
         report_generator = ReportGenerator(db_manager)
         mobsf_manager = MobSFManager()
+        session_folder_manager = SessionFolderManager()
         
         # Repository services for statistics
         step_log_repository = StepLogRepository(db_manager)
@@ -218,6 +220,7 @@ class MainWindow(QMainWindow):
             'database_manager': db_manager,
             'step_log_repository': step_log_repository,
             'screen_repository': screen_repository,
+            'session_folder_manager': session_folder_manager,
         }
 
     def _setup_window(self):
@@ -455,7 +458,11 @@ class MainWindow(QMainWindow):
         appium_driver = self._services['appium_driver']
         
         state_machine = CrawlStateMachine()
-        screenshot_capture = ScreenshotCapture(driver=appium_driver, run_id=run_id)
+        screenshot_capture = ScreenshotCapture(
+            driver=appium_driver, 
+            run_id=run_id,
+            session_folder_manager=self._services['session_folder_manager']
+        )
         ai_service = AIInteractionService.from_config(config_manager, event_listener=self.signal_adapter)
         gesture_handler = GestureHandler(appium_driver)
         action_executor = ActionExecutor(appium_driver, gesture_handler)
@@ -483,6 +490,7 @@ class MainWindow(QMainWindow):
             config_manager=config_manager,
             appium_driver=appium_driver,
             screen_tracker=screen_tracker,
+            session_folder_manager=self._services['session_folder_manager'],
             event_listeners=event_listeners,
             top_bar_height=config_manager.get('top_bar_height', 0)
         )

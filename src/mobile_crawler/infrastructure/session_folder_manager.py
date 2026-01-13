@@ -16,37 +16,40 @@ logger = logging.getLogger(__name__)
 class SessionFolderManager:
     """Manages creation and deletion of session folders with subdirectories."""
 
-    def __init__(self, base_path: str = "output_data"):
+    def __init__(self, base_path: Optional[str] = None):
         """Initialize with base path for session folders.
         
         Args:
-            base_path: Base directory for session folders
+            base_path: Base directory for session folders. If None, uses app_data_dir/output_data.
         """
+        if base_path is None:
+            from mobile_crawler.config import get_app_data_dir
+            base_path = str(get_app_data_dir() / "output_data")
+            
         self.base_path = base_path
 
-    def create_session_folder(self, device_id: str, app_package: str) -> str:
-        """Create a new session folder with timestamp and subdirectories.
+    def create_session_folder(self, run_id: int) -> str:
+        """Create a new session folder with ID and timestamp.
         
         Args:
-            device_id: Device identifier
-            app_package: App package name
+            run_id: Run ID
             
         Returns:
             Path to the created session folder
         """
-        timestamp = datetime.now().strftime("%d_%m_%H_%M")
-        folder_name = f"{device_id}_{app_package}_{timestamp}"
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        folder_name = f"run_{run_id}_{timestamp}"
         session_path = os.path.join(self.base_path, folder_name)
         
         # Create main directory
         os.makedirs(session_path, exist_ok=True)
         
-        # Create subdirectories
-        subdirs = ["screenshots", "logs", "video", "data"]
+        # Create standard subdirectories
+        subdirs = ["screenshots", "reports", "data"]
         for subdir in subdirs:
             os.makedirs(os.path.join(session_path, subdir), exist_ok=True)
         
-        return session_path
+        return os.path.abspath(session_path)
 
     def delete_session_folder(self, session_path: str):
         """Delete a session folder and all its contents.
@@ -61,8 +64,9 @@ class SessionFolderManager:
         """Resolve the session folder path for a given run.
         
         Tries locations in order:
-        1. screenshots/run_{id} (standard crawler output)
-        2. Heuristic match in base_path (timestamped session folders)
+        1. run.session_path (explicitly stored in DB)
+        2. screenshots/run_{id} (standard crawler output - legacy)
+        3. Heuristic match in base_path (timestamped session folders - legacy)
         
         Args:
             run: The Run object
@@ -70,13 +74,25 @@ class SessionFolderManager:
         Returns:
             Absolute path to the session folder if found, None otherwise
         """
-        # 1. Check for standard crawler screenshot directory
+        # 1. Check for explicitly stored path
+        if hasattr(run, 'session_path') and run.session_path and os.path.exists(run.session_path):
+            return os.path.abspath(run.session_path)
+
+        # 2. Check for legacy crawler screenshot directory
         # This is where most runs store their data
         run_folder = os.path.join("screenshots", f"run_{run.id}")
         if os.path.exists(run_folder):
             return os.path.abspath(run_folder)
             
-        # 2. Check for timestamped session folders in base_path (heuristics)
+        # 3. Check for standard run_{id}_* folders in base_path
+        if os.path.exists(self.base_path):
+            standard_pattern = f"run_{run.id}_*"
+            standard_search = os.path.join(self.base_path, standard_pattern)
+            standard_candidates = glob.glob(standard_search)
+            if standard_candidates:
+                return os.path.abspath(standard_candidates[0])
+
+        # 4. Check for timestamped session folders in base_path (legacy heuristics)
         if not os.path.exists(self.base_path):
             return None
             
@@ -132,3 +148,23 @@ class SessionFolderManager:
                 continue
                 
         return os.path.abspath(best_match) if best_match else None
+
+    def get_subfolder(self, run: "Run", subdir: str) -> str:
+        """Get the absolute path to a subfolder within the session directory.
+        
+        Args:
+            run: The Run object
+            subdir: The subdirectory name (e.g., 'screenshots', 'reports', 'data')
+            
+        Returns:
+            Absolute path to the subfolder
+        """
+        session_path = self.get_session_path(run)
+        if not session_path:
+            # Fallback for runs without session folders - create in current structure if missing?
+            # For now, just return a path relative to current or base_path
+            session_path = os.path.join(self.base_path, f"run_{run.id}")
+            
+        target_path = os.path.join(session_path, subdir)
+        os.makedirs(target_path, exist_ok=True)
+        return os.path.abspath(target_path)

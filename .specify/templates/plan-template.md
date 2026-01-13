@@ -31,7 +31,12 @@
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-[Gates determined based on constitution file]
+- [ ] **Test-Driven Development**: Tests are defined for all new functionality and will be written before implementation
+- [ ] **Documentation-First**: Feature has complete specification with user stories, requirements, and acceptance criteria
+- [ ] **Image-Only Architecture**: Design respects image-only constraints (no XML/DOM access, coordinate-based actions)
+- [ ] **Modular Design**: Clear module boundaries, no circular dependencies, independently testable components
+- [ ] **Observability**: Logging strategy defined for all operations, especially AI interactions
+- [ ] **No Backward Compatibility**: If code changes affect data structures/APIs, migration scripts are planned and will be tested
 
 ## Project Structure
 

@@ -1,4 +1,4 @@
-# mobile-crawler Development Guidelines
+﻿# mobile-crawler Development Guidelines
 
 Auto-generated from all feature plans. Last updated: 2026-01-10
 
@@ -9,6 +9,8 @@ Auto-generated from all feature plans. Last updated: 2026-01-10
 - SQLite via existing `AIInteractionRepository` (crawler.db) (002-ai-io-monitor)
 - Python 3.9+ + PySide6 6.6+ (Qt GUI framework), Appium Python Client 3.0+, SQLite3 (built-in) (003-live-statistics-ui)
 - SQLite databases (crawler.db for run data, user_config.db for preferences) (003-live-statistics-ui)
+- [e.g., Python 3.11, Swift 5.9, Rust 1.75 or NEEDS CLARIFICATION] + [e.g., FastAPI, UIKit, LLVM or NEEDS CLARIFICATION] (010-fix-run-history-ui)
+- [if applicable, e.g., PostgreSQL, CoreData, files or N/A] (010-fix-run-history-ui)
 
 - Python 3.12 + PySide6 6.x, existing mobile_crawler modules (001-wire-gui-widgets)
 
@@ -28,9 +30,9 @@ cd src; pytest; ruff check .
 Python 3.12: Follow standard conventions
 
 ## Recent Changes
+- 010-fix-run-history-ui: Added [e.g., Python 3.11, Swift 5.9, Rust 1.75 or NEEDS CLARIFICATION] + [e.g., FastAPI, UIKit, LLVM or NEEDS CLARIFICATION]
 - 003-live-statistics-ui: Added Python 3.9+ + PySide6 6.6+ (Qt GUI framework), Appium Python Client 3.0+, SQLite3 (built-in)
 - 002-ai-io-monitor: Added Python 3.9+ + PySide6 >=6.6.0
-- 001-fix-settings-persistence: Added Python 3.9+ (compatible with 3.9, 3.10, 3.11, 3.12) + PySide6 >=6.6.0, cryptography >=42.0.0, sqlite3 (stdlib)
 
 
 <!-- MANUAL ADDITIONS START -->

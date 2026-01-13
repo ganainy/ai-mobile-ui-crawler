@@ -21,6 +21,7 @@ class Run:
     ai_model: Optional[str]  # model name used
     total_steps: int = 0
     unique_screens: int = 0
+    session_path: Optional[str] = None
 
 
 class RunRepository:
@@ -49,8 +50,9 @@ class RunRepository:
         cursor.execute("""
             INSERT INTO runs (
                 device_id, app_package, start_activity, start_time, end_time,
-                status, ai_provider, ai_model, total_steps, unique_screens
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                status, ai_provider, ai_model, total_steps, unique_screens,
+                session_path
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             run.device_id,
             run.app_package,
@@ -61,7 +63,8 @@ class RunRepository:
             run.ai_provider,
             run.ai_model,
             run.total_steps,
-            run.unique_screens
+            run.unique_screens,
+            run.session_path
         ))
 
         run_id = cursor.lastrowid
@@ -161,7 +164,7 @@ class RunRepository:
             UPDATE runs SET
                 device_id = ?, app_package = ?, start_activity = ?, start_time = ?,
                 end_time = ?, status = ?, ai_provider = ?, ai_model = ?,
-                total_steps = ?, unique_screens = ?
+                total_steps = ?, unique_screens = ?, session_path = ?
             WHERE id = ?
         """, (
             run.device_id,
@@ -174,6 +177,7 @@ class RunRepository:
             run.ai_model,
             run.total_steps,
             run.unique_screens,
+            run.session_path,
             run.id
         ))
 
@@ -224,6 +228,28 @@ class RunRepository:
                 UPDATE runs SET total_steps = ?, unique_screens = ?
                 WHERE id = ?
             """, (total_steps, unique_screens, run_id))
+
+        updated = cursor.rowcount > 0
+        conn.commit()
+        return updated
+
+    def update_session_path(self, run_id: int, session_path: str) -> bool:
+        """Update the session folder path for a run.
+
+        Args:
+            run_id: The run ID to update
+            session_path: Absolute path to the session folder
+
+        Returns:
+            True if run was updated, False if not found
+        """
+        conn = self.db_manager.get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute(
+            "UPDATE runs SET session_path = ? WHERE id = ?",
+            (session_path, run_id)
+        )
 
         updated = cursor.rowcount > 0
         conn.commit()
@@ -325,5 +351,6 @@ class RunRepository:
             ai_provider=row["ai_provider"],
             ai_model=row["ai_model"],
             total_steps=row["total_steps"],
-            unique_screens=row["unique_screens"]
+            unique_screens=row["unique_screens"],
+            session_path=row["session_path"] if "session_path" in row.keys() else None
         )

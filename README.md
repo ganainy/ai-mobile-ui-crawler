@@ -111,7 +111,21 @@ tests/                # Test suite
 ├── infrastructure/   # Infrastructure layer tests
 └── ...
 
-output_data/          # Crawl session data (created at runtime)
+## Data Organization
+
+The crawler organizes all session data into a unified directory structure for easy access and portability.
+
+### Session Folder Structure
+By default, all artifacts are stored in `output_data/` (or platform-specific AppData directory):
+
+```text
+output_data/run_{ID}_{TIMESTAMP}/
+├── screenshots/      # All full and annotated screenshots
+├── reports/          # PDF crawl reports and MobSF analysis results
+└── data/             # JSON run exports and database snippets
+```
+
+Each run's `session_path` is persisted in the database, allowing the UI to open the correct folder directly.
 ```
 
 ## Database Schema

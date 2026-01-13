@@ -54,7 +54,8 @@ class DatabaseManager:
                 ai_provider TEXT,               -- gemini, openrouter, ollama
                 ai_model TEXT,                  -- model name used
                 total_steps INTEGER DEFAULT 0,
-                unique_screens INTEGER DEFAULT 0
+                unique_screens INTEGER DEFAULT 0,
+                session_path TEXT                -- consolidated directory for artifacts
             )
         """)
 
@@ -247,6 +248,17 @@ class DatabaseManager:
 
     def migrate_schema(self):
         """Run database migrations if needed."""
-        # For now, just create schema if it doesn't exist
-        # Future: implement proper migration system
         self.create_schema()
+        
+        # Simple migration for session_path column
+        conn = self.get_connection()
+        try:
+            cursor = conn.execute("PRAGMA table_info(runs)")
+            columns = [row['name'] for row in cursor.fetchall()]
+            if 'session_path' not in columns:
+                conn.execute("ALTER TABLE runs ADD COLUMN session_path TEXT")
+                conn.commit()
+        except Exception:
+            pass
+        finally:
+            conn.close()

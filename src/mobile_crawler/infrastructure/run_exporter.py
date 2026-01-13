@@ -59,8 +59,12 @@ class RunExporter:
             raise ValueError(f"Run {run_id} not found")
         
         # Determine output path
+        # Determine output directory
         if output_dir is None:
-            output_dir = get_app_data_dir() / "exports"
+            if run.session_path and Path(run.session_path).exists():
+                output_dir = Path(run.session_path) / "data"
+            else:
+                output_dir = get_app_data_dir() / "exports"
         output_dir.mkdir(parents=True, exist_ok=True)
         
         # Generate filename with timestamp

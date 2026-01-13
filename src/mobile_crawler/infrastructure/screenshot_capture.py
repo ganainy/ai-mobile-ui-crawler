@@ -12,6 +12,9 @@ import numpy as np
 
 from mobile_crawler.infrastructure.appium_driver import AppiumDriver
 from mobile_crawler.infrastructure.device_detection import AndroidDevice
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from mobile_crawler.infrastructure.session_folder_manager import SessionFolderManager
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +36,8 @@ class ScreenshotCapture:
         output_dir: Optional[Path] = None,
         ai_max_width: int = 1024,
         ai_max_height: int = 1024,
-        ai_jpeg_quality: int = 75
+        ai_jpeg_quality: int = 75,
+        session_folder_manager: Optional['SessionFolderManager'] = None
     ):
         """Initialize screenshot capture.
 
@@ -50,9 +54,15 @@ class ScreenshotCapture:
         self.driver = driver
         self.max_width = max_width
         self.max_height = max_height
+        self.session_folder_manager = session_folder_manager
+        self.run_id = run_id
         
         # Create run-specific directory
-        if output_dir is None:
+        if session_folder_manager and run_id:
+            # We don't have the Run object yet, so we'll resolve it later or create a temporary path
+            # Better: resolve it when needed or initialize with a placeholder
+            self.output_dir = Path("screenshots") / f"run_{run_id}"
+        elif output_dir is None:
             self.output_dir = Path("screenshots") / f"run_{run_id}"
         else:
             self.output_dir = output_dir
@@ -63,6 +73,16 @@ class ScreenshotCapture:
         self.ai_max_width = ai_max_width
         self.ai_max_height = ai_max_height
         self.ai_jpeg_quality = ai_jpeg_quality
+
+    def set_output_dir(self, output_dir: Path):
+        """Update the output directory and ensure it exists.
+        
+        Args:
+            output_dir: New output directory path
+        """
+        self.output_dir = output_dir
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        logger.debug(f"Screenshot output directory updated to: {self.output_dir}")
 
     def capture_screenshot(self) -> Image.Image:
         """Capture a screenshot from the device.
