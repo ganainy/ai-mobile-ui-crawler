@@ -13,14 +13,18 @@ from PySide6.QtWidgets import (
     QComboBox,
     QLineEdit,
     QScrollArea,
-    QTabWidget
+    QTabWidget,
+    QRadioButton,
+    QButtonGroup
 )
 from PySide6.QtCore import Qt, Signal, Slot, QTimer
 from PySide6.QtGui import QColor, QPixmap, QPainter, QPen, QFont
 from typing import Dict, Any, Optional, List
 import json
 import base64
+import os
 from datetime import datetime
+from .json_tree_widget import JsonTreeWidget
 
 
 class AIInteractionItem(QWidget):
@@ -143,80 +147,13 @@ class AIInteractionItem(QWidget):
             layout.addWidget(error_label)
 
 
-def draw_overlays_on_pixmap(pixmap: QPixmap, actions: List[dict]) -> QPixmap:
-    """Draw bounding box overlays on a pixmap using QPainter."""
-    if not actions:
-        return pixmap
-        
-    result = pixmap.copy()
-    painter = QPainter(result)
-    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-    
-    # High-contrast colors for overlays
-    colors = [
-        QColor("#00FF00"),  # Green
-        QColor("#0088FF"),  # Blue
-        QColor("#FF8800"),  # Orange
-        QColor("#FF00FF"),  # Magenta
-        QColor("#00FFFF")   # Cyan
-    ]
-    error_color = QColor("#FF0000")  # Red
-    
-    for i, action in enumerate(actions):
-        bbox = action.get('target_bounding_box')
-        if not bbox:
-            continue
-            
-        top_left = bbox.get('top_left')
-        bottom_right = bbox.get('bottom_right')
-        if not top_left or not bottom_right:
-            continue
-            
-        x1, y1 = top_left
-        x2, y2 = bottom_right
-        
-        # Simple bounds check for color
-        is_valid = x1 >= 0 and y1 >= 0 and x2 <= pixmap.width() and y2 <= pixmap.height()
-        color = colors[i % len(colors)] if is_valid else error_color
-        
-        pen = QPen(color)
-        pen.setWidth(2 if is_valid else 3)
-        if not is_valid:
-            pen.setStyle(Qt.PenStyle.DashLine)
-        painter.setPen(pen)
-        
-        # Draw rectangle
-        painter.drawRect(x1, y1, x2 - x1, y2 - y1)
-        
-        # Draw center point
-        cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
-        painter.setBrush(color)
-        painter.drawEllipse(cx - 3, cy - 3, 6, 6)
-        
-        # Draw action index label
-        label = str(i + 1)
-        font = QFont("Arial", 10, QFont.Weight.Bold)
-        painter.setFont(font)
-        
-        # Draw background for label
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QColor(0, 0, 0, 180)) # Semi-transparent black
-        painter.drawRect(x1 + 2, y1 + 2, 20, 20)
-        
-        painter.setPen(color)
-        painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.drawText(x1 + 6, y1 + 16, label)
-        
-    painter.end()
-    return result
-
 
 class StepDetailWidget(QWidget):
     """Widget for displaying detailed step information in a tab."""
 
     def __init__(self, step_number: int, timestamp: datetime, success: bool,
                  full_prompt: str, full_response: str, parsed_actions: List[dict],
-                 error_message: Optional[str] = None, parent=None):
+                 error_message: Optional[str] = None, screenshot_path: Optional[str] = None, parent=None):
         """Initialize step detail widget.
 
         Args:
@@ -227,6 +164,7 @@ class StepDetailWidget(QWidget):
             full_response: Complete response text
             parsed_actions: Parsed action details
             error_message: Error message if failed
+            screenshot_path: Optional path to screenshot file
             parent: Parent widget
         """
         super().__init__(parent)
@@ -237,6 +175,7 @@ class StepDetailWidget(QWidget):
         self.full_response = full_response
         self.parsed_actions = parsed_actions
         self.error_message = error_message
+        self.screenshot_path = screenshot_path
         self._setup_ui()
 
     def _setup_ui(self):
@@ -262,88 +201,129 @@ class StepDetailWidget(QWidget):
         scroll_content = QWidget()
         scroll_layout = QVBoxLayout(scroll_content)
 
-        # Try to parse and display prompt nicely, filtering out base64
+        # Try to extract screenshot for display, but keep rest of prompt data for JsonTreeWidget
         screenshot_pixmap = None
-        prompt_display_text = self.full_prompt
+        prompt_json_data = self.full_prompt
 
         try:
             prompt_data = json.loads(self.full_prompt)
             if isinstance(prompt_data, dict):
+                # Handle nested structure from AIInteractionService
+                # request_data = {"system_prompt": "...", "user_prompt": "{json string}"}
+                actual_prompt_data = prompt_data
+                if 'user_prompt' in prompt_data:
+                    # Parse the nested user_prompt JSON string
+                    try:
+                        actual_prompt_data = json.loads(prompt_data['user_prompt'])
+                    except (json.JSONDecodeError, TypeError):
+                        actual_prompt_data = prompt_data
+                
                 # Extract screenshot if present
-                screenshot_b64 = prompt_data.get('screenshot', '')
+                screenshot_b64 = actual_prompt_data.get('screenshot', '')
                 if screenshot_b64 and len(screenshot_b64) > 100:
                     try:
-                        # Remove data URL prefix if present
                         if screenshot_b64.startswith('data:image'):
                             screenshot_b64 = screenshot_b64.split(',', 1)[1]
-
                         image_data = base64.b64decode(screenshot_b64)
                         pixmap = QPixmap()
                         if pixmap.loadFromData(image_data):
                             screenshot_pixmap = pixmap
                     except Exception:
                         pass
-
-                # Format the rest of the prompt data WITHOUT base64
-                display_parts = []
-                # First handle priority fields
-                priority_keys = ['screen_dimensions', 'exploration_progress', 'ocr_grounding']
-                for key in priority_keys:
-                    if key in prompt_data:
-                        value = prompt_data[key]
-                        if isinstance(value, (list, dict)):
-                            display_parts.append(f"{key}: {json.dumps(value, indent=2)}")
-                        else:
-                            display_parts.append(f"{key}: {value}")
                 
-                # Then handle the rest
-                for key, value in prompt_data.items():
-                    if key == 'screenshot':
-                        display_parts.append(f"{key}: [Image displayed on left]")
-                    elif key in priority_keys:
-                        continue # Already added
-                    elif isinstance(value, (list, dict)):
-                        display_parts.append(f"{key}: {json.dumps(value, indent=2)}")
-                    else:
-                        display_parts.append(f"{key}: {value}")
-                prompt_display_text = "\n".join(display_parts)
+                # Create a version of data without the huge base64 screenshot for the tree view
+                prompt_json_data = actual_prompt_data.copy() if isinstance(actual_prompt_data, dict) else actual_prompt_data
+                if isinstance(prompt_json_data, dict) and 'screenshot' in prompt_json_data:
+                    prompt_json_data['screenshot'] = "[Image displayed on left]"
         except (json.JSONDecodeError, TypeError):
-            # Not JSON, check if it looks like base64 and filter it
-            if len(prompt_display_text) > 500 and all(c in 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=' for c in prompt_display_text.replace('\n', '').replace('\r', '')):
-                prompt_display_text = "[Large base64 data - not displayed]"
+            # Not JSON, handle large base64 if needed
+            if len(self.full_prompt) > 1000 and all(c in 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=' for c in self.full_prompt.replace('\n', '').replace('\r', '').replace(' ', '')):
+                prompt_json_data = "[Large base64 data - not displayed]"
 
         # TOP ROW: Screenshot (1/3) + Prompt Data (2/3)
         top_row_layout = QHBoxLayout()
         
         # Screenshot section (1/3 width)
         screenshot_group = QGroupBox("Screenshot")
-        screenshot_layout = QVBoxLayout(screenshot_group)
+        self.screenshot_layout = QVBoxLayout(screenshot_group)
+        
+        # Add toggle buttons
+        toggle_layout = QHBoxLayout()
+        self.annotated_radio = QRadioButton("Annotated")
+        self.ocr_radio = QRadioButton("OCR")
+        self.annotated_radio.setChecked(True)
+        
+        self.toggle_group = QButtonGroup(self)
+        self.toggle_group.addButton(self.annotated_radio)
+        self.toggle_group.addButton(self.ocr_radio)
+        self.toggle_group.buttonClicked.connect(self._on_toggle_changed)
+        
+        toggle_layout.addWidget(self.annotated_radio)
+        toggle_layout.addWidget(self.ocr_radio)
+        toggle_layout.addStretch()
+        self.screenshot_layout.addLayout(toggle_layout)
+
+        # Store pixmaps for toggling
+        self.orig_pixmap = None
+        self.annotated_pixmap = None
+        self.ocr_pixmap = None
+
+        # Load screenshot - prioritize file path if available
+        if self.screenshot_path and os.path.exists(self.screenshot_path):
+            pixmap = QPixmap(self.screenshot_path)
+            if not pixmap.isNull():
+                screenshot_pixmap = pixmap
+
         if screenshot_pixmap:
-            # Draw overlays on the ORIGINAL sized pixmap before scaling for display
-            if self.parsed_actions:
-                screenshot_pixmap = draw_overlays_on_pixmap(screenshot_pixmap, self.parsed_actions)
+            self.orig_pixmap = screenshot_pixmap
+            
+            # Load images from disk if available to avoid re-implementing drawing logic
+            # Annotated view (Actions)
+            if self.screenshot_path:
+                base, ext = os.path.splitext(self.screenshot_path)
                 
-            screenshot_label = QLabel()
-            # Scale to smaller size (max 200px width)
-            scaled_pixmap = screenshot_pixmap.scaledToWidth(200, Qt.TransformationMode.SmoothTransformation)
-            screenshot_label.setPixmap(scaled_pixmap)
-            screenshot_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            screenshot_layout.addWidget(screenshot_label)
+                # 1. Annotated Actions
+                annotated_path = f"{base}_annotated{ext}"
+                if os.path.exists(annotated_path):
+                    pixmap = QPixmap(annotated_path)
+                    if not pixmap.isNull():
+                        self.annotated_pixmap = pixmap
+                
+                # 2. Grounded OCR
+                grounded_path = f"{base}_grounded{ext}"
+                if os.path.exists(grounded_path):
+                    pixmap = QPixmap(grounded_path)
+                    if not pixmap.isNull():
+                        self.ocr_pixmap = pixmap
+
+            # Fallbacks for runtime reliability
+            if not self.annotated_pixmap:
+                self.annotated_pixmap = screenshot_pixmap
+            if not self.ocr_pixmap:
+                self.ocr_pixmap = screenshot_pixmap
+            
+            self.screenshot_label = QLabel()
+            # Initial display: Annotated
+            scaled_pixmap = self.annotated_pixmap.scaledToWidth(200, Qt.TransformationMode.SmoothTransformation)
+            self.screenshot_label.setPixmap(scaled_pixmap)
+            self.screenshot_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.screenshot_layout.addWidget(self.screenshot_label)
         else:
             no_screenshot_label = QLabel("No screenshot available")
             no_screenshot_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             no_screenshot_label.setStyleSheet("color: #666; font-style: italic;")
-            screenshot_layout.addWidget(no_screenshot_label)
-        screenshot_layout.addStretch()
+            self.screenshot_layout.addWidget(no_screenshot_label)
+            self.annotated_radio.setEnabled(False)
+            self.ocr_radio.setEnabled(False)
+            
+        self.screenshot_layout.addStretch()
         top_row_layout.addWidget(screenshot_group, 1)  # 1/3 stretch factor
 
         # Prompt Data section (2/3 width)
         prompt_group = QGroupBox("Prompt Data")
         prompt_layout = QVBoxLayout(prompt_group)
-        prompt_text = QTextEdit()
-        prompt_text.setPlainText(prompt_display_text)
-        prompt_text.setReadOnly(True)
-        prompt_layout.addWidget(prompt_text)
+        self.prompt_tree = JsonTreeWidget(prompt_json_data)
+        prompt_layout.addWidget(self.prompt_tree)
         top_row_layout.addWidget(prompt_group, 2)  # 2/3 stretch factor
 
         scroll_layout.addLayout(top_row_layout)
@@ -354,10 +334,8 @@ class StepDetailWidget(QWidget):
         # Response section (1/2 width)
         response_group = QGroupBox("Response")
         response_layout = QVBoxLayout(response_group)
-        response_text = QTextEdit()
-        response_text.setPlainText(self.full_response)
-        response_text.setReadOnly(True)
-        response_layout.addWidget(response_text)
+        self.response_tree = JsonTreeWidget(self.full_response)
+        response_layout.addWidget(self.response_tree)
         bottom_row_layout.addWidget(response_group, 1)
 
         # Actions section (1/2 width)
@@ -423,11 +401,25 @@ class StepDetailWidget(QWidget):
         scroll.setWidget(scroll_content)
         layout.addWidget(scroll)
 
+    def _on_toggle_changed(self, button):
+        """Handle screenshot viewer toggle change."""
+        if not self.orig_pixmap:
+            return
+            
+        if button == self.annotated_radio:
+            pixmap = self.annotated_pixmap
+        else:
+            pixmap = self.ocr_pixmap
+            
+        if pixmap:
+            scaled_pixmap = pixmap.scaledToWidth(200, Qt.TransformationMode.SmoothTransformation)
+            self.screenshot_label.setPixmap(scaled_pixmap)
+
 
 class AIMonitorPanel(QWidget):
     """Widget for monitoring AI interactions in real-time."""
 
-    show_step_details = Signal(int, datetime, bool, str, str, list, object)  # step_number, timestamp, success, prompt, response, actions, error_msg
+    show_step_details = Signal(int, datetime, bool, str, str, list, object, str)  # step_number, timestamp, success, prompt, response, actions, error_msg, screenshot_path
 
     def __init__(self, parent=None):
         """Initialize AI monitor panel.
@@ -439,6 +431,30 @@ class AIMonitorPanel(QWidget):
         self._interactions = {}  # step_number -> interaction data
         self._filter_state = {"status": "all", "search": ""}
         self._setup_ui()
+    
+    @Slot(int, int, str)
+    def add_screenshot_path(self, run_id: int, step_number: int, screenshot_path: str):
+        """Store screenshot path for a step.
+        
+        Args:
+            run_id: Run ID
+            step_number: Step number
+            screenshot_path: Path to the captured screenshot
+        """
+        if step_number not in self._interactions:
+            # Create base interaction if it doesn't exist yet
+            self._interactions[step_number] = {
+                "run_id": run_id,
+                "step_number": step_number,
+                "timestamp": datetime.now(),
+                "request_data": {},
+                "response_data": {},
+                "success": False,
+                "_response_updated": False
+            }
+        
+        # Update path
+        self._interactions[step_number]["screenshot_path"] = screenshot_path
 
     def _setup_ui(self):
         """Set up the user interface."""
@@ -494,16 +510,26 @@ class AIMonitorPanel(QWidget):
             step_number: Step number
             request_data: Request data dictionary
         """
-        # Store pending interaction
-        self._interactions[step_number] = {
-            "run_id": run_id,
-            "step_number": step_number,
-            "timestamp": datetime.now(),
-            "request_data": request_data,
-            "response_data": None,
-            "success": None,
-            "error_message": None
-        }
+        # Initialize or update existing entry (to preserve screenshot_path if already set)
+        if step_number not in self._interactions:
+            self._interactions[step_number] = {
+                "run_id": run_id,
+                "step_number": step_number,
+                "timestamp": datetime.now(),
+                "response_data": None,
+                "success": None,
+                "error_message": None,
+                "_response_updated": False
+            }
+        
+        # Update request data and ensure basic fields are set
+        interaction = self._interactions[step_number]
+        interaction["run_id"] = run_id
+        interaction["request_data"] = request_data
+        
+        # If timestamp was just a placeholder, update it to actual request time
+        if "timestamp" not in interaction:
+            interaction["timestamp"] = datetime.now()
 
         # Create pending list item
         self._add_list_item(step_number, pending=True)
@@ -520,11 +546,20 @@ class AIMonitorPanel(QWidget):
         if step_number not in self._interactions:
             return
 
-        # Update interaction with response
         interaction = self._interactions[step_number]
+        
+        # Skip if already updated with full data and this is just a summary
+        is_full = self._is_full_response(response_data)
+        if interaction.get("_response_updated") and not is_full:
+            return
+            
+        # Update interaction with response
         interaction["response_data"] = response_data
-        interaction["success"] = response_data.get("success", False)
+        interaction["success"] = self._determine_success(response_data)
         interaction["error_message"] = response_data.get("error_message")
+        
+        if is_full:
+            interaction["_response_updated"] = True
 
         # Update or replace list item
         self._update_list_item(step_number)
@@ -578,31 +613,39 @@ class AIMonitorPanel(QWidget):
 
         # Parse actions if available
         parsed_actions = []
-        if "parsed_response" in response_data:
+        if "actions" in response_data:
+            parsed_actions = response_data["actions"]
+        elif "parsed_response" in response_data:
             try:
                 parsed = json.loads(response_data["parsed_response"])
-                if "actions" in parsed:
+                if isinstance(parsed, dict) and "actions" in parsed:
                     parsed_actions = parsed["actions"]
+                elif isinstance(parsed, list):
+                    parsed_actions = parsed
             except (json.JSONDecodeError, KeyError):
                 pass
 
-        response_text = ""
+        # Extract full response text
+        full_response = ""
+        if "response" in response_data:
+            full_response = response_data["response"]
+        elif "raw_response" in response_data:
+            full_response = response_data["raw_response"]
+        elif "parsed_response" in response_data:
+            full_response = response_data["parsed_response"]
+
+        # Create response preview
+        response_preview_text = full_response
         if parsed_actions:
-            # Use first action's action and reasoning for preview
+            # Use first action for preview
             action = parsed_actions[0]
-            action_name = action.get('action', '')
+            action_name = action.get('action', action.get('action_type', 'unknown'))
             reasoning = action.get('reasoning', '')
-            response_text = f"{action_name}: {reasoning}"
-        else:
-            # Fallback to raw response
-            if "response" in response_data:
-                response_text = response_data["response"]
-            elif "raw_response" in response_data:
-                response_text = response_data["raw_response"]
+            response_preview_text = f"{action_name}: {reasoning}"
 
         # Create previews
         prompt_preview = prompt_preview_text[:100] + "..." if len(prompt_preview_text) > 100 else prompt_preview_text
-        response_preview = response_text[:100] + "..." if len(response_text) > 100 else response_text
+        response_preview = response_preview_text[:100] + "..." if len(response_preview_text) > 100 else response_preview_text
 
         # Create custom widget
         item_widget = AIInteractionItem(
@@ -616,7 +659,7 @@ class AIMonitorPanel(QWidget):
             prompt_preview=prompt_preview,
             response_preview=response_preview,
             full_prompt=prompt_text,
-            full_response=response_text,
+            full_response=full_response,
             parsed_actions=parsed_actions,
             pending=pending
         )
@@ -642,6 +685,36 @@ class AIMonitorPanel(QWidget):
         interaction["_list_item"] = list_item
         interaction["_item_widget"] = item_widget
 
+    def _is_full_response(self, response_data: dict) -> bool:
+        """Check if response_data contains full AI response (not just summary)."""
+        return (
+            "parsed_response" in response_data or
+            "raw_response" in response_data or
+            "response" in response_data
+        )
+
+    def _determine_success(self, response_data: dict) -> bool:
+        """Determine if AI response was successful."""
+        # Has error? -> Failed
+        if response_data.get("error_message"):
+            return False
+        
+        # Has parsed actions? -> Success
+        if "parsed_response" in response_data:
+            try:
+                parsed = json.loads(response_data["parsed_response"])
+                if "actions" in parsed and len(parsed["actions"]) > 0:
+                    return True
+            except (json.JSONDecodeError, TypeError):
+                pass
+        
+        # Has actions count > 0? -> Success
+        if response_data.get("actions_count", 0) > 0:
+            return True
+        
+        # Default to False
+        return False
+
     def _update_list_item(self, step_number: int):
         """Update existing list item with response data.
 
@@ -649,17 +722,27 @@ class AIMonitorPanel(QWidget):
             step_number: Step number
         """
         interaction = self._interactions.get(step_number)
-        if not interaction or "_list_item" not in interaction:
+        if not interaction:
             return
 
-        # Remove old item
-        list_item = interaction["_list_item"]
-        row = self.interactions_list.row(list_item)
-        if row >= 0:
-            self.interactions_list.takeItem(row)
+        # Remove old list item if it exists
+        old_list_item = interaction.get("_list_item")
+        old_widget = interaction.get("_item_widget")
+        
+        if old_list_item:
+            row = self.interactions_list.row(old_list_item)
+            if row >= 0:
+                # Remove widget first, then item
+                self.interactions_list.removeItemWidget(old_list_item)
+                self.interactions_list.takeItem(row)
+            # Clear references
+            interaction["_list_item"] = None
+            interaction["_item_widget"] = None
+            if old_widget:
+                old_widget.deleteLater()
 
-        # Add updated item
-        self._add_list_item(step_number)
+        # Add updated item (not pending anymore)
+        self._add_list_item(step_number, pending=False)
 
     def _on_status_filter_changed(self, status_text: str):
         """Handle status filter change.
@@ -766,14 +849,20 @@ class AIMonitorPanel(QWidget):
             response_text = response_data["response"]
         elif "raw_response" in response_data:
             response_text = response_data["raw_response"]
+        elif "parsed_response" in response_data:
+            response_text = response_data["parsed_response"]
 
         # Parse actions if available
         parsed_actions = []
-        if "parsed_response" in response_data:
+        if "actions" in response_data:
+            parsed_actions = response_data["actions"]
+        elif "parsed_response" in response_data:
             try:
                 parsed = json.loads(response_data["parsed_response"])
-                if "actions" in parsed:
+                if isinstance(parsed, dict) and "actions" in parsed:
                     parsed_actions = parsed["actions"]
+                elif isinstance(parsed, list):
+                    parsed_actions = parsed
             except (json.JSONDecodeError, KeyError):
                 pass
 
@@ -785,5 +874,6 @@ class AIMonitorPanel(QWidget):
             prompt_text,
             response_text,
             parsed_actions,
-            error_message
+            error_message,
+            interaction.get("screenshot_path")
         )
