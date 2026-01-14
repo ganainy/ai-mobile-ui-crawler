@@ -216,3 +216,131 @@ def installed_test_app(android_device: str, sample_app: Path) -> Generator[str, 
         )
     except Exception:
         pass
+
+@pytest.fixture(scope="module")
+def auth_device_session(android_device):
+    """Fixture to manage the DeviceSession for auth tests."""
+    from tests.integration.device_verifier.session import DeviceSession
+    APP_PACKAGE = "com.example.auth_test_app"
+    session = DeviceSession(
+        device_id=android_device,
+        # app_package=APP_PACKAGE  # We handle launch via deep links
+    )
+    session.connect()
+    yield session
+    session.disconnect()
+
+@pytest.fixture(scope="module")
+def auth_navigator(android_device):
+    """Fixture for AuthNavigator."""
+    from tests.integration.device_verifier.deep_link_navigator import DeepLinkNavigator
+    from tests.integration.device_verifier.auth.auth_navigator import AuthNavigator
+    APP_PACKAGE = "com.example.auth_test_app"
+    deep_link_navigator = DeepLinkNavigator(
+        device_id=android_device,
+        app_package=APP_PACKAGE
+    )
+    return AuthNavigator(deep_link_navigator)
+
+@pytest.fixture(scope="module")
+def auth_verifier(auth_device_session):
+    """Fixture for AuthVerifier."""
+    from tests.integration.device_verifier.auth.auth_verifier import AuthVerifier
+    return AuthVerifier(driver=auth_device_session.get_driver())
+
+@pytest.fixture(scope="module")
+def auth_form_filler(auth_device_session):
+    """Fixture for AuthFormFiller."""
+    from mobile_crawler.infrastructure.gesture_handler import GestureHandler
+    from tests.integration.device_verifier.auth.auth_form_filler import AuthFormFiller
+    
+    class DriverWrapper:
+        def __init__(self, driver):
+            self.driver = driver
+        def get_driver(self):
+            return self.driver
+            
+    wrapper = DriverWrapper(auth_device_session.get_driver())
+    gesture_handler = GestureHandler(wrapper)
+    width, height = auth_device_session.get_screen_dimensions()
+    return AuthFormFiller(gesture_handler, (width, height))
+
+
+# ============================================================================
+# Gmail Automation Fixtures
+# ============================================================================
+
+@pytest.fixture(scope="module")
+def gmail_config():
+    """Fixture for Gmail automation configuration."""
+    from tests.integration.device_verifier.gmail.gmail_configs import GmailAutomationConfig
+    return GmailAutomationConfig(
+        poll_interval_seconds=5,
+        max_wait_seconds=60,
+        capture_screenshots=True,
+        screenshot_dir="gmail_failures"
+    )
+
+
+@pytest.fixture(scope="module")
+def gmail_navigator(auth_device_session, android_device, gmail_config):
+    """Fixture for GmailNavigator."""
+    from tests.integration.device_verifier.gmail.gmail_navigator import GmailNavigator
+    return GmailNavigator(
+        driver=auth_device_session.get_driver(),
+        device_id=android_device,
+        config=gmail_config
+    )
+
+
+@pytest.fixture(scope="module")
+def gmail_reader(auth_device_session, android_device, gmail_config):
+    """Fixture for GmailReader."""
+    from tests.integration.device_verifier.gmail.gmail_reader import GmailReader
+    return GmailReader(
+        driver=auth_device_session.get_driver(),
+        device_id=android_device,
+        config=gmail_config
+    )
+
+
+@pytest.fixture(scope="module")
+def app_switcher(auth_device_session, android_device, gmail_config):
+    """Fixture for AppSwitcher."""
+    from tests.integration.device_verifier.gmail.app_switcher import AppSwitcher
+    AUTH_APP_PACKAGE = "com.example.auth_test_app"
+    return AppSwitcher(
+        driver=auth_device_session.get_driver(),
+        device_id=android_device,
+        test_app_package=AUTH_APP_PACKAGE,
+        config=gmail_config
+    )
+
+
+@pytest.fixture(scope="module")
+def clipboard_helper(auth_device_session, android_device, gmail_config):
+    """Fixture for ClipboardHelper."""
+    from tests.integration.device_verifier.gmail.clipboard_helper import ClipboardHelper
+    return ClipboardHelper(
+        driver=auth_device_session.get_driver(),
+        device_id=android_device,
+        config=gmail_config
+    )
+
+
+@pytest.fixture(scope="module")
+def gmail_auth_verifier(gmail_navigator, gmail_reader, app_switcher):
+    """Fixture for GmailAuthVerifier."""
+    from tests.integration.device_verifier.gmail.gmail_auth_verifier import GmailAuthVerifier
+    return GmailAuthVerifier(
+        navigator=gmail_navigator,
+        reader=gmail_reader,
+        switcher=app_switcher
+    )
+
+
+@pytest.fixture(scope="module")
+def email_sender():
+    """Fixture for mock EmailSender."""
+    from tests.integration.device_verifier.gmail.email_sender import EmailSender
+    return EmailSender(sender_email="afoda50@gmail.com")

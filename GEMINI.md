@@ -19,6 +19,9 @@ tests/
 
 cd src; pytest; ruff check .
 
+# Gmail Auth Tests
+pytest tests/integration/test_auth_gmail_e2e.py -v
+
 ## Code Style
 
 Python 3.11+ (Project Standard): Follow standard conventions
