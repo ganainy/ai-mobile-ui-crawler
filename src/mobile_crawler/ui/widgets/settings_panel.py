@@ -259,6 +259,15 @@ class SettingsPanel(QWidget):
         self.test_password_input.setPlaceholderText("Enter test password")
         password_layout.addWidget(self.test_password_input)
         credentials_layout.addLayout(password_layout)
+        
+        # Test Gmail Account (for both form filling and verification)
+        gmail_layout = QHBoxLayout()
+        gmail_label = QLabel("Test Gmail Account:")
+        gmail_layout.addWidget(gmail_label)
+        self.test_gmail_account_input = QLineEdit()
+        self.test_gmail_account_input.setPlaceholderText("Enter gmail used for tests")
+        gmail_layout.addWidget(self.test_gmail_account_input)
+        credentials_layout.addLayout(gmail_layout)
 
         credentials_group.setLayout(credentials_layout)
         layout.addWidget(credentials_group)
@@ -354,6 +363,11 @@ class SettingsPanel(QWidget):
         if test_password:
             self.test_password_input.setText(test_password)
 
+        # Load test gmail (from either field, prioritizing test_gmail_account)
+        test_gmail = self._config_store.get_setting("test_gmail_account") or self._config_store.get_setting("test_email") or ""
+        self.test_gmail_account_input.setText(test_gmail)
+        # Note: We keep internal test_email and test_gmail_account keys for now to avoid data loss
+
         # Load traffic capture settings
         enable_traffic_capture = self._config_store.get_setting("enable_traffic_capture", default=False)
         self.enable_traffic_capture_checkbox.setChecked(enable_traffic_capture)
@@ -439,6 +453,15 @@ class SettingsPanel(QWidget):
                 self._config_store.set_secret_plaintext("test_password", test_password)
             else:
                 self._config_store.delete_secret("test_password")
+
+            test_gmail = self.test_gmail_account_input.text().strip()
+            if test_gmail:
+                # Save to BOTH internal keys so existing logic doesn't break
+                self._config_store.set_setting("test_email", test_gmail, "string")
+                self._config_store.set_setting("test_gmail_account", test_gmail, "string")
+            else:
+                self._config_store.delete_setting("test_email")
+                self._config_store.delete_setting("test_gmail_account")
 
             # Save traffic capture settings
             enable_traffic_capture = self.enable_traffic_capture_checkbox.isChecked()
@@ -552,6 +575,18 @@ class SettingsPanel(QWidget):
             Current test username
         """
         return self.test_username_input.text()
+
+    def get_test_password(self) -> str:
+        """Get the current test password value."""
+        return self.test_password_input.text()
+
+    def get_test_email(self) -> str:
+        """Get the current test email value."""
+        return self.test_gmail_account_input.text()
+
+    def get_test_gmail_account(self) -> str:
+        """Get the current test gmail account value."""
+        return self.test_gmail_account_input.text()
 
     def get_enable_traffic_capture(self) -> bool:
         """Get the current traffic capture enabled state.

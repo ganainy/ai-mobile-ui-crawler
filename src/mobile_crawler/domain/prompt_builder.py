@@ -177,6 +177,7 @@ class PromptBuilder:
         test_username = self.config_manager.get('test_username', '')
         test_password = self.config_manager.get('test_password', '')
         test_email = self.config_manager.get('test_email', '')
+        test_gmail = self.config_manager.get('test_gmail_account', '')
 
         credentials = []
         if test_username:
@@ -185,6 +186,8 @@ class PromptBuilder:
             credentials.append(f"Password: {test_password}")
         if test_email:
             credentials.append(f"Email: {test_email}")
+        if test_gmail:
+            credentials.append(f"Test Gmail Account: {test_gmail}")
 
         if credentials:
             return "\n".join(credentials)
@@ -217,10 +220,14 @@ class PromptBuilder:
                     seen_screens.add(screen_id)
             
             # Build journal entry with novelty signal
+            outcome = "Success" if step.execution_success else f"Failed: {step.error_message or 'Unknown error'}"
+            if step.action_type == "extract_otp" and step.execution_success and step.input_text:
+                outcome = f"Success - Extracted OTP: {step.input_text}"
+
             entry = {
                 "step": step.step_number,
                 "action": step.action_description or step.action_type,
-                "outcome": "Success" if step.execution_success else f"Failed: {step.error_message or 'Unknown error'}",
+                "outcome": outcome,
             }
             
             # Add screen info with novelty signal

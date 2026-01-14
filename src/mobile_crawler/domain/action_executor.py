@@ -7,6 +7,8 @@ from mobile_crawler.domain.models import ActionResult
 from mobile_crawler.infrastructure.appium_driver import AppiumDriver
 from mobile_crawler.infrastructure.gesture_handler import GestureHandler
 from mobile_crawler.infrastructure.adb_input_handler import ADBInputHandler
+from mobile_crawler.infrastructure.gmail.service import GmailService
+from mobile_crawler.infrastructure.gmail.config import GmailSearchQuery
 
 
 class ActionExecutor:
@@ -15,17 +17,20 @@ class ActionExecutor:
     """
 
     def __init__(self, appium_driver: AppiumDriver, gesture_handler: GestureHandler,
-                 adb_input_handler: Optional[ADBInputHandler] = None):
+                 adb_input_handler: Optional[ADBInputHandler] = None,
+                 gmail_service: Optional[GmailService] = None):
         """Initialize action executor.
 
         Args:
             appium_driver: Appium driver instance
             gesture_handler: Gesture handler instance
             adb_input_handler: ADB input handler for text input (optional, created if not provided)
+            gmail_service: Gmail service for email automation (optional)
         """
         self.appium_driver = appium_driver
         self.gesture_handler = gesture_handler
         self.adb_input_handler = adb_input_handler or ADBInputHandler()
+        self.gmail_service = gmail_service
         self._last_action_time = 0
         self._action_delay_ms = 2000  # 2s between actions for visual observability
 
@@ -279,4 +284,73 @@ class ActionExecutor:
             duration_ms=duration_ms,
             error_message=error,
             navigated_away=False
+        )
+
+    def extract_otp(self, sender: Optional[str] = None, subject: Optional[str] = None) -> ActionResult:
+        """Execute OTP extraction from Gmail.
+
+        Args:
+            sender: Email sender filter
+            subject: Subject keyword filter
+
+        Returns:
+            ActionResult (success=True, input_text=OTP if found)
+        """
+        if not self.gmail_service:
+            return ActionResult(success=False, action_type="extract_otp", error_message="Gmail service not initialized")
+
+        self._ensure_delay()
+        query = GmailSearchQuery(sender=sender, subject_contains=subject)
+
+        start_time = time.time()
+        try:
+            otp = self.gmail_service.extract_otp(query)
+            success = otp is not None
+            error = None if success else "OTP not found"
+        except Exception as e:
+            otp = None
+            success = False
+            error = str(e)
+        duration_ms = (time.time() - start_time) * 1000
+
+        return ActionResult(
+            success=success,
+            action_type="extract_otp",
+            target="Gmail",
+            duration_ms=duration_ms,
+            error_message=error,
+            input_text=otp
+        )
+
+    def click_verification_link(self, sender: Optional[str] = None, subject: Optional[str] = None) -> ActionResult:
+        """Execute verification link click in Gmail.
+
+        Args:
+            sender: Email sender filter
+            subject: Subject keyword filter
+
+        Returns:
+            ActionResult
+        """
+        if not self.gmail_service:
+            return ActionResult(success=False, action_type="click_verification_link", error_message="Gmail service not initialized")
+
+        self._ensure_delay()
+        query = GmailSearchQuery(sender=sender, subject_contains=subject)
+
+        start_time = time.time()
+        try:
+            success = self.gmail_service.click_verification_link(query)
+            error = None if success else "Link not clicked"
+        except Exception as e:
+            success = False
+            error = str(e)
+        duration_ms = (time.time() - start_time) * 1000
+
+        return ActionResult(
+            success=success,
+            action_type="click_verification_link",
+            target="Gmail",
+            duration_ms=duration_ms,
+            error_message=error
         )

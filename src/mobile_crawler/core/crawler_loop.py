@@ -658,6 +658,13 @@ class CrawlerLoop:
                     result = self.action_executor.swipe_right()
                 elif ai_action.action == "back":
                     result = self.action_executor.back()
+                elif ai_action.action == "extract_otp":
+                    # AI can provide sender/subject hint in input_text or similar, 
+                    # but usually it's better to just use defaults or reasoning.
+                    # For now, we'll try to extract without specific filters if not provided.
+                    result = self.action_executor.extract_otp()
+                elif ai_action.action == "click_verification_link":
+                    result = self.action_executor.click_verification_link()
                 else:
                     # Unknown action - skip
                     continue

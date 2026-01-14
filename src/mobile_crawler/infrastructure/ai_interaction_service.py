@@ -397,7 +397,7 @@ class AIInteractionService:
         # Validate action type
         valid_actions = [
             "click", "input", "long_press", "scroll_up", "scroll_down", 
-            "scroll_left", "scroll_right", "back"
+            "scroll_left", "scroll_right", "back", "extract_otp", "click_verification_link"
         ]
         if action_data["action"] not in valid_actions:
             raise ValueError(f"Invalid action type: {action_data['action']}")

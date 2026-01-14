@@ -1,16 +1,14 @@
 """
 Clipboard Helper - Clipboard operations for OTP transfer.
-
-This class provides methods to copy OTP codes to the Android
-clipboard and paste them into apps.
 """
 
 import time
 import base64
 import subprocess
 from typing import Optional
+from appium.webdriver.common.appiumby import AppiumBy
 
-from .gmail_configs import GmailAutomationConfig
+from .config import GmailAutomationConfig
 
 
 class ClipboardHelper:
@@ -111,42 +109,45 @@ class ClipboardHelper:
                 time.sleep(0.3)
             
             # Get current focused element location for long press
-            # Use Appium's long press action
             try:
-                from appium.webdriver.common.touch_action import TouchAction
+                # Use W3C actions or fallback
+                # Assuming AppiumDriver
                 
-                if element:
-                    action = TouchAction(self.driver)
-                    action.long_press(element).release().perform()
-                else:
-                    # Long press at center of screen
-                    size = self.driver.get_window_size()
-                    center_x = size['width'] // 2
-                    center_y = size['height'] // 2
-                    action = TouchAction(self.driver)
-                    action.long_press(x=center_x, y=center_y).release().perform()
-                
-                time.sleep(0.5)
-                
-            except ImportError:
-                # Fallback for newer Appium versions
-                if element:
-                    self.driver.execute_script('mobile: longClickGesture', {
-                        'elementId': element.id,
-                        'duration': 1000
-                    })
-                else:
-                    size = self.driver.get_window_size()
-                    self.driver.execute_script('mobile: longClickGesture', {
-                        'x': size['width'] // 2,
-                        'y': size['height'] // 2,
-                        'duration': 1000
-                    })
-                time.sleep(0.5)
+                # Check for Appium's TouchAction (deprecated) or newer W3C
+                try:
+                    from appium.webdriver.common.touch_action import TouchAction
+                    if element:
+                        action = TouchAction(self.driver)
+                        action.long_press(element).release().perform()
+                    else:
+                        size = self.driver.get_window_size()
+                        center_x = size['width'] // 2
+                        center_y = size['height'] // 2
+                        action = TouchAction(self.driver)
+                        action.long_press(x=center_x, y=center_y).release().perform()
+                    
+                    time.sleep(0.5)
+                except ImportError:
+                    # Newer Appium (v2+ client) may not have TouchAction, use script or W3C
+                     if element:
+                        self.driver.execute_script('mobile: longClickGesture', {
+                            'elementId': element.id,
+                            'duration': 1000
+                        })
+                     else:
+                        size = self.driver.get_window_size()
+                        self.driver.execute_script('mobile: longClickGesture', {
+                            'x': size['width'] // 2,
+                            'y': size['height'] // 2,
+                            'duration': 1000
+                        })
+                     time.sleep(0.5)
+
+            except Exception:
+                # Fallback to simple ADB keyevent? Long press via ADB is tricky without coordinates
+                pass
             
             # Find and tap Paste option
-            from appium.webdriver.common.appiumby import AppiumBy
-            
             paste_options = [
                 "Paste",
                 "PASTE",

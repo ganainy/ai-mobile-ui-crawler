@@ -72,4 +72,6 @@ DEFAULTS: Dict[str, Any] = {
     'mobsf_scan_timeout': 900,  # 15 minutes (scans can take 5-10+ minutes for complex apps)
     # Interval between scan status polls (in seconds)
     'mobsf_poll_interval': 2,
+    # Test credentials
+    'test_gmail_account': None,
 }

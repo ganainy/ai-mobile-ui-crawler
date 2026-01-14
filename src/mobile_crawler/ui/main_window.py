@@ -44,6 +44,8 @@ from mobile_crawler.domain.screen_tracker import ScreenTracker
 from mobile_crawler.infrastructure.step_log_repository import StepLogRepository
 from mobile_crawler.infrastructure.screen_repository import ScreenRepository
 from mobile_crawler.domain.models import ActionResult
+from mobile_crawler.infrastructure.gmail.service import GmailService
+from mobile_crawler.infrastructure.gmail.config import GmailAutomationConfig
 
 # Widget imports
 from mobile_crawler.ui.widgets.device_selector import DeviceSelector
@@ -337,6 +339,7 @@ class MainWindow(QMainWindow):
             # Create run record
             run = self._create_run_record()
             run_id = self._services['run_repository'].create_run(run)
+            run.id = run_id  # Ensure the object has the assigned ID
             self._current_run_id = run_id
             
             # Initialize statistics tracking
@@ -352,7 +355,7 @@ class MainWindow(QMainWindow):
                 self.stats_dashboard.set_max_duration(self.settings_panel.get_max_duration())
             
             # Create crawler loop
-            crawler_loop = self._create_crawler_loop(config_manager, run_id)
+            crawler_loop = self._create_crawler_loop(config_manager, run)
             self._crawler_loop = crawler_loop
             
             # Apply step-by-step mode if enabled in UI
@@ -360,7 +363,7 @@ class MainWindow(QMainWindow):
                 crawler_loop.set_step_by_step_enabled(True)
             
             # Create and start worker thread
-            self._crawler_worker = CrawlerWorker(crawler_loop, run_id)
+            self._crawler_worker = CrawlerWorker(crawler_loop, run.id)
             self._crawler_worker.finished.connect(self._on_crawl_finished)
             self._crawler_worker.error.connect(self._on_crawl_error)
             self._crawler_worker.start()
@@ -424,6 +427,12 @@ class MainWindow(QMainWindow):
         if openrouter_key:
             config_manager.set('openrouter_api_key', openrouter_key)
         
+        # Set test credentials from settings panel
+        config_manager.set('test_username', self.settings_panel.get_test_username())
+        config_manager.set('test_password', self.settings_panel.get_test_password())
+        config_manager.set('test_email', self.settings_panel.get_test_email())
+        config_manager.set('test_gmail_account', self.settings_panel.get_test_gmail_account())
+
         # Set screen configuration
         top_height = self.settings_panel.get_top_bar_height()
         # Log to UI so user can see it's being picked up
@@ -493,16 +502,17 @@ class MainWindow(QMainWindow):
             unique_screens=0
         )
 
-    def _create_crawler_loop(self, config_manager: ConfigManager, run_id: int) -> CrawlerLoop:
+    def _create_crawler_loop(self, config_manager: ConfigManager, run: Any) -> CrawlerLoop:
         """Create crawler loop with all dependencies.
         
         Args:
             config_manager: Configuration manager
-            run_id: Run ID
+            run: Run object
             
         Returns:
             CrawlerLoop instance
         """
+        run_id = run.id
         # Get the connected AppiumDriver
         appium_driver = self._services['appium_driver']
         
@@ -514,7 +524,20 @@ class MainWindow(QMainWindow):
         )
         ai_service = AIInteractionService.from_config(config_manager, event_listener=self.signal_adapter)
         gesture_handler = GestureHandler(appium_driver)
-        action_executor = ActionExecutor(appium_driver, gesture_handler)
+        
+        # Initialize GmailService for ActionExecutor
+        gmail_config = GmailAutomationConfig(
+            target_account=config_manager.get('test_gmail_account'),
+            screenshot_dir=self._services['session_folder_manager'].get_subfolder(run, "gmail_failures")
+        )
+        gmail_service = GmailService(
+            driver=appium_driver.get_driver(),
+            device_id=appium_driver.device_id,
+            target_app_package=config_manager.get('app_package'),
+            config=gmail_config
+        )
+        
+        action_executor = ActionExecutor(appium_driver, gesture_handler, gmail_service=gmail_service)
         step_log_repo = StepLogRepository(self._services['database_manager'])
         
         # Get screen deduplication configuration

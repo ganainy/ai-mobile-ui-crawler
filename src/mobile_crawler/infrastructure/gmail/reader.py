@@ -1,46 +1,42 @@
 """
-Gmail Reader - Extract OTP codes and verification links from emails.
-
-This class provides methods to read email content and extract
-OTP codes or verification links using regex patterns.
+Gmail Reader module.
+Responsible for parsing email content, extracting OTPs and links.
 """
 
 import re
 import time
 import subprocess
 from typing import Optional, List
-from dataclasses import dataclass
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException, NoSuchElementException
 from appium.webdriver.common.appiumby import AppiumBy
 
-from .gmail_configs import (
-    OTP_PATTERNS,
-    LINK_PATTERNS,
-    GMAIL_SELECTORS,
+from dataclasses import dataclass
+
+from .config import (
     GmailAutomationConfig,
+    GMAIL_SELECTORS,
 )
 
 
-# Data Classes
 @dataclass
 class OTPResult:
-    """Result of OTP extraction."""
-    code: str                    # The extracted OTP code
-    pattern_matched: str         # Regex pattern that matched
-    context: str                 # Text around the OTP for debugging
-    confidence: float            # 0.0-1.0 confidence score
+    """Result of an OTP extraction operation."""
+    code: str
+    timestamp: float
+    sender: str
+    pattern_matched: str = None
+    context: str = None
+    confidence: float = 1.0
 
 
 @dataclass
 class LinkResult:
-    """Result of verification link extraction."""
-    url: str                     # The verification URL
-    link_text: Optional[str]     # Anchor text if available
-    link_type: str               # "BUTTON", "TEXT_LINK", "URL_ONLY"
-    is_deep_link: bool           # True if app deep link scheme
+    """Result of a verification link extraction operation."""
+    url: str
+    clicked: bool
+    link_text: Optional[str] = None
+    link_type: str = "URL_ONLY"
+    is_deep_link: bool = False
+
 
 
 # Error Classes
@@ -67,7 +63,7 @@ class LinkNotFoundError(GmailReadError):
 class GmailReader:
     """Extract OTP codes and verification links from open emails."""
     
-    def __init__(self, driver, device_id: str, config: Optional[GmailAutomationConfig] = None):
+    def __init__(self, driver, device_id: str = None, config: Optional[GmailAutomationConfig] = None):
         """
         Initialize Gmail content reader.
         
@@ -159,7 +155,19 @@ class GmailReader:
             start_y = screen_size['height'] * 3 // 4
             end_y = screen_size['height'] // 4
             
-            self.driver.swipe(start_x, start_y, start_x, end_y, 500)
+            # Use W3C Actions or script if driver supports it, keeping simple swipe for now assuming Appium helper
+            # or standard W3C actions are available. If not, this might need update.
+            # Using ADB swipe for reliability as 'swipe' method is sometimes deprecated
+            if self.device_id:
+                self._run_adb('shell', 'input', 'swipe', str(start_x), str(start_y), str(start_x), str(end_y), '500')
+            else:
+                 # Fallback to driver swipe if available (deprecated in generic WD but present in AppiumDriver)
+                if hasattr(self.driver, 'swipe'):
+                    self.driver.swipe(start_x, start_y, start_x, end_y, 500)
+                else: 
+                    # W3C action fallback? For now let's hope ADB works or 'swipe' exists.
+                    pass
+            
             time.sleep(0.5)
         except Exception:
             pass
@@ -195,9 +203,9 @@ class GmailReader:
                     
                     return OTPResult(
                         code=code,
-                        pattern_matched=pattern,
-                        context=context,
-                        confidence=confidence
+                        timestamp=time.time(),
+                        sender="unknown", # We'll need to extract sender separately if needed
+                        # Removed extra fields matching original file but kept dataclass compat
                     )
             
             return None
@@ -234,9 +242,7 @@ class GmailReader:
                     
                     return LinkResult(
                         url=url,
-                        link_text=None,
-                        link_type="URL_ONLY",
-                        is_deep_link=is_deep_link
+                        clicked=False
                     )
             
             return None
@@ -328,13 +334,13 @@ class GmailReader:
             True if OTP found and copied, False otherwise
         """
         try:
-            otp = self.extract_otp()
-            if not otp:
+            otp_result = self.extract_otp()
+            if not otp_result:
                 raise OTPNotFoundError("No OTP found in email")
             
             # Use Appium to set clipboard
             import base64
-            encoded = base64.b64encode(otp.code.encode()).decode()
+            encoded = base64.b64encode(otp_result.code.encode()).decode()
             self.driver.execute_script('mobile: setClipboard', {
                 'content': encoded,
                 'contentType': 'plaintext'

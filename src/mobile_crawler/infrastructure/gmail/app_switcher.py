@@ -1,17 +1,13 @@
 """
 App Switcher - Switch between test app and Gmail reliably.
-
-This class provides methods to switch app context during
-email verification workflows.
 """
 
 import time
 import subprocess
 from typing import Optional
 from dataclasses import dataclass
-from appium.webdriver.common.appiumby import AppiumBy
 
-from .gmail_configs import GMAIL_PACKAGE, GMAIL_ACTIVITY, GmailAutomationConfig
+from .config import GMAIL_PACKAGE, GMAIL_ACTIVITY, GmailAutomationConfig
 
 
 @dataclass
@@ -251,4 +247,3 @@ class AppSwitcher:
                 return True
             time.sleep(0.5)
         return False
-

@@ -1,12 +1,9 @@
 """
-Gmail automation configuration, selectors, and patterns.
-
-This module contains all the constants, selectors, and regex patterns
-needed for Gmail app automation.
+Configuration constants, selectors, patterns, and data classes for Gmail interaction.
 """
 
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import List, Optional, Dict
 from datetime import datetime
 
 # Gmail App Identifiers
@@ -14,7 +11,7 @@ GMAIL_PACKAGE = "com.google.android.gm"
 GMAIL_ACTIVITY = "com.google.android.gm.ConversationListActivityGmail"
 
 # Gmail UI Element Selectors
-GMAIL_SELECTORS = {
+GMAIL_SELECTORS: Dict[str, str | List[str]] = {
     # Inbox view
     "inbox_list": "com.google.android.gm:id/conversation_list",
     "conversation_item": "com.google.android.gm:id/conversation_list_item",
@@ -100,6 +97,9 @@ class GmailAutomationConfig:
     # Screenshot on failure
     capture_screenshots: bool = True
     screenshot_dir: str = "gmail_failures"
+    
+    # Target account for multi-account support
+    target_account: Optional[str] = None
 
 
 @dataclass

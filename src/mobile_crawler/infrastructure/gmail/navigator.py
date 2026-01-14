@@ -1,22 +1,18 @@
 """
 Gmail Navigator - Navigate and control the Gmail app on Android.
-
-This class provides methods to open Gmail, navigate to inbox,
-search for emails, and open specific messages.
 """
 
 import time
 import subprocess
 import logging
 from datetime import datetime
-from typing import Optional, List
-from selenium.webdriver.common.by import By
+from typing import Optional
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException, NoSuchElementException
+from selenium.common.exceptions import TimeoutException
 from appium.webdriver.common.appiumby import AppiumBy
 
-from .gmail_configs import (
+from .config import (
     GMAIL_PACKAGE,
     GMAIL_ACTIVITY,
     GMAIL_SELECTORS,
@@ -118,7 +114,11 @@ class GmailNavigator:
             time.sleep(self.config.app_switch_delay_seconds)
             
             # Wait for inbox to be visible
-            return self.is_inbox_visible()
+            if not self.is_inbox_visible():
+                return False
+
+            # Ensure correct account is active
+            return self.ensure_correct_account()
 
             
         except GmailNotInstalledError:
@@ -187,6 +187,78 @@ class GmailNavigator:
         except:
             return False
 
+    def ensure_correct_account(self) -> bool:
+        """
+        Verify the active account in Gmail and switch if mismatch with target_account.
+        
+        Returns:
+            True if target account is active or switched successfully
+        """
+        if not self.config.target_account:
+            return True  # No target specified, skip
+
+        logger.info(f"Ensuring Gmail account: {self.config.target_account}")
+        try:
+            # 1. Check current account using profile ring button
+            profile_btn_id = "com.google.android.gm:id/og_apd_ring_view"
+            
+            try:
+                profile_btn = WebDriverWait(self.driver, 5).until(
+                    EC.presence_of_element_located((AppiumBy.ID, profile_btn_id))
+                )
+            except TimeoutException:
+                # Close any overlay that might be blocking (e.g. search)
+                self.recover_from_unknown_state()
+                profile_btn = WebDriverWait(self.driver, 5).until(
+                    EC.presence_of_element_located((AppiumBy.ID, profile_btn_id))
+                )
+
+            desc = profile_btn.get_attribute("content-desc") or ""
+            
+            if self.config.target_account.lower() in desc.lower():
+                logger.info(f"Target account {self.config.target_account} is already active.")
+                return True
+                
+            logger.info(f"Account mismatch. Current profile: {desc}. Switching to {self.config.target_account}...")
+            
+            # 2. Click profile to open account switcher
+            profile_btn.click()
+            time.sleep(1.5)
+            
+            # Look for the target account in the list
+            # We use an XPath that matches any text view containing the email
+            account_xpath = f"//android.widget.TextView[contains(@text, '{self.config.target_account}')]"
+            
+            try:
+                target_item = WebDriverWait(self.driver, 5).until(
+                    EC.presence_of_element_located((AppiumBy.XPATH, account_xpath))
+                )
+                target_item.click()
+                time.sleep(2)
+                
+                # Verify switching worked
+                profile_btn = WebDriverWait(self.driver, 5).until(
+                    EC.presence_of_element_located((AppiumBy.ID, profile_btn_id))
+                )
+                new_desc = profile_btn.get_attribute("content-desc") or ""
+                if self.config.target_account.lower() in new_desc.lower():
+                    logger.info(f"Successfully switched to {self.config.target_account}")
+                    return True
+                else:
+                    logger.error(f"Failed to confirm switch. Still on: {new_desc}")
+                    return False
+                    
+            except TimeoutException:
+                logger.error(f"Target account {self.config.target_account} not found in accounts list.")
+                # Try to close switcher
+                self.driver.press_keycode(4) # Back
+                return False
+                
+        except Exception as e:
+            self._save_screenshot("account_switch_failed")
+            logger.error(f"Error during account switching: {e}")
+            return False
+
     
     def refresh_inbox(self) -> bool:
         """
@@ -202,7 +274,15 @@ class GmailNavigator:
             start_y = screen_size['height'] // 4
             end_y = screen_size['height'] // 2
             
-            self.driver.swipe(start_x, start_y, start_x, end_y, 500)
+            # Using ADB swipe for consistency with scroll implementation
+            if self.device_id:
+                self._run_adb('shell', 'input', 'swipe', str(start_x), str(start_y), str(start_x), str(end_y), '500')
+            else:
+                if hasattr(self.driver, 'swipe'):
+                     self.driver.swipe(start_x, start_y, start_x, end_y, 500)
+                else: 
+                     pass 
+
             time.sleep(2)  # Wait for refresh
             return True
         except Exception:

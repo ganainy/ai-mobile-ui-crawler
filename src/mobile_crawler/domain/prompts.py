@@ -41,6 +41,8 @@ You can perform these actions on the app:
 - **scroll_left**: Scroll left from center of screen
 - **scroll_right**: Scroll right from center of screen
 - **back**: Press the Android back button (useful for navigation, escaping modals)
+- **extract_otp**: Switch to Gmail, find verification email, extract OTP, and return to app (use when verification code is sent via email)
+- **click_verification_link**: Switch to Gmail, find and click the verification link, then return to app (use for Magic Links or email verification)
 
 ## Action Format
 Respond with a JSON object containing:

@@ -1,4 +1,4 @@
-﻿# mobile-crawler Development Guidelines
+# mobile-crawler Development Guidelines
 
 Auto-generated from all feature plans. Last updated: 2026-01-11
 
@@ -11,6 +11,10 @@ Auto-generated from all feature plans. Last updated: 2026-01-11
 - `crawler.db` (SQLite), specific folder structure in `output_data/` (010-fix-run-history-ui)
 - [e.g., Python 3.11, Swift 5.9, Rust 1.75 or NEEDS CLARIFICATION] + [e.g., FastAPI, UIKit, LLVM or NEEDS CLARIFICATION] (010-fix-run-history-ui)
 - [if applicable, e.g., PostgreSQL, CoreData, files or N/A] (010-fix-run-history-ui)
+- Python 3.11+ + pytest, Appium (via existing `device_verifier` infrastructure), selenium (016-auth-e2e-tests)
+- N/A (tests store credentials in memory only) (016-auth-e2e-tests)
+- Python 3.11+ (Test Suite) + Dart/Flutter (Optional Test App) + Appium, Android UiAutomator2, Gmail app on device (016-auth-e2e-tests)
+- N/A (stateless test execution) (016-auth-e2e-tests)
 
 - Python 3.9+ + appium-python-client, pytest, requests (007-test-app-actions-verify)
 
@@ -30,9 +34,8 @@ cd src; pytest; ruff check .
 Python 3.9+: Follow standard conventions
 
 ## Recent Changes
-- 010-fix-run-history-ui: Added [e.g., Python 3.11, Swift 5.9, Rust 1.75 or NEEDS CLARIFICATION] + [e.g., FastAPI, UIKit, LLVM or NEEDS CLARIFICATION]
-- 010-fix-run-history-ui: Added Python 3.11 + PySide6, SQLite
-- 008-debug-overlay: Added Python 3.11 + PySide6 (Qt bindings), Pillow (PIL for image manipulation)
+- 016-auth-e2e-tests: Added Python 3.11+ (Test Suite) + Dart/Flutter (Optional Test App) + Appium, Android UiAutomator2, Gmail app on device
+- 016-auth-e2e-tests: Added Python 3.11+ + pytest, Appium (via existing `device_verifier` infrastructure), selenium
 
 
 <!-- MANUAL ADDITIONS START -->

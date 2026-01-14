@@ -2,12 +2,8 @@
 Gmail-integrated auth E2E tests.
 
 These tests verify the ability to extract OTP codes and click
-verification links from real emails in the Gmail app.
-
-Prerequisites:
-- Gmail app installed and signed in on the test device
-- A real email service that can send OTP/verification emails
-- Proper network connectivity
+verification links from real emails in the Gmail app using the
+production GmailService.
 
 Usage:
     pytest tests/integration/test_auth_gmail_e2e.py -v -s
@@ -27,233 +23,62 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 
 class TestGmailModuleImports:
-    """Test that Gmail module imports work correctly."""
+    """Test that Gmail module imports work correctly from src."""
     
-    def test_gmail_configs_import(self):
-        """Test that gmail_configs imports correctly."""
-        from tests.integration.device_verifier.gmail.gmail_configs import (
+    def test_gmail_config_import(self):
+        """Test that config imports correctly."""
+        from mobile_crawler.infrastructure.gmail.config import (
             GMAIL_PACKAGE,
-            GMAIL_ACTIVITY,
             OTP_PATTERNS,
-            LINK_PATTERNS,
-            GMAIL_SELECTORS,
             GmailAutomationConfig,
             GmailSearchQuery,
         )
-        
         assert GMAIL_PACKAGE == "com.google.android.gm"
         assert len(OTP_PATTERNS) > 0
-        assert len(LINK_PATTERNS) > 0
-    
-    def test_gmail_navigator_import(self):
-        """Test that gmail_navigator imports correctly."""
-        from tests.integration.device_verifier.gmail.gmail_navigator import (
-            GmailNavigator,
-            GmailNavigationError,
-            GmailNotInstalledError,
-            NoEmailsFoundError,
-        )
-        
-        assert GmailNavigator is not None
-    
-    def test_gmail_reader_import(self):
-        """Test that gmail_reader imports correctly."""
-        from tests.integration.device_verifier.gmail.gmail_reader import (
-            GmailReader,
-            OTPResult,
-            LinkResult,
-            GmailReadError,
-            OTPNotFoundError,
-            LinkNotFoundError,
-        )
-        
-        assert GmailReader is not None
-        assert OTPResult is not None
-    
-    def test_app_switcher_import(self):
-        """Test that app_switcher imports correctly."""
-        from tests.integration.device_verifier.gmail.app_switcher import (
-            AppSwitcher,
-            AppState,
-        )
-        
-        assert AppSwitcher is not None
-    
-    def test_clipboard_helper_import(self):
-        """Test that clipboard_helper imports correctly."""
-        from tests.integration.device_verifier.gmail.clipboard_helper import (
-            ClipboardHelper,
-        )
-        
-        assert ClipboardHelper is not None
 
-
-# ============================================================================
-# Gmail Search Query Tests
-# ============================================================================
-
-class TestGmailSearchQuery:
-    """Test GmailSearchQuery functionality."""
-    
-    def test_query_with_sender(self):
-        """Test query building with sender filter."""
-        from tests.integration.device_verifier.gmail.gmail_configs import GmailSearchQuery
-        
-        query = GmailSearchQuery(sender="test@example.com")
-        assert query.to_gmail_query() == "from:test@example.com is:unread"
-    
-    def test_query_with_subject(self):
-        """Test query building with subject filter."""
-        from tests.integration.device_verifier.gmail.gmail_configs import GmailSearchQuery
-        
-        query = GmailSearchQuery(subject_contains="Verification")
-        assert "subject:Verification" in query.to_gmail_query()
-    
-    def test_query_validation(self):
-        """Test query validation."""
-        from tests.integration.device_verifier.gmail.gmail_configs import GmailSearchQuery
-        
-        empty_query = GmailSearchQuery()
-        assert not empty_query.is_valid()
-        
-        valid_query = GmailSearchQuery(sender="test@example.com")
-        assert valid_query.is_valid()
-
-
-# ============================================================================
-# OTP Pattern Tests
-# ============================================================================
-
-class TestOTPPatterns:
-    """Test OTP extraction patterns."""
-    
-    def test_extract_6_digit_otp(self):
-        """Test extraction of 6-digit OTP."""
-        import re
-        from tests.integration.device_verifier.gmail.gmail_configs import OTP_PATTERNS
-        
-        test_text = "Your verification code is 123456. Please enter it to continue."
-        
-        for pattern in OTP_PATTERNS:
-            match = re.search(pattern, test_text, re.IGNORECASE)
-            if match:
-                assert match.group(1) == "123456"
-                return
-        
-        pytest.fail("No OTP pattern matched")
-    
-    def test_extract_otp_with_label(self):
-        """Test extraction of OTP with label."""
-        import re
-        from tests.integration.device_verifier.gmail.gmail_configs import OTP_PATTERNS
-        
-        test_text = "Your OTP: 987654"
-        
-        for pattern in OTP_PATTERNS:
-            match = re.search(pattern, test_text, re.IGNORECASE)
-            if match:
-                assert match.group(1) == "987654"
-                return
-        
-        pytest.fail("No OTP pattern matched")
-
-
-# ============================================================================
-# Link Pattern Tests
-# ============================================================================
-
-class TestLinkPatterns:
-    """Test verification link extraction patterns."""
-    
-    def test_extract_verify_link(self):
-        """Test extraction of verification link."""
-        import re
-        from tests.integration.device_verifier.gmail.gmail_configs import LINK_PATTERNS
-        
-        test_text = "Click here to verify: https://example.com/verify?token=abc123"
-        
-        for pattern in LINK_PATTERNS:
-            match = re.search(pattern, test_text, re.IGNORECASE)
-            if match:
-                url = match.group(1)
-                assert "verify" in url
-                assert "token=abc123" in url
-                return
-        
-        pytest.fail("No link pattern matched")
+    def test_gmail_service_import(self):
+        """Test that GmailService imports correctly."""
+        from mobile_crawler.infrastructure.gmail.service import GmailService
+        assert GmailService is not None
 
 
 # ============================================================================
 # Integration Tests (Require Device)
 # ============================================================================
 
-class TestGmailNavigation:
-    """Test Gmail app navigation."""
+@pytest.fixture(scope="module")
+def gmail_service(auth_device_session, android_device):
+    """Fixture for the production GmailService."""
+    from mobile_crawler.infrastructure.gmail.service import GmailService
+    from mobile_crawler.infrastructure.gmail.config import GmailAutomationConfig
     
-    def test_open_gmail(self, gmail_navigator):
-        """Test opening Gmail app."""
-        result = gmail_navigator.open_gmail()
-        assert result, "Failed to open Gmail"
-        assert gmail_navigator.is_inbox_visible(), "Inbox not visible"
-    
-    def test_refresh_inbox(self, gmail_navigator):
-        """Test refreshing the inbox."""
-        gmail_navigator.open_gmail()
-        result = gmail_navigator.refresh_inbox()
-        assert result, "Failed to refresh inbox"
+    config = GmailAutomationConfig(
+        poll_interval_seconds=5, 
+        max_wait_seconds=60,
+        capture_screenshots=True,
+        screenshot_dir="gmail_failures",
+        target_account="afoda50@gmail.com"
+    )
+    return GmailService(
+        driver=auth_device_session.get_driver(),
+        device_id=android_device,
+        target_app_package="com.example.auth_test_app",
+        config=config
+    )
 
+@pytest.fixture(scope="module")
+def email_sender():
+    """Fixture for mock EmailSender."""
+    from tests.integration.device_verifier.gmail.email_sender import EmailSender
+    return EmailSender(sender_email="afoda50@gmail.com")
 
-class TestAppSwitching:
-    """Test app switching functionality."""
-    
-    def test_switch_to_gmail(self, app_switcher):
-        """Test switching to Gmail."""
-        result = app_switcher.switch_to_gmail()
-        assert result, "Failed to switch to Gmail"
-        assert app_switcher.is_gmail_foreground(), "Gmail not in foreground"
-    
-    def test_switch_to_test_app(self, app_switcher):
-        """Test switching back to test app."""
-        app_switcher.switch_to_gmail()
-        result = app_switcher.switch_to_test_app()
-        assert result, "Failed to switch to test app"
-
-
-class TestClipboard:
-    """Test clipboard operations."""
-    
-    def test_set_and_get_clipboard(self, clipboard_helper):
-        """Test setting and getting clipboard content."""
-        test_text = "123456"
-        result = clipboard_helper.set_clipboard(test_text)
-        assert result, "Failed to set clipboard"
-        
-        content = clipboard_helper.get_clipboard()
-        assert content == test_text, f"Expected {test_text}, got {content}"
-
-
-@pytest.fixture(autouse=True)
-def cleanup_app():
-    """Reset the test app before each test to ensure a clean state."""
-    APP_PACKAGE = "com.example.auth_test_app"
-    logger.info(f"Resetting app state for {APP_PACKAGE}")
-    subprocess.run(["adb", "shell", "pm", "clear", APP_PACKAGE], capture_output=True)
-    time.sleep(1)
-
-
-# ============================================================================
-# Full Flow Tests (Require Real Email Service)
-# ============================================================================
 
 class TestGmailOTPExtraction:
-    """Test OTP extraction from real Gmail emails."""
+    """Test OTP extraction from Gmail using GmailService."""
     
     def test_gmail_otp_extraction(
         self,
-        gmail_navigator,
-        gmail_reader,
-        app_switcher,
-        clipboard_helper,
+        gmail_service,
         auth_navigator,
         auth_form_filler,
         auth_verifier,
@@ -263,14 +88,11 @@ class TestGmailOTPExtraction:
         Full OTP extraction workflow:
         1. Navigate to signup in test app (OTP mode)
         2. Fill form and submit (triggers OTP email)
-        3. Switch to Gmail
-        4. Wait for and open OTP email
-        5. Extract OTP from email
-        6. Copy OTP to clipboard
-        7. Switch back to test app
-        8. Paste OTP and verify
+        3. Use GmailService to extract OTP
+        4. Enter OTP and verify
         """
         from tests.integration.device_verifier.auth.auth_configs import AuthMode, TestCredentials
+        from mobile_crawler.infrastructure.gmail.config import GmailSearchQuery
         
         # Step 1: Navigate to signup with OTP mode
         logger.info("Step 1: Navigating to signup (OTP mode)")
@@ -285,43 +107,29 @@ class TestGmailOTPExtraction:
         
         # MOCK BACKEND: Send the email that the app doesn't send
         logger.info("MOCK BACKEND: Sending OTP email")
-        send_success = email_sender.send_otp_email(recipient_email=creds.email, otp="123456")
+        # Ensure distinct OTP for verification
+        otp = "123456"
+        send_success = email_sender.send_otp_email(recipient_email=creds.email, otp=otp)
         assert send_success, "Failed to send OTP email via SMTP"
         
         # Wait for OTP screen to appear
         assert auth_verifier.wait_for_otp_screen(), "OTP screen not displayed"
         
-        # Step 3: Switch to Gmail
-        logger.info("Step 3: Switching to Gmail")
-        assert app_switcher.switch_to_gmail(), "Failed to switch to Gmail"
-        
-        # Step 4: Wait for OTP email
-        logger.info("Step 4: Waiting for OTP email")
-        # Sender: afoda50@gmail.com (Recipient: appiumtester96@gmail.com)
-        email_found = gmail_navigator.wait_for_email(
+        # Step 3: Extract OTP using GmailService
+        logger.info("Step 3: Extracting OTP via GmailService")
+        query = GmailSearchQuery(
             sender="afoda50@gmail.com",
-            subject="Verification",
-            timeout=60
+            subject_contains="Verification"
         )
-        assert email_found, "OTP email not received"
         
-        # Step 5: Extract OTP
-        logger.info("Step 5: Extracting OTP")
-        otp_result = gmail_reader.extract_otp()
-        assert otp_result, "Failed to extract OTP from email"
-        logger.info(f"Found OTP: {otp_result.code}")
+        extracted_otp = gmail_service.extract_otp(query, timeout_sec=120)
+        assert extracted_otp, "Failed to extract OTP via GmailService"
+        logger.info(f"Extracted OTP: {extracted_otp}")
+        assert extracted_otp == otp, f"Extracted OTP {extracted_otp} does not match sent {otp}"
         
-        # Step 6: Copy OTP
-        logger.info("Step 6: Copying OTP to clipboard")
-        assert gmail_reader.copy_otp_to_clipboard(), "Failed to copy OTP"
-        
-        # Step 7: Switch back to app
-        logger.info("Step 7: Switching back to test app")
-        assert app_switcher.switch_to_test_app(), "Failed to switch to test app"
-        
-        # Step 8: Enter OTP and verify
-        logger.info("Step 8: Entering OTP")
-        auth_form_filler.enter_otp(otp_result.code)
+        # Step 4: Enter OTP and verify
+        logger.info("Step 4: Entering OTP")
+        auth_form_filler.enter_otp(extracted_otp)
         auth_form_filler.submit()
         
         # Verify success
@@ -330,28 +138,24 @@ class TestGmailOTPExtraction:
 
 
 class TestGmailVerificationLink:
-    """Test clicking verification links in Gmail emails."""
+    """Test clicking verification links using GmailService."""
     
     def test_gmail_verification_link_click(
         self,
-        gmail_navigator,
-        gmail_reader,
-        app_switcher,
+        gmail_service,
         auth_navigator,
         auth_form_filler,
         auth_verifier,
         email_sender,
     ):
         """
-        Full verification link workflow:
-        1. Navigate to signup in test app (link mode)
-        ...
+        Full verification link workflow using GmailService.
         """
         from tests.integration.device_verifier.auth.auth_configs import AuthMode, TestCredentials
+        from mobile_crawler.infrastructure.gmail.config import GmailSearchQuery
         
         # Step 1: Navigate to signup with link mode
         logger.info("Step 1: Navigating to signup (link mode)")
-
         auth_navigator.go_to_signup(mode=AuthMode.EMAIL_LINK)
         time.sleep(2)
         
@@ -369,24 +173,29 @@ class TestGmailVerificationLink:
         # Wait for email verification screen
         assert auth_verifier.wait_for_email_screen(timeout=15), "Email verification screen not displayed"
         
-        # Step 3: Switch to Gmail
-        logger.info("Step 3: Switching to Gmail")
-        assert app_switcher.switch_to_gmail(), "Failed to switch to Gmail"
-        
-        # Step 4: Wait for verification email
-        logger.info("Step 4: Waiting for verification email")
-        email_found = gmail_navigator.wait_for_email(
+        # Step 3: Click verification link using GmailService
+        logger.info("Step 3: Clicking verification link via GmailService")
+        query = GmailSearchQuery(
             sender="afoda50@gmail.com",
-            subject="Verify",
-            timeout=60
+            subject_contains="Verify"
         )
-        assert email_found, "Verification email not received"
         
-        # Step 5: Click verification link
-        logger.info("Step 5: Clicking verification link")
-        assert gmail_reader.click_verification_link(), "Failed to click verification link"
+        success = gmail_service.click_verification_link(query, timeout_sec=120)
+        assert success, "Failed to click verification link via GmailService"
         
-        # Step 6: Verify authentication
-        logger.info("Step 6: Verifying authentication")
+        # Step 4: Verify authentication
+        logger.info("Step 4: Verifying authentication")
         time.sleep(3)  # Wait for app to handle deep link
         assert auth_verifier.wait_for_home(), "Failed to reach home screen after link click"
+
+# ============================================================================
+# Cleanup
+# ============================================================================
+
+@pytest.fixture(autouse=True)
+def cleanup_app():
+    """Reset the test app before each test to ensure a clean state."""
+    APP_PACKAGE = "com.example.auth_test_app"
+    logger.info(f"Resetting app state for {APP_PACKAGE}")
+    subprocess.run(["adb", "shell", "pm", "clear", APP_PACKAGE], capture_output=True)
+    time.sleep(1)

@@ -270,73 +270,14 @@ def auth_form_filler(auth_device_session):
 # Gmail Automation Fixtures
 # ============================================================================
 
-@pytest.fixture(scope="module")
-def gmail_config():
-    """Fixture for Gmail automation configuration."""
-    from tests.integration.device_verifier.gmail.gmail_configs import GmailAutomationConfig
-    return GmailAutomationConfig(
-        poll_interval_seconds=5,
-        max_wait_seconds=60,
-        capture_screenshots=True,
-        screenshot_dir="gmail_failures"
-    )
+
+# ============================================================================
+# Gmail Automation Fixtures
+# ============================================================================
+
+# NOTE: Old Gmail fixtures removed. Use GmailService from src in tests.
 
 
-@pytest.fixture(scope="module")
-def gmail_navigator(auth_device_session, android_device, gmail_config):
-    """Fixture for GmailNavigator."""
-    from tests.integration.device_verifier.gmail.gmail_navigator import GmailNavigator
-    return GmailNavigator(
-        driver=auth_device_session.get_driver(),
-        device_id=android_device,
-        config=gmail_config
-    )
-
-
-@pytest.fixture(scope="module")
-def gmail_reader(auth_device_session, android_device, gmail_config):
-    """Fixture for GmailReader."""
-    from tests.integration.device_verifier.gmail.gmail_reader import GmailReader
-    return GmailReader(
-        driver=auth_device_session.get_driver(),
-        device_id=android_device,
-        config=gmail_config
-    )
-
-
-@pytest.fixture(scope="module")
-def app_switcher(auth_device_session, android_device, gmail_config):
-    """Fixture for AppSwitcher."""
-    from tests.integration.device_verifier.gmail.app_switcher import AppSwitcher
-    AUTH_APP_PACKAGE = "com.example.auth_test_app"
-    return AppSwitcher(
-        driver=auth_device_session.get_driver(),
-        device_id=android_device,
-        test_app_package=AUTH_APP_PACKAGE,
-        config=gmail_config
-    )
-
-
-@pytest.fixture(scope="module")
-def clipboard_helper(auth_device_session, android_device, gmail_config):
-    """Fixture for ClipboardHelper."""
-    from tests.integration.device_verifier.gmail.clipboard_helper import ClipboardHelper
-    return ClipboardHelper(
-        driver=auth_device_session.get_driver(),
-        device_id=android_device,
-        config=gmail_config
-    )
-
-
-@pytest.fixture(scope="module")
-def gmail_auth_verifier(gmail_navigator, gmail_reader, app_switcher):
-    """Fixture for GmailAuthVerifier."""
-    from tests.integration.device_verifier.gmail.gmail_auth_verifier import GmailAuthVerifier
-    return GmailAuthVerifier(
-        navigator=gmail_navigator,
-        reader=gmail_reader,
-        switcher=app_switcher
-    )
 
 
 @pytest.fixture(scope="module")
