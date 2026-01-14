@@ -424,6 +424,10 @@ class CrawlerLoop:
         self._emit_event("on_step_started", run_id, step_number)
 
         try:
+            # Ensure keyboard is hidden before taking screenshot
+            self.appium_driver.hide_keyboard()
+            time.sleep(0.5)  # Wait for keyboard animation
+
             # Capture screenshot (returns image, path, AI-optimized base64, and scale factor)
             screenshot_image, screenshot_path, screenshot_b64, scale_factor = self.screenshot_capture.capture_full()
 
@@ -514,15 +518,8 @@ class CrawlerLoop:
             original_width, original_height = screenshot_image.size
             screen_dimensions = {"width": original_width, "height": original_height}
 
-            # Emit AI request event
-            request_data = {
-                "screenshot_path": screenshot_path,
-                "is_stuck": is_stuck,
-                "stuck_reason": stuck_reason,
-                "current_screen_id": self._current_screen_state.screen_id,
-                "ocr_grounding": grounding_overlay.ocr_elements if grounding_overlay else None
-            }
-            self._emit_event("on_ai_request_sent", run_id, step_number, request_data)
+            # NOTE: on_ai_request_sent is emitted by AIInteractionService (not here)
+            # to avoid duplicate events
 
             # Get AI actions with screen context for novelty signals
             ai_response = self.ai_interaction_service.get_next_actions(
@@ -646,6 +643,10 @@ class CrawlerLoop:
                     result = self.action_executor.click(bounds)
                 elif ai_action.action == "input":
                     result = self.action_executor.input(bounds, ai_action.input_text)
+                    # Hide keyboard after input
+                    if result.success:
+                        self.appium_driver.hide_keyboard()
+                        time.sleep(0.5)  # Wait for keyboard animation
                 elif ai_action.action == "long_press":
                     result = self.action_executor.long_press(bounds)
                 elif ai_action.action == "scroll_up":

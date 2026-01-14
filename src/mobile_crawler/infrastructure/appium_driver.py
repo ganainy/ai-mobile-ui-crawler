@@ -503,6 +503,26 @@ class AppiumDriver:
             logger.error(f"Unexpected error pressing back: {e}")
             return False
 
+    def hide_keyboard(self) -> bool:
+        """Hide the keyboard if it is visible.
+
+        Returns:
+            True if successful (keyboard hidden or not visible), False otherwise
+        """
+        try:
+            driver = self.get_driver()
+            if driver.is_keyboard_shown():
+                driver.hide_keyboard()
+                logger.info("Hidden keyboard")
+            return True
+        except (WebDriverException, SessionLostError) as e:
+            # Often throws if soft keyboard is not present, which is fine
+            logger.debug(f"Failed to hide keyboard (may not be visible): {e}")
+            return True
+        except Exception as e:
+            logger.error(f"Unexpected error hiding keyboard: {e}")
+            return False
+
     def __enter__(self):
         """Context manager entry."""
         return self.connect()

@@ -69,7 +69,7 @@ class SuccessVerifier:
                 logger.info("Success found via text search")
                 return True
             
-            time.sleep(0.3)
+            time.sleep(0.5)
         
         logger.warning(f"Timeout waiting for success indicator after {timeout}s")
         return False

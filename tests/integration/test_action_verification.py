@@ -97,8 +97,8 @@ def run_action_test(
     nav_success = deep_link_navigator.navigate_to(config.deep_link_route)
     assert nav_success, f"Failed to navigate to {config.deep_link_route}"
     
-    print("[WAIT] Waiting 0.5s for screen to load...")
-    time.sleep(0.5)
+    print("[WAIT] Waiting 1s for screen to load...")
+    time.sleep(1)
     
     # 2. Perform the primary action
     action_x, action_y = config.get_action_coords(width, height)
@@ -157,7 +157,7 @@ def run_action_test(
     select_pos = config.action_params.get("select_position")
     if select_pos:
         print(f"[STEP 2b] Waiting for popup, tapping at {select_pos}")
-        time.sleep(1.0)
+        time.sleep(1.5)
         sel_x = int(width * select_pos[0])
         sel_y = int(height * select_pos[1])
         gesture_handler.tap_at(sel_x, sel_y)

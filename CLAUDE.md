@@ -15,6 +15,8 @@ Auto-generated from all feature plans. Last updated: 2026-01-11
 - N/A (tests store credentials in memory only) (016-auth-e2e-tests)
 - Python 3.11+ (Test Suite) + Dart/Flutter (Optional Test App) + Appium, Android UiAutomator2, Gmail app on device (016-auth-e2e-tests)
 - N/A (stateless test execution) (016-auth-e2e-tests)
+- Python 3.11+ + PySide6 (Qt for Python), PIL/Pillow (017-ui-monitor-improvements)
+- N/A (in-memory UI state, existing SQLite for persistence) (017-ui-monitor-improvements)
 
 - Python 3.9+ + appium-python-client, pytest, requests (007-test-app-actions-verify)
 
@@ -34,6 +36,7 @@ cd src; pytest; ruff check .
 Python 3.9+: Follow standard conventions
 
 ## Recent Changes
+- 017-ui-monitor-improvements: Added Python 3.11+ + PySide6 (Qt for Python), PIL/Pillow
 - 016-auth-e2e-tests: Added Python 3.11+ (Test Suite) + Dart/Flutter (Optional Test App) + Appium, Android UiAutomator2, Gmail app on device
 - 016-auth-e2e-tests: Added Python 3.11+ + pytest, Appium (via existing `device_verifier` infrastructure), selenium
 

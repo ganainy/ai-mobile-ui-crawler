@@ -299,6 +299,7 @@ class MainWindow(QMainWindow):
         self.signal_adapter.step_completed.connect(self._on_step_completed)
         self.signal_adapter.crawl_completed.connect(self._on_crawl_completed)
         self.signal_adapter.ai_request_sent.connect(self.ai_monitor_panel.add_request)
+        self.signal_adapter.screenshot_captured.connect(self.ai_monitor_panel.add_screenshot_path)
         self.signal_adapter.ai_response_received.connect(self._on_ai_response_received)
         self.signal_adapter.screen_processed.connect(self._on_screen_processed)
         self.signal_adapter.step_paused.connect(self._on_step_paused)
@@ -689,9 +690,11 @@ class MainWindow(QMainWindow):
             step_number: Step number
             response_data: Response data dictionary
         """
-        # Forward to AI monitor panel
+        # Forward to AI monitor panel only if it contains full response data
+        # Summary responses from CrawlerLoop are ignored by the Monitor
         if self.ai_monitor_panel:
-            self.ai_monitor_panel.add_response(run_id, step_number, response_data)
+            if self.ai_monitor_panel._is_full_response(response_data):
+                self.ai_monitor_panel.add_response(run_id, step_number, response_data)
 
     def _on_action_executed(self, run_id: int, step_number: int, action_index: int, result) -> None:
         """Handle action executed event.
@@ -928,7 +931,7 @@ class MainWindow(QMainWindow):
         self._update_start_button_state()
 
     def _on_show_step_details(self, step_number: int, timestamp, success: bool,
-                                prompt: str, response: str, actions: list, error_msg):
+                                prompt: str, response: str, actions: list, error_msg, screenshot_path: str = None):
         """Handle request to show step details in a new tab.
 
         Args:
@@ -939,6 +942,7 @@ class MainWindow(QMainWindow):
             response: Complete response text
             actions: Parsed action details
             error_msg: Error message if failed
+            screenshot_path: Path to screenshot file
         """
         from datetime import datetime
         
@@ -950,7 +954,8 @@ class MainWindow(QMainWindow):
             full_prompt=prompt,
             full_response=response,
             parsed_actions=actions or [],
-            error_message=error_msg
+            error_message=error_msg,
+            screenshot_path=screenshot_path
         )
 
         # Add as new tab

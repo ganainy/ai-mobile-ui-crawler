@@ -32,7 +32,7 @@ class ActionTestConfig:
     action_params: Dict[str, Any] = field(default_factory=dict)
     
     # Timeout for success indicator detection (seconds)
-    timeout_seconds: int = 3
+    timeout_seconds: int = 5
     
     # DEPRECATED: Hub tile position (no longer used with deep links)
     tile_position: Optional[Tuple[float, float]] = None
