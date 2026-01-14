@@ -17,7 +17,7 @@ def device_session(android_device, appium_server):
     # Using the package name provided by the user.
     session = DeviceSession(
         device_id=android_device,
-        app_package="com.example.flutter_application_1",
+        app_package="com.example.appium_action_test_app",
         appium_url=appium_server
     )
     session.connect()

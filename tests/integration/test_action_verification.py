@@ -19,8 +19,8 @@ from tests.integration.device_verifier.action_configs import ACTION_CONFIGS, Act
 logger = logging.getLogger(__name__)
 
 # Constants
-APP_PACKAGE = "com.example.flutter_application_1"
-MAIN_ACTIVITY = "com.example.flutter_application_1.MainActivity"
+APP_PACKAGE = "com.example.appium_action_test_app"
+MAIN_ACTIVITY = "com.example.appium_action_test_app.MainActivity"
 
 
 @pytest.fixture(scope="module")
@@ -97,8 +97,8 @@ def run_action_test(
     nav_success = deep_link_navigator.navigate_to(config.deep_link_route)
     assert nav_success, f"Failed to navigate to {config.deep_link_route}"
     
-    print("[WAIT] Waiting 1s for screen to load...")
-    time.sleep(1)
+    print("[WAIT] Waiting 0.5s for screen to load...")
+    time.sleep(0.5)
     
     # 2. Perform the primary action
     action_x, action_y = config.get_action_coords(width, height)
@@ -129,12 +129,12 @@ def run_action_test(
             end_coords = config.get_action_end_coords(width, height)
             if end_coords:
                 gesture_handler.swipe(action_x, action_y, end_coords[0], end_coords[1], duration=300)
-            time.sleep(0.5)
+            time.sleep(0.3)
     elif config.action_type == "input":
         text = config.action_params.get("text", "test")
         print(f"[INPUT] Tapping field, then typing '{text}'")
         gesture_handler.tap_at(action_x, action_y)
-        time.sleep(1)
+        time.sleep(0.5)
         # Use ADB input method which is more reliable
         import subprocess
         driver = device_session.get_driver()
@@ -150,14 +150,14 @@ def run_action_test(
     if repeat > 1 and config.action_type == "tap":
         for i in range(1, repeat):  # Already did first tap
             print(f"[TAP] Repeat {i+1}/{repeat}")
-            time.sleep(0.3)
+            time.sleep(0.2)
             gesture_handler.tap_at(action_x, action_y)
     
     # 2b. Secondary action (e.g., dropdown selection)
     select_pos = config.action_params.get("select_position")
     if select_pos:
         print(f"[STEP 2b] Waiting for popup, tapping at {select_pos}")
-        time.sleep(1.5)
+        time.sleep(1.0)
         sel_x = int(width * select_pos[0])
         sel_y = int(height * select_pos[1])
         gesture_handler.tap_at(sel_x, sel_y)
@@ -177,11 +177,11 @@ def run_action_test(
     success = success_verifier.wait_for_success(timeout=config.timeout_seconds)
     
     if success:
-        print("[RESULT] ✅ success_indicator found!")
+        print("[RESULT] [SUCCESS] success_indicator found!")
     else:
         # Get status for debugging
         status = success_verifier.get_status_text()
-        print(f"[RESULT] ❌ success_indicator NOT found. Current status: {status}")
+        print(f"[RESULT] [FAILURE] success_indicator NOT found. Current status: {status}")
         
     assert success, f"success_indicator not found for {config_name}"
 

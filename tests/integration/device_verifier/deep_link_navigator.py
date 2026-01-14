@@ -16,7 +16,7 @@ class DeepLinkNavigator:
     
     # Deep link scheme and package for the Flutter test app
     DEEP_LINK_SCHEME = "app://testapp"
-    APP_PACKAGE = "com.example.flutter_application_1"
+    APP_PACKAGE = "com.example.appium_action_test_app"
     
     def __init__(self, device_id: str, app_package: Optional[str] = None):
         """
@@ -40,11 +40,13 @@ class DeepLinkNavigator:
         Returns:
             True if navigation succeeded, False otherwise
         """
-        # Ensure route starts with /
-        if not route.startswith('/'):
-            route = f'/{route}'
-        
-        deep_link_uri = f"{self.DEEP_LINK_SCHEME}{route}"
+        if "://" in route:
+            deep_link_uri = route
+        else:
+            # Ensure route starts with /
+            if not route.startswith('/'):
+                route = f'/{route}'
+            deep_link_uri = f"{self.DEEP_LINK_SCHEME}{route}"
         
         cmd = [
             'adb', '-s', self.device_id,

@@ -32,7 +32,7 @@ class ActionTestConfig:
     action_params: Dict[str, Any] = field(default_factory=dict)
     
     # Timeout for success indicator detection (seconds)
-    timeout_seconds: int = 5
+    timeout_seconds: int = 3
     
     # DEPRECATED: Hub tile position (no longer used with deep links)
     tile_position: Optional[Tuple[float, float]] = None
@@ -62,21 +62,21 @@ ACTION_CONFIGS: Dict[str, ActionTestConfig] = {
         display_name="Tap",
         deep_link_route="/tap",
         action_type="tap",
-        action_position=(0.50, 0.55),  # From README: (0.50, 0.55)
+        action_position=(0.50, 0.60),  # Calibrated: (0.5, 0.60) center of button
     ),
     "double_tap": ActionTestConfig(
         name="double_tap",
         display_name="Double Tap",
         deep_link_route="/double_tap",
         action_type="double_tap",
-        action_position=(0.50, 0.60),  # From README: (0.50, 0.60)
+        action_position=(0.50, 0.68),  # Calibrated: (0.5, 0.68) center of box
     ),
     "long_press": ActionTestConfig(
         name="long_press",
         display_name="Long Press",
         deep_link_route="/long_press",
         action_type="long_press",
-        action_position=(0.50, 0.60),  # From README: (0.50, 0.60)
+        action_position=(0.50, 0.68),  # Calibrated: (0.5, 0.68) center of box
         action_params={"duration": 1.0},  # ~1 second as per README
     ),
     "drag_drop": ActionTestConfig(
@@ -84,8 +84,8 @@ ACTION_CONFIGS: Dict[str, ActionTestConfig] = {
         display_name="Drag & Drop",
         deep_link_route="/drag_drop",
         action_type="drag",
-        action_position=(0.50, 0.26),  # Updated: Drag target at y=0.26
-        action_end_position=(0.50, 0.76),  # Updated: Drop target at y=0.76
+        action_position=(0.50, 0.53),  # Calibrated: DRAG center y=0.53
+        action_end_position=(0.50, 0.83),  # Calibrated: Drop Target center y=0.83
     ),
     "swipe": ActionTestConfig(
         name="swipe",
@@ -108,44 +108,44 @@ ACTION_CONFIGS: Dict[str, ActionTestConfig] = {
         display_name="Slider",
         deep_link_route="/slider",
         action_type="swipe",
-        action_position=(0.20, 0.50),  # Start: left of slider
-        action_end_position=(0.80, 0.50),  # End: right (value > 50)
+        action_position=(0.20, 0.59),  # Calibrated: Slider vertical center y=0.59
+        action_end_position=(0.80, 0.59),  # Calibrated: Slider vertical center y=0.59
     ),
     "switch": ActionTestConfig(
         name="switch",
         display_name="Switch",
         deep_link_route="/switch",
         action_type="tap",
-        action_position=(0.50, 0.58),  # Updated: Widget center Y=0.58
+        action_position=(0.50, 0.56),  # Calibrated: Switch center y=0.56
     ),
     "checkbox": ActionTestConfig(
         name="checkbox",
         display_name="Checkbox",
         deep_link_route="/checkbox",
         action_type="tap",
-        action_position=(0.50, 0.58),  # Updated: Widget center Y=0.58
+        action_position=(0.50, 0.56),  # Calibrated: Checkbox center y=0.56
     ),
     "radio": ActionTestConfig(
         name="radio",
         display_name="Radio",
         deep_link_route="/radio",
         action_type="tap",
-        action_position=(0.50, 0.61),  # Updated: Option 2 is at y=0.61
+        action_position=(0.30, 0.61),  # Calibrated: Option 2 y=0.61, shifted left for button
     ),
     "dropdown": ActionTestConfig(
         name="dropdown",
         display_name="Dropdown",
         deep_link_route="/dropdown",
         action_type="tap",
-        action_position=(0.50, 0.59),  # Updated: Trigger at y=0.59
-        action_params={"select_position": (0.50, 0.54)},  # Try 0.54 (like Radio Option 1)
+        action_position=(0.50, 0.59),  # Calibrated: Trigger at y=0.59
+        action_params={"select_position": (0.50, 0.65)},  # Calibrated: Banana at y=0.65
     ),
     "stepper": ActionTestConfig(
         name="stepper",
         display_name="Stepper",
         deep_link_route="/stepper",
         action_type="tap",
-        action_position=(0.66, 0.58),  # Updated: Plus button at x=0.66, y=0.58
+        action_position=(0.60, 0.58),  # Calibrated: Plus button at y=0.58
         action_params={"repeat": 5},  # Tap 5 times to reach count=5
     ),
     "scroll": ActionTestConfig(
@@ -162,7 +162,7 @@ ACTION_CONFIGS: Dict[str, ActionTestConfig] = {
         display_name="Alert",
         deep_link_route="/alert",
         action_type="tap",
-        action_position=(0.50, 0.59),  # Updated: SHOW ALERT at y=0.59
-        action_params={"dismiss_position": (0.72, 0.54)},  # Updated: Standard OK location
+        action_position=(0.50, 0.60),  # Calibrated: SHOW ALERT at y=0.60
+        action_params={"dismiss_position": (0.75, 0.58)},  # Calibrated: Standard OK location
     ),
 }
