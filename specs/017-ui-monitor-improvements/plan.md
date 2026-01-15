@@ -1,66 +1,104 @@
-# Implementation Plan: UI Monitor Improvements
+# Implementation Plan: [FEATURE]
 
-**Branch**: `017-ui-monitor-improvements` | **Date**: 2026-01-14 | **Spec**: [spec.md](./spec.md)  
-**Input**: Feature specification from `/specs/017-ui-monitor-improvements/spec.md`
+**Branch**: `[###-feature-name]` | **Date**: [DATE] | **Spec**: [link]
+**Input**: Feature specification from `/specs/[###-feature-name]/spec.md`
+
+**Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/commands/plan.md` for the execution workflow.
 
 ## Summary
 
-This feature addresses several UI bugs and enhancements in the AI Monitor panel:
-
-1. **JSON Expand/Collapse** (P1): Add collapsible tree view for JSON data in Prompt Data and Response panels
-2. **Fix Empty Response/Parsed Actions** (P1): Fix data extraction to correctly display AI responses and parsed actions
-3. **Fix Incorrect Failed Status** (P2): Correct the success/failure determination logic
-4. **Fix Duplicate Actions** (P2): Prevent double-entries in the AI Monitor list
-5. **Screenshot Toggle** (P3): Add toggle between Annotated and OCR screenshot views
+[Extract from feature spec: primary requirement + technical approach from research]
 
 ## Technical Context
 
-**Language/Version**: Python 3.11+  
-**Primary Dependencies**: PySide6 (Qt for Python), PIL/Pillow  
-**Storage**: N/A (in-memory UI state, existing SQLite for persistence)  
-**Testing**: pytest  
-**Target Platform**: Windows (primary), Linux, macOS (desktop)  
-**Project Type**: Single Python project with Qt UI  
-**Performance Goals**: UI operations < 100ms, JSON rendering < 500ms for 1000 nodes  
-**Constraints**: Must maintain current signal-based event architecture  
-**Scale/Scope**: Single AI Monitor panel with Step Detail tabs
+<!--
+  ACTION REQUIRED: Replace the content in this section with the technical details
+  for the project. The structure here is presented in advisory capacity to guide
+  the iteration process.
+-->
+
+**Language/Version**: [e.g., Python 3.11, Swift 5.9, Rust 1.75 or NEEDS CLARIFICATION]  
+**Primary Dependencies**: [e.g., FastAPI, UIKit, LLVM or NEEDS CLARIFICATION]  
+**Storage**: [if applicable, e.g., PostgreSQL, CoreData, files or N/A]  
+**Testing**: [e.g., pytest, XCTest, cargo test or NEEDS CLARIFICATION]  
+**Target Platform**: [e.g., Linux server, iOS 15+, WASM or NEEDS CLARIFICATION]
+**Project Type**: [single/web/mobile - determines source structure]  
+**Performance Goals**: [domain-specific, e.g., 1000 req/s, 10k lines/sec, 60 fps or NEEDS CLARIFICATION]  
+**Constraints**: [domain-specific, e.g., <200ms p95, <100MB memory, offline-capable or NEEDS CLARIFICATION]  
+**Scale/Scope**: [domain-specific, e.g., 10k users, 1M LOC, 50 screens or NEEDS CLARIFICATION]
 
 ## Constitution Check
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-✅ **All checks pass** - No constitution violations. This is a UI-only change with no new architectural patterns required.
+[Gates determined based on constitution file]
 
 ## Project Structure
 
 ### Documentation (this feature)
 
 ```text
-specs/017-ui-monitor-improvements/
-├── plan.md              # This file
-├── research.md          # Phase 0 output: Root cause analysis
-├── data-model.md        # Phase 1 output: Data structures for JSON viewer
-├── quickstart.md        # Phase 1 output: Developer guide
-├── contracts/           # N/A - No API contracts (internal UI)
-└── tasks.md             # Phase 2 output (/speckit.tasks command)
+specs/[###-feature]/
+├── plan.md              # This file (/speckit.plan command output)
+├── research.md          # Phase 0 output (/speckit.plan command)
+├── data-model.md        # Phase 1 output (/speckit.plan command)
+├── quickstart.md        # Phase 1 output (/speckit.plan command)
+├── contracts/           # Phase 1 output (/speckit.plan command)
+└── tasks.md             # Phase 2 output (/speckit.tasks command - NOT created by /speckit.plan)
 ```
 
 ### Source Code (repository root)
+<!--
+  ACTION REQUIRED: Replace the placeholder tree below with the concrete layout
+  for this feature. Delete unused options and expand the chosen structure with
+  real paths (e.g., apps/admin, packages/something). The delivered plan must
+  not include Option labels.
+-->
 
 ```text
-src/mobile_crawler/ui/
-├── widgets/
-│   ├── ai_monitor_panel.py    # Main file: AIMonitorPanel, AIInteractionItem, StepDetailWidget
-│   └── json_tree_widget.py    # NEW: Collapsible JSON tree widget
-└── main_window.py             # Signal connections (may need minor updates)
+# [REMOVE IF UNUSED] Option 1: Single project (DEFAULT)
+src/
+├── models/
+├── services/
+├── cli/
+└── lib/
 
-tests/ui/
-├── test_ai_monitor_panel.py   # Existing tests (update for new behavior)
-└── test_json_tree_widget.py   # NEW: JSON tree widget tests
+tests/
+├── contract/
+├── integration/
+└── unit/
+
+# [REMOVE IF UNUSED] Option 2: Web application (when "frontend" + "backend" detected)
+backend/
+├── src/
+│   ├── models/
+│   ├── services/
+│   └── api/
+└── tests/
+
+frontend/
+├── src/
+│   ├── components/
+│   ├── pages/
+│   └── services/
+└── tests/
+
+# [REMOVE IF UNUSED] Option 3: Mobile + API (when "iOS/Android" detected)
+api/
+└── [same as backend above]
+
+ios/ or android/
+└── [platform-specific structure: feature modules, UI flows, platform tests]
 ```
 
-**Structure Decision**: Single project with existing `src/mobile_crawler/ui/widgets/` structure. Add one new widget file for JSON tree functionality.
+**Structure Decision**: [Document the selected structure and reference the real
+directories captured above]
 
 ## Complexity Tracking
 
-> No violations to justify - standard UI enhancement pattern.
+> **Fill ONLY if Constitution Check has violations that must be justified**
+
+| Violation | Why Needed | Simpler Alternative Rejected Because |
+|-----------|------------|-------------------------------------|
+| [e.g., 4th project] | [current need] | [why 3 projects insufficient] |
+| [e.g., Repository pattern] | [specific problem] | [why direct DB access insufficient] |
