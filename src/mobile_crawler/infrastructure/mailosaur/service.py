@@ -74,16 +74,62 @@ class MailosaurService:
         if not all_links:
             raise ValueError(f"No magic link found in email to {email}")
 
+        # Strategy: Use scoring to pick the best link
+        scored_links = []
+        
+        # Keywords to look for
+        action_keywords = ["verify", "confirm", "bestätigen", "activate", "continue", "click here", "registration", "anmeldung"]
+        path_keywords = ["/verify", "/confirm", "/activate", "/registration", "/auth", "/token", "/link"]
+        exclude_keywords = ["logo", "unsubscribe", "privacy", "terms", "datenschutz", "impressum", "facebook", "twitter", "instagram"]
+
+        for link in all_links:
+            score = 0
+            href = (link.href or "").lower()
+            text = (link.text or "").lower()
+
+            # 1. Check Link Text
+            if text:
+                if any(k in text for k in action_keywords):
+                    score += 10
+                if any(k in text for k in exclude_keywords):
+                    score -= 15
+            
+            # 2. Check URL Path
+            if any(k in href for k in path_keywords):
+                score += 15
+            if any(k in href for k in exclude_keywords):
+                score -= 15
+            
+            # 3. Signals (Length implies token)
+            if len(href) > 60:
+                score += 5
+            
+            # 4. Exclude static assets/root domains
+            if href.split("?")[0].endswith((".png", ".jpg", ".jpeg", ".gif")):
+                score -= 30
+            
+            scored_links.append((score, link))
+
+        # Sort by score descending
+        scored_links.sort(key=lambda x: x[0], reverse=True)
+        
+        # Log top links for debugging
+        import logging
+        logger = logging.getLogger(__name__)
+        for s, l in scored_links[:3]:
+            logger.debug(f"Candidate Link: Score={s}, Text='{l.text}', Href='{l.href[:50]}...'")
+
         if link_text:
-            # Case insensitive match for convenience
+            # If AI provided a specific hint, try to match it first
             target_text = link_text.lower()
-            for link in all_links:
+            for score, link in scored_links:
                 if link.text and target_text in link.text.lower():
                     return link.href
-            raise ValueError(f"No magic link found matching '{link_text}' in email to {email}")
+            # Fallback to the highest scoring link if AI hint didn't match anything
+            logger.warning(f"AI hint '{link_text}' did not match any links, falling back to highest score")
 
-        # Default: return the first link
-        return all_links[0].href
+        # Return the link with the highest score
+        return scored_links[0][1].href
 
 
 

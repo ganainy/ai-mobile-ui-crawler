@@ -57,6 +57,11 @@ A developer runs an automated test that validates the crawler can handle email O
 
 **Independent Test**: Signup → OTP entry screen appears → Enter test OTP → Verify authenticated state.
 
+# FEATURE: Verify Gmail Integration E2E (SUPERSEDED)
+
+> **NOTICE**: This feature has been SUPERSEDED by [019-force-mailosaur-email](../019-force-mailosaur-email/spec.md).
+> Gmail-based UI automation for verification has been removed in favor of Mailosaur API integration.
+
 **Acceptance Scenarios**:
 
 1. **Given** signup triggers OTP verification, **When** the correct test OTP is entered, **Then** signup completes and authenticated state is reached

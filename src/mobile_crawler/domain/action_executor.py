@@ -1,14 +1,18 @@
 """Action executor for mobile app interactions."""
 
 import time
+import logging
+import subprocess
 from typing import Optional, Tuple
 
 from mobile_crawler.domain.models import ActionResult
 from mobile_crawler.infrastructure.appium_driver import AppiumDriver
 from mobile_crawler.infrastructure.gesture_handler import GestureHandler
 from mobile_crawler.infrastructure.adb_input_handler import ADBInputHandler
-from mobile_crawler.infrastructure.gmail.service import GmailService
-from mobile_crawler.infrastructure.gmail.config import GmailSearchQuery
+from mobile_crawler.infrastructure.mailosaur.service import MailosaurService
+from mobile_crawler.infrastructure.mailosaur.models import MailosaurConfig
+
+logger = logging.getLogger(__name__)
 
 
 class ActionExecutor:
@@ -18,19 +22,22 @@ class ActionExecutor:
 
     def __init__(self, appium_driver: AppiumDriver, gesture_handler: GestureHandler,
                  adb_input_handler: Optional[ADBInputHandler] = None,
-                 gmail_service: Optional[GmailService] = None):
+                 mailosaur_service: Optional[MailosaurService] = None,
+                 test_email: Optional[str] = None):
         """Initialize action executor.
 
         Args:
             appium_driver: Appium driver instance
             gesture_handler: Gesture handler instance
             adb_input_handler: ADB input handler for text input (optional, created if not provided)
-            gmail_service: Gmail service for email automation (optional)
+            mailosaur_service: Mailosaur service for email automation (optional)
+            test_email: Optional fallback email address for extraction
         """
         self.appium_driver = appium_driver
         self.gesture_handler = gesture_handler
         self.adb_input_handler = adb_input_handler or ADBInputHandler()
-        self.gmail_service = gmail_service
+        self.mailosaur_service = mailosaur_service
+        self.test_email = test_email
         self._last_action_time = 0
         self._action_delay_ms = 2000  # 2s between actions for visual observability
 
@@ -286,27 +293,37 @@ class ActionExecutor:
             navigated_away=False
         )
 
-    def extract_otp(self, sender: Optional[str] = None, subject: Optional[str] = None) -> ActionResult:
-        """Execute OTP extraction from Gmail.
+    def extract_otp(self, email: Optional[str] = None, timeout: int = 60) -> ActionResult:
+        """Execute OTP extraction from Mailosaur.
 
         Args:
-            sender: Email sender filter
-            subject: Subject keyword filter
+            email: The email address to check for OTP.
+                   If None, uses configured test email.
+            timeout: Maximum time to wait for email (seconds)
 
         Returns:
-            ActionResult (success=True, input_text=OTP if found)
+            ActionResult with success=True and input_text=OTP if found
         """
-        if not self.gmail_service:
-            return ActionResult(success=False, action_type="extract_otp", error_message="Gmail service not initialized")
+        if not self.mailosaur_service:
+            logger.error("extract_otp failed: Mailosaur service not configured")
+            return ActionResult(success=False, action_type="extract_otp", target="Email", error_message="Mailosaur service not configured")
 
         self._ensure_delay()
-        query = GmailSearchQuery(sender=sender, subject_contains=subject)
+        target_email = email or self.test_email
+        if not target_email:
+            logger.error("extract_otp failed: No email address provided or configured")
+            return ActionResult(success=False, action_type="extract_otp", target="Email", error_message="No email address provided or configured")
 
+        logger.info(f"Extracting OTP for {target_email} (timeout={timeout}s)...")
         start_time = time.time()
         try:
-            otp = self.gmail_service.extract_otp(query)
+            otp = self.mailosaur_service.get_otp(target_email, timeout=timeout)
             success = otp is not None
-            error = None if success else "OTP not found"
+            if success:
+                logger.info(f"OTP found: {otp}")
+            else:
+                logger.warning(f"OTP not found for {target_email}")
+            error = None if success else "OTP not found in email"
         except Exception as e:
             otp = None
             success = False
@@ -316,32 +333,51 @@ class ActionExecutor:
         return ActionResult(
             success=success,
             action_type="extract_otp",
-            target="Gmail",
+            target=f"Mailosaur ({target_email})",
             duration_ms=duration_ms,
             error_message=error,
             input_text=otp
         )
 
-    def click_verification_link(self, sender: Optional[str] = None, subject: Optional[str] = None) -> ActionResult:
-        """Execute verification link click in Gmail.
+    def click_verification_link(self, email: Optional[str] = None, link_text: Optional[str] = None, timeout: int = 60) -> ActionResult:
+        """Execute verification link extraction and processing.
+
+        Retrieves the magic link from Mailosaur and opens it using ADB.
 
         Args:
-            sender: Email sender filter
-            subject: Subject keyword filter
+            email: The email address to check for verification link.
+                   If None, uses configured test email.
+            link_text: Optional anchor text to identify the correct link.
+            timeout: Maximum time to wait for email (seconds)
 
         Returns:
             ActionResult
         """
-        if not self.gmail_service:
-            return ActionResult(success=False, action_type="click_verification_link", error_message="Gmail service not initialized")
+        if not self.mailosaur_service:
+            logger.error("click_verification_link failed: Mailosaur service not configured")
+            return ActionResult(success=False, action_type="click_verification_link", target="Email", error_message="Mailosaur service not configured")
 
         self._ensure_delay()
-        query = GmailSearchQuery(sender=sender, subject_contains=subject)
+        target_email = email or self.test_email
+        if not target_email:
+            logger.error("click_verification_link failed: No email address provided or configured")
+            return ActionResult(success=False, action_type="click_verification_link", target="Email", error_message="No email address provided or configured")
 
+        logger.info(f"Extracting magic link for {target_email} (link_text='{link_text}', timeout={timeout}s)...")
         start_time = time.time()
         try:
-            success = self.gmail_service.click_verification_link(query)
-            error = None if success else "Link not clicked"
+            url = self.mailosaur_service.get_magic_link(target_email, link_text, timeout=timeout)
+            if url:
+                logger.info(f"Found magic link: {url}")
+                logger.info("Opening magic link via ADB...")
+                self._open_url_via_adb(url)
+                logger.info("Magic link opened successfully")
+                success = True
+                error = None
+            else:
+                logger.warning(f"No magic link found for {target_email}")
+                success = False
+                error = "No verification link found"
         except Exception as e:
             success = False
             error = str(e)
@@ -350,7 +386,27 @@ class ActionExecutor:
         return ActionResult(
             success=success,
             action_type="click_verification_link",
-            target="Gmail",
+            target=f"Mailosaur ({target_email})",
             duration_ms=duration_ms,
             error_message=error
         )
+
+    def _open_url_via_adb(self, url: str):
+        """Open URL on device using ADB."""
+        device_id = self.appium_driver.device_id
+        cmd = [
+            "adb", "-s", device_id,
+            "shell", "am", "start",
+            "-a", "android.intent.action.VIEW",
+            "-d", url
+        ]
+        logger.info(f"Running ADB command to open URL: {' '.join(cmd)}")
+        try:
+            result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+            if result.stdout:
+                logger.debug(f"ADB stdout: {result.stdout.strip()}")
+            if result.stderr:
+                logger.debug(f"ADB stderr: {result.stderr.strip()}")
+        except subprocess.CalledProcessError as e:
+            logger.error(f"ADB command failed (code {e.returncode}): {e.stderr.strip()}")
+            raise

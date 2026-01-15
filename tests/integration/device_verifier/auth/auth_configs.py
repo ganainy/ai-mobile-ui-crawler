@@ -25,14 +25,6 @@ class TestCredentials:
             name=name
         )
 
-    @classmethod
-    def gmail_test(cls) -> "TestCredentials":
-        """Credentials for real Gmail integration testing."""
-        return cls(
-            email="appiumtester96@gmail.com",
-            password="Test@123456",
-            name="Appium Tester"
-        )
 
 class AuthMode(Enum):
     BASIC = "basic"

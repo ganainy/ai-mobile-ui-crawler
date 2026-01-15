@@ -177,7 +177,6 @@ class PromptBuilder:
         test_username = self.config_manager.get('test_username', '')
         test_password = self.config_manager.get('test_password', '')
         test_email = self.config_manager.get('test_email', '')
-        test_gmail = self.config_manager.get('test_gmail_account', '')
 
         credentials = []
         if test_username:
@@ -186,8 +185,6 @@ class PromptBuilder:
             credentials.append(f"Password: {test_password}")
         if test_email:
             credentials.append(f"Email: {test_email}")
-        if test_gmail:
-            credentials.append(f"Test Gmail Account: {test_gmail}")
 
         if credentials:
             return "\n".join(credentials)

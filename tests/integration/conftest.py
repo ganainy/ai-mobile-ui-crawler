@@ -266,22 +266,3 @@ def auth_form_filler(auth_device_session):
     return AuthFormFiller(gesture_handler, (width, height))
 
 
-# ============================================================================
-# Gmail Automation Fixtures
-# ============================================================================
-
-
-# ============================================================================
-# Gmail Automation Fixtures
-# ============================================================================
-
-# NOTE: Old Gmail fixtures removed. Use GmailService from src in tests.
-
-
-
-
-@pytest.fixture(scope="module")
-def email_sender():
-    """Fixture for mock EmailSender."""
-    from tests.integration.device_verifier.gmail.email_sender import EmailSender
-    return EmailSender(sender_email="afoda50@gmail.com")

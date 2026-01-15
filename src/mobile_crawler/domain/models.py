@@ -28,9 +28,10 @@ class ActionResult:
     success: bool
     action_type: str
     target: str
-    duration_ms: float
-    error_message: Optional[str]
-    navigated_away: bool  # Did screen change?
+    duration_ms: float = 0.0
+    error_message: Optional[str] = None
+    navigated_away: bool = False  # Did screen change?
+    input_text: Optional[str] = None  # Text input or extracted OTP
 
 
 @dataclass

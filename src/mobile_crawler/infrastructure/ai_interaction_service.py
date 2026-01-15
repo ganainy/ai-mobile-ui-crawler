@@ -434,8 +434,8 @@ class AIInteractionService:
         input_text = action_data.get("input_text")
         if action_data["action"] == "input" and input_text is None:
             raise ValueError("Input action requires input_text")
-        if action_data["action"] != "input" and input_text is not None:
-            raise ValueError("Only input actions can have input_text")
+        if action_data["action"] not in ["input", "extract_otp", "click_verification_link"] and input_text is not None:
+            raise ValueError(f"Action '{action_data['action']}' cannot have input_text")
         
         return AIAction(
             action=action_data["action"],

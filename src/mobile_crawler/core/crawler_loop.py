@@ -626,17 +626,15 @@ class CrawlerLoop:
                         bounds[3] + self.top_bar_height
                     )
                 
-                if not bounds:
-                    # Fallback for actions that don't need bounds (back, etc.)
-                    # or if resolution failed
-                    tap_x, tap_y = 0, 0
-                else:
+                if bounds:
                     # Calculate tap center point
                     tap_x = (bounds[0] + bounds[2]) // 2
                     tap_y = (bounds[1] + bounds[3]) // 2
-                
-                self._emit_event("on_debug_log", run_id, step_number,
-                    f"EXECUTE {ai_action.action}: tap at ({tap_x}, {tap_y}) [bounds: {bounds}]")
+                    self._emit_event("on_debug_log", run_id, step_number,
+                        f"EXECUTE {ai_action.action}: tap at ({tap_x}, {tap_y}) [bounds: {bounds}]")
+                else:
+                    self._emit_event("on_debug_log", run_id, step_number,
+                        f"EXECUTE {ai_action.action} (no coordinates required)")
 
                 # Execute action based on type
                 if ai_action.action == "click":
@@ -660,12 +658,11 @@ class CrawlerLoop:
                 elif ai_action.action == "back":
                     result = self.action_executor.back()
                 elif ai_action.action == "extract_otp":
-                    # AI can provide sender/subject hint in input_text or similar, 
-                    # but usually it's better to just use defaults or reasoning.
-                    # For now, we'll try to extract without specific filters if not provided.
-                    result = self.action_executor.extract_otp()
+                    # AI can provide email or hint in input_text
+                    result = self.action_executor.extract_otp(email=ai_action.input_text)
                 elif ai_action.action == "click_verification_link":
-                    result = self.action_executor.click_verification_link()
+                    # AI can provide link text hint in input_text
+                    result = self.action_executor.click_verification_link(link_text=ai_action.input_text)
                 else:
                     # Unknown action - skip
                     continue

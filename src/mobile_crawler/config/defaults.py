@@ -73,5 +73,4 @@ DEFAULTS: Dict[str, Any] = {
     # Interval between scan status polls (in seconds)
     'mobsf_poll_interval': 2,
     # Test credentials
-    'test_gmail_account': None,
 }

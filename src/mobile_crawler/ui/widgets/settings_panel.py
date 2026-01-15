@@ -260,14 +260,33 @@ class SettingsPanel(QWidget):
         password_layout.addWidget(self.test_password_input)
         credentials_layout.addLayout(password_layout)
         
-        # Test Gmail Account (for both form filling and verification)
-        gmail_layout = QHBoxLayout()
-        gmail_label = QLabel("Test Gmail Account:")
-        gmail_layout.addWidget(gmail_label)
-        self.test_gmail_account_input = QLineEdit()
-        self.test_gmail_account_input.setPlaceholderText("Enter gmail used for tests")
-        gmail_layout.addWidget(self.test_gmail_account_input)
-        credentials_layout.addLayout(gmail_layout)
+        # Mailosaur API Key
+        mailosaur_api_layout = QHBoxLayout()
+        mailosaur_api_label = QLabel("Mailosaur API Key:")
+        mailosaur_api_layout.addWidget(mailosaur_api_label)
+        self.mailosaur_api_key_input = QLineEdit()
+        self.mailosaur_api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.mailosaur_api_key_input.setPlaceholderText("Enter Mailosaur API key")
+        mailosaur_api_layout.addWidget(self.mailosaur_api_key_input)
+        credentials_layout.addLayout(mailosaur_api_layout)
+
+        # Mailosaur Server ID
+        mailosaur_server_layout = QHBoxLayout()
+        mailosaur_server_label = QLabel("Mailosaur Server ID:")
+        mailosaur_server_layout.addWidget(mailosaur_server_label)
+        self.mailosaur_server_id_input = QLineEdit()
+        self.mailosaur_server_id_input.setPlaceholderText("Enter Mailosaur Server ID")
+        mailosaur_server_layout.addWidget(self.mailosaur_server_id_input)
+        credentials_layout.addLayout(mailosaur_server_layout)
+
+        # Test Email (Recipient for verification)
+        test_email_layout = QHBoxLayout()
+        test_email_label = QLabel("Test Email:")
+        test_email_layout.addWidget(test_email_label)
+        self.test_email_input = QLineEdit()
+        self.test_email_input.setPlaceholderText("e.g. user@abc12345.mailosaur.net")
+        test_email_layout.addWidget(self.test_email_input)
+        credentials_layout.addLayout(test_email_layout)
 
         credentials_group.setLayout(credentials_layout)
         layout.addWidget(credentials_group)
@@ -363,10 +382,17 @@ class SettingsPanel(QWidget):
         if test_password:
             self.test_password_input.setText(test_password)
 
-        # Load test gmail (from either field, prioritizing test_gmail_account)
-        test_gmail = self._config_store.get_setting("test_gmail_account") or self._config_store.get_setting("test_email") or ""
-        self.test_gmail_account_input.setText(test_gmail)
-        # Note: We keep internal test_email and test_gmail_account keys for now to avoid data loss
+        # Load test email
+        test_email = self._config_store.get_setting("test_email") or ""
+        self.test_email_input.setText(test_email)
+
+        # Load Mailosaur credentials
+        mailosaur_api_key = self._config_store.get_secret_plaintext("mailosaur_api_key")
+        if mailosaur_api_key:
+            self.mailosaur_api_key_input.setText(mailosaur_api_key)
+        
+        mailosaur_server_id = self._config_store.get_setting("mailosaur_server_id") or ""
+        self.mailosaur_server_id_input.setText(mailosaur_server_id)
 
         # Load traffic capture settings
         enable_traffic_capture = self._config_store.get_setting("enable_traffic_capture", default=False)
@@ -454,14 +480,27 @@ class SettingsPanel(QWidget):
             else:
                 self._config_store.delete_secret("test_password")
 
-            test_gmail = self.test_gmail_account_input.text().strip()
-            if test_gmail:
-                # Save to BOTH internal keys so existing logic doesn't break
-                self._config_store.set_setting("test_email", test_gmail, "string")
-                self._config_store.set_setting("test_gmail_account", test_gmail, "string")
+            test_email = self.test_email_input.text().strip()
+            if test_email:
+                self._config_store.set_setting("test_email", test_email, "string")
             else:
                 self._config_store.delete_setting("test_email")
-                self._config_store.delete_setting("test_gmail_account")
+            
+            # Save Mailosaur credentials
+            mailosaur_api_key = self.mailosaur_api_key_input.text().strip()
+            if mailosaur_api_key:
+                self._config_store.set_secret_plaintext("mailosaur_api_key", mailosaur_api_key)
+            else:
+                self._config_store.delete_secret("mailosaur_api_key")
+            
+            mailosaur_server_id = self.mailosaur_server_id_input.text().strip()
+            if mailosaur_server_id:
+                self._config_store.set_setting("mailosaur_server_id", mailosaur_server_id, "string")
+            else:
+                self._config_store.delete_setting("mailosaur_server_id")
+            
+            # Cleanup old config keys
+            self._config_store.delete_setting("test_gmail_account")
 
             # Save traffic capture settings
             enable_traffic_capture = self.enable_traffic_capture_checkbox.isChecked()
@@ -582,11 +621,15 @@ class SettingsPanel(QWidget):
 
     def get_test_email(self) -> str:
         """Get the current test email value."""
-        return self.test_gmail_account_input.text()
+        return self.test_email_input.text()
 
-    def get_test_gmail_account(self) -> str:
-        """Get the current test gmail account value."""
-        return self.test_gmail_account_input.text()
+    def get_mailosaur_api_key(self) -> str:
+        """Get the current Mailosaur API key."""
+        return self.mailosaur_api_key_input.text()
+
+    def get_mailosaur_server_id(self) -> str:
+        """Get the current Mailosaur Server ID."""
+        return self.mailosaur_server_id_input.text()
 
     def get_enable_traffic_capture(self) -> bool:
         """Get the current traffic capture enabled state.

@@ -44,8 +44,8 @@ from mobile_crawler.domain.screen_tracker import ScreenTracker
 from mobile_crawler.infrastructure.step_log_repository import StepLogRepository
 from mobile_crawler.infrastructure.screen_repository import ScreenRepository
 from mobile_crawler.domain.models import ActionResult
-from mobile_crawler.infrastructure.gmail.service import GmailService
-from mobile_crawler.infrastructure.gmail.config import GmailAutomationConfig
+from mobile_crawler.infrastructure.mailosaur.service import MailosaurService
+from mobile_crawler.infrastructure.mailosaur.models import MailosaurConfig
 
 # Widget imports
 from mobile_crawler.ui.widgets.device_selector import DeviceSelector
@@ -432,7 +432,8 @@ class MainWindow(QMainWindow):
         config_manager.set('test_username', self.settings_panel.get_test_username())
         config_manager.set('test_password', self.settings_panel.get_test_password())
         config_manager.set('test_email', self.settings_panel.get_test_email())
-        config_manager.set('test_gmail_account', self.settings_panel.get_test_gmail_account())
+        config_manager.set('mailosaur_api_key', self.settings_panel.get_mailosaur_api_key())
+        config_manager.set('mailosaur_server_id', self.settings_panel.get_mailosaur_server_id())
 
         # Set screen configuration
         top_height = self.settings_panel.get_top_bar_height()
@@ -526,19 +527,25 @@ class MainWindow(QMainWindow):
         ai_service = AIInteractionService.from_config(config_manager, event_listener=self.signal_adapter)
         gesture_handler = GestureHandler(appium_driver)
         
-        # Initialize GmailService for ActionExecutor
-        gmail_config = GmailAutomationConfig(
-            target_account=config_manager.get('test_gmail_account'),
-            screenshot_dir=self._services['session_folder_manager'].get_subfolder(run, "gmail_failures")
-        )
-        gmail_service = GmailService(
-            driver=appium_driver.get_driver(),
-            device_id=appium_driver.device_id,
-            target_app_package=config_manager.get('app_package'),
-            config=gmail_config
-        )
+        # Initialize MailosaurService for ActionExecutor
+        import os
+        mailosaur_api_key = os.environ.get('MAILOSAUR_API_KEY') or config_manager.get('mailosaur_api_key')
+        mailosaur_server_id = os.environ.get('MAILOSAUR_SERVER_ID') or config_manager.get('mailosaur_server_id')
         
-        action_executor = ActionExecutor(appium_driver, gesture_handler, gmail_service=gmail_service)
+        mailosaur_service = None
+        if mailosaur_api_key and mailosaur_server_id:
+            mailosaur_config = MailosaurConfig(
+                api_key=mailosaur_api_key,
+                server_id=mailosaur_server_id
+            )
+            mailosaur_service = MailosaurService(config=mailosaur_config)
+        
+        action_executor = ActionExecutor(
+            appium_driver, 
+            gesture_handler, 
+            mailosaur_service=mailosaur_service,
+            test_email=config_manager.get('test_email')
+        )
         step_log_repo = StepLogRepository(self._services['database_manager'])
         
         # Get screen deduplication configuration

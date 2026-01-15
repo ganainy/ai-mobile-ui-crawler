@@ -1,4 +1,7 @@
-# Feature Specification: Integrate Gmail Auth
+# FEATURE: Integrate Gmail-based Authentication (SUPERSEDED)
+
+> **NOTICE**: This feature has been SUPERSEDED by [019-force-mailosaur-email](../019-force-mailosaur-email/spec.md).
+> Gmail-based UI automation for verification has been removed in favor of Mailosaur API integration.
 
 **Feature Branch**: `001-integrate-gmail-auth`
 **Created**: 2026-01-14

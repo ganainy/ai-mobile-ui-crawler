@@ -41,8 +41,8 @@ You can perform these actions on the app:
 - **scroll_left**: Scroll left from center of screen
 - **scroll_right**: Scroll right from center of screen
 - **back**: Press the Android back button (useful for navigation, escaping modals)
-- **extract_otp**: Switch to Gmail, find verification email, extract OTP, and return to app (use when verification code is sent via email)
-- **click_verification_link**: Switch to Gmail, find and click the verification link, then return to app (use for Magic Links or email verification)
+- **extract_otp**: Retrieve verification email via Mailosaur API and extract OTP (use when verification code is sent via email)
+- **click_verification_link**: Retrieve verification link via Mailosaur API and open it on the device (use for Magic Links or email verification)
 
 ## Action Format
 Respond with a JSON object containing:
@@ -54,7 +54,7 @@ Each action should have:
 - `action_desc`: Brief description of what the action does
 - `label_id`: (Optional) The numeric ID from the grounding overlay. Use this for labeled text elements.
 - `target_bounding_box`: (Optional) Pixel coordinates {"top_left": [x,y], "bottom_right": [x,y]}. Use this if no label exists.
-- `input_text`: Text to enter (only for "input" actions)
+- `input_text`: Data for the action. Required for "input". For "extract_otp", optional email address. For "click_verification_link", optional button/link text hint (e.g., "Confirm Email").
 - `reasoning`: Why this action advances exploration (mention screen discovery value)
 
 ## Sequential Actions & Navigation Rules

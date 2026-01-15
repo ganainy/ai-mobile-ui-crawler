@@ -1,13 +1,10 @@
 ﻿# mobile-crawler Development Guidelines
 
-Auto-generated from all feature plans. Last updated: 2026-01-12
+Auto-generated from all feature plans. Last updated: 2026-01-16
 
 ## Active Technologies
-- Python 3.11+ (Project Standard) + mailosaur (018-integrate-mailosaur)
-- [e.g., Python 3.11, Swift 5.9, Rust 1.75 or NEEDS CLARIFICATION] + [e.g., FastAPI, UIKit, LLVM or NEEDS CLARIFICATION] (010-fix-run-history-ui)
-- [if applicable, e.g., PostgreSQL, CoreData, files or N/A] (010-fix-run-history-ui)
-- Python 3.11+ (Project Standard) + Appium, ADB (Project Standard) (001-integrate-gmail-auth)
-
+- Python 3.11+ (Project Standard) + mailosaur (019-force-mailosaur-email)
+- Python 3.11+ (Project Standard) + Appium, ADB (Project Standard)
 - Python 3.11+ (Project Standard) (009-ocr-som-grounding)
 
 ## Project Structure
@@ -21,19 +18,19 @@ tests/
 
 cd src; pytest; ruff check .
 
-# Gmail Auth Tests
-pytest tests/integration/test_auth_gmail_e2e.py -v
+# Verification Tests (Mailosaur)
+pytest tests/unit/domain/test_action_executor_mailosaur.py -v
+pytest tests/integration/test_mailosaur_e2e.py -v
 
 ## Code Style
 
 Python 3.11+ (Project Standard): Follow standard conventions
 
 ## Recent Changes
-- 018-integrate-mailosaur: Added Python 3.11+ (Project Standard) + mailosaur
-- 017-ui-monitor-improvements: Added [e.g., Python 3.11, Swift 5.9, Rust 1.75 or NEEDS CLARIFICATION] + [e.g., FastAPI, UIKit, LLVM or NEEDS CLARIFICATION]
-- 001-integrate-gmail-auth: Added Python 3.11+ (Project Standard) + Appium, ADB (Project Standard)
-- 010-fix-run-history-ui: Added [e.g., Python 3.11, Swift 5.9, Rust 1.75 or NEEDS CLARIFICATION] + [e.g., FastAPI, UIKit, LLVM or NEEDS CLARIFICATION]
-
+- 019-force-mailosaur-email: Removed Gmail automation, forced Mailosaur for email verification.
+- 018-integrate-mailosaur: Added MailosaurService for OTP/link retrieval via API.
+- 017-ui-monitor-improvements: UI feedback improvements for crawler actions.
+- 010-fix-run-history-ui: Fixed session history display and folder resolution.
 
 <!-- MANUAL ADDITIONS START -->
 <!-- MANUAL ADDITIONS END -->
