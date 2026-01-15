@@ -1,5 +1,6 @@
 """Main crawler loop orchestration."""
 
+import json
 import time
 import base64
 import logging
@@ -12,6 +13,7 @@ from mobile_crawler.core.crawl_state_machine import CrawlState, CrawlStateMachin
 from mobile_crawler.core.crawler_event_listener import CrawlerEventListener
 from mobile_crawler.domain.action_executor import ActionExecutor
 from mobile_crawler.domain.models import ActionResult
+from mobile_crawler.core.uiautomator_recovery import UiAutomatorRecoveryManager, RecoveryConfig, is_uiautomator2_crash
 from mobile_crawler.domain.screen_tracker import ScreenTracker, ScreenState
 from mobile_crawler.domain.overlay_renderer import OverlayRenderer
 from mobile_crawler.infrastructure.ai_interaction_service import AIInteractionService
@@ -96,6 +98,16 @@ class CrawlerLoop:
         self._traffic_capture_manager: Optional[TrafficCaptureManager] = None
         self._video_recording_manager: Optional[VideoRecordingManager] = None
         self._mobsf_manager: Optional[MobSFManager] = None
+
+        # Recovery Manager (US Story 1)
+        self._recovery_config = RecoveryConfig(
+            max_restart_attempts=self.config_manager.get('uiautomator2_max_recovery_attempts', 3),
+            restart_delay_seconds=self.config_manager.get('uiautomator2_recovery_delay', 3.0)
+        )
+        self._recovery_manager = UiAutomatorRecoveryManager(self.appium_driver, self._recovery_config)
+        self._recovery_failed = False
+        self.total_recovery_count = 0
+        self.total_recovery_time_ms = 0.0
 
         # Configuration
         self.max_crawl_steps = self.config_manager.get('max_crawl_steps', 15)
@@ -268,6 +280,7 @@ class CrawlerLoop:
 
             # Run MobSF analysis after crawl completion (if enabled)
             self._run_mobsf_analysis(run_id, session_path)
+            self._update_run_recovery_stats(run_id)
 
             # Complete crawl
             total_duration_ms = (time.time() - start_time) * 1000
@@ -282,9 +295,11 @@ class CrawlerLoop:
             
             # Finalize run record with actual screen stats
             total_steps = step_number - 1  # steps are 1-indexed
+            final_status = 'RECOVERY_FAILED' if self._recovery_failed else 'COMPLETED'
+            
             self.run_repository.update_run_stats(
                 run_id=run_id,
-                status='COMPLETED',
+                status=final_status,
                 end_time=datetime.now(),
                 total_steps=total_steps,
                 unique_screens=screen_stats.get('unique_screens', total_steps)
@@ -401,6 +416,146 @@ class CrawlerLoop:
         except Exception as e:
             logger.error(f"Error checking app foreground: {e}")
             return False
+
+    def _execute_single_action(self, ai_action, bounds) -> ActionResult:
+        """Execute a single action without recovery logic."""
+        if ai_action.action == "click":
+            return self.action_executor.click(bounds)
+        elif ai_action.action == "input":
+            result = self.action_executor.input(bounds, ai_action.input_text)
+            # Hide keyboard after input
+            if result.success:
+                try:
+                    self.appium_driver.hide_keyboard()
+                    time.sleep(0.5)  # Wait for keyboard animation
+                except Exception as e:
+                    logger.debug(f"Failed to hide keyboard: {e}")
+            return result
+        elif ai_action.action == "long_press":
+            return self.action_executor.long_press(bounds)
+        elif ai_action.action == "scroll_up":
+            return self.action_executor.scroll_up()
+        elif ai_action.action == "scroll_down":
+            return self.action_executor.scroll_down()
+        elif ai_action.action == "scroll_left":
+            return self.action_executor.swipe_left()
+        elif ai_action.action == "scroll_right":
+            return self.action_executor.swipe_right()
+        elif ai_action.action == "back":
+            return self.action_executor.back()
+        elif ai_action.action == "extract_otp":
+            # AI can provide email or hint in input_text
+            return self.action_executor.extract_otp(email=ai_action.input_text)
+        elif ai_action.action == "click_verification_link":
+            # AI can provide link text hint in input_text
+            return self.action_executor.click_verification_link(link_text=ai_action.input_text)
+        else:
+            return ActionResult(success=False, action_type=ai_action.action, target="unknown", error_message="Unknown action type")
+
+    def _execute_action_with_recovery(self, ai_action, bounds, run_id, step_number, action_index) -> ActionResult:
+        """Execute action with automatic crash recovery retry logic."""
+        # Reset retry state for this step if it's the first action
+        if action_index == 0:
+            self._recovery_manager.reset_for_new_step()
+            
+        total_recovery_time_ms = 0.0
+        
+        while self._recovery_manager.should_retry():
+            try:
+                # Attempt to execute the action
+                result = self._execute_single_action(ai_action, bounds)
+                
+                # Populate recovery info in ActionResult
+                retry_count = self._recovery_manager.state.current_attempts
+                if retry_count > 0:
+                    result.was_retried = True
+                    result.retry_count = retry_count
+                    result.recovery_time_ms = total_recovery_time_ms
+                
+                # If success or not a crash error, return the result
+                return result
+                
+            except Exception as e:
+                # Check if it's a UiAutomator2 crash
+                if not self._recovery_manager.is_uiautomator2_crash(e):
+                    # Not a crash error, propagate it
+                    logger.error(f"Action execution failed with non-crash error: {e}")
+                    return ActionResult(
+                        success=False,
+                        action_type=ai_action.action,
+                        target=str(bounds) if bounds else "N/A",
+                        error_message=str(e)
+                    )
+                
+                # It is a crash, initiate recovery
+                logger.warning(f"Detected UiAutomator2 crash during action {action_index+1}. Initiating recovery...")
+                
+                # Emit recovery started event
+                self._emit_event(
+                    "on_recovery_started",
+                    run_id,
+                    step_number,
+                    self._recovery_manager.state.current_attempts + 1,
+                    self._recovery_manager.state.max_attempts,
+                    ai_action.action
+                )
+                
+                recovery_start_time = time.time()
+                recovery_result = self._recovery_manager.attempt_recovery()
+                recovery_duration_ms = (time.time() - recovery_start_time) * 1000
+                total_recovery_time_ms += recovery_duration_ms
+                
+                # Emit recovery completed event
+                self._emit_event(
+                    "on_recovery_completed",
+                    run_id,
+                    step_number,
+                    recovery_result.success,
+                    recovery_duration_ms
+                )
+                
+                self.total_recovery_count += 1
+                self.total_recovery_time_ms += recovery_duration_ms
+                
+                if recovery_result.success:
+                    logger.info("UiAutomator2 session restored. Restoring app foreground and retrying action...")
+                    
+                    # Ensure app is in foreground after restart (FR-008, T027)
+                    if self._target_package:
+                        try:
+                            self.appium_driver.get_driver().activate_app(self._target_package)
+                            time.sleep(1.0) # Wait for app to activate
+                        except Exception as activate_err:
+                            logger.error(f"Failed to activate app after recovery: {activate_err}")
+                    
+                    # Retry the loop
+                    continue
+                else:
+                    # Recovery failed, we've exhausted attempts or hit a fatal error
+                    logger.error(f"UiAutomator2 recovery failed: {recovery_result.error_message}")
+                    self._recovery_failed = True
+                    break
+        
+        # If we reach here, recovery failed or efforts were exhausted
+        if not self._recovery_manager.should_retry():
+             self._recovery_failed = True
+             self._emit_event(
+                "on_recovery_exhausted",
+                run_id,
+                step_number,
+                self._recovery_manager.state.current_attempts,
+                "Max recovery attempts exceeded"
+            )
+             
+        return ActionResult(
+            success=False,
+            action_type=ai_action.action,
+            target=str(bounds) if bounds else "N/A",
+            error_message="UiAutomator2 crash recovery failed or exhausted",
+            was_retried=self._recovery_manager.state.current_attempts > 0,
+            retry_count=self._recovery_manager.state.current_attempts,
+            recovery_time_ms=total_recovery_time_ms
+        )
 
     def _execute_step(self, run_id: int, step_number: int) -> bool:
         """Execute a single step of the crawl.
@@ -636,36 +791,8 @@ class CrawlerLoop:
                     self._emit_event("on_debug_log", run_id, step_number,
                         f"EXECUTE {ai_action.action} (no coordinates required)")
 
-                # Execute action based on type
-                if ai_action.action == "click":
-                    result = self.action_executor.click(bounds)
-                elif ai_action.action == "input":
-                    result = self.action_executor.input(bounds, ai_action.input_text)
-                    # Hide keyboard after input
-                    if result.success:
-                        self.appium_driver.hide_keyboard()
-                        time.sleep(0.5)  # Wait for keyboard animation
-                elif ai_action.action == "long_press":
-                    result = self.action_executor.long_press(bounds)
-                elif ai_action.action == "scroll_up":
-                    result = self.action_executor.scroll_up()
-                elif ai_action.action == "scroll_down":
-                    result = self.action_executor.scroll_down()
-                elif ai_action.action == "scroll_left":
-                    result = self.action_executor.swipe_left()
-                elif ai_action.action == "scroll_right":
-                    result = self.action_executor.swipe_right()
-                elif ai_action.action == "back":
-                    result = self.action_executor.back()
-                elif ai_action.action == "extract_otp":
-                    # AI can provide email or hint in input_text
-                    result = self.action_executor.extract_otp(email=ai_action.input_text)
-                elif ai_action.action == "click_verification_link":
-                    # AI can provide link text hint in input_text
-                    result = self.action_executor.click_verification_link(link_text=ai_action.input_text)
-                else:
-                    # Unknown action - skip
-                    continue
+                # Execute action with automatic crash recovery (US Story 1)
+                result = self._execute_action_with_recovery(ai_action, bounds, run_id, step_number, i)
 
                 actions_executed += 1
                 self._emit_event("on_action_executed", run_id, step_number, i, result)
@@ -691,7 +818,10 @@ class CrawlerLoop:
                     error_message=str(result.error_message) if result.error_message else None,
                     action_duration_ms=result.duration_ms,
                     ai_response_time_ms=ai_response.latency_ms,  # Use AI response time from response
-                    ai_reasoning=ai_action.reasoning
+                    ai_reasoning=ai_action.reasoning,
+                    was_retried=result.was_retried,
+                    retry_count=result.retry_count,
+                    recovery_time_ms=result.recovery_time_ms
                 )
                 self.step_log_repository.create_step_log(step_log)
 
@@ -727,6 +857,9 @@ class CrawlerLoop:
         Returns:
             Completion reason string
         """
+        if self._recovery_failed:
+            return "UiAutomator2 recovery failed"
+
         if step_number > self.max_crawl_steps:
             return f"Reached maximum steps ({self.max_crawl_steps})"
         
@@ -1046,6 +1179,56 @@ class CrawlerLoop:
         except Exception as e:
             logger.error(f"Error stopping traffic capture: {e}", exc_info=True)
             # Don't fail the crawl if traffic capture stop fails
+
+    def _update_run_recovery_stats(self, run_id: int) -> None:
+        """Update the run_stats table with recovery metrics.
+        
+        Args:
+            run_id: The run ID to update
+        """
+        if self.total_recovery_count == 0:
+            return
+            
+        try:
+            from mobile_crawler.infrastructure.database import DatabaseManager
+            db_manager = DatabaseManager()
+            conn = db_manager.get_connection()
+            cursor = conn.cursor()
+            
+            avg_recovery_time = self.total_recovery_time_ms / self.total_recovery_count
+            
+            # Use recovery_manager to get success count (total count - failed count from recovery_failed check)
+            # Actually we can just track successful recoveries too
+            # For simplicity, let's just update the totals
+            cursor.execute(
+                """
+                INSERT OR REPLACE INTO run_stats (
+                    run_id, 
+                    uiautomator_crash_count, 
+                    uiautomator_recovery_count,
+                    avg_recovery_time_ms
+                )
+                VALUES (?, 
+                    COALESCE((SELECT uiautomator_crash_count FROM run_stats WHERE run_id = ?), 0) + ?,
+                    COALESCE((SELECT uiautomator_recovery_count FROM run_stats WHERE run_id = ?), 0) + ?,
+                    ?
+                )
+                ON CONFLICT(run_id) DO UPDATE SET
+                    uiautomator_crash_count = uiautomator_crash_count + EXCLUDED.uiautomator_crash_count,
+                    uiautomator_recovery_count = uiautomator_recovery_count + EXCLUDED.uiautomator_recovery_count,
+                    avg_recovery_time_ms = (avg_recovery_time_ms + EXCLUDED.avg_recovery_time_ms) / 2
+                """,
+                (
+                    run_id, 
+                    run_id, self.total_recovery_count,
+                    run_id, self.total_recovery_count if not self._recovery_failed else self.total_recovery_count - 1,
+                    avg_recovery_time
+                ),
+            )
+            conn.commit()
+            logger.info(f"Updated run_stats with recovery metrics: {self.total_recovery_count} crashes")
+        except Exception as e:
+            logger.warning(f"Failed to update run recovery stats: {e}")
 
     def _emit_event(self, event_method: str, *args, **kwargs) -> None:
         """Emit an event to all listeners.

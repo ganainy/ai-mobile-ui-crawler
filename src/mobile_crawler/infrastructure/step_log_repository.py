@@ -25,6 +25,9 @@ class StepLog:
     action_duration_ms: Optional[float]
     ai_response_time_ms: Optional[float]
     ai_reasoning: Optional[str]  # AI's reasoning for this action
+    was_retried: bool = False
+    retry_count: int = 0
+    recovery_time_ms: Optional[float] = None
 
 
 class StepLogRepository:
@@ -55,8 +58,9 @@ class StepLogRepository:
                 run_id, step_number, timestamp, from_screen_id, to_screen_id,
                 action_type, action_description, target_bbox_json, input_text,
                 execution_success, error_message, action_duration_ms,
-                ai_response_time_ms, ai_reasoning
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ai_response_time_ms, ai_reasoning, was_retried,
+                retry_count, recovery_time_ms
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             step_log.run_id,
             step_log.step_number,
@@ -71,7 +75,10 @@ class StepLogRepository:
             step_log.error_message,
             step_log.action_duration_ms,
             step_log.ai_response_time_ms,
-            step_log.ai_reasoning
+            step_log.ai_reasoning,
+            step_log.was_retried,
+            step_log.retry_count,
+            step_log.recovery_time_ms
         ))
 
         conn.commit()
@@ -93,7 +100,8 @@ class StepLogRepository:
             SELECT id, run_id, step_number, timestamp, from_screen_id, to_screen_id,
                    action_type, action_description, target_bbox_json, input_text,
                    execution_success, error_message, action_duration_ms,
-                   ai_response_time_ms, ai_reasoning
+                   ai_response_time_ms, ai_reasoning, was_retried,
+                   retry_count, recovery_time_ms
             FROM step_logs
             WHERE run_id = ?
             ORDER BY step_number
@@ -116,7 +124,10 @@ class StepLogRepository:
                 error_message=row[11],
                 action_duration_ms=row[12],
                 ai_response_time_ms=row[13],
-                ai_reasoning=row[14]
+                ai_reasoning=row[14],
+                was_retried=bool(row[15]),
+                retry_count=row[16],
+                recovery_time_ms=row[17]
             ))
 
         return step_logs

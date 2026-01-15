@@ -92,6 +92,9 @@ class DatabaseManager:
                 action_duration_ms REAL,
                 ai_response_time_ms REAL,
                 ai_reasoning TEXT,              -- AI's reasoning for this action
+                was_retried BOOLEAN DEFAULT 0,
+                retry_count INTEGER DEFAULT 0,
+                recovery_time_ms REAL,
                 FOREIGN KEY (run_id) REFERENCES runs(id),
                 FOREIGN KEY (from_screen_id) REFERENCES screens(id),
                 FOREIGN KEY (to_screen_id) REFERENCES screens(id)
@@ -166,9 +169,11 @@ class DatabaseManager:
                 stuck_recovery_success INTEGER DEFAULT 0,
                 app_crash_count INTEGER DEFAULT 0,
                 app_relaunch_count INTEGER DEFAULT 0,
-                context_loss_count INTEGER DEFAULT 0,
                 context_recovery_count INTEGER DEFAULT 0,
                 invalid_bbox_count INTEGER DEFAULT 0,
+                uiautomator_crash_count INTEGER DEFAULT 0,
+                uiautomator_recovery_count INTEGER DEFAULT 0,
+                avg_recovery_time_ms REAL,
 
                 -- Device & App Info
                 device_model TEXT,
@@ -251,14 +256,35 @@ class DatabaseManager:
         """Run database migrations if needed."""
         self.create_schema()
         
-        # Simple migration for session_path column
         conn = self.get_connection()
         try:
+            # Migration for runs.session_path
             cursor = conn.execute("PRAGMA table_info(runs)")
             columns = [row['name'] for row in cursor.fetchall()]
             if 'session_path' not in columns:
                 conn.execute("ALTER TABLE runs ADD COLUMN session_path TEXT")
-                conn.commit()
+
+            # Migration for step_logs recovery columns
+            cursor = conn.execute("PRAGMA table_info(step_logs)")
+            columns = [row['name'] for row in cursor.fetchall()]
+            if 'was_retried' not in columns:
+                conn.execute("ALTER TABLE step_logs ADD COLUMN was_retried BOOLEAN DEFAULT 0")
+            if 'retry_count' not in columns:
+                conn.execute("ALTER TABLE step_logs ADD COLUMN retry_count INTEGER DEFAULT 0")
+            if 'recovery_time_ms' not in columns:
+                conn.execute("ALTER TABLE step_logs ADD COLUMN recovery_time_ms REAL")
+            
+            # Migration for run_stats recovery columns
+            cursor = conn.execute("PRAGMA table_info(run_stats)")
+            columns = [row['name'] for row in cursor.fetchall()]
+            if 'uiautomator_crash_count' not in columns:
+                conn.execute("ALTER TABLE run_stats ADD COLUMN uiautomator_crash_count INTEGER DEFAULT 0")
+            if 'uiautomator_recovery_count' not in columns:
+                conn.execute("ALTER TABLE run_stats ADD COLUMN uiautomator_recovery_count INTEGER DEFAULT 0")
+            if 'avg_recovery_time_ms' not in columns:
+                conn.execute("ALTER TABLE run_stats ADD COLUMN avg_recovery_time_ms REAL")
+            
+            conn.commit()
         except Exception:
             pass
         finally:

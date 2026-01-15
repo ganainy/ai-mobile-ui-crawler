@@ -143,6 +143,21 @@ class AppiumDriver:
         self.disconnect()
         return self.connect()
 
+    def restart_uiautomator2(self, delay_seconds: float = 3.0) -> WebDriver:
+        """
+        Restart the UiAutomator2 session by reconnecting.
+        
+        Args:
+            delay_seconds: Seconds to wait after disconnect before reconnecting.
+            
+        Returns:
+            New Appium WebDriver instance
+        """
+        logger.info(f"Restarting UiAutomator2 (waiting {delay_seconds}s)...")
+        self.disconnect()
+        time.sleep(delay_seconds)
+        return self.connect()
+
     def ensure_connected(self) -> WebDriver:
         """Ensure we have an active connection, reconnecting if necessary.
 

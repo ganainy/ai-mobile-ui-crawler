@@ -38,6 +38,11 @@ class QtSignalAdapter(QObject):
     state_changed = Signal(int, str, str)  # run_id, old_state, new_state
     screen_processed = Signal(int, int, int, bool, int, int)  # run_id, step, screen_id, is_new, visit_count, total
     debug_log = Signal(int, int, str)  # run_id, step_number, message
+    
+    # Recovery signals (US Story 3)
+    recovery_started = Signal(int, int, int)  # run_id, step, attempt
+    recovery_completed = Signal(int, int, bool, float)  # run_id, step, success, duration_ms
+    recovery_exhausted = Signal(int, int, int, str)  # run_id, step, attempts, message
 
     def on_crawl_started(self, run_id: int, target_package: str) -> None:
         """Called when a crawl starts."""
@@ -100,3 +105,15 @@ class QtSignalAdapter(QObject):
     def on_debug_log(self, run_id: int, step_number: int, message: str) -> None:
         """Called when a debug log message should be displayed."""
         self.debug_log.emit(run_id, step_number, message)
+
+    def on_recovery_started(self, run_id: int, step_number: int, attempt_number: int) -> None:
+        """Called when a crash recovery attempt starts."""
+        self.recovery_started.emit(run_id, step_number, attempt_number)
+
+    def on_recovery_completed(self, run_id: int, step_number: int, success: bool, duration_ms: float) -> None:
+        """Called when a crash recovery attempt completes."""
+        self.recovery_completed.emit(run_id, step_number, success, duration_ms)
+
+    def on_recovery_exhausted(self, run_id: int, step_number: int, attempts: int, message: str) -> None:
+        """Called when all recovery attempts are exhausted."""
+        self.recovery_exhausted.emit(run_id, step_number, attempts, message)

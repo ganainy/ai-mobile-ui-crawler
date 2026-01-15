@@ -61,9 +61,12 @@ class RuntimeStats:
     stuck_recovery_success: int = 0
     app_crash_count: int = 0
     app_relaunch_count: int = 0
-    context_loss_count: int = 0
     context_recovery_count: int = 0
     invalid_bbox_count: int = 0
+    uiautomator_crash_count: int = 0
+    uiautomator_recovery_count: int = 0
+    avg_recovery_time_ms: float = 0.0
+    total_recovery_time_ms: float = 0.0  # Helper for average
 
     # Device & Session
     device_id: Optional[str] = None
@@ -148,6 +151,9 @@ class RuntimeStats:
             "context_loss_count": self.context_loss_count,
             "context_recovery_count": self.context_recovery_count,
             "invalid_bbox_count": self.invalid_bbox_count,
+            "uiautomator_crash_count": self.uiautomator_crash_count,
+            "uiautomator_recovery_count": self.uiautomator_recovery_count,
+            "avg_recovery_time_ms": self.avg_recovery_time_ms,
 
             # Device & Session
             "device_model": self.device_model,
@@ -385,6 +391,25 @@ class RuntimeStatsCollector:
     def record_invalid_bbox(self) -> None:
         """Record an invalid bounding box."""
         self._stats.invalid_bbox_count += 1
+
+    def record_uiautomator_crash(self) -> None:
+        """Record a UiAutomator2 crash."""
+        self._stats.uiautomator_crash_count += 1
+
+    def record_uiautomator_recovery(self, success: bool, duration_ms: float) -> None:
+        """Record a UiAutomator2 recovery attempt.
+
+        Args:
+            success: Whether the recovery was successful
+            duration_ms: Time taken for recovery
+        """
+        if success:
+            self._stats.uiautomator_recovery_count += 1
+            
+        self._stats.total_recovery_time_ms += duration_ms
+        recs = self._stats.uiautomator_crash_count
+        if recs > 0:
+            self._stats.avg_recovery_time_ms = self._stats.total_recovery_time_ms / recs
 
     def set_device_info(self, device_id: str, device_model: str, android_version: str,
                      screen_width: int, screen_height: int) -> None:

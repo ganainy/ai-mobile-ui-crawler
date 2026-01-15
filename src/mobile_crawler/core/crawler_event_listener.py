@@ -69,25 +69,22 @@ class CrawlerEventListener(ABC):
         visit_count: int,
         total_screens: int
     ) -> None:
-        """Called when a screen is processed by the screen tracker.
-        
-        Args:
-            run_id: Current run ID
-            step_number: Current step number
-            screen_id: ID of the processed screen
-            is_new: True if this screen was just discovered
-            visit_count: Number of times this screen has been visited in this run
-            total_screens: Total unique screens discovered in this run
-        """
+        """Called when a screen is processed by the screen tracker."""
         pass
 
     @abstractmethod
     def on_debug_log(self, run_id: int, step_number: int, message: str) -> None:
-        """Called to emit a debug log message to the UI.
-        
-        Args:
-            run_id: Current run ID
-            step_number: Current step number
-            message: Debug message to display
-        """
+        """Called to emit a debug log message to the UI."""
+        pass
+
+    def on_recovery_started(self, run_id: int, step_number: int, attempt_number: int) -> None:
+        """Called when a crash recovery attempt starts."""
+        pass
+
+    def on_recovery_completed(self, run_id: int, step_number: int, success: bool, duration_ms: float) -> None:
+        """Called when a crash recovery attempt completes."""
+        pass
+
+    def on_recovery_exhausted(self, run_id: int, step_number: int, attempts: int, message: str) -> None:
+        """Called when all recovery attempts are exhausted."""
         pass

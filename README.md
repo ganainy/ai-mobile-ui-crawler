@@ -74,6 +74,12 @@ pip install -e ".[dev]"
 - **Integrated Analysis**: Aggregates MobSF security findings and network traffic summaries into a single unified report
 - **Modular Reporting Architecture**: Decoupled parsers (PCAP, MobSF) and generators (Jinja2) for extensibility
 
+### ✅ Completed (Phase 5 - Fault Tolerance & Recovery)
+- **UiAutomator2 Crash Recovery**: Automatic detection and recovery from UiAutomator2 crashes during crawling
+- **Intelligent Retries**: Transparently restarts Appium session and retries failed actions with configurable limits
+- **Session Restoration**: Restores app foreground state and resumes exploration after recovery
+- **Recovery Metrics**: Detailed tracking of recovery events, duration, and success rates in database logs
+
 ## Usage
 
 ### CLI

@@ -8,6 +8,7 @@ from enum import Enum
 from selenium.common.exceptions import WebDriverException
 
 from mobile_crawler.infrastructure.appium_driver import AppiumDriver
+from mobile_crawler.core.uiautomator_recovery import is_uiautomator2_crash
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +72,8 @@ class GestureHandler:
             logger.info(f"Tapped at coordinates ({x}, {y})")
             return True
         except WebDriverException as e:
+            if is_uiautomator2_crash(e):
+                raise
             logger.error(f"Failed to tap at ({x}, {y}): {e}")
             return False
         except Exception as e:
@@ -110,6 +113,8 @@ class GestureHandler:
             logger.info(f"Double tapped at coordinates ({x}, {y})")
             return True
         except WebDriverException as e:
+            if is_uiautomator2_crash(e):
+                raise
             logger.error(f"Failed to double tap at ({x}, {y}): {e}")
             return False
         except Exception as e:
@@ -149,6 +154,8 @@ class GestureHandler:
             logger.info(f"Long pressed at coordinates ({x}, {y}) for {duration}s")
             return True
         except WebDriverException as e:
+            if is_uiautomator2_crash(e):
+                raise
             logger.error(f"Failed to long press at ({x}, {y}): {e}")
             return False
         except Exception as e:
@@ -194,6 +201,8 @@ class GestureHandler:
             logger.info(f"Swiped from ({start_x}, {start_y}) to ({end_x}, {end_y})")
             return True
         except WebDriverException as e:
+            if is_uiautomator2_crash(e):
+                raise
             logger.error(f"Failed to swipe: {e}")
             return False
 
@@ -234,6 +243,8 @@ class GestureHandler:
             logger.info(f"Dragged from ({start_x}, {start_y}) to ({end_x}, {end_y})")
             return True
         except WebDriverException as e:
+            if is_uiautomator2_crash(e):
+                raise
             logger.error(f"Failed to drag from ({start_x}, {start_y}) to ({end_x}, {end_y}): {e}")
             return False
 

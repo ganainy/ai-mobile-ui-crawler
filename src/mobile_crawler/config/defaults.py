@@ -9,6 +9,8 @@ DEFAULTS: Dict[str, Any] = {
     'appium_url': 'http://localhost:4723',
     'appium_connection_timeout': 30,
     'appium_implicit_wait': 10,
+    'uiautomator2_max_recovery_attempts': 3,
+    'uiautomator2_recovery_delay': 3.0,
 
     # Crawl settings
     'max_crawl_steps': 15,

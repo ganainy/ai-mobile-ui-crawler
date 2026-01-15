@@ -185,7 +185,7 @@ class MainWindow(QMainWindow):
         """
         # Database and config
         db_manager = DatabaseManager()
-        db_manager.create_schema()
+        db_manager.migrate_schema()
         
         user_config_store = UserConfigStore()
         user_config_store.create_schema()

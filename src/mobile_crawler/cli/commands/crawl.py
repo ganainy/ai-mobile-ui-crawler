@@ -205,7 +205,7 @@ def crawl(device: str, package: str, model: str, steps: Optional[int], duration:
 
         # Initialize database
         db_manager = DatabaseManager()
-        db_manager.create_schema()
+        db_manager.migrate_schema()
 
         # Create run repository
         run_repo = RunRepository(db_manager)

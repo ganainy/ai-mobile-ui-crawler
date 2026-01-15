@@ -32,6 +32,9 @@ class ActionResult:
     error_message: Optional[str] = None
     navigated_away: bool = False  # Did screen change?
     input_text: Optional[str] = None  # Text input or extracted OTP
+    was_retried: bool = False         # Was this action retried after recovery?
+    retry_count: int = 0             # Number of retries before success/failure
+    recovery_time_ms: Optional[float] = None  # Total time spent in recovery
 
 
 @dataclass
