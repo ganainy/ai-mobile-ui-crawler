@@ -16,6 +16,7 @@ Mobile Crawler is an automated exploration tool for Android mobile applications 
 - **Video Recording**: Automatic screen recording of crawl sessions using Appium's built-in recording
 - **Security Analysis**: MobSF integration for static security analysis of Android applications
 - **Flexible Configuration**: Environment variables, database settings, and user preferences with validation
+- **Enhanced Reporting**: Generates human-readable HTML reports (printer-friendly) and machine-readable JSON reports with correlated timeline of actions and network requests
 
 ## Installation
 
@@ -66,6 +67,12 @@ pip install -e ".[dev]"
 - **Configuration Management**: UI and CLI configuration with validation and persistence
 - **Prerequisite Validation**: Pre-crawl checks for feature dependencies (PCAPdroid, MobSF server, video support)
 - **Graceful Degradation**: Crawl continues successfully even if optional features fail
+
+### ✅ Completed (Phase 4 - Enhanced Reporting)
+- **HTML/JSON Report Generator**: Transitioned from basic PDF to rich, printer-friendly HTML and structured JSON reports
+- **Context-Enriched Timeline**: Correlates network requests (HTTP/DNS) from PCAP files with specific crawl steps based on timestamps
+- **Integrated Analysis**: Aggregates MobSF security findings and network traffic summaries into a single unified report
+- **Modular Reporting Architecture**: Decoupled parsers (PCAP, MobSF) and generators (Jinja2) for extensibility
 
 ## Usage
 

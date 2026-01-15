@@ -1,1 +1,3 @@
 mailosaur
+jinja2
+dpkt

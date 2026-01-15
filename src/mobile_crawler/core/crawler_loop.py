@@ -682,7 +682,7 @@ class CrawlerLoop:
                     to_screen_id=current_screen_id,
                     action_type=ai_action.action,
                     action_description=ai_action.action_desc,
-                    target_bbox_json=str({
+                    target_bbox_json=json.dumps({
                         "top_left": list(ai_action.target_bounding_box.top_left) if ai_action.target_bounding_box else [bounds[0], bounds[1]],
                         "bottom_right": list(ai_action.target_bounding_box.bottom_right) if ai_action.target_bounding_box else [bounds[2], bounds[3]]
                     }) if ai_action.action in ["click", "input", "long_press"] else None,

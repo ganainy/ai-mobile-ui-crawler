@@ -312,7 +312,7 @@ class RunHistoryView(QWidget):
         reply = QMessageBox.question(
             self,
             "Generate Report",
-            f"Generate PDF report for run {run_id}?",
+            f"Generate enhanced report for run {run_id}?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.Yes
         )
