@@ -189,7 +189,9 @@ class MobSFManager:
         temp_client = ADBClient(adb_executable=adb_executable)
         return await temp_client.execute_async(command_list, suppress_stderr)
 
-    def extract_apk_from_device(self, package_name: str) -> Optional[str]:
+    def extract_apk_from_device(
+        self, package_name: str, output_dir: Optional[str] = None
+    ) -> Optional[str]:
         """Extract the APK file from a connected Android device using ADB.
 
         Args:
@@ -237,15 +239,16 @@ class MobSFManager:
                 logger.error("Could not find a valid APK path from 'pm path' output.")
                 return None
 
-            # Resolve output directory - use session directory if available
-            output_dir = os.path.join("output_data", "extracted_apk")
-            if self.session_folder_manager:
-                # Will be resolved when we have a run object
-                pass
-            os.makedirs(output_dir, exist_ok=True)
+            # Resolve output directory - use provided directory or session directory if available
+            if output_dir:
+                selected_output_dir = output_dir
+            else:
+                selected_output_dir = os.path.join("output_data", "apks")
+            
+            os.makedirs(selected_output_dir, exist_ok=True)
 
             # Generate the local APK filename
-            local_apk = os.path.join(output_dir, f"{package_name}.apk")
+            local_apk = os.path.join(selected_output_dir, f"{package_name}.apk")
 
             # Pull the APK from the device
             pull_cmd = ["pull", base_apk_path, local_apk]
@@ -453,26 +456,31 @@ class MobSFManager:
         # Resolve output directory
         if session_path:
             reports_dir = os.path.join(session_path, "reports")
+            apks_dir = os.path.join(session_path, "apks")
         elif self.session_folder_manager and run_id:
             from mobile_crawler.infrastructure.run_repository import RunRepository
             from mobile_crawler.infrastructure.database import DatabaseManager
 
             db_manager = DatabaseManager()
             run_repo = RunRepository(db_manager)
-            run = run_repo.get_run(run_id)
+            run = run_repo.get_run_by_id(run_id)
             if run and self.session_folder_manager:
                 reports_dir = self.session_folder_manager.get_subfolder(run, "reports")
+                apks_dir = self.session_folder_manager.get_subfolder(run, "apks")
             else:
                 reports_dir = os.path.join("output_data", "mobsf_reports")
+                apks_dir = os.path.join("output_data", "apks")
         else:
             reports_dir = os.path.join("output_data", "mobsf_reports")
+            apks_dir = os.path.join("output_data", "apks")
 
         os.makedirs(reports_dir, exist_ok=True)
+        os.makedirs(apks_dir, exist_ok=True)
 
         # Extract APK from device
         _log("Extracting APK from device...", "blue")
         logger.debug(f"Extracting APK for package: {package_name}")
-        apk_path = self.extract_apk_from_device(package_name)
+        apk_path = self.extract_apk_from_device(package_name, output_dir=apks_dir)
         if not apk_path:
             error_msg = "Failed to extract APK from device"
             logger.error(f"MobSF analysis failed: {error_msg}")

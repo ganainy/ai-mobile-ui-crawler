@@ -168,10 +168,12 @@ class MainWindow(QMainWindow):
         self._crawler_worker = None
         self._current_run_id = None
         self._crawler_loop = None
-        self._step_by_step_enabled = False  # Track UI checkbox state
+        
+        # Load step-by-step preference from config store
+        config_store = self._services['user_config_store']
+        self._step_by_step_enabled = config_store.get_setting('ui_step_by_step_enabled', False)
         
         self._setup_window()
-        self._setup_menu_bar()
         self._setup_central_widget()
         self._connect_statistics_signals()
 
@@ -242,22 +244,9 @@ class MainWindow(QMainWindow):
         self.resize(1280, 960)
         # Set window icon
         self.setWindowIcon(QIcon(":/resources/crawler_logo.ico"))
-    def _setup_menu_bar(self):
-        """Configure the menu bar."""
-        menubar = self.menuBar()
-
-        # File menu
-        file_menu = menubar.addMenu("&File")
         
-        exit_action = file_menu.addAction("E&xit")
-        exit_action.setShortcut("Ctrl+Q")
-        exit_action.triggered.connect(self.close)
-
-        # Help menu
-        help_menu = menubar.addMenu("&Help")
-        
-        about_action = help_menu.addAction("&About")
-        about_action.triggered.connect(self._show_about)
+        # Hide menu bar as requested (Streamlined UI)
+        self.menuBar().setVisible(False)
 
     def _setup_central_widget(self):
         """Configure the central widget."""
@@ -279,8 +268,8 @@ class MainWindow(QMainWindow):
         right_panel = self._create_right_panel()
         main_splitter.addWidget(right_panel)
         
-        # Set splitter proportions (left: 25%, center: 35%, right: 40%)
-        main_splitter.setSizes([250, 350, 400])
+        # Set splitter proportions (approx 20% left, 40% center, 40% right)
+        main_splitter.setSizes([280, 500, 500])
         
         main_layout.addWidget(main_splitter)
         
@@ -321,6 +310,9 @@ class MainWindow(QMainWindow):
         
         # Update start button state based on initial synced values
         self._update_start_button_state()
+        
+        # Apply initial step-by-step state to UI
+        self.control_panel.set_step_by_step(self._step_by_step_enabled)
 
     def _start_crawl(self) -> None:
         """Start a new crawl with current configuration."""
@@ -599,6 +591,10 @@ class MainWindow(QMainWindow):
         self._step_by_step_enabled = enabled
         if self._crawler_loop:
             self._crawler_loop.set_step_by_step_enabled(enabled)
+            
+        # Save preference
+        config_store = self._services['user_config_store']
+        config_store.set_setting('ui_step_by_step_enabled', enabled)
 
     def _on_next_step_requested(self) -> None:
         """Handle request to advance to next step."""
@@ -852,6 +848,8 @@ class MainWindow(QMainWindow):
         """Create the center panel with crawl controls and stats."""
         panel = QWidget()
         layout = QVBoxLayout(panel)
+        layout.setSpacing(2)  # Tight spacing between controls and statistics
+        layout.setContentsMargins(4, 4, 4, 4)  # Minimal margins
         
         # Instantiate widgets
         self.control_panel = CrawlControlPanel(self._services['crawl_controller'])
@@ -859,8 +857,8 @@ class MainWindow(QMainWindow):
         self.stats_dashboard = StatsDashboard()
         self.stats_dashboard.setObjectName("statsDashboard")
         
-        layout.addWidget(self.control_panel)
-        layout.addWidget(self.stats_dashboard)
+        layout.addWidget(self.control_panel, 0)
+        layout.addWidget(self.stats_dashboard, 1)
         
         return panel
 
@@ -900,6 +898,7 @@ class MainWindow(QMainWindow):
         """Create the bottom panel with run history."""
         panel = QWidget()
         layout = QVBoxLayout(panel)
+        layout.setContentsMargins(4, 0, 4, 4)
         
         # Instantiate widget
         self.run_history_view = RunHistoryView(
@@ -908,6 +907,7 @@ class MainWindow(QMainWindow):
             self._services['mobsf_manager']
         )
         self.run_history_view.setObjectName("runHistoryView")
+        self.run_history_view.setMinimumHeight(280)  # US4: Increase visibility
         
         layout.addWidget(self.run_history_view)
         
@@ -1064,19 +1064,6 @@ class MainWindow(QMainWindow):
         # Update the control panel
         if self.control_panel:
             self.control_panel.set_validation_passed(can_start)
-
-    def _show_about(self):
-        """Show the about dialog."""
-        from PySide6.QtWidgets import QMessageBox
-        
-        QMessageBox.about(
-            self,
-            "About Mobile Crawler",
-            "AI-Powered Android Exploration Tool\n\n"
-            "Version 0.1.0\n\n"
-            "An automated testing tool for Android applications\n"
-            "using AI vision models."
-        )
 
     def _connect_statistics_signals(self):
         """Connect crawler events to statistics handlers."""

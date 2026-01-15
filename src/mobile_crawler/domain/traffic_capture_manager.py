@@ -168,7 +168,7 @@ class TrafficCaptureManager:
 
             db_manager = DatabaseManager()
             run_repo = RunRepository(db_manager)
-            run = run_repo.get_run(run_id)
+            run = run_repo.get_run_by_id(run_id)
             if run and self.session_folder_manager:
                 traffic_capture_dir = self.session_folder_manager.get_subfolder(run, "pcap")
             else:

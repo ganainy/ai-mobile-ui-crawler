@@ -18,6 +18,7 @@ from mobile_crawler.infrastructure.device_detection import (
     AndroidDevice,
     DeviceDetectionError
 )
+from mobile_crawler.ui.async_utils import AsyncOperation
 
 if TYPE_CHECKING:
     from mobile_crawler.infrastructure.user_config_store import UserConfigStore
@@ -96,14 +97,32 @@ class DeviceSelector(QWidget):
         """Refresh the list of available devices."""
         self.status_label.setText("Refreshing devices...")
         self.status_label.setStyleSheet("color: orange; font-style: italic;")
+        self.refresh_button.setEnabled(False)
 
-        try:
-            devices = self.device_detection.get_available_devices()
-            self._update_device_list(devices)
-        except DeviceDetectionError as e:
-            self.status_label.setText(f"Error: {e}")
-            self.status_label.setStyleSheet("color: red; font-style: italic;")
-            QMessageBox.critical(self.parent(), "Device Detection Error", str(e))
+        # Create async operation
+        self._detect_thread = AsyncOperation(self.device_detection.get_available_devices)
+        self._detect_thread.result_ready.connect(self._on_detection_success)
+        self._detect_thread.error_occurred.connect(self._on_detection_error)
+        self._detect_thread.finished_signal.connect(lambda: self.refresh_button.setEnabled(True))
+        self._detect_thread.start()
+
+    def _on_detection_success(self, devices: list[AndroidDevice]):
+        """Handle successful device detection.
+
+        Args:
+            devices: List of detected AndroidDevice objects
+        """
+        self._update_device_list(devices)
+
+    def _on_detection_error(self, error: str):
+        """Handle device detection error.
+
+        Args:
+            error: Error message
+        """
+        self.status_label.setText(f"Error: {error}")
+        self.status_label.setStyleSheet("color: red; font-style: italic;")
+        QMessageBox.critical(self.parent(), "Device Detection Error", str(error))
 
     def _update_device_list(self, devices: list[AndroidDevice]):
         """Update the device dropdown with new list.

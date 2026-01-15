@@ -31,7 +31,7 @@ def delete(run_id: str, yes: bool):
         session_folder_manager = SessionFolderManager()
         
         # Get run details first
-        run = run_repository.get_run(run_id_int)
+        run = run_repository.get_run_by_id(run_id_int)
         if run is None:
             click.echo(f"Run not found: {run_id}", err=True)
             raise click.Abort()

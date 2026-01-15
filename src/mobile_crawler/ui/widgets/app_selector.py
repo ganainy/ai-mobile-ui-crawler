@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Signal, QObject
 
 from mobile_crawler.infrastructure.appium_driver import AppiumDriver
+from mobile_crawler.ui.async_utils import AsyncOperation
 
 if TYPE_CHECKING:
     from mobile_crawler.infrastructure.user_config_store import UserConfigStore
@@ -156,71 +157,96 @@ class AppSelector(QWidget):
         self.status_label.setText("Loading apps...")
         self.status_label.setStyleSheet("color: orange; font-style: italic;")
 
-        try:
-            if not self.appium_driver.is_connected():
-                # Show a more helpful message about needing a device connection
-                QMessageBox.warning(
-                    self,
-                    "No Device Session",
-                    "No active device session.\n\n"
-                    "Please select a device from the Device Selector first.\n"
-                    "The device must be connected and authorized."
-                )
-                self.status_label.setText("No device connected")
-                self.status_label.setStyleSheet("color: red; font-style: italic;")
-                return
-
-            # Get list of installed packages
-            packages = self.appium_driver.get_driver().execute_script(
-                "mobile: shell",
-                {"command": "pm", "args": ["list", "packages", "-3"]}
+        if not self.appium_driver.is_connected():
+            # Show a more helpful message about needing a device connection
+            QMessageBox.warning(
+                self,
+                "No Device Session",
+                "No active device session.\n\n"
+                "Please select a device from the Device Selector first.\n"
+                "The device must be connected and authorized."
             )
-
-            # Parse output
-            package_list = []
-            if packages:
-                for line in packages.split('\n'):
-                    line = line.strip()
-                    if line.startswith('package:'):
-                        package = line.replace('package:', '').strip()
-                        package_list.append(package)
-
-            if package_list:
-                # Sort packages
-                package_list.sort()
-
-                # Populate combo box
-                self.apps_combo.clear()
-                self.apps_combo.addItem("Select an app...", None)
-                for package in package_list:
-                    self.apps_combo.addItem(package, package)
-
-                # Show combo box
-                self.apps_combo.setVisible(True)
-
-                self.status_label.setText(f"Found {len(package_list)} apps")
-                self.status_label.setStyleSheet("color: green; font-style: italic;")
-            else:
-                self.status_label.setText("No apps found")
-                self.status_label.setStyleSheet("color: red; font-style: italic;")
-                self.apps_combo.setVisible(False)
-
-        except Exception as e:
-            error_msg = str(e).lower()
-            if "connection refused" in error_msg or "connection failed" in error_msg or "appium" in error_msg:
-                QMessageBox.critical(
-                    self.parent(), 
-                    "Appium Not Running", 
-                    "Cannot connect to Appium server. Please:\n\n"
-                    "1. Start Appium server: npx appium -p 4723\n"
-                    "2. Ensure Appium is running on port 4723\n"
-                    "3. Check that no firewall is blocking the connection\n\n"
-                    f"Error: {e}"
-                )
-            else:
-                QMessageBox.critical(self.parent(), "App List Error", str(e))
-            self.status_label.setText(f"Error: {e}")
+            self.status_label.setText("No device connected")
             self.status_label.setStyleSheet("color: red; font-style: italic;")
+            return
+
+        self.refresh_button.setEnabled(False)
+
+        # Create async operation
+        self._list_thread = AsyncOperation(self._fetch_packages)
+        self._list_thread.result_ready.connect(self._on_list_success)
+        self._list_thread.error_occurred.connect(self._on_list_error)
+        self._list_thread.finished_signal.connect(lambda: self.refresh_button.setEnabled(True))
+        self._list_thread.start()
+
+    def _fetch_packages(self) -> str:
+        """Fetch installed packages from device via Appium.
+        
+        Returns:
+            Output of 'pm list packages -3'
+        """
+        return self.appium_driver.get_driver().execute_script(
+            "mobile: shell",
+            {"command": "pm", "args": ["list", "packages", "-3"]}
+        )
+
+    def _on_list_success(self, packages: str):
+        """Handle successful package list retrieval.
+
+        Args:
+            packages: Raw string output from package manager
+        """
+        # Parse output
+        package_list = []
+        if packages:
+            for line in packages.split('\n'):
+                line = line.strip()
+                if line.startswith('package:'):
+                    package = line.replace('package:', '').strip()
+                    package_list.append(package)
+
+        if package_list:
+            # Sort packages
+            package_list.sort()
+
+            # Populate combo box
+            self.apps_combo.clear()
+            self.apps_combo.addItem("Select an app...", None)
+            for package in package_list:
+                self.apps_combo.addItem(package, package)
+
+            # Show combo box
+            self.apps_combo.setVisible(True)
+
+            self.status_label.setText(f"Found {len(package_list)} apps")
+            self.status_label.setStyleSheet("color: green; font-style: italic;")
+        else:
+            self.status_label.setText("No apps found")
+            self.status_label.setStyleSheet("color: red; font-style: italic;")
+            self.apps_combo.setVisible(False)
+
+    def _on_list_error(self, error: str):
+        """Handle package list retrieval error.
+
+        Args:
+            error: Error message
+        """
+        error_msg = str(error).lower()
+        if "connection refused" in error_msg or "connection failed" in error_msg or "appium" in error_msg:
+            QMessageBox.critical(
+                self.parent(), 
+                "Appium Not Running", 
+                "Cannot connect to Appium server. Please:\n\n"
+                "1. Start Appium server: npx appium -p 4723\n"
+                "2. Ensure Appium is running on port 4723\n"
+                "3. Check that no firewall is blocking the connection\n\n"
+                f"Error: {error}"
+            )
+        else:
+            QMessageBox.critical(self.parent(), "App List Error", str(error))
+        
+        self.status_label.setText(f"Error: {error}")
+        self.status_label.setStyleSheet("color: red; font-style: italic;")
 
     def current_package(self) -> str:
         """Get the currently selected package.

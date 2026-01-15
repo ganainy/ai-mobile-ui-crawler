@@ -47,7 +47,7 @@ class ReportGenerator:
             ValueError: If run not found or invalid
         """
         # Get run data
-        run = self.run_repository.get_run(run_id)
+        run = self.run_repository.get_run_by_id(run_id)
         if not run:
             raise ValueError(f"Run {run_id} not found")
 

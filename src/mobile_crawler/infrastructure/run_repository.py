@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
+from contextlib import closing
 
 from mobile_crawler.infrastructure.database import DatabaseManager
 
@@ -44,34 +45,34 @@ class RunRepository:
         Returns:
             The ID of the newly created run
         """
-        conn = self.db_manager.get_connection()
-        cursor = conn.cursor()
+        with closing(self.db_manager.get_connection()) as conn:
+            cursor = conn.cursor()
 
-        cursor.execute("""
-            INSERT INTO runs (
-                device_id, app_package, start_activity, start_time, end_time,
-                status, ai_provider, ai_model, total_steps, unique_screens,
-                session_path
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            run.device_id,
-            run.app_package,
-            run.start_activity,
-            run.start_time.isoformat(),
-            run.end_time.isoformat() if run.end_time else None,
-            run.status,
-            run.ai_provider,
-            run.ai_model,
-            run.total_steps,
-            run.unique_screens,
-            run.session_path
-        ))
+            cursor.execute("""
+                INSERT INTO runs (
+                    device_id, app_package, start_activity, start_time, end_time,
+                    status, ai_provider, ai_model, total_steps, unique_screens,
+                    session_path
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                run.device_id,
+                run.app_package,
+                run.start_activity,
+                run.start_time.isoformat(),
+                run.end_time.isoformat() if run.end_time else None,
+                run.status,
+                run.ai_provider,
+                run.ai_model,
+                run.total_steps,
+                run.unique_screens,
+                run.session_path
+            ))
 
-        run_id = cursor.lastrowid
-        conn.commit()
-        return run_id
+            run_id = cursor.lastrowid
+            conn.commit()
+            return run_id
 
-    def get_run(self, run_id: int) -> Optional[Run]:
+    def get_run_by_id(self, run_id: int) -> Optional[Run]:
         """Get a run by ID.
 
         Args:
@@ -80,30 +81,22 @@ class RunRepository:
         Returns:
             Run object if found, None otherwise
         """
-        conn = self.db_manager.get_connection()
-        cursor = conn.cursor()
-
-        cursor.execute("SELECT * FROM runs WHERE id = ?", (run_id,))
-        row = cursor.fetchone()
-
-        if row is None:
-            return None
-
-        return self._row_to_run(row)
+        runs = self.get_all_runs()
+        return next((run for run in runs if run.id == run_id), None)
 
     def get_all_runs(self) -> list[Run]:
-        """Get all runs ordered by start_time descending.
+        """Get all runs ordered by id descending.
 
         Returns:
             List of all runs
         """
-        conn = self.db_manager.get_connection()
-        cursor = conn.cursor()
+        with closing(self.db_manager.get_connection()) as conn:
+            cursor = conn.cursor()
 
-        cursor.execute("SELECT * FROM runs ORDER BY start_time DESC")
-        rows = cursor.fetchall()
+            cursor.execute("SELECT * FROM runs ORDER BY id DESC")
+            rows = cursor.fetchall()
 
-        return [self._row_to_run(row) for row in rows]
+            return [self._row_to_run(row) for row in rows]
 
     def get_runs_by_package(self, app_package: str) -> list[Run]:
         """Get all runs for a specific app package.
@@ -114,16 +107,16 @@ class RunRepository:
         Returns:
             List of runs for the package
         """
-        conn = self.db_manager.get_connection()
-        cursor = conn.cursor()
+        with closing(self.db_manager.get_connection()) as conn:
+            cursor = conn.cursor()
 
-        cursor.execute(
-            "SELECT * FROM runs WHERE app_package = ? ORDER BY start_time DESC",
-            (app_package,)
-        )
-        rows = cursor.fetchall()
+            cursor.execute(
+                "SELECT * FROM runs WHERE app_package = ? ORDER BY id DESC",
+                (app_package,)
+            )
+            rows = cursor.fetchall()
 
-        return [self._row_to_run(row) for row in rows]
+            return [self._row_to_run(row) for row in rows]
 
     def get_runs_by_status(self, status: str) -> list[Run]:
         """Get all runs with a specific status.
@@ -134,16 +127,16 @@ class RunRepository:
         Returns:
             List of runs with the specified status
         """
-        conn = self.db_manager.get_connection()
-        cursor = conn.cursor()
+        with closing(self.db_manager.get_connection()) as conn:
+            cursor = conn.cursor()
 
-        cursor.execute(
-            "SELECT * FROM runs WHERE status = ? ORDER BY start_time DESC",
-            (status,)
-        )
-        rows = cursor.fetchall()
+            cursor.execute(
+                "SELECT * FROM runs WHERE status = ? ORDER BY id DESC",
+                (status,)
+            )
+            rows = cursor.fetchall()
 
-        return [self._row_to_run(row) for row in rows]
+            return [self._row_to_run(row) for row in rows]
 
     def update_run(self, run: Run) -> bool:
         """Update an existing run.
@@ -157,33 +150,33 @@ class RunRepository:
         if run.id is None:
             return False
 
-        conn = self.db_manager.get_connection()
-        cursor = conn.cursor()
+        with closing(self.db_manager.get_connection()) as conn:
+            cursor = conn.cursor()
 
-        cursor.execute("""
-            UPDATE runs SET
-                device_id = ?, app_package = ?, start_activity = ?, start_time = ?,
-                end_time = ?, status = ?, ai_provider = ?, ai_model = ?,
-                total_steps = ?, unique_screens = ?, session_path = ?
-            WHERE id = ?
-        """, (
-            run.device_id,
-            run.app_package,
-            run.start_activity,
-            run.start_time.isoformat(),
-            run.end_time.isoformat() if run.end_time else None,
-            run.status,
-            run.ai_provider,
-            run.ai_model,
-            run.total_steps,
-            run.unique_screens,
-            run.session_path,
-            run.id
-        ))
+            cursor.execute("""
+                UPDATE runs SET
+                    device_id = ?, app_package = ?, start_activity = ?, start_time = ?,
+                    end_time = ?, status = ?, ai_provider = ?, ai_model = ?,
+                    total_steps = ?, unique_screens = ?, session_path = ?
+                WHERE id = ?
+            """, (
+                run.device_id,
+                run.app_package,
+                run.start_activity,
+                run.start_time.isoformat(),
+                run.end_time.isoformat() if run.end_time else None,
+                run.status,
+                run.ai_provider,
+                run.ai_model,
+                run.total_steps,
+                run.unique_screens,
+                run.session_path,
+                run.id
+            ))
 
-        updated = cursor.rowcount > 0
-        conn.commit()
-        return updated
+            updated = cursor.rowcount > 0
+            conn.commit()
+            return updated
 
     def update_run_stats(
         self,
@@ -205,33 +198,33 @@ class RunRepository:
         Returns:
             True if run was updated, False if not found
         """
-        conn = self.db_manager.get_connection()
-        cursor = conn.cursor()
+        with closing(self.db_manager.get_connection()) as conn:
+            cursor = conn.cursor()
 
-        if status is not None and end_time is not None:
-            cursor.execute("""
-                UPDATE runs SET total_steps = ?, unique_screens = ?, status = ?, end_time = ?
-                WHERE id = ?
-            """, (total_steps, unique_screens, status, end_time.isoformat() if end_time else None, run_id))
-        elif status is not None:
-            cursor.execute("""
-                UPDATE runs SET total_steps = ?, unique_screens = ?, status = ?
-                WHERE id = ?
-            """, (total_steps, unique_screens, status, run_id))
-        elif end_time is not None:
-            cursor.execute("""
-                UPDATE runs SET total_steps = ?, unique_screens = ?, end_time = ?
-                WHERE id = ?
-            """, (total_steps, unique_screens, end_time.isoformat() if end_time else None, run_id))
-        else:
-            cursor.execute("""
-                UPDATE runs SET total_steps = ?, unique_screens = ?
-                WHERE id = ?
-            """, (total_steps, unique_screens, run_id))
+            if status is not None and end_time is not None:
+                cursor.execute("""
+                    UPDATE runs SET total_steps = ?, unique_screens = ?, status = ?, end_time = ?
+                    WHERE id = ?
+                """, (total_steps, unique_screens, status, end_time.isoformat() if end_time else None, run_id))
+            elif status is not None:
+                cursor.execute("""
+                    UPDATE runs SET total_steps = ?, unique_screens = ?, status = ?
+                    WHERE id = ?
+                """, (total_steps, unique_screens, status, run_id))
+            elif end_time is not None:
+                cursor.execute("""
+                    UPDATE runs SET total_steps = ?, unique_screens = ?, end_time = ?
+                    WHERE id = ?
+                """, (total_steps, unique_screens, end_time.isoformat() if end_time else None, run_id))
+            else:
+                cursor.execute("""
+                    UPDATE runs SET total_steps = ?, unique_screens = ?
+                    WHERE id = ?
+                """, (total_steps, unique_screens, run_id))
 
-        updated = cursor.rowcount > 0
-        conn.commit()
-        return updated
+            updated = cursor.rowcount > 0
+            conn.commit()
+            return updated
 
     def update_session_path(self, run_id: int, session_path: str) -> bool:
         """Update the session folder path for a run.
@@ -243,27 +236,20 @@ class RunRepository:
         Returns:
             True if run was updated, False if not found
         """
-        conn = self.db_manager.get_connection()
-        cursor = conn.cursor()
+        with closing(self.db_manager.get_connection()) as conn:
+            cursor = conn.cursor()
 
-        cursor.execute(
-            "UPDATE runs SET session_path = ? WHERE id = ?",
-            (session_path, run_id)
-        )
+            cursor.execute(
+                "UPDATE runs SET session_path = ? WHERE id = ?",
+                (session_path, run_id)
+            )
 
-        updated = cursor.rowcount > 0
-        conn.commit()
-        return updated
+            updated = cursor.rowcount > 0
+            conn.commit()
+            return updated
 
     def delete_run(self, run_id: int) -> bool:
         """Delete a run and all related data (cascading delete).
-
-        This will delete:
-        - The run record
-        - All step_logs for this run
-        - All transitions for this run
-        - The run_stats record for this run
-        - All ai_interactions for this run
 
         Args:
             run_id: The run ID to delete
@@ -271,33 +257,33 @@ class RunRepository:
         Returns:
             True if run was deleted, False if not found
         """
-        conn = self.db_manager.get_connection()
-        cursor = conn.cursor()
+        with closing(self.db_manager.get_connection()) as conn:
+            cursor = conn.cursor()
 
-        # Check if run exists first
-        cursor.execute("SELECT id FROM runs WHERE id = ?", (run_id,))
-        if cursor.fetchone() is None:
-            return False
+            # Check if run exists first
+            cursor.execute("SELECT id FROM runs WHERE id = ?", (run_id,))
+            if cursor.fetchone() is None:
+                return False
 
-        # Delete in order to respect foreign key constraints
-        # ai_interactions first (no dependencies)
-        cursor.execute("DELETE FROM ai_interactions WHERE run_id = ?", (run_id,))
+            # Delete in order to respect foreign key constraints
+            # ai_interactions first (no dependencies)
+            cursor.execute("DELETE FROM ai_interactions WHERE run_id = ?", (run_id,))
 
-        # transitions next (depends on screens, but screens may be referenced by other runs)
-        cursor.execute("DELETE FROM transitions WHERE run_id = ?", (run_id,))
+            # transitions next
+            cursor.execute("DELETE FROM transitions WHERE run_id = ?", (run_id,))
 
-        # step_logs next (depends on screens)
-        cursor.execute("DELETE FROM step_logs WHERE run_id = ?", (run_id,))
+            # step_logs next
+            cursor.execute("DELETE FROM step_logs WHERE run_id = ?", (run_id,))
 
-        # run_stats (depends on screens for most_visited_screen_id)
-        cursor.execute("DELETE FROM run_stats WHERE run_id = ?", (run_id,))
+            # run_stats
+            cursor.execute("DELETE FROM run_stats WHERE run_id = ?", (run_id,))
 
-        # Finally delete the run itself
-        cursor.execute("DELETE FROM runs WHERE id = ?", (run_id,))
+            # Finally delete the run itself
+            cursor.execute("DELETE FROM runs WHERE id = ?", (run_id,))
 
-        deleted = cursor.rowcount > 0
-        conn.commit()
-        return deleted
+            deleted = cursor.rowcount > 0
+            conn.commit()
+            return deleted
 
     def get_run_count(self) -> int:
         """Get total number of runs in the database.
@@ -305,11 +291,11 @@ class RunRepository:
         Returns:
             Total count of runs
         """
-        conn = self.db_manager.get_connection()
-        cursor = conn.cursor()
+        with closing(self.db_manager.get_connection()) as conn:
+            cursor = conn.cursor()
 
-        cursor.execute("SELECT COUNT(*) FROM runs")
-        return cursor.fetchone()[0]
+            cursor.execute("SELECT COUNT(*) FROM runs")
+            return cursor.fetchone()[0]
 
     def get_recent_runs(self, limit: int = 10) -> list[Run]:
         """Get the most recent runs.
@@ -320,16 +306,16 @@ class RunRepository:
         Returns:
             List of most recent runs
         """
-        conn = self.db_manager.get_connection()
-        cursor = conn.cursor()
+        with closing(self.db_manager.get_connection()) as conn:
+            cursor = conn.cursor()
 
-        cursor.execute(
-            "SELECT * FROM runs ORDER BY start_time DESC LIMIT ?",
-            (limit,)
-        )
-        rows = cursor.fetchall()
+            cursor.execute(
+                "SELECT * FROM runs ORDER BY id DESC LIMIT ?",
+                (limit,)
+            )
+            rows = cursor.fetchall()
 
-        return [self._row_to_run(row) for row in rows]
+            return [self._row_to_run(row) for row in rows]
 
     def _row_to_run(self, row) -> Run:
         """Convert a database row to a Run object.

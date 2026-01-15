@@ -16,6 +16,8 @@ from PySide6.QtWidgets import (
     QRadioButton,
     QButtonGroup,
     QCheckBox,
+    QTabWidget,
+    QScrollArea,
 )
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
@@ -48,8 +50,109 @@ class SettingsPanel(QWidget):
 
     def _setup_ui(self):
         """Set up user interface."""
-        layout = QVBoxLayout()
+        main_layout = QVBoxLayout(self)
+        
+        # Main Tab Widget
+        self.tab_widget = QTabWidget()
+        
+        # 1. General Tab (Limits, Screen Config)
+        self.tab_widget.addTab(self._setup_general_tab(), "General")
+        
+        # 2. AI Settings Tab (API Keys, System Prompt)
+        self.tab_widget.addTab(self._setup_ai_tab(), "AI Settings")
+        
+        # 3. Integrations Tab (Traffic, Video, MobSF)
+        self.tab_widget.addTab(self._setup_integrations_tab(), "Integrations")
+        
+        # 4. Credentials Tab (Test Credentials)
+        self.tab_widget.addTab(self._setup_credentials_tab(), "Credentials")
+        
+        main_layout.addWidget(self.tab_widget)
 
+        # Save button in bottom area (stays visible regardless of tab)
+        save_layout = QHBoxLayout()
+        save_layout.addStretch()
+        self.save_button = QPushButton("Save Settings")
+        self.save_button.setMinimumHeight(40)
+        self.save_button.setStyleSheet("font-weight: bold;")
+        self.save_button.clicked.connect(self._on_save_clicked)
+        save_layout.addWidget(self.save_button)
+        main_layout.addLayout(save_layout)
+
+    def _setup_general_tab(self) -> QWidget:
+        """Create the General settings tab."""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        
+        # Group box for Crawl Limits
+        limits_group = QGroupBox("Crawl Limits")
+        limits_layout = QVBoxLayout()
+
+        # Radio buttons for limit type selection
+        self.limit_button_group = QButtonGroup(self)
+        
+        # Max Steps option
+        max_steps_layout = QHBoxLayout()
+        self.steps_radio = QRadioButton()
+        self.steps_radio.setChecked(True)
+        self.limit_button_group.addButton(self.steps_radio, 0)
+        max_steps_layout.addWidget(self.steps_radio)
+        max_steps_label = QLabel("Max Steps:")
+        max_steps_layout.addWidget(max_steps_label)
+        self.max_steps_input = QSpinBox()
+        self.max_steps_input.setRange(1, 10000)
+        self.max_steps_input.setValue(100)
+        self.max_steps_input.setSingleStep(10)
+        max_steps_layout.addWidget(self.max_steps_input)
+        max_steps_layout.addStretch()
+        limits_layout.addLayout(max_steps_layout)
+
+        # Max Duration option
+        max_duration_layout = QHBoxLayout()
+        self.duration_radio = QRadioButton()
+        self.limit_button_group.addButton(self.duration_radio, 1)
+        max_duration_layout.addWidget(self.duration_radio)
+        max_duration_label = QLabel("Max Duration (seconds):")
+        max_duration_layout.addWidget(max_duration_label)
+        self.max_duration_input = QSpinBox()
+        self.max_duration_input.setRange(10, 3600)
+        self.max_duration_input.setValue(300)
+        self.max_duration_input.setSingleStep(30)
+        self.max_duration_input.setEnabled(False)
+        max_duration_layout.addWidget(self.max_duration_input)
+        max_duration_layout.addStretch()
+        limits_layout.addLayout(max_duration_layout)
+
+        self.steps_radio.toggled.connect(self._on_limit_type_changed)
+        limits_group.setLayout(limits_layout)
+        layout.addWidget(limits_group)
+
+        # Group box for Screen Configuration
+        screen_group = QGroupBox("Screen Configuration")
+        screen_layout = QVBoxLayout()
+
+        top_bar_layout = QHBoxLayout()
+        top_bar_label = QLabel("Exclude Top Bar (pixels):")
+        top_bar_layout.addWidget(top_bar_label)
+        self.top_bar_height_input = QSpinBox()
+        self.top_bar_height_input.setRange(0, 500)
+        self.top_bar_height_input.setValue(0)
+        self.top_bar_height_input.setToolTip("Exclude the Android status bar from OCR and AI analysis. Typically 80-120px.")
+        top_bar_layout.addWidget(self.top_bar_height_input)
+        top_bar_layout.addStretch()
+        screen_layout.addLayout(top_bar_layout)
+
+        screen_group.setLayout(screen_layout)
+        layout.addWidget(screen_group)
+        
+        layout.addStretch()
+        return self._wrap_in_scroll_area(tab)
+
+    def _setup_ai_tab(self) -> QWidget:
+        """Create the AI Settings tab."""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        
         # Group box for API Keys
         api_keys_group = QGroupBox("API Keys")
         api_keys_layout = QVBoxLayout()
@@ -80,230 +183,143 @@ class SettingsPanel(QWidget):
         # Group box for System Prompt
         prompt_group = QGroupBox("System Prompt")
         prompt_layout = QVBoxLayout()
-
         prompt_label = QLabel("Custom System Prompt:")
         prompt_layout.addWidget(prompt_label)
-
         self.system_prompt_input = QTextEdit()
-        self.system_prompt_input.setPlaceholderText(
-            "Enter custom system prompt (leave empty to use default)"
-        )
-        self.system_prompt_input.setMaximumHeight(150)
+        self.system_prompt_input.setPlaceholderText("Enter custom system prompt (leave empty to use default)")
         prompt_layout.addWidget(self.system_prompt_input)
-
         prompt_group.setLayout(prompt_layout)
         layout.addWidget(prompt_group)
-
-        # Group box for Crawl Limits
-        limits_group = QGroupBox("Crawl Limits")
-        limits_layout = QVBoxLayout()
-
-        # Radio buttons for limit type selection
-        self.limit_button_group = QButtonGroup()
         
-        # Max Steps option
-        max_steps_layout = QHBoxLayout()
-        self.steps_radio = QRadioButton()
-        self.steps_radio.setChecked(True)
-        self.limit_button_group.addButton(self.steps_radio, 0)
-        max_steps_layout.addWidget(self.steps_radio)
-        max_steps_label = QLabel("Max Steps:")
-        max_steps_layout.addWidget(max_steps_label)
-        self.max_steps_input = QSpinBox()
-        self.max_steps_input.setRange(1, 10000)
-        self.max_steps_input.setValue(100)
-        self.max_steps_input.setSingleStep(10)
-        max_steps_layout.addWidget(self.max_steps_input)
-        max_steps_layout.addStretch()
-        limits_layout.addLayout(max_steps_layout)
+        layout.addStretch()
+        return self._wrap_in_scroll_area(tab)
 
-        # Max Duration option
-        max_duration_layout = QHBoxLayout()
-        self.duration_radio = QRadioButton()
-        self.limit_button_group.addButton(self.duration_radio, 1)
-        max_duration_layout.addWidget(self.duration_radio)
-        max_duration_label = QLabel("Max Duration (seconds):")
-        max_duration_layout.addWidget(max_duration_label)
-        self.max_duration_input = QSpinBox()
-        self.max_duration_input.setRange(10, 3600)
-        self.max_duration_input.setValue(300)
-        self.max_duration_input.setSingleStep(30)
-        self.max_duration_input.setEnabled(False)  # Initially disabled
-        max_duration_layout.addWidget(self.max_duration_input)
-        max_duration_layout.addStretch()
-        limits_layout.addLayout(max_duration_layout)
-
-        # Connect radio button signals
-        self.steps_radio.toggled.connect(self._on_limit_type_changed)
-
-        limits_group.setLayout(limits_layout)
-        layout.addWidget(limits_group)
-
-        # Group box for Screen Configuration
-        screen_group = QGroupBox("Screen Configuration")
-        screen_layout = QVBoxLayout()
-
-        top_bar_layout = QHBoxLayout()
-        top_bar_label = QLabel("Exclude Top Bar (pixels):")
-        top_bar_layout.addWidget(top_bar_label)
-        self.top_bar_height_input = QSpinBox()
-        self.top_bar_height_input.setRange(0, 500)
-        self.top_bar_height_input.setValue(0)
-        self.top_bar_height_input.setToolTip("Exclude the Android status bar from OCR and AI analysis. Typically 80-120px.")
-        top_bar_layout.addWidget(self.top_bar_height_input)
-        top_bar_layout.addStretch()
-        screen_layout.addLayout(top_bar_layout)
-
-        screen_group.setLayout(screen_layout)
-        layout.addWidget(screen_group)
-
-        # Group box for Traffic Capture
+    def _setup_integrations_tab(self) -> QWidget:
+        """Create the Integrations tab."""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        
+        # Traffic Capture
         traffic_capture_group = QGroupBox("Traffic Capture (PCAPdroid)")
         traffic_capture_layout = QVBoxLayout()
-
-        # Enable traffic capture checkbox
-        enable_layout = QHBoxLayout()
         self.enable_traffic_capture_checkbox = QCheckBox("Enable Traffic Capture")
-        enable_layout.addWidget(self.enable_traffic_capture_checkbox)
-        enable_layout.addStretch()
-        traffic_capture_layout.addLayout(enable_layout)
-
-        # PCAPdroid API Key
-        pcapdroid_api_key_layout = QHBoxLayout()
-        pcapdroid_api_key_label = QLabel("PCAPdroid API Key:")
-        pcapdroid_api_key_layout.addWidget(pcapdroid_api_key_label)
+        traffic_capture_layout.addWidget(self.enable_traffic_capture_checkbox)
+        
+        pcap_key_layout = QHBoxLayout()
+        pcap_key_label = QLabel("API Key:")
+        pcap_key_layout.addWidget(pcap_key_label)
         self.pcapdroid_api_key_input = QLineEdit()
         self.pcapdroid_api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
-        self.pcapdroid_api_key_input.setPlaceholderText("Enter PCAPdroid API key")
         self.pcapdroid_api_key_input.setEnabled(False)
-        pcapdroid_api_key_layout.addWidget(self.pcapdroid_api_key_input)
-        traffic_capture_layout.addLayout(pcapdroid_api_key_layout)
-
-        # Connect checkbox to enable/disable fields
+        pcap_key_layout.addWidget(self.pcapdroid_api_key_input)
+        traffic_capture_layout.addLayout(pcap_key_layout)
+        
         self.enable_traffic_capture_checkbox.toggled.connect(self._on_traffic_capture_toggled)
-
         traffic_capture_group.setLayout(traffic_capture_layout)
         layout.addWidget(traffic_capture_group)
 
-        # Group box for Video Recording
-        video_recording_group = QGroupBox("Video Recording")
-        video_recording_layout = QVBoxLayout()
-
-        # Enable video recording checkbox
-        enable_video_layout = QHBoxLayout()
+        # Video Recording
+        video_group = QGroupBox("Video Recording")
+        video_layout = QVBoxLayout()
         self.enable_video_recording_checkbox = QCheckBox("Enable Video Recording")
-        enable_video_layout.addWidget(self.enable_video_recording_checkbox)
-        enable_video_layout.addStretch()
-        video_recording_layout.addLayout(enable_video_layout)
+        video_layout.addWidget(self.enable_video_recording_checkbox)
+        video_group.setLayout(video_layout)
+        layout.addWidget(video_group)
 
-        video_recording_group.setLayout(video_recording_layout)
-        layout.addWidget(video_recording_group)
-
-        # Group box for MobSF Analysis
+        # MobSF Analysis
         mobsf_group = QGroupBox("MobSF Static Analysis")
         mobsf_layout = QVBoxLayout()
-
-        # Enable MobSF analysis checkbox
-        enable_mobsf_layout = QHBoxLayout()
         self.enable_mobsf_analysis_checkbox = QCheckBox("Enable MobSF Analysis")
-        enable_mobsf_layout.addWidget(self.enable_mobsf_analysis_checkbox)
-        enable_mobsf_layout.addStretch()
-        mobsf_layout.addLayout(enable_mobsf_layout)
-
-        # MobSF API URL
+        mobsf_layout.addWidget(self.enable_mobsf_analysis_checkbox)
+        
         mobsf_url_layout = QHBoxLayout()
-        mobsf_url_label = QLabel("MobSF API URL:")
-        mobsf_url_layout.addWidget(mobsf_url_label)
+        mobsf_url_layout.addWidget(QLabel("API URL:"))
         self.mobsf_api_url_input = QLineEdit()
         self.mobsf_api_url_input.setPlaceholderText("http://localhost:8000")
-        self.mobsf_api_url_input.setEnabled(False)  # Enabled when checkbox is checked
+        self.mobsf_api_url_input.setEnabled(False)
         mobsf_url_layout.addWidget(self.mobsf_api_url_input)
         mobsf_layout.addLayout(mobsf_url_layout)
-
-        # MobSF API Key
-        mobsf_api_key_layout = QHBoxLayout()
-        mobsf_api_key_label = QLabel("MobSF API Key:")
-        mobsf_api_key_layout.addWidget(mobsf_api_key_label)
+        
+        mobsf_key_layout = QHBoxLayout()
+        mobsf_key_layout.addWidget(QLabel("API Key:"))
         self.mobsf_api_key_input = QLineEdit()
         self.mobsf_api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
-        self.mobsf_api_key_input.setPlaceholderText("Enter MobSF API key")
         self.mobsf_api_key_input.setEnabled(False)
-        mobsf_api_key_layout.addWidget(self.mobsf_api_key_input)
-        mobsf_layout.addLayout(mobsf_api_key_layout)
-
-        # Connect checkbox to enable/disable fields
+        mobsf_key_layout.addWidget(self.mobsf_api_key_input)
+        mobsf_layout.addLayout(mobsf_key_layout)
+        
         self.enable_mobsf_analysis_checkbox.toggled.connect(self._on_mobsf_toggled)
-
         mobsf_group.setLayout(mobsf_layout)
         layout.addWidget(mobsf_group)
-
-        # Group box for Test Credentials
-        credentials_group = QGroupBox("Test Credentials")
-        credentials_layout = QVBoxLayout()
-
-        # Test Username
-        username_layout = QHBoxLayout()
-        username_label = QLabel("Test Username:")
-        username_layout.addWidget(username_label)
-        self.test_username_input = QLineEdit()
-        self.test_username_input.setPlaceholderText("Enter test username")
-        username_layout.addWidget(self.test_username_input)
-        credentials_layout.addLayout(username_layout)
-
-        # Test Password
-        password_layout = QHBoxLayout()
-        password_label = QLabel("Test Password:")
-        password_layout.addWidget(password_label)
-        self.test_password_input = QLineEdit()
-        self.test_password_input.setEchoMode(QLineEdit.EchoMode.Password)
-        self.test_password_input.setPlaceholderText("Enter test password")
-        password_layout.addWidget(self.test_password_input)
-        credentials_layout.addLayout(password_layout)
         
-        # Mailosaur API Key
-        mailosaur_api_layout = QHBoxLayout()
-        mailosaur_api_label = QLabel("Mailosaur API Key:")
-        mailosaur_api_layout.addWidget(mailosaur_api_label)
-        self.mailosaur_api_key_input = QLineEdit()
-        self.mailosaur_api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
-        self.mailosaur_api_key_input.setPlaceholderText("Enter Mailosaur API key")
-        mailosaur_api_layout.addWidget(self.mailosaur_api_key_input)
-        credentials_layout.addLayout(mailosaur_api_layout)
+        layout.addStretch()
+        return self._wrap_in_scroll_area(tab)
 
-        # Mailosaur Server ID
-        mailosaur_server_layout = QHBoxLayout()
-        mailosaur_server_label = QLabel("Mailosaur Server ID:")
-        mailosaur_server_layout.addWidget(mailosaur_server_label)
-        self.mailosaur_server_id_input = QLineEdit()
-        self.mailosaur_server_id_input.setPlaceholderText("Enter Mailosaur Server ID")
-        mailosaur_server_layout.addWidget(self.mailosaur_server_id_input)
-        credentials_layout.addLayout(mailosaur_server_layout)
+    def _setup_credentials_tab(self) -> QWidget:
+        """Create the Credentials tab. Implements US5 (proper spacing)."""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setSpacing(15)  # Increased vertical spacing between group boxes
+        
+        # Test Credentials group
+        credentials_group = QGroupBox("App & Service Credentials")
+        # Use form-like layout with more spacing
+        credentials_layout = QVBoxLayout()
+        credentials_layout.setSpacing(12)  # Vertical spacing between items
+        credentials_layout.setContentsMargins(15, 20, 15, 20)
 
-        # Test Email (Recipient for verification)
-        test_email_layout = QHBoxLayout()
-        test_email_label = QLabel("Test Email:")
-        test_email_layout.addWidget(test_email_label)
-        self.test_email_input = QLineEdit()
-        self.test_email_input.setPlaceholderText("e.g. user@abc12345.mailosaur.net")
-        test_email_layout.addWidget(self.test_email_input)
-        credentials_layout.addLayout(test_email_layout)
+        # Helper to create spaced field
+        def create_field(label_text, placeholder, is_password=False):
+            field_layout = QVBoxLayout()
+            field_layout.setSpacing(4)
+            label = QLabel(label_text)
+            label.setStyleSheet("font-weight: bold;")
+            field_layout.addWidget(label)
+            edit = QLineEdit()
+            edit.setPlaceholderText(placeholder)
+            edit.setMinimumHeight(30)
+            if is_password:
+                edit.setEchoMode(QLineEdit.EchoMode.Password)
+            field_layout.addWidget(edit)
+            return field_layout, edit
+
+        # Username
+        l, self.test_username_input = create_field("Test Username:", "Enter test username")
+        credentials_layout.addLayout(l)
+        
+        # Password
+        l, self.test_password_input = create_field("Test Password:", "Enter test password", True)
+        credentials_layout.addLayout(l)
+        
+        # Email
+        l, self.test_email_input = create_field("Test Email:", "e.g. user@abc12345.mailosaur.net")
+        credentials_layout.addLayout(l)
+        
+        # Mailosaur section
+        mailosaur_label = QLabel("Mailosaur Integration:")
+        mailosaur_label.setStyleSheet("font-weight: bold; margin-top: 10px; color: #555;")
+        credentials_layout.addWidget(mailosaur_label)
+        
+        l, self.mailosaur_api_key_input = create_field("API Key:", "Enter Mailosaur API key", True)
+        credentials_layout.addLayout(l)
+        
+        l, self.mailosaur_server_id_input = create_field("Server ID:", "Enter Mailosaur Server ID")
+        credentials_layout.addLayout(l)
 
         credentials_group.setLayout(credentials_layout)
         layout.addWidget(credentials_group)
-
-        # Save button
-        save_layout = QHBoxLayout()
-        save_layout.addStretch()
-        self.save_button = QPushButton("Save Settings")
-        self.save_button.clicked.connect(self._on_save_clicked)
-        save_layout.addWidget(self.save_button)
-        layout.addLayout(save_layout)
-
-        # Add stretch at bottom
+        
         layout.addStretch()
+        return self._wrap_in_scroll_area(tab)
 
-        # Set the layout for this widget
-        self.setLayout(layout)
+    def _wrap_in_scroll_area(self, widget: QWidget) -> QWidget:
+        """Wrap a widget in a QScrollArea for handling small screens."""
+        from PySide6.QtWidgets import QScrollArea
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(widget)
+        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        return scroll
 
     def _on_limit_type_changed(self, checked: bool):
         """Handle limit type radio button toggle.

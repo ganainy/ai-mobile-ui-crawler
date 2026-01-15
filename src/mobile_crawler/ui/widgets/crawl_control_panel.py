@@ -106,8 +106,6 @@ class CrawlControlPanel(QWidget):
         self.status_label.setStyleSheet("color: gray; font-weight: bold;")
         layout.addWidget(self.status_label)
 
-        layout.addStretch()
-        
         # Set the layout for this widget
         self.setLayout(layout)
 
@@ -186,6 +184,14 @@ class CrawlControlPanel(QWidget):
             self.pause_button.setVisible(True)
             self.resume_button.setVisible(False)
             self.next_step_button.setVisible(False)
+
+    def set_step_by_step(self, enabled: bool):
+        """Set the step-by-step checkbox state.
+
+        Args:
+            enabled: True if step-by-step mode should be enabled
+        """
+        self.step_by_step_checkbox.setChecked(enabled)
 
     def set_validation_passed(self, passed: bool):
         """Set whether pre-crawl validation has passed.

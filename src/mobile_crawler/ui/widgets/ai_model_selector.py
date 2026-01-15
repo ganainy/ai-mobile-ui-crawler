@@ -16,6 +16,7 @@ from PySide6.QtCore import Signal, QObject, QTimer
 from mobile_crawler.domain.providers.registry import ProviderRegistry
 from mobile_crawler.domain.providers.vision_detector import VisionDetector
 from mobile_crawler.domain.model_adapters import ModelAdapter
+from mobile_crawler.ui.async_utils import AsyncOperation
 
 if TYPE_CHECKING:
     from mobile_crawler.infrastructure.user_config_store import UserConfigStore
@@ -201,67 +202,82 @@ class AIModelSelector(QWidget):
         self.status_label.setText("Loading models...")
         self.status_label.setStyleSheet("color: orange; font-style: italic;")
 
-        try:
-            # Get API key for providers that require it
-            api_key = None
-            if provider in ['gemini', 'openrouter']:
-                if self._api_key_callback:
-                    api_key = self._api_key_callback(provider)
-                
-                if not api_key:
-                    # Only show error dialog if not restoring saved selection
-                    if not getattr(self, '_restoring_selection', False):
-                        QMessageBox.warning(
-                            self,
-                            "API Key Required",
-                            f"Please enter your {provider.title()} API key in the Settings panel below,\n"
-                            f"then click 'Save Settings' before selecting this provider."
-                        )
-                    self.model_combo.clear()
-                    self.model_combo.addItem("API key required", None)
-                    self.status_label.setText("API key required")
-                    self.status_label.setStyleSheet("color: red; font-style: italic;")
-                    return
-
-            # Get vision-capable models for provider
-            vision_models = self.vision_detector.get_vision_models(provider, api_key=api_key)
-
-            if vision_models:
-                # Extract model IDs/names for display
-                model_names = [m.get('id', m.get('name', str(m))) for m in vision_models]
-                # Sort models alphabetically
-                model_names.sort()
-
-                # Populate model combo box
+        # Get API key for providers that require it
+        api_key = None
+        if provider in ['gemini', 'openrouter']:
+            if self._api_key_callback:
+                api_key = self._api_key_callback(provider)
+            
+            if not api_key:
+                # Only show error dialog if not restoring saved selection
+                if not getattr(self, '_restoring_selection', False):
+                    QMessageBox.warning(
+                        self,
+                        "API Key Required",
+                        f"Please enter your {provider.title()} API key in the Settings panel below,\n"
+                        f"then click 'Save Settings' before selecting this provider."
+                    )
                 self.model_combo.clear()
-                self.model_combo.addItem("Select a model...", None)
-                for model in model_names:
-                    self.model_combo.addItem(model, model)
-
-                # Store models for this provider
-                self._provider_models[provider] = model_names
-
-                self.status_label.setText(f"Found {len(model_names)} vision models")
-                self.status_label.setStyleSheet("color: green; font-style: italic;")
-                
-                # Restore saved model selection if it matches this provider
-                if hasattr(self, '_saved_model') and self._saved_model and self._saved_model in model_names:
-                    for i in range(self.model_combo.count()):
-                        if self.model_combo.itemText(i) == self._saved_model:
-                            self.model_combo.setCurrentIndex(i)
-                            break
-                    self._saved_model = None  # Clear after use
-            else:
-                self.model_combo.clear()
-                self.model_combo.addItem("No vision models available", None)
-                self.status_label.setText("No vision models available")
+                self.model_combo.addItem("API key required", None)
+                self.status_label.setText("API key required")
                 self.status_label.setStyleSheet("color: red; font-style: italic;")
+                return
 
-        except Exception as e:
+        self.refresh_button.setEnabled(False)
+        self.provider_combo.setEnabled(False)
+
+        # Create async operation
+        # Note: we pass provider and api_key as args/kwargs to the worker
+        self._model_thread = AsyncOperation(self.vision_detector.get_vision_models, args=(provider,), kwargs={'api_key': api_key})
+        self._model_thread.result_ready.connect(lambda models: self._on_models_success(provider, models))
+        self._model_thread.error_occurred.connect(self._on_models_error)
+        self._model_thread.finished_signal.connect(self._on_models_finished)
+        self._model_thread.start()
+
+    def _on_models_success(self, provider: str, vision_models: list):
+        """Handle successful model list retrieval."""
+        if vision_models:
+            # Extract model IDs/names for display
+            model_names = [m.get('id', m.get('name', str(m))) for m in vision_models]
+            # Sort models alphabetically
+            model_names.sort()
+
+            # Populate model combo box
             self.model_combo.clear()
-            self.model_combo.addItem("Error loading models", None)
-            self.status_label.setText(f"Error: {e}")
+            self.model_combo.addItem("Select a model...", None)
+            for model in model_names:
+                self.model_combo.addItem(model, model)
+
+            # Store models for this provider
+            self._provider_models[provider] = model_names
+
+            self.status_label.setText(f"Found {len(model_names)} vision models")
+            self.status_label.setStyleSheet("color: green; font-style: italic;")
+            
+            # Restore saved model selection if it matches this provider
+            if hasattr(self, '_saved_model') and self._saved_model and self._saved_model in model_names:
+                for i in range(self.model_combo.count()):
+                    if self.model_combo.itemText(i) == self._saved_model:
+                        self.model_combo.setCurrentIndex(i)
+                        break
+                self._saved_model = None  # Clear after use
+        else:
+            self.model_combo.clear()
+            self.model_combo.addItem("No vision models available", None)
+            self.status_label.setText("No vision models available")
             self.status_label.setStyleSheet("color: red; font-style: italic;")
+
+    def _on_models_error(self, error: str):
+        """Handle model list retrieval error."""
+        self.model_combo.clear()
+        self.model_combo.addItem("Error loading models", None)
+        self.status_label.setText(f"Error: {error}")
+        self.status_label.setStyleSheet("color: red; font-style: italic;")
+
+    def _on_models_finished(self):
+        """Re-enable controls after fetch."""
+        self.refresh_button.setEnabled(True)
+        self.provider_combo.setEnabled(True)
 
     def _refresh_models(self):
         """Refresh model list for current provider."""

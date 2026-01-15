@@ -56,6 +56,10 @@ class RunHistoryView(QWidget):
         self._run_repository = run_repository
         self._report_generator = report_generator
         self._mobsf_manager = mobsf_manager
+        
+        # US6: Ensure the run history table has enough vertical space by default
+        self.setMinimumHeight(280)
+        
         self._setup_ui()
         self._load_runs()
 
@@ -358,7 +362,7 @@ class RunHistoryView(QWidget):
         
         if reply == QMessageBox.StandardButton.Yes:
             try:
-                run = self._run_repository.get_run(run_id)
+                run = self._run_repository.get_run_by_id(run_id)
                 if not run:
                     raise ValueError(f"Run {run_id} not found")
                 

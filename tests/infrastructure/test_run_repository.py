@@ -89,7 +89,7 @@ class TestRunRepository:
         assert isinstance(run_id, int)
 
         # Verify the run was created
-        created_run = run_repository.get_run(run_id)
+        created_run = run_repository.get_run_by_id(run_id)
         assert created_run is not None
         assert created_run.id == run_id
         assert created_run.device_id == sample_run.device_id
@@ -98,7 +98,7 @@ class TestRunRepository:
 
     def test_get_run_not_found(self, run_repository):
         """Test getting a non-existent run returns None."""
-        assert run_repository.get_run(999) is None
+        assert run_repository.get_run_by_id(999) is None
 
     def test_get_all_runs_empty(self, run_repository):
         """Test getting all runs when database is empty."""
@@ -180,7 +180,7 @@ class TestRunRepository:
         run_id = run_repository.create_run(sample_run)
 
         # Get the run and modify it
-        run = run_repository.get_run(run_id)
+        run = run_repository.get_run_by_id(run_id)
         assert run is not None
 
         run.status = "STOPPED"
@@ -193,7 +193,7 @@ class TestRunRepository:
         assert success is True
 
         # Verify the update
-        updated_run = run_repository.get_run(run_id)
+        updated_run = run_repository.get_run_by_id(run_id)
         assert updated_run is not None
         assert updated_run.status == "STOPPED"
         assert updated_run.end_time == run.end_time
@@ -216,7 +216,7 @@ class TestRunRepository:
         assert success is True
 
         # Verify the update
-        run = run_repository.get_run(run_id)
+        run = run_repository.get_run_by_id(run_id)
         assert run is not None
         assert run.total_steps == 200
         assert run.unique_screens == 30
@@ -232,14 +232,14 @@ class TestRunRepository:
         run_id = run_repository.create_run(sample_run)
 
         # Verify it exists
-        assert run_repository.get_run(run_id) is not None
+        assert run_repository.get_run_by_id(run_id) is not None
 
         # Delete it
         success = run_repository.delete_run(run_id)
         assert success is True
 
         # Verify it's gone
-        assert run_repository.get_run(run_id) is None
+        assert run_repository.get_run_by_id(run_id) is None
 
     def test_delete_run_not_found(self, run_repository):
         """Test deleting a non-existent run."""
@@ -309,7 +309,7 @@ class TestRunRepository:
 
         # Create and retrieve
         run_id = run_repository.create_run(run)
-        retrieved_run = run_repository.get_run(run_id)
+        retrieved_run = run_repository.get_run_by_id(run_id)
 
         assert retrieved_run is not None
         assert retrieved_run.start_time == start_time
@@ -332,7 +332,7 @@ class TestRunRepository:
         )
 
         run_id = run_repository.create_run(run)
-        retrieved_run = run_repository.get_run(run_id)
+        retrieved_run = run_repository.get_run_by_id(run_id)
 
         assert retrieved_run is not None
         assert retrieved_run.start_activity is None

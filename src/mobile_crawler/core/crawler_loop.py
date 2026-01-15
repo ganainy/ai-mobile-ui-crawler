@@ -176,7 +176,7 @@ class CrawlerLoop:
         """
         try:
             # Get run details
-            run = self.run_repository.get_run(run_id)
+            run = self.run_repository.get_run_by_id(run_id)
             if not run:
                 raise ValueError(f"Run {run_id} not found")
 
@@ -953,7 +953,7 @@ class CrawlerLoop:
             self._emit_event("on_debug_log", run_id, 0, "[DEBUG] MobSFManager initialized successfully")
 
             # Get package name from run
-            run = self.run_repository.get_run(run_id)
+            run = self.run_repository.get_run_by_id(run_id)
             if not run:
                 logger.error(f"Run {run_id} not found for MobSF analysis")
                 self._emit_event("on_debug_log", run_id, 0, f"[DEBUG] MobSF analysis FAILED: Run {run_id} not found")
