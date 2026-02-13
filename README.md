@@ -1,181 +1,225 @@
-# AI-Driven Android App Crawler
+# Mobile Crawler
 
-[![Python Version](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/)
-[![Status](https://img.shields.io/badge/status-development-yellow.svg)]()
+AI-Powered Android Exploration Tool (Image-Only Mode)
 
 ## Overview
 
-An automated Android app testing tool powered by pluggable AI model adapters (Gemini, Ollama, OpenRouter). Intelligently explores applications by analyzing visual layouts and structural information to discover new states and interactions.
-
-**Available Interfaces:**
-- **CLI Controller** - Command-line interface for automation and scripting. See [`docs/cli-user-guide.md`](docs/cli-user-guide.md).
-- **UI Controller** - Graphical user interface for interactive use. See [`docs/gui-user-guide.md`](docs/gui-user-guide.md).
+Mobile Crawler is an automated exploration tool for Android mobile applications using AI-driven **visual-only analysis** and intelligent action decisions. It operates in **image-only mode**, meaning it uses screenshots and coordinate-based actions without accessing XML page source or DOM hierarchy. The crawler captures screenshots, analyzes them via pluggable AI providers (VLM), translates analysis into device commands, and executes them via Appium.
 
 ## Features
 
-- **AI-Powered Exploration** - Multiple provider support (Gemini, Ollama, OpenRouter)
-- **OCR-Based Element Detection** - Detects text elements not accessible via standard accessibility APIs
-- **AI Interaction Inspector** - Real-time visibility into AI prompts and responses with color-coded display
-- **Enhanced Action History** - Human-readable descriptions of actions for better AI context
-- **Intelligent State Management** - Visual and structural hashing for unique screen identification
-- **Loop Detection** - Prevents repetitive patterns
-- **Traffic Capture** - Optional network monitoring via PCAPdroid during crawl (saves .pcap files)
-- **Video Recording** - Optional screen recording of entire crawl session (saves .mp4 files)
-- **MobSF Integration** - Optional automatic static security analysis after crawl completion
-- **Comprehensive Reporting** - PDF reports with crawl analysis
+- **Image-Only Operation**: Operates purely on visual feedback (screenshots) with coordinate-based actions - no XML/DOM access
+- **AI-Driven Exploration**: Uses vision-capable AI models (Gemini, OpenRouter, Ollama) to analyze screenshots and determine next actions
+- **Multiple Interfaces**: Both GUI and CLI interfaces for different use cases
+- **Comprehensive Logging**: Detailed action logs, statistics, and reporting
+- **Network Traffic Capture**: PCAPdroid integration for capturing network traffic during crawl sessions
+- **Video Recording**: Automatic screen recording of crawl sessions using Appium's built-in recording
+- **Security Analysis**: MobSF integration for static security analysis of Android applications
+- **Flexible Configuration**: Environment variables, database settings, and user preferences with validation
+- **Enhanced Reporting**: Generates human-readable HTML reports (printer-friendly) and machine-readable JSON reports with correlated timeline of actions and network requests
 
-## AI Model Support
+## Installation
 
-### Supported Providers
+```bash
+# Clone the repository
+git clone <repository-url>
+cd mobile-crawler
 
-1. **Google Gemini** - Cloud-based multimodal model with excellent image understanding
-2. **Ollama** - Local models (supports vision-capable variants like llama3.2-vision)
-3. **OpenRouter** - Cloud router to top models via OpenAI-compatible API
+# Create virtual environment
+python -m venv .venv
 
-### Configuration Example
+# Activate virtual environment (Windows)
+.\.venv\Scripts\Activate.ps1
 
-```json
-{
-  "AI_PROVIDER": "ollama",
-  "DEFAULT_MODEL_TYPE": "llama3.2-vision",
-  "OLLAMA_BASE_URL": "http://localhost:11434"
-}
+# Install project
+pip install -e .
+
+# Install development dependencies (optional)
+pip install -e ".[dev]"
 ```
 
-**Vision-capable Ollama models:** `llama3.2-vision`, `llava`, `bakllava`
+## Development Status
 
-## Appium Integration
+### ✅ Completed (Phase 0)
+- Project structure and packaging
+- Linting and formatting setup (Ruff, Black)
+- Testing framework (pytest)
+- Virtual environment isolation
 
-The system uses Appium-Python-Client for direct mobile device interaction. No external server is required beyond the standard Appium server.
+### ✅ Completed (Phase 1 - Database Layer)
+- **crawler.db schema**: Complete SQLite schema with 6 tables (runs, screens, step_logs, transitions, run_stats, ai_interactions)
+- **user_config.db schema**: User preferences and encrypted secrets storage
+- **Secrets encryption**: Fernet encryption with machine-bound key derivation for API keys
+- **RunRepository**: Complete CRUD operations for runs table with cascading deletes
+- Database connection management with WAL mode and foreign keys
+- Comprehensive test coverage for all database operations
 
-### Configuration
+### ✅ Completed (Phase 2 - Image-Only Mode)
+- **Image-Only Architecture**: Removed all XML/DOM access, now operates purely on screenshots and coordinates
+- **ADB Text Input**: Implemented ADB-based text input handler to avoid DOM access
+- **Coordinate-Based Actions**: All actions use visual coordinates from VLM, no element selectors
+- **Updated Prompts**: System prompts explicitly request coordinate-based actions
 
-```json
-{
-  "APPIUM_SERVER_URL": "http://127.0.0.1:4723"
-}
-```
+### ✅ Completed (Phase 3 - Feature Integrations)
+- **Traffic Capture**: PCAPdroid integration for network traffic analysis during crawl sessions
+- **Video Recording**: Appium-based screen recording with automatic saving to session directories
+- **MobSF Analysis**: Static security analysis with PDF/JSON report generation and security score tracking
+- **Configuration Management**: UI and CLI configuration with validation and persistence
+- **Prerequisite Validation**: Pre-crawl checks for feature dependencies (PCAPdroid, MobSF server, video support)
+- **Graceful Degradation**: Crawl continues successfully even if optional features fail
 
-**Note:** Ensure Appium server is running on the configured port (default: 4723).
+### ✅ Completed (Phase 4 - Enhanced Reporting)
+- **HTML/JSON Report Generator**: Transitioned from basic PDF to rich, printer-friendly HTML and structured JSON reports
+- **Context-Enriched Timeline**: Correlates network requests (HTTP/DNS) from PCAP files with specific crawl steps based on timestamps
+- **Integrated Analysis**: Aggregates MobSF security findings and network traffic summaries into a single unified report
+- **Modular Reporting Architecture**: Decoupled parsers (PCAP, MobSF) and generators (Jinja2) for extensibility
 
-## Architecture
+### ✅ Completed (Phase 5 - Fault Tolerance & Recovery)
+- **UiAutomator2 Crash Recovery**: Automatic detection and recovery from UiAutomator2 crashes during crawling
+- **Intelligent Retries**: Transparently restarts Appium session and retries failed actions with configurable limits
+- **Session Restoration**: Restores app foreground state and resumes exploration after recovery
+- **Recovery Metrics**: Detailed tracking of recovery events, duration, and success rates in database logs
 
-### Core Components
+## Quick Start
 
-- **`run_cli.py`** - CLI entry point
-- **`run_ui.py`** - GUI entry point
-- **`cli/main.py`** - CLI command orchestration
-- **`core/crawler.py`** - Main crawling logic and state transitions
-- **`core/crawl_logger.py`** - Enhanced logging with human-readable action history
-- **`domain/agent_assistant.py`** - Main AI orchestration (lean container)
-- **`domain/action_executor.py`** - Device interaction logic and action dispatching
-- **`domain/prompt_builder.py`** - Dynamic prompt construction and JSON output parsing
-- **`domain/langchain_wrapper.py`** - LangChain model adapters and multimodal context
-- **`domain/model_adapters.py`** - Unified AI provider integration
-- **`domain/ui_controller.py`** - UI management including AI Interaction Inspector
-- **`config/context_constants.py`** - Centralized prompt configuration constants
-- **`infrastructure/appium_helper.py`** - Core Appium session management
-- **`infrastructure/ocr_service.py`** - OCR-based element detection service
-- **`infrastructure/device_detection.py`** - Device/emulator detection
-- **`infrastructure/capability_builder.py`** - W3C capability building
-- **`domain/screen_state_manager.py`** - State tracking and transitions
+The easiest way to start the application is using the startup script which handles all dependencies:
 
-### Agent-Based Workflow
-
-1. **Observe** - Capture screenshot and XML representation
-2. **Reason** - Analyze screen elements and available actions
-3. **Plan** - Determine optimal next action
-4. **Act** - Execute action via agent tools
-5. **Observe Again** - Receive feedback and adapt
-
-## CLI Usage
-
-Detailed CLI usage, command reference and examples have been moved to the dedicated CLI user guide:
-- [`docs/cli-user-guide.md`](docs/cli-user-guide.md:1)
-
-For GUI usage and interactive workflows see the GUI user guide:
-- [`docs/gui-user-guide.md`](docs/gui-user-guide.md:1)
-
-## Configuration Management
-
-**Configuration Management:**
-All configuration, including API keys and model selection, is managed solely through the application's user interface or CLI. Data is stored securely in a local SQLite database (`config.db`).
-
-- **Settings UI**: Launch the UI (`python run_ui.py`) and navigate to the Settings tab to configure AI providers, API keys, and other options.
-- **CLI Configuration**: Use CLI commands to set configuration values if needed (see `docs/cli-user-guide.md`).
-
-**No `.env` file is required.**
-
-
-**System Variables:**
-```
-ANDROID_HOME=C:/Users/youruser/AppData/Local/Android/Sdk
-```
-
-## Output Structure
-
-Session-based output per device/app run:
-```
-output_data/<device_id>_<app_package>_<timestamp>/
-├── screenshots/
-├── annotated_screenshots/
-├── database/<app_package>_crawl_data.db
-├── traffic_captures/        # PCAP files (if traffic capture enabled)
-├── video/                   # Video recordings (if video recording enabled)
-├── logs/
-├── reports/
-├── mobsf_scan_results/      # MobSF analysis results (if MobSF analysis enabled)
-└── extracted_apk/
-```
-
-App info caches (stable, reusable):
-```
-output_data/app_info/<device_id>/
-├── device_<device_id>_all_apps.json
-└── device_<device_id>_filtered_health_apps.json
-```
-
-## Prerequisites
-
-### Required
-- Python 3.12+
-- Node.js & npm (for Appium)
-- Android SDK with ADB
-
-### Optional
-- MobSF (Docker or native)
-- PCAPdroid (for traffic capture)
-- Ollama (for local AI models)
-
-### Device Setup
-1. Enable Developer options (tap Build number 7 times)
-2. Enable USB debugging
-3. Connect via USB and authorize ADB
-
-## MobSF Integration
-
-MobSF (Mobile Security Framework) must be installed and running before enabling MobSF analysis. For installation instructions, see the [official MobSF documentation](https://github.com/MobSF/Mobile-Security-Framework-MobSF).
-
-### Docker Setup (Recommended)
 ```powershell
-# Basic (ephemeral)
-docker run -d --name mobsf -p 8000:8000 opensecurity/mobile-security-framework-mobsf:latest
+# Start everything (MobSF, Appium, UI)
+.\scripts\start.ps1
 
-# With persistent storage (Windows)
-mkdir C:\mobsf\uploads, C:\mobsf\signatures
-docker run -d --name mobsf -p 8000:8000 `
-  -v "C:\mobsf\uploads:/home/mobsf/Mobile-Security-Framework-MobSF/uploads" `
-  -v "C:\mobsf\signatures:/home/mobsf/Mobile-Security-Framework-MobSF/signatures" `
-  opensecurity/mobile-security-framework-mobsf:latest
+# Start without MobSF
+.\scripts\start.ps1 -NoMobsf
+
+# Start only the UI
+.\scripts\start.ps1 -UiOnly
+
+# Show help
+.\scripts\start.ps1 -Help
 ```
 
-**Note:** For native installation or other setup methods, refer to the [official MobSF installation guide](https://github.com/MobSF/Mobile-Security-Framework-MobSF).
+The script will:
+- ✅ Check if Docker, npm, and Python are installed
+- ✅ Display clear warnings with installation URLs if dependencies are missing
+- ✅ Start MobSF Docker container on port 8000
+- ✅ **Automatically extract and save the MobSF API key** for the app to use
+- ✅ Start Appium server on port 4723
+- ✅ Wait for services to be ready
+- ✅ Launch the main UI application
+- ✅ Clean up all processes on Ctrl+C
 
-### Configuration
-```json
-{
-  "ENABLE_MOBSF_ANALYSIS": true,
-  "MOBSF_API_URL": "http://localhost:8000/api/v1",
-  "MOBSF_API_KEY": "YOUR_API_KEY_HERE"
-}
+### MobSF API Key Auto-Configuration
+
+When you start MobSF using the startup script, it automatically:
+1. Captures the REST API key from MobSF's Docker output
+2. Saves it to `.mobsf_api_key` in the project root
+3. The app auto-loads this key on startup—no manual configuration needed!
+
+## Usage
+
+### CLI
+
+Basic crawl:
+```bash
+mobile-crawler-cli crawl --package com.example.app --device emulator-5554 --model gemini-1.5-pro --provider gemini
 ```
+
+With optional features:
+```bash
+# Enable traffic capture
+mobile-crawler-cli crawl --package com.example.app --device emulator-5554 --model gemini-1.5-pro --provider gemini --enable-traffic-capture
+
+# Enable video recording
+mobile-crawler-cli crawl --package com.example.app --device emulator-5554 --model gemini-1.5-pro --provider gemini --enable-video-recording
+
+# Enable MobSF analysis
+mobile-crawler-cli crawl --package com.example.app --device emulator-5554 --model gemini-1.5-pro --provider gemini --enable-mobsf-analysis
+
+# Enable all features
+mobile-crawler-cli crawl --package com.example.app --device emulator-5554 --model gemini-1.5-pro --provider gemini --enable-traffic-capture --enable-video-recording --enable-mobsf-analysis
+```
+
+### GUI
+```bash
+mobile-crawler-gui
+```
+
+## Requirements
+
+- Python 3.9+
+- Android device or emulator
+- Appium server
+- AI provider API keys (Gemini, OpenRouter, or Ollama)
+
+### Optional Requirements (for additional features)
+
+- **PCAPdroid** (for traffic capture): Install from [F-Droid](https://f-droid.org/packages/com.emanuelef.remote_capture/)
+- **MobSF Server** (for security analysis): Running MobSF instance with API access
+- **ADB** (Android Debug Bridge): Required for PCAPdroid control and APK extraction
+
+## Development
+
+```bash
+# Run tests
+pytest
+
+# Run linter
+ruff check .
+
+# Format code
+black .
+
+# Generate coverage report
+pytest --cov=mobile_crawler --cov-report=html
+```
+
+## Project Structure
+
+```
+src/mobile_crawler/
+├── core/              # Business logic and domain models
+├── infrastructure/    # External services and persistence
+├── domain/           # Use cases and business rules
+├── ui/               # User interface components
+├── cli/              # Command-line interface
+├── config/           # Configuration management
+└── utils/            # Utility functions
+
+tests/                # Test suite
+├── infrastructure/   # Infrastructure layer tests
+└── ...
+
+## Data Organization
+
+The crawler organizes all session data into a unified directory structure for easy access and portability.
+
+### Session Folder Structure
+By default, all artifacts are stored in `output_data/` (or platform-specific AppData directory):
+
+```text
+output_data/run_{ID}_{TIMESTAMP}/
+├── screenshots/      # All full and annotated screenshots
+├── reports/          # PDF crawl reports and MobSF analysis results
+└── data/             # JSON run exports and database snippets
+```
+
+Each run's `session_path` is persisted in the database, allowing the UI to open the correct folder directly.
+```
+
+## Database Schema
+
+### crawler.db
+- `runs` - Crawl session metadata
+- `screens` - Discovered screen states with perceptual hashes
+- `step_logs` - Per-step action history
+- `transitions` - Screen-to-screen navigation graph
+- `run_stats` - Comprehensive crawl statistics
+- `ai_interactions` - AI request/response logging
+
+### user_config.db
+- `user_config` - Key-value user settings
+- `secrets` - Encrypted API keys and credentials
+
+## License
+
+MIT

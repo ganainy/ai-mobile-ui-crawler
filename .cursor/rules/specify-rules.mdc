@@ -1,0 +1,34 @@
+# mobile-crawler Development Guidelines
+
+Auto-generated from all feature plans. Last updated: 2026-01-13
+
+## Active Technologies
+- Python 3.9+ + PySide6 6.x, Appium Python Client, cryptography (Fernet), existing mobile_crawler modules (013-app-auth-signup)
+- SQLite via existing DatabaseManager and UserConfigStore (013-app-auth-signup)
+- Python 3.9+ (project requires Python 3.9+) (014-packet-video-analysis)
+
+- Python 3.9+ + Standard library (pathlib, ast, json), existing mobile_crawler modules for current project analysis (012-reference-features)
+
+## Project Structure
+
+```text
+src/
+tests/
+```
+
+## Commands
+
+cd src; pytest; ruff check .
+
+## Code Style
+
+Python 3.9+: Follow standard conventions
+
+## Recent Changes
+- 015-responsive-ui: Added Python 3.9+ (project requires Python 3.9+)
+- 014-packet-video-analysis: Added Python 3.9+ (project requires Python 3.9+)
+- 013-app-auth-signup: Added Python 3.9+ + PySide6 6.x, Appium Python Client, cryptography (Fernet), existing mobile_crawler modules
+
+
+<!-- MANUAL ADDITIONS START -->
+<!-- MANUAL ADDITIONS END -->
