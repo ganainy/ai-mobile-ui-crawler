@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mobile Crawler Report - {{ run_id }}</title>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --bg: #f8fafc;
+            --card: #ffffff;
+            --text: #1e293b;
+            --border: #e2e8f0;
+            --high: #ef4444;
+            --medium: #f59e0b;
+            --low: #3b82f6;
+        }
+        body { font-family: -apple-system, blinkmacsystemfont, "Segoe UI", roboto, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; margin: 0; padding: 2rem; }
+        .container { max-width: 1000px; margin: 0 auto; }
+        header { margin-bottom: 2rem; border-bottom: 2px solid var(--border); padding-bottom: 1rem; }
+        h1 { margin: 0; color: var(--primary); }
+        .section { background: var(--card); border-radius: 8px; border: 1px solid var(--border); padding: 1.5rem; margin-bottom: 2rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        h2 { margin-top: 0; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; font-size: 1.25rem; }
+        .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; }
+        .stat-box { padding: 1rem; background: #f1f5f9; border-radius: 4px; }
+        .label { font-size: 0.875rem; color: #64748b; font-weight: 600; text-transform: uppercase; }
+        .value { font-size: 1.125rem; font-weight: 700; }
+        
+        table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+        th, td { text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border); }
+        th { background: #f1f5f9; font-weight: 600; }
+        
+        .timeline-step { display: flex; gap: 1.5rem; margin-bottom: 2rem; border-left: 3px solid var(--primary); padding-left: 1.5rem; }
+        .step-info { flex: 1; }
+        .step-img { width: 250px; border: 1px solid var(--border); border-radius: 4px; }
+        
+        .finding { padding: 0.75rem; border-radius: 4px; margin-bottom: 0.5rem; border-left: 4px solid #ccc; }
+        .finding.high { border-color: var(--high); background: #fee2e2; }
+        .finding.medium { border-color: var(--medium); background: #ffedd5; }
+        
+        .traffic-list { font-family: monospace; font-size: 0.875rem; background: #f1f5f9; padding: 0.5rem; border-radius: 4px; max-height: 200px; overflow-y: auto; }
+        
+        @media print {
+            body { padding: 0; background: white; }
+            .section { box-shadow: none; border-color: #eee; break-inside: avoid; }
+            .traffic-list { max-height: none; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Mobile Crawler Report</h1>
+            <p>Run ID: <strong>{{ run_id }}</strong> | Generated at: {{ generated_at }}</p>
+        </header>
+
+        <section class="section">
+            <h2>Run Summary</h2>
+            <div class="summary-grid">
+                <div class="stat-box"><div class="label">Status</div><div class="value">{{ summary.status }}</div></div>
+                <div class="stat-box"><div class="label">Duration</div><div class="value">{{ summary.duration_seconds | int }}s</div></div>
+                <div class="stat-box"><div class="label">App Package</div><div class="value">{{ summary.app_package }}</div></div>
+                <div class="stat-box"><div class="label">Steps</div><div class="value">{{ summary.total_steps }}</div></div>
+            </div>
+        </section>
+
+        {% if security_analysis %}
+        <section class="section">
+            <h2>Security Analysis (MobSF)</h2>
+            <div class="summary-grid" style="margin-bottom: 1rem;">
+                <div class="stat-box"><div class="label">Security Score</div><div class="value">{{ security_analysis.score }}/100</div></div>
+                <div class="stat-box"><div class="label">Grade</div><div class="value">{{ security_analysis.grade }}</div></div>
+            </div>
+            
+            <h3>High Issues ({{ security_analysis.high_issues | length }})</h3>
+            {% for issue in security_analysis.high_issues %}
+            <div class="finding high">
+                <strong>{{ issue.title }}</strong>
+                <p style="margin: 0.25rem 0; font-size: 0.9rem;">{{ issue.description }}</p>
+            </div>
+            {% endfor %}
+        </section>
+        {% endif %}
+
+        <section class="section">
+            <h2>Execution Timeline</h2>
+            {% for step in timeline %}
+            <div class="timeline-step">
+                <div class="step-info">
+                    <h3>Step {{ step.step_number }}: {{ step.action_type }}</h3>
+                    <p class="label">{{ step.timestamp }}</p>
+                    <pre style="font-size: 0.8rem; background: #f8fafc; padding: 0.5rem;">{{ step.action_details | tojson(indent=2) }}</pre>
+                    
+                    {% if step.network_requests %}
+                    <h4>Network Traffic during this step ({{ step.network_requests | length }})</h4>
+                    <div class="traffic-list">
+                        {% for req in step.network_requests %}
+                        <div>[{{ req.method }}] {{ req.url }}</div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+                {% if step.screenshot_path %}
+                <img src="{{ step.screenshot_path }}" class="step-img" alt="Step {{ step.step_number }} Screenshot">
+                {% endif %}
+            </div>
+            {% endfor %}
+        </section>
+    </div>
+</body>
+</html>
