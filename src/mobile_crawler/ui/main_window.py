@@ -352,10 +352,12 @@ class MainWindow(QMainWindow):
             return
         
         try:
-            # Update Appium driver with the selected app package and reconnect
+            # Update Appium driver with the selected app package and device ID, then reconnect
             appium_driver = self._services['appium_driver']
             appium_driver.disconnect()
             appium_driver.app_package = self._selected_package
+            if self._selected_device:
+                appium_driver.device_id = self._selected_device.device_id
             appium_driver.connect()
             
             # Create config manager with current settings

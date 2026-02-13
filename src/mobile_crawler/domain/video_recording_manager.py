@@ -4,7 +4,7 @@ import base64
 import logging
 import os
 import time
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, Tuple
 
 if TYPE_CHECKING:
     from mobile_crawler.config.config_manager import ConfigManager
@@ -59,7 +59,7 @@ class VideoRecordingManager:
         run_id: Optional[int] = None,
         step_num: Optional[int] = None,
         session_path: Optional[str] = None,
-    ) -> bool:
+    ) -> Tuple[bool, str]:
         """Starts video recording.
 
         Args:
@@ -68,49 +68,33 @@ class VideoRecordingManager:
             session_path: Optional session directory path for output
 
         Returns:
-            True if recording started successfully, False otherwise
+            Tuple containing (success, reason_message)
         """
         logger.info(f"start_recording called: video_recording_enabled={self.video_recording_enabled}, run_id={run_id}, session_path={session_path}")
         logger.debug(f"[DEBUG] VideoRecordingManager.start_recording - enabled={self.video_recording_enabled}, run_id={run_id}, step_num={step_num}, session_path={session_path}")
         
         if not self.video_recording_enabled:
-            logger.warning("Video recording is not enabled in VideoRecordingManager, skipping start")
-            logger.debug("[DEBUG] Video recording disabled in config, aborting start_recording")
-            return False
+            return False, "Video recording disabled in config"
 
         if self._is_recording:
-            logger.warning("Video recording already started by this manager.")
-            logger.debug("[DEBUG] Video recording already active, returning True")
-            return True
+            return True, "Already recording"
 
         try:
             # Check if AppiumDriver is available
             if not self.appium_driver:
-                logger.error("AppiumDriver not available, cannot start video recording")
-                logger.debug("[DEBUG] AppiumDriver is None")
-                return False
+                return False, "AppiumDriver instance not available"
             
-            logger.debug(f"[DEBUG] AppiumDriver available: {self.appium_driver is not None}")
+            # Verify driver is connected
+            try:
+                self.appium_driver.get_driver()
+            except Exception:
+                return False, "Appium WebDriver not connected"
             
-            # Check if driver instance exists
-            driver = getattr(self.appium_driver, '_driver', None)
-            if driver is None:
-                logger.error("Appium WebDriver instance not available, cannot start video recording")
-                logger.debug("[DEBUG] AppiumDriver._driver is None - driver may not be connected")
-                return False
-            
-            logger.debug(f"[DEBUG] Appium WebDriver instance available: {driver is not None}")
-            logger.debug(f"[DEBUG] Appium WebDriver session_id: {getattr(driver, 'session_id', 'N/A')}")
-
             # Generate filename
             target_app_package = str(self.config_manager.get("app_package", ""))
             if not target_app_package:
-                logger.error("APP_PACKAGE not configured, cannot start video recording")
-                logger.debug("[DEBUG] APP_PACKAGE is empty or not set in config")
-                return False
+                return False, "Application package not configured"
             
-            logger.debug(f"[DEBUG] App package: {target_app_package}")
-
             sanitized_package = target_app_package.replace(".", "_")
             timestamp = time.strftime("%Y%m%d_%H%M%S")
 
@@ -121,113 +105,102 @@ class VideoRecordingManager:
             else:
                 video_filename = f"{sanitized_package}_{timestamp}.mp4"
 
-            # Resolve output directory - videos are saved to "videos" folder in session directory
+            # Resolve output directory
             if session_path:
                 video_output_dir = os.path.join(session_path, "videos")
             elif self.session_folder_manager and run_id:
-                # Try to get session path from manager
-                from mobile_crawler.infrastructure.run_repository import RunRepository
-                from mobile_crawler.infrastructure.database import DatabaseManager
-
-                db_manager = DatabaseManager()
-                run_repo = RunRepository(db_manager)
-                run = run_repo.get_run_by_id(run_id)
-                if run and self.session_folder_manager:
-                    video_output_dir = self.session_folder_manager.get_subfolder(run, "videos")
-                else:
-                    video_output_dir = os.path.join("output_data", "videos")
+                # Assuming generic output path if repo lookup is too complex here.
+                video_output_dir = os.path.join("output_data", "videos")
             else:
                 video_output_dir = os.path.join("output_data", "videos")
 
-            os.makedirs(video_output_dir, exist_ok=True)
-            logger.debug(f"[DEBUG] Video output directory: {video_output_dir}")
-            logger.debug(f"[DEBUG] Video output directory exists: {os.path.exists(video_output_dir)}")
+            # Better directory resolution logic from original code
+            if not session_path and self.session_folder_manager and run_id:
+                 try:
+                    from mobile_crawler.infrastructure.database import DatabaseManager
+                    from mobile_crawler.infrastructure.run_repository import RunRepository
+                    # This is heavy but was in original code
+                    db_manager = DatabaseManager()
+                    run_repo = RunRepository(db_manager)
+                    run = run_repo.get_run_by_id(run_id)
+                    if run:
+                        video_output_dir = self.session_folder_manager.get_subfolder(run, "videos")
+                 except Exception:
+                     pass
 
-            # Set the full path (we'll save here when stopping)
+            try:
+                os.makedirs(video_output_dir, exist_ok=True)
+            except OSError as e:
+                return False, f"Failed to create video directory: {e}"
+
+            # Set the full path
             self.video_file_path = os.path.join(video_output_dir, video_filename)
-            logger.debug(f"[DEBUG] Video file path: {self.video_file_path}")
 
-            # Start recording using Appium's built-in method
-            logger.debug("[DEBUG] Calling appium_driver.start_recording_screen()...")
-            success = False
-            for attempt in range(2):  # Retry once
-                try:
-                    success = self.appium_driver.start_recording_screen()
-                    logger.debug(f"[DEBUG] start_recording_screen() attempt {attempt+1} returned: {success}")
-                    if success:
-                        break
-                except Exception as e:
-                    logger.error(f"[DEBUG] Exception in start_recording_screen() attempt {attempt+1}: {e}", exc_info=True)
-                    if attempt == 0:  # Only retry on first attempt
-                        logger.debug("[DEBUG] Retrying start_recording_screen()...")
-                        time.sleep(1.0)  # Brief pause before retry
-                        continue
-                    else:
-                        break
-            
-            if not success:
+            # Start recording
+            try:
+                self.appium_driver.start_recording_screen()
+                self._is_recording = True
+                return True, "Recording started successfully"
+            except Exception as e:
                 self.video_file_path = None
                 self._is_recording = False
-                return False
+                logger.error(f"Appium start_recording_screen failed: {e}", exc_info=True)
+                return False, f"Appium error: {str(e)}"
 
         except Exception as e:
             logger.error(f"Error starting video recording: {e}", exc_info=True)
             self.video_file_path = None
             self._is_recording = False
-            return False
+            return False, f"Unexpected error: {str(e)}"
 
-    def stop_recording_and_save(self) -> Optional[str]:
+    def stop_recording_and_save(self) -> Tuple[Optional[str], str]:
         """Stops video recording and saves the file.
 
         Returns:
-            Path to saved video file, or None on error
+            Tuple containing (path to saved video file or None, reason message)
         """
-        logger.debug("[DEBUG] VideoRecordingManager.stop_recording_and_save() called")
-        logger.debug(f"[DEBUG] video_recording_enabled={self.video_recording_enabled}, _is_recording={self._is_recording}")
-        
         if not self.video_recording_enabled:
-            logger.debug("[DEBUG] Video recording disabled, returning None")
-            return None
+            return None, "Video recording disabled"
 
         if not self._is_recording:
-            logger.warning(
-                "Video recording not started by this manager. Cannot stop/save."
-            )
-            logger.debug("[DEBUG] Video recording was not started, cannot stop")
-            return None
+            return None, "Recording was not started"
 
         try:
             # Stop recording and get video data (base64 string)
-            logger.debug("[DEBUG] Calling appium_driver.stop_recording_screen()...")
-            video_base64 = self.appium_driver.stop_recording_screen()
+            try:
+                video_base64 = self.appium_driver.stop_recording_screen()
+            except Exception as e:
+                self._is_recording = False
+                return None, f"Failed to stop recording: {str(e)}"
+                
             self._is_recording = False
-            logger.debug(f"[DEBUG] stop_recording_screen() returned: {video_base64 is not None}")
-            logger.debug(f"[DEBUG] Video data length: {len(video_base64) if video_base64 else 0} characters")
-
+            
             if not video_base64:
-                logger.error("Video recording stopped but no data returned")
-                logger.debug("[DEBUG] No video data received from Appium driver")
                 self.video_file_path = None
-                return None
+                return None, "No video data received from driver"
 
             if not self.video_file_path:
-                logger.error("Video file path not set. Cannot save.")
-                return None
+                return None, "Video file path not set"
 
             # Decode base64 and save to file
             try:
                 video_bytes = base64.b64decode(video_base64)
             except Exception as e:
-                logger.error(f"Failed to decode base64 video data: {e}")
                 self.video_file_path = None
-                return None
+                return None, f"Failed to decode video data: {str(e)}"
 
             # Ensure directory exists
-            os.makedirs(os.path.dirname(self.video_file_path), exist_ok=True)
+            try:
+                os.makedirs(os.path.dirname(self.video_file_path), exist_ok=True)
+            except OSError as e:
+                return None, f"Failed to create directory: {str(e)}"
 
             # Save video to file
-            with open(self.video_file_path, "wb") as f:
-                f.write(video_bytes)
+            try:
+                with open(self.video_file_path, "wb") as f:
+                    f.write(video_bytes)
+            except OSError as e:
+                return None, f"Failed to write video file: {str(e)}"
 
             if os.path.exists(self.video_file_path):
                 file_size = os.path.getsize(self.video_file_path)
@@ -235,24 +208,18 @@ class VideoRecordingManager:
                     saved_path = os.path.abspath(self.video_file_path)
                     logger.info(f"Video recording saved: {saved_path} ({file_size} bytes)")
                     self.video_file_path = None  # Reset after successful save
-                    return saved_path
+                    return saved_path, "Success"
                 else:
-                    logger.warning(
-                        f"Video file saved but is EMPTY: {self.video_file_path}"
-                    )
-                    return os.path.abspath(self.video_file_path)
+                    return os.path.abspath(self.video_file_path), "File saved but empty"
             else:
-                logger.error(
-                    f"Failed to save video recording to: {self.video_file_path}"
-                )
                 self.video_file_path = None
-                return None
+                return None, "File save verification failed"
 
         except Exception as e:
             logger.error(f"Error stopping/saving video recording: {e}", exc_info=True)
             self._is_recording = False
             self.video_file_path = None
-            return None
+            return None, f"Unexpected error: {str(e)}"
 
     def save_partial_on_crash(self) -> Optional[str]:
         """Attempt to save partial recording on crash.
@@ -276,21 +243,86 @@ class VideoRecordingManager:
             # Use the same directory as the main video
             if self.video_file_path:
                 video_dir = os.path.dirname(self.video_file_path)
-                partial_path = os.path.join(video_dir, "recording_partial.mp4")
+                partial_path = os.path.join(video_dir, "recording_partial_crash.mp4")
             else:
                 # Fallback directory
                 video_dir = os.path.join("output_data", "videos")
                 os.makedirs(video_dir, exist_ok=True)
-                partial_path = os.path.join(video_dir, "recording_partial.mp4")
+                partial_path = os.path.join(video_dir, "recording_partial_crash.mp4")
 
             with open(partial_path, "wb") as f:
                 f.write(video_bytes)
 
-            self.video_file_path = partial_path
             logger.info(f"Partial video recording saved: {partial_path}")
             return os.path.abspath(partial_path)
-        except Exception as e:
-            logger.error(f"Error saving partial video recording: {e}", exc_info=True)
-            return None
+        except Exception:
+            # Fallback to ADB pull
+            return self.manual_pull_video_fallback(0)
         finally:
             self._is_recording = False
+    
+    def manual_pull_video_fallback(self, run_id: int) -> Optional[str]:
+        """Attempt to manually pull the last generated video file from the device using ADB.
+        
+        This is a fallback for when Appium fails to return the video data (e.g. session crash).
+        It looks for recent mp4 files in /sdcard/ created in the last few minutes.
+        """
+        try:
+            # We need device_id
+            if not self.appium_driver or not self.appium_driver.device_id:
+                logger.warning("Cannot manual pull video: No device_id available")
+                return None
+            
+            device_id = self.appium_driver.device_id
+            
+            # List mp4 files in /sdcard/, sorted by time (newest first)
+            # screenrecord files usually don't have a standard name if initiated by Appium 
+            # (Appium often uses a random UUID), but we can guess.
+            import subprocess
+            
+            # Find recent mp4 files
+            cmd = ['adb', '-s', device_id, 'shell', 'ls', '-t', '/sdcard/*.mp4']
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+            
+            if result.returncode != 0:
+                return None
+                
+            files = result.stdout.strip().split('\n')
+            if not files or not files[0] or 'No such file' in files[0]:
+                return None
+            
+            # Get the newest file
+            latest_video = files[0].strip()
+            
+            # Validate it looks like a path
+            if not latest_video.startswith('/'):
+                return None
+                
+            logger.info(f"Found candidate video file on device: {latest_video}")
+            
+            # Pull it
+            # Determine target path
+            if self.video_file_path:
+                local_path = self.video_file_path
+            else:
+                # Fallback path if not set
+                video_dir = os.path.join("output_data", "videos")
+                os.makedirs(video_dir, exist_ok=True)
+                timestamp = time.strftime("%Y%m%d_%H%M%S")
+                local_path = os.path.join(video_dir, f"fallback_recording_{run_id}_{timestamp}.mp4")
+            
+            pull_cmd = ['adb', '-s', device_id, 'pull', latest_video, local_path]
+            pull_result = subprocess.run(pull_cmd, capture_output=True, text=True, timeout=30)
+            
+            if pull_result.returncode == 0 and os.path.exists(local_path):
+                logger.info(f"Successfully pulled video via ADB fallback: {local_path}")
+                # Optional: Delete from device to clean up
+                subprocess.run(['adb', '-s', device_id, 'shell', 'rm', latest_video], timeout=5)
+                return os.path.abspath(local_path)
+            else:
+                logger.warning(f"Failed to pull video: {pull_result.stderr}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error in manual_pull_video_fallback: {e}")
+            return None

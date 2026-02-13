@@ -339,12 +339,26 @@ class CrawlerLoop:
         """Consolidated cleanup logic for consistent termination."""
         logger.info(f"Cleaning up crawl session {run_id}...")
         
-        # 1. Stop feature managers (PCAP, Video)
+        # 1a. Stop traffic capture 
         try:
             self._stop_traffic_capture(run_id, step_number)
-            self._stop_video_recording()
         except Exception as e:
-            logger.warning(f"Cleanup error during feature stop: {e}")
+            logger.warning(f"Cleanup error during traffic stop: {e}")
+
+        # 1b. Stop video recording (inlined for direct visibility)
+        self._emit_event("on_debug_log", run_id, 0, f"[VIDEO] Cleanup: _video_recording_manager is {'SET' if self._video_recording_manager else 'None'}")
+        if self._video_recording_manager:
+            try:
+                self._emit_event("on_debug_log", run_id, 0, "[VIDEO] Calling stop_recording_and_save()...")
+                video_path, reason = self._video_recording_manager.stop_recording_and_save()
+                self._emit_event("on_debug_log", run_id, 0, f"[VIDEO] Result: path={video_path}, reason={reason}")
+                if video_path:
+                    logger.info(f"Video saved: {video_path}")
+                else:
+                    logger.warning(f"Video not saved: {reason}")
+            except Exception as e:
+                self._emit_event("on_debug_log", run_id, 0, f"[VIDEO] Exception during stop: {type(e).__name__}: {e}")
+                logger.error(f"Error stopping video: {e}", exc_info=True)
 
         # 2. Run MobSF analysis (if enabled and NOT stopped early)
         try:
@@ -1100,17 +1114,17 @@ class CrawlerLoop:
 
             # Start recording
             logger.debug(f"[DEBUG] Calling start_recording(run_id={run_id}, step_num=1, session_path={session_path})...")
-            success = self._video_recording_manager.start_recording(
+            success, reason = self._video_recording_manager.start_recording(
                 run_id=run_id, step_num=1, session_path=session_path
             )
-            logger.debug(f"[DEBUG] start_recording() returned: {success}")
+            logger.debug(f"[DEBUG] start_recording() returned: {success}, reason: {reason}")
             
             if success:
                 logger.info(f"Video recording started for run {run_id}")
                 self._emit_event("on_debug_log", run_id, 0, "Video recording STARTED successfully")
             else:
-                logger.warning(f"Failed to start video recording for run {run_id}")
-                self._emit_event("on_debug_log", run_id, 0, "Video recording FAILED to start - crawl will continue without video")
+                logger.warning(f"Failed to start video recording for run {run_id}: {reason}")
+                self._emit_event("on_debug_log", run_id, 0, f"Video recording FAILED to start - {reason}")
                 self._emit_event("on_debug_log", run_id, 0, "[DEBUG] Check Appium driver connection and device capabilities")
         except Exception as e:
             error_msg = f"Error initializing video recording: {e}"
@@ -1120,25 +1134,44 @@ class CrawlerLoop:
             # Don't fail the crawl if video recording fails
             self._video_recording_manager = None
 
-    def _stop_video_recording(self) -> None:
-        """Stop video recording and save video file."""
+    def _stop_video_recording(self, run_id: int) -> None:
+        """Stop video recording and save video file.
+        
+        Args:
+            run_id: Run ID for event logging
+        """
+        logger.debug("[DEBUG] _stop_video_recording called for run {run_id}")
+        
         if not self._video_recording_manager:
+            logger.debug("[DEBUG] _video_recording_manager is None in _stop_video_recording")
             return
 
         try:
-            video_path = self._video_recording_manager.stop_recording_and_save()
+            logger.debug(f"[DEBUG] Stopping video recording for run {run_id}...")
+            self._emit_event("on_debug_log", run_id, 0, "Stopping video recording...")
+            
+            video_path, reason = self._video_recording_manager.stop_recording_and_save()
+            
             if video_path:
                 logger.info(f"Video recording completed. Video file saved: {video_path}")
+                self._emit_event("on_debug_log", run_id, 0, f"Video recording saved: {video_path}")
+                if reason != "Success":
+                    self._emit_event("on_debug_log", run_id, 0, f"Video saving warning: {reason}")
             else:
-                logger.warning("Video recording stopped but video file not saved")
+                logger.warning(f"Video recording stopped but video file not saved: {reason}")
+                self._emit_event("on_debug_log", run_id, 0, f"Video recording FAILED to save: {reason}")
+                
         except Exception as e:
             logger.error(f"Error stopping video recording: {e}", exc_info=True)
+            self._emit_event("on_debug_log", run_id, 0, f"Error stopping video recording: {e}")
+            
             # Don't fail the crawl if video recording stop fails
             # Try to save partial recording
             try:
                 partial_path = self._video_recording_manager.save_partial_on_crash()
                 if partial_path:
                     logger.info(f"Partial video recording saved: {partial_path}")
+                    self._emit_event("on_debug_log", run_id, 0, f"Partial video recording saved: {partial_path}")
             except Exception:
                 pass
 
