@@ -104,6 +104,7 @@ class MobSFManager:
         data: Optional[Dict[str, Any]] = None,
         files: Optional[Dict[str, Any]] = None,
         stream: bool = False,
+        timeout: Optional[int] = None,
     ) -> Tuple[bool, Any]:
         """Make an API request to MobSF.
 
@@ -113,6 +114,7 @@ class MobSFManager:
             data: Form data for POST requests
             files: Files for multipart form submissions
             stream: Whether to stream the response
+            timeout: Request timeout in seconds
 
         Returns:
             Tuple of (success, response_data)
@@ -126,13 +128,17 @@ class MobSFManager:
             api_url = f"http://{api_url}"
         api_url = api_url.rstrip("/") + "/"
 
+        # Get timeout from config if not specified
+        if timeout is None:
+            timeout = int(self.config_manager.get("mobsf_request_timeout", 300))
+
         url = f"{api_url}api/v1/{endpoint}"
         try:
             if method.upper() == "GET":
-                response = requests.get(url, headers=self.headers, stream=stream, timeout=60)
+                response = requests.get(url, headers=self.headers, stream=stream, timeout=timeout)
             else:  # POST
                 response = requests.post(
-                    url, headers=self.headers, data=data, files=files, stream=stream, timeout=60
+                    url, headers=self.headers, data=data, files=files, stream=stream, timeout=timeout
                 )
 
             if response.status_code == 200:
@@ -315,43 +321,46 @@ class MobSFManager:
         data = {"hash": file_hash}
         return self._make_api_request("scan_logs", "POST", data=data)
 
-    def get_report_json(self, file_hash: str) -> Tuple[bool, Dict[str, Any]]:
+    def get_report_json(self, file_hash: str, timeout: Optional[int] = None) -> Tuple[bool, Dict[str, Any]]:
         """Get JSON report for a scanned file.
 
         Args:
             file_hash: The hash of the file
+            timeout: Request timeout in seconds
 
         Returns:
             Tuple of (success, report)
         """
         data = {"hash": file_hash}
-        return self._make_api_request("report_json", "POST", data=data)
+        return self._make_api_request("report_json", "POST", data=data, timeout=timeout)
 
-    def get_pdf_report(self, file_hash: str) -> Tuple[bool, bytes]:
+    def get_pdf_report(self, file_hash: str, timeout: Optional[int] = None) -> Tuple[bool, bytes]:
         """Get PDF report for a scanned file.
 
         Args:
             file_hash: The hash of the file
+            timeout: Request timeout in seconds
 
         Returns:
             Tuple of (success, pdf_content)
         """
         data = {"hash": file_hash}
-        return self._make_api_request("download_pdf", "POST", data=data)
+        return self._make_api_request("download_pdf", "POST", data=data, timeout=timeout)
 
     def save_pdf_report(
-        self, file_hash: str, output_path: Optional[str] = None
+        self, file_hash: str, output_path: Optional[str] = None, timeout: Optional[int] = None
     ) -> Optional[str]:
         """Save the PDF report to a file.
 
         Args:
             file_hash: The hash of the file
             output_path: Optional path to save the PDF, if not provided a default path is used
+            timeout: Request timeout in seconds
 
         Returns:
             Path to the saved PDF file, or None if saving failed
         """
-        success, pdf_content = self.get_pdf_report(file_hash)
+        success, pdf_content = self.get_pdf_report(file_hash, timeout=timeout)
         if not success:
             logger.error(f"Failed to get PDF report: {pdf_content}")
             return None
@@ -370,18 +379,19 @@ class MobSFManager:
             return None
 
     def save_json_report(
-        self, file_hash: str, output_path: Optional[str] = None
+        self, file_hash: str, output_path: Optional[str] = None, timeout: Optional[int] = None
     ) -> Optional[str]:
         """Save the JSON report to a file.
 
         Args:
             file_hash: The hash of the file
             output_path: Optional path to save the JSON, if not provided a default path is used
+            timeout: Request timeout in seconds
 
         Returns:
             Path to the saved JSON file, or None if saving failed
         """
-        success, report = self.get_report_json(file_hash)
+        success, report = self.get_report_json(file_hash, timeout=timeout)
         if not success:
             logger.error(f"Failed to get JSON report: {report}")
             return None
@@ -585,13 +595,14 @@ class MobSFManager:
             # Also try to detect completion by checking if PDF report is available
             # This is more reliable than checking log status
             if attempt > 10:  # Wait at least 20 seconds before checking reports
-                pdf_success, pdf_result = self.get_pdf_report(file_hash)
+                # Use shorter timeout for polling checks
+                pdf_success, pdf_result = self.get_pdf_report(file_hash, timeout=10)
                 if pdf_success and isinstance(pdf_result, bytes) and len(pdf_result) > 0:
                     _log("Scan completed - PDF report is available", "green")
                     scan_complete = True
                     break
                 # Also check JSON report as fallback
-                json_success, json_result = self.get_report_json(file_hash)
+                json_success, json_result = self.get_report_json(file_hash, timeout=10)
                 if json_success and isinstance(json_result, dict) and json_result:
                     _log("Scan completed - JSON report is available", "green")
                     scan_complete = True
@@ -603,6 +614,7 @@ class MobSFManager:
                 elif attempt % 15 == 0:  # Log progress every 30 seconds
                     elapsed = attempt * poll_interval
                     _log(f"Scan in progress... ({elapsed:.0f}s / {scan_timeout}s)", "blue")
+                    logger.info(f"MobSF scan for {file_hash} still in progress: {elapsed:.0f}s elapsed")
 
             time.sleep(poll_interval)
 
@@ -616,8 +628,9 @@ class MobSFManager:
             pdf_path = os.path.join(reports_dir, f"{file_hash}_report.pdf")
             json_path = os.path.join(reports_dir, f"{file_hash}_report.json")
 
-            pdf_path = self.save_pdf_report(file_hash, pdf_path)
-            json_path = self.save_json_report(file_hash, json_path)
+            req_timeout = int(self.config_manager.get("mobsf_request_timeout", 300))
+            pdf_path = self.save_pdf_report(file_hash, pdf_path, timeout=req_timeout)
+            json_path = self.save_json_report(file_hash, json_path, timeout=req_timeout)
 
             if pdf_path:
                 _log(f"PDF report saved: {pdf_path}", "green")

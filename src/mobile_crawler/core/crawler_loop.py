@@ -95,9 +95,20 @@ class CrawlerLoop:
         self._step_advance_event = threading.Event()
 
         # Feature managers (initialized on demand)
-        self._traffic_capture_manager: Optional[TrafficCaptureManager] = None
         self._video_recording_manager: Optional[VideoRecordingManager] = None
         self._mobsf_manager: Optional[MobSFManager] = None
+        self._stopped_early = False
+        
+        # Timer state for US5
+        self._paused_duration = 0.0
+        self._pause_start_time: Optional[float] = None
+        
+        # OCR statistics for US6
+        self._ocr_total_time_ms = 0.0
+        self._ocr_operation_count = 0
+        
+        # Completion reason
+        self._completion_reason: Optional[str] = None
 
         # Recovery Manager (US Story 1)
         self._recovery_config = RecoveryConfig(
@@ -109,9 +120,11 @@ class CrawlerLoop:
         self.total_recovery_count = 0
         self.total_recovery_time_ms = 0.0
 
-        # Configuration
-        self.max_crawl_steps = self.config_manager.get('max_crawl_steps', 15)
-        self.max_crawl_duration_seconds = self.config_manager.get('max_crawl_duration_seconds', 600)
+        # Configuration (Moved to run() to ensure fresh values)
+        # self.max_crawl_steps = ...
+        # self.max_crawl_duration_seconds = ...
+        self.max_crawl_steps = 15  # Defaults
+        self.max_crawl_duration_seconds = 600
         # Use passed value or fallback to config
         self.top_bar_height = top_bar_height or self.config_manager.get('top_bar_height', 0)
 
@@ -140,16 +153,25 @@ class CrawlerLoop:
     def pause(self) -> None:
         """Pause the crawler."""
         if self.state_machine.state == CrawlState.RUNNING:
+            self._pause_start_time = time.time()
             self.state_machine.transition_to(CrawlState.PAUSED_MANUAL)
+            logger.info("Crawler paused manually.")
 
     def resume(self) -> None:
         """Resume the crawler."""
-        if self.state_machine.state == CrawlState.PAUSED_MANUAL:
+        if self.state_machine.state in [CrawlState.PAUSED_MANUAL, CrawlState.PAUSED_STEP]:
+            if self._pause_start_time:
+                self._paused_duration += time.time() - self._pause_start_time
+                self._pause_start_time = None
+            
             self.state_machine.transition_to(CrawlState.RUNNING)
+            logger.info(f"Crawler resumed. Total paused duration: {self._paused_duration:.2f}s")
 
     def stop(self) -> None:
         """Stop the crawler."""
         if self.state_machine.state in [CrawlState.RUNNING, CrawlState.PAUSED_MANUAL]:
+            self._stopped_early = True
+            logger.info("Stopping crawler loop manually...")
             self.state_machine.transition_to(CrawlState.STOPPING)
 
     def is_running(self) -> bool:
@@ -186,6 +208,16 @@ class CrawlerLoop:
         Raises:
             Exception: If the crawl fails
         """
+        session_path = ""
+        step_number = 1
+        start_time = time.time()
+        self._paused_duration = 0.0
+        self._pause_start_time = None
+        self._stopped_early = False
+        self._ocr_total_time_ms = 0.0
+        self._ocr_operation_count = 0
+        self._completion_reason = None
+        
         try:
             # Get run details
             run = self.run_repository.get_run_by_id(run_id)
@@ -204,6 +236,11 @@ class CrawlerLoop:
 
             # Store target package for app context validation
             self._target_package = run.app_package
+
+            # Re-read configuration at run start (ensures UI settings are applied)
+            self.max_crawl_steps = self.config_manager.get('max_crawl_steps', 15)
+            self.max_crawl_duration_seconds = self.config_manager.get('max_crawl_duration_seconds', 600)
+            logger.info(f"Crawl configuration: max_steps={self.max_crawl_steps}, max_duration={self.max_crawl_duration_seconds}s")
 
             # Initialize and start feature managers if enabled
             self._initialize_traffic_capture(run_id, session_path)
@@ -245,7 +282,7 @@ class CrawlerLoop:
                     break
                     
                 try:
-                    step_success = self._execute_step(run_id, step_number)
+                    step_success, reason = self._execute_step(run_id, step_number)
                     
                     # Handle step-by-step pause (Phase 5)
                     if self._step_by_step_enabled and self.state_machine.state != CrawlState.STOPPING:
@@ -254,12 +291,17 @@ class CrawlerLoop:
                         self._emit_event("on_step_paused", run_id, step_number)
                         
                         self._step_advance_event.clear()
+                        # Track pause time for step-by-step
+                        step_pause_start = time.time()
+                        
                         # Wait for UI to signal advance
                         while not self._step_advance_event.is_set():
                             if self.state_machine.state == CrawlState.STOPPING:
                                 break
                             time.sleep(0.1)
                             
+                        self._paused_duration += time.time() - step_pause_start
+                        
                         # If we were resumed, go back to running state
                         if self.state_machine.state == CrawlState.PAUSED_STEP:
                             self.state_machine.transition_to(CrawlState.RUNNING)
@@ -268,35 +310,77 @@ class CrawlerLoop:
                     if step_success:
                         step_number += 1
                     else:
-                        # Step failed or signup completed - exit the loop
+                        logger.info(f"Step {step_number} failed: {reason}")
+                        self._completion_reason = reason
                         break
                 except Exception as e:
                     # Fail the crawl
                     raise
 
-            # Stop feature managers before completing crawl
+            # Export run data to JSON
+            try:
+                db_manager = DatabaseManager()
+                run_exporter = RunExporter(db_manager)
+                export_path = run_exporter.export_run(run_id)
+                logger.info(f"Run data exported to: {export_path}")
+            except Exception as e:
+                logger.warning(f"Failed to export run data: {e}")
+
+        except Exception as e:
+            logger.error(f"Crawler loop failed: {e}")
+            self.state_machine.transition_to(CrawlState.ERROR)
+            self._emit_event("on_error", run_id, step_number, e)
+            raise
+        finally:
+            # Consistent cleanup regardless of how the loop exited (completion, error, or manual stop)
+            self._cleanup_crawl_session(run_id, step_number, start_time, session_path)
+
+    def _cleanup_crawl_session(self, run_id: int, step_number: int, start_time: float, session_path: str) -> None:
+        """Consolidated cleanup logic for consistent termination."""
+        logger.info(f"Cleaning up crawl session {run_id}...")
+        
+        # 1. Stop feature managers (PCAP, Video)
+        try:
             self._stop_traffic_capture(run_id, step_number)
             self._stop_video_recording()
+        except Exception as e:
+            logger.warning(f"Cleanup error during feature stop: {e}")
 
-            # Run MobSF analysis after crawl completion (if enabled)
-            self._run_mobsf_analysis(run_id, session_path)
+        # 2. Run MobSF analysis (if enabled and NOT stopped early)
+        try:
+            if not self._stopped_early:
+                self._run_mobsf_analysis(run_id, session_path)
+            else:
+                logger.info("Skipping MobSF analysis because crawl was stopped early.")
+        except Exception as e:
+            logger.warning(f"Cleanup error during MobSF analysis: {e}")
+
+        # 3. Update recovery stats
+        try:
             self._update_run_recovery_stats(run_id)
+        except Exception as e:
+            logger.warning(f"Cleanup error updating recovery stats: {e}")
 
-            # Complete crawl
-            total_duration_ms = (time.time() - start_time) * 1000
-            reason = self._get_completion_reason(run_id, step_number, start_time)
-
+        # 4. Finalize state and screen tracking
+        if self.state_machine.state in [CrawlState.RUNNING, CrawlState.INITIALIZING]:
             self.state_machine.transition_to(CrawlState.STOPPING)
-            self._emit_event("on_state_changed", run_id, "running", "stopping")
 
-            # End screen tracking and get final stats
-            screen_stats = self.screen_tracker.get_run_stats()
-            self.screen_tracker.end_run()
-            
-            # Finalize run record with actual screen stats
-            total_steps = step_number - 1  # steps are 1-indexed
-            final_status = 'RECOVERY_FAILED' if self._recovery_failed else 'COMPLETED'
-            
+        screen_stats = self.screen_tracker.get_run_stats()
+        self.screen_tracker.end_run()
+
+        # 5. Finalize run record in DB
+        total_steps = step_number - 1
+        final_status = 'COMPLETED'
+        
+        if self._recovery_failed:
+            final_status = 'RECOVERY_FAILED'
+        
+        if self.state_machine.state == CrawlState.ERROR:
+            final_status = 'ERROR'
+        elif self.state_machine.state in [CrawlState.STOPPING, CrawlState.STOPPED]:
+             final_status = 'STOPPED'
+
+        try:
             self.run_repository.update_run_stats(
                 run_id=run_id,
                 status=final_status,
@@ -304,29 +388,22 @@ class CrawlerLoop:
                 total_steps=total_steps,
                 unique_screens=screen_stats.get('unique_screens', total_steps)
             )
-            
-            # Export run data to JSON
-            try:
-                db_manager = DatabaseManager()
-                run_exporter = RunExporter(db_manager)
-                export_path = run_exporter.export_run(run_id)
-                logger.info(f"Run data exported to: {export_path}")
-            except Exception as export_error:
-                logger.warning(f"Failed to export run data: {export_error}")
-
-            self.state_machine.transition_to(CrawlState.STOPPED)
-            self._emit_event("on_state_changed", run_id, "stopping", "stopped")
-
-            self._emit_event("on_crawl_completed", run_id, step_number - 1, total_duration_ms, reason)
-
         except Exception as e:
-            # Handle initialization or other critical errors
-            if self.state_machine.state != CrawlState.ERROR:
-                old_state = self.state_machine.state.value
-                self.state_machine.transition_to(CrawlState.ERROR)
-                self._emit_event("on_state_changed", run_id, old_state, "error")
-            self._emit_event("on_error", run_id, None, e)
-            raise
+            logger.warning(f"Cleanup error updating run stats: {e}")
+
+        # 6. Final state transition to STOPPED
+        self.state_machine.transition_to(CrawlState.STOPPED)
+        
+        # 7. Emit completion event
+        total_duration_ms = (time.time() - start_time) * 1000
+        reason = self._get_completion_reason(run_id, step_number, start_time)
+        
+        ocr_avg_ms = 0.0
+        if self._ocr_operation_count > 0:
+            ocr_avg_ms = self._ocr_total_time_ms / self._ocr_operation_count
+            
+        self._emit_event("on_crawl_completed", run_id, total_steps, total_duration_ms, reason, ocr_avg_ms)
+        logger.info(f"Crawl session {run_id} cleanup complete. Reason: {reason}, OCR Avg: {ocr_avg_ms:.2f}ms")
 
     def _should_continue(self, run_id: int, step_number: int, start_time: float) -> bool:
         """Check if the crawl should continue.
@@ -341,11 +418,15 @@ class CrawlerLoop:
         """
         # Check step limit
         if step_number > self.max_crawl_steps:
+            logger.info(f"Reached maximum steps ({self.max_crawl_steps})")
             return False
 
-        # Check duration limit
-        elapsed_seconds = time.time() - start_time
-        if elapsed_seconds >= self.max_crawl_duration_seconds:
+        # Check duration limit (accounting for pauses)
+        active_seconds = time.time() - start_time - self._paused_duration
+        remaining_seconds = self.max_crawl_duration_seconds - active_seconds
+        logger.debug(f"Duration check: active={active_seconds:.2f}s, remaining={remaining_seconds:.2f}s")
+        if active_seconds >= self.max_crawl_duration_seconds:
+            logger.info(f"Reached maximum duration ({self.max_crawl_duration_seconds}s, active time: {active_seconds:.2f}s)")
             return False
 
         # Don't check state here - handled in main loop
@@ -463,7 +544,12 @@ class CrawlerLoop:
         while self._recovery_manager.should_retry():
             try:
                 # Attempt to execute the action
+                action_start = time.time()
                 result = self._execute_single_action(ai_action, bounds)
+                action_duration_ms = (time.time() - action_start) * 1000
+                
+                # Add execution timing to result
+                result.execution_time_ms = action_duration_ms
                 
                 # Populate recovery info in ActionResult
                 retry_count = self._recovery_manager.state.current_attempts
@@ -557,7 +643,7 @@ class CrawlerLoop:
             recovery_time_ms=total_recovery_time_ms
         )
 
-    def _execute_step(self, run_id: int, step_number: int) -> bool:
+    def _execute_step(self, run_id: int, step_number: int) -> tuple[bool, str]:
         """Execute a single step of the crawl.
 
         Args:
@@ -565,10 +651,11 @@ class CrawlerLoop:
             step_number: Current step number
             
         Returns:
-            True if step executed successfully, False if any action failed
+            Tuple of (success, reason)
         """
         step_start_time = time.time()
         step_success = True
+        reason = "completed"
 
         # Ensure we're in the target app before each step
         if not self._ensure_app_foreground():
@@ -584,7 +671,12 @@ class CrawlerLoop:
             time.sleep(0.5)  # Wait for keyboard animation
 
             # Capture screenshot (returns image, path, AI-optimized base64, and scale factor)
+            screenshot_start = time.time()
             screenshot_image, screenshot_path, screenshot_b64, scale_factor = self.screenshot_capture.capture_full()
+            screenshot_duration_ms = (time.time() - screenshot_start) * 1000
+            
+            # Emit screenshot timing event
+            self._emit_event("on_screenshot_timing", run_id, step_number, screenshot_duration_ms)
 
             # Handle top bar exclusion if configured
             self._emit_event("on_debug_log", run_id, step_number, 
@@ -628,9 +720,15 @@ class CrawlerLoop:
                 
                 grounding_overlay = self.grounding_manager.process_screenshot(screenshot_path)
                 
-                ocr_duration = time.time() - ocr_start
+                ocr_duration_ms = (time.time() - ocr_start) * 1000
+                self._ocr_total_time_ms += ocr_duration_ms
+                self._ocr_operation_count += 1
+                
                 self._emit_event("on_debug_log", run_id, step_number, 
-                    f"Grounding: Completed in {ocr_duration:.2f}s ({len(grounding_overlay.ocr_elements)} elements)")
+                    f"Grounding: Completed in {ocr_duration_ms:.2f}ms ({len(grounding_overlay.ocr_elements)} elements)")
+                
+                # Emit OCR completed event for timing statistics
+                self._emit_event("on_ocr_completed", run_id, step_number, ocr_duration_ms, len(grounding_overlay.ocr_elements))
                 
                 # Use the grounded screenshot for AI analysis
                 # We need to re-encode it as base64 if it changed, 
@@ -828,6 +926,7 @@ class CrawlerLoop:
                 # Stop executing actions if one fails
                 if not result.success:
                     step_success = False
+                    reason = "action_failed"
                     break
 
             # Emit step completed event
@@ -837,14 +936,15 @@ class CrawlerLoop:
             # Check if signup is completed - if so, stop the crawl
             if ai_response.signup_completed:
                 step_success = False
+                reason = "signup_completed"
 
-            return step_success
+            return step_success, reason
 
         except Exception as e:
             # Emit step completed with error
             step_duration_ms = (time.time() - step_start_time) * 1000
             self._emit_event("on_step_completed", run_id, step_number, 0, step_duration_ms)
-            raise
+            return False, f"step_error: {e}"
 
     def _get_completion_reason(self, run_id: int, step_number: int, start_time: float) -> str:
         """Get the reason for crawl completion.
@@ -857,6 +957,9 @@ class CrawlerLoop:
         Returns:
             Completion reason string
         """
+        if self._completion_reason:
+            return self._completion_reason
+            
         if self._recovery_failed:
             return "UiAutomator2 recovery failed"
 
@@ -880,6 +983,15 @@ class CrawlerLoop:
         enable_traffic_capture = self.config_manager.get("enable_traffic_capture", False)
         logger.info(f"Traffic capture enabled in config: {enable_traffic_capture}")
         self._emit_event("on_debug_log", run_id, 0, f"Traffic capture enabled in config: {enable_traffic_capture}")
+        
+        if enable_traffic_capture:
+            api_key = self.config_manager.get("pcapdroid_api_key", "")
+            if api_key:
+                logger.info("PCAPdroid API key is configured")
+                self._emit_event("on_debug_log", run_id, 0, "PCAPdroid API key is configured")
+            else:
+                logger.warning("PCAPdroid API key not configured - permission dialog may appear")
+                self._emit_event("on_debug_log", run_id, 0, "PCAPdroid API key not configured - permission dialog may appear")
         
         if not enable_traffic_capture:
             logger.info("Traffic capture is disabled, skipping initialization")
@@ -998,8 +1110,7 @@ class CrawlerLoop:
                 self._emit_event("on_debug_log", run_id, 0, "Video recording STARTED successfully")
             else:
                 logger.warning(f"Failed to start video recording for run {run_id}")
-                logger.debug("[DEBUG] Video recording start failed - check logs above for details")
-                self._emit_event("on_debug_log", run_id, 0, "Video recording FAILED to start")
+                self._emit_event("on_debug_log", run_id, 0, "Video recording FAILED to start - crawl will continue without video")
                 self._emit_event("on_debug_log", run_id, 0, "[DEBUG] Check Appium driver connection and device capabilities")
         except Exception as e:
             error_msg = f"Error initializing video recording: {e}"

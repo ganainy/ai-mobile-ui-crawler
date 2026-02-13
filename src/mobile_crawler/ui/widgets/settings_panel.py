@@ -435,6 +435,40 @@ class SettingsPanel(QWidget):
         mobsf_api_key = self._config_store.get_secret_plaintext("mobsf_api_key")
         if mobsf_api_key:
             self.mobsf_api_key_input.setText(mobsf_api_key)
+        else:
+            # Try to auto-load from startup script's .mobsf_api_key file
+            mobsf_api_key = self._load_mobsf_api_key_from_file()
+            if mobsf_api_key:
+                self.mobsf_api_key_input.setText(mobsf_api_key)
+                # Auto-save the key to the config store for future use
+                self._config_store.set_secret_plaintext("mobsf_api_key", mobsf_api_key)
+
+    def _load_mobsf_api_key_from_file(self) -> str:
+        """Load MobSF API key from the startup script's output file.
+        
+        The startup script (scripts/start.ps1) automatically extracts the
+        MobSF REST API key from Docker logs and saves it to .mobsf_api_key.
+        
+        Returns:
+            The API key string, or empty string if not found.
+        """
+        import os
+        import logging
+        
+        logger = logging.getLogger(__name__)
+        api_key_file = ".mobsf_api_key"
+        
+        try:
+            if os.path.exists(api_key_file):
+                with open(api_key_file, "r", encoding="utf-8") as f:
+                    api_key = f.read().strip()
+                    if api_key:
+                        logger.info(f"Auto-loaded MobSF API key from {api_key_file}")
+                        return api_key
+        except Exception as e:
+            logger.warning(f"Failed to read MobSF API key file: {e}")
+        
+        return ""
 
     def _on_save_clicked(self):
         """Handle save button click."""

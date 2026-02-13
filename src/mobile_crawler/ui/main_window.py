@@ -83,6 +83,18 @@ class CrawlStatistics:
     ai_response_times_ms: List[float] = field(default_factory=list)
     last_step_number: int = 0  # Track last seen step to avoid double counting
     
+    # OCR timing
+    ocr_total_time_ms: float = 0.0
+    ocr_operation_count: int = 0
+    
+    # Action execution timing
+    action_total_time_ms: float = 0.0
+    action_count: int = 0
+    
+    # Screenshot capture timing
+    screenshot_total_time_ms: float = 0.0
+    screenshot_count: int = 0
+    
     def avg_ai_response_time(self) -> float:
         """Calculate average AI response time in milliseconds."""
         if not self.ai_response_times_ms:
@@ -99,6 +111,24 @@ class CrawlStatistics:
         if minutes <= 0:
             return 0.0
         return len(self.unique_screen_hashes) / minutes
+    
+    def avg_ocr_time_ms(self) -> float:
+        """Average OCR processing time in milliseconds."""
+        if self.ocr_operation_count == 0:
+            return 0.0
+        return self.ocr_total_time_ms / self.ocr_operation_count
+    
+    def avg_action_time_ms(self) -> float:
+        """Average action execution time in milliseconds."""
+        if self.action_count == 0:
+            return 0.0
+        return self.action_total_time_ms / self.action_count
+    
+    def avg_screenshot_time_ms(self) -> float:
+        """Average screenshot capture time in milliseconds."""
+        if self.screenshot_count == 0:
+            return 0.0
+        return self.screenshot_total_time_ms / self.screenshot_count
 
 
 class CrawlerWorker(QThread):
@@ -293,6 +323,8 @@ class MainWindow(QMainWindow):
         self.signal_adapter.screen_processed.connect(self._on_screen_processed)
         self.signal_adapter.step_paused.connect(self._on_step_paused)
         self.signal_adapter.debug_log.connect(self._on_debug_log)
+        self.signal_adapter.ocr_completed.connect(self._on_ocr_completed)
+        self.signal_adapter.screenshot_timing.connect(self._on_screenshot_timing)
         
         # Bottom panel: Run history
         bottom_panel = self._create_bottom_panel()
@@ -390,6 +422,15 @@ class MainWindow(QMainWindow):
             api_key = self._get_api_key_for_provider(self._ai_provider)
             if not api_key:
                 self._show_error("API Key Missing", f"Please configure your {self._ai_provider} API key in Settings.")
+                return False
+        
+        # Check PCAPdroid API key if traffic capture is enabled
+        if self.settings_panel.get_enable_traffic_capture():
+            pcapdroid_key = self.settings_panel.get_pcapdroid_api_key()
+            if not pcapdroid_key:
+                self._show_error("PCAPdroid API Key Missing", 
+                    "Traffic capture is enabled but PCAPdroid API key is not configured. "
+                    "Please configure the API key in Settings, or disable traffic capture.")
                 return False
         
         return True
@@ -713,6 +754,49 @@ class MainWindow(QMainWindow):
         level = LogLevel.ACTION if result.success else LogLevel.WARNING
         if self.log_viewer:
             self.log_viewer.append_log(level, message)
+        
+        # Accumulate action timing for statistics
+        if self._current_stats and result.execution_time_ms > 0:
+            self._current_stats.action_count += 1
+            self._current_stats.action_total_time_ms += result.execution_time_ms
+            # Update stats dashboard
+            if self.stats_dashboard:
+                self.stats_dashboard.update_stats(action_avg_ms=self._current_stats.avg_action_time_ms())
+
+    def _on_ocr_completed(
+        self, run_id: int, step_number: int, duration_ms: float, element_count: int
+    ) -> None:
+        """Handle OCR completed event.
+        
+        Args:
+            run_id: Run ID
+            step_number: Step number
+            duration_ms: OCR processing time
+            element_count: Number of elements detected
+        """
+        # Accumulate OCR timing for statistics
+        if self._current_stats:
+            self._current_stats.ocr_operation_count += 1
+            self._current_stats.ocr_total_time_ms += duration_ms
+            # Update stats dashboard
+            if self.stats_dashboard:
+                self.stats_dashboard.update_stats(ocr_avg_ms=self._current_stats.avg_ocr_time_ms())
+
+    def _on_screenshot_timing(self, run_id: int, step_number: int, duration_ms: float) -> None:
+        """Handle screenshot timing event.
+        
+        Args:
+            run_id: Run ID
+            step_number: Step number
+            duration_ms: Screenshot capture time
+        """
+        # Accumulate screenshot timing for statistics
+        if self._current_stats:
+            self._current_stats.screenshot_count += 1
+            self._current_stats.screenshot_total_time_ms += duration_ms
+            # Update stats dashboard
+            if self.stats_dashboard:
+                self.stats_dashboard.update_stats(screenshot_avg_ms=self._current_stats.avg_screenshot_time_ms())
 
     def _on_step_completed(self, run_id: int, step_number: int, actions_count: int, duration_ms: float) -> None:
         """Handle step completed event.
@@ -731,7 +815,7 @@ class MainWindow(QMainWindow):
         # Note: Full stats update would require accumulating data from run repository
         # For MVP, we'll keep it simple
 
-    def _on_crawl_completed(self, run_id: int, steps: int, duration_ms: float, reason: str) -> None:
+    def _on_crawl_completed(self, run_id: int, steps: int, duration_ms: float, reason: str, ocr_avg_ms: float = 0.0) -> None:
         """Handle crawl completed event.
         
         Args:
@@ -739,8 +823,12 @@ class MainWindow(QMainWindow):
             steps: Total steps completed
             duration_ms: Total duration in milliseconds
             reason: Completion reason
+            ocr_avg_ms: Average OCR processing time in ms
         """
         message = f"Crawl completed: {steps} steps in {duration_ms/1000:.1f}s - {reason}"
+        if ocr_avg_ms > 0:
+            message += f" (OCR Avg: {ocr_avg_ms:.0f}ms)"
+            
         if self.log_viewer:
             self.log_viewer.append_log(LogLevel.INFO, message)
         

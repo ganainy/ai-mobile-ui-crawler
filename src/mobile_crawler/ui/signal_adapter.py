@@ -33,11 +33,15 @@ class QtSignalAdapter(QObject):
     action_executed = Signal(int, int, int, object)  # run_id, step_number, action_index, result
     step_completed = Signal(int, int, int, float)  # run_id, step_number, actions_count, duration_ms
     step_paused = Signal(int, int)  # run_id, step_number
-    crawl_completed = Signal(int, int, float, str)  # run_id, total_steps, total_duration_ms, reason
+    crawl_completed = Signal(int, int, float, str, float)  # run_id, total_steps, total_duration_ms, reason, ocr_avg_ms
     error_occurred = Signal(int, int, object)  # run_id, step_number, error
     state_changed = Signal(int, str, str)  # run_id, old_state, new_state
     screen_processed = Signal(int, int, int, bool, int, int)  # run_id, step, screen_id, is_new, visit_count, total
     debug_log = Signal(int, int, str)  # run_id, step_number, message
+    
+    # Timing signals
+    ocr_completed = Signal(int, int, float, int)  # run_id, step, duration_ms, element_count
+    screenshot_timing = Signal(int, int, float)   # run_id, step, duration_ms
     
     # Recovery signals (US Story 3)
     recovery_started = Signal(int, int, int)  # run_id, step, attempt
@@ -76,9 +80,16 @@ class QtSignalAdapter(QObject):
         """Called when a step is paused (step-by-step mode)."""
         self.step_paused.emit(run_id, step_number)
 
-    def on_crawl_completed(self, run_id: int, total_steps: int, total_duration_ms: float, reason: str) -> None:
+    def on_crawl_completed(
+        self,
+        run_id: int,
+        total_steps: int,
+        total_duration_ms: float,
+        reason: str,
+        ocr_avg_ms: float = 0.0
+    ) -> None:
         """Called when a crawl completes."""
-        self.crawl_completed.emit(run_id, total_steps, total_duration_ms, reason)
+        self.crawl_completed.emit(run_id, total_steps, total_duration_ms, reason, ocr_avg_ms)
 
     def on_error(self, run_id: int, step_number: Optional[int], error: Exception) -> None:
         """Called when an error occurs."""
@@ -105,6 +116,16 @@ class QtSignalAdapter(QObject):
     def on_debug_log(self, run_id: int, step_number: int, message: str) -> None:
         """Called when a debug log message should be displayed."""
         self.debug_log.emit(run_id, step_number, message)
+
+    def on_ocr_completed(
+        self, run_id: int, step_number: int, duration_ms: float, element_count: int
+    ) -> None:
+        """Called after OCR grounding completes."""
+        self.ocr_completed.emit(run_id, step_number, duration_ms, element_count)
+
+    def on_screenshot_timing(self, run_id: int, step_number: int, duration_ms: float) -> None:
+        """Called after screenshot capture completes."""
+        self.screenshot_timing.emit(run_id, step_number, duration_ms)
 
     def on_recovery_started(self, run_id: int, step_number: int, attempt_number: int) -> None:
         """Called when a crash recovery attempt starts."""

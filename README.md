@@ -80,6 +80,41 @@ pip install -e ".[dev]"
 - **Session Restoration**: Restores app foreground state and resumes exploration after recovery
 - **Recovery Metrics**: Detailed tracking of recovery events, duration, and success rates in database logs
 
+## Quick Start
+
+The easiest way to start the application is using the startup script which handles all dependencies:
+
+```powershell
+# Start everything (MobSF, Appium, UI)
+.\scripts\start.ps1
+
+# Start without MobSF
+.\scripts\start.ps1 -NoMobsf
+
+# Start only the UI
+.\scripts\start.ps1 -UiOnly
+
+# Show help
+.\scripts\start.ps1 -Help
+```
+
+The script will:
+- ✅ Check if Docker, npm, and Python are installed
+- ✅ Display clear warnings with installation URLs if dependencies are missing
+- ✅ Start MobSF Docker container on port 8000
+- ✅ **Automatically extract and save the MobSF API key** for the app to use
+- ✅ Start Appium server on port 4723
+- ✅ Wait for services to be ready
+- ✅ Launch the main UI application
+- ✅ Clean up all processes on Ctrl+C
+
+### MobSF API Key Auto-Configuration
+
+When you start MobSF using the startup script, it automatically:
+1. Captures the REST API key from MobSF's Docker output
+2. Saves it to `.mobsf_api_key` in the project root
+3. The app auto-loads this key on startup—no manual configuration needed!
+
 ## Usage
 
 ### CLI

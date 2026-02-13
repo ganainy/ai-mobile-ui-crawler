@@ -573,6 +573,11 @@ class AppiumDriver:
             logger.error(error_msg)
             logger.debug(f"[DEBUG] WebDriverException details: {type(e).__name__}: {str(e)}")
             logger.debug(f"[DEBUG] Exception args: {e.args if hasattr(e, 'args') else 'N/A'}")
+            # Check if it's the benign "No such process" error from cleanup
+            if "No such process" in str(e):
+                logger.info("Screen recording started (ignoring 'No such process' cleanup error)")
+                logger.debug("[DEBUG] Treating 'No such process' as success")
+                return True
             return False
         except AttributeError as e:
             error_msg = f"start_recording_screen method not available: {e}"

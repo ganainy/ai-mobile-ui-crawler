@@ -78,6 +78,24 @@ class TrafficCaptureManager:
         """Returns the internal state of whether capture is thought to be active."""
         return self._is_currently_capturing
 
+    async def _stop_any_existing_capture_async(self) -> None:
+        """Stop any running capture as a precaution."""
+        pcapdroid_activity = "com.emanuelef.remote_capture/.activities.CaptureCtrl"
+        stop_command_args = [
+            "shell",
+            "am",
+            "start",
+            "-n",
+            pcapdroid_activity,
+            "-e",
+            "action",
+            "stop",
+        ]
+        logger.debug("[DEBUG] Sending precautionary STOP command to PCAPdroid...")
+        await self._run_adb_command_async(stop_command_args, suppress_stderr=True)
+        # Brief wait to ensure PCAPdroid has time to stop and release resources
+        await asyncio.sleep(1.0)
+
     async def start_capture_async(
         self,
         run_id: Optional[int] = None,
@@ -99,8 +117,12 @@ class TrafficCaptureManager:
         if not self.traffic_capture_enabled:
             return False, "Traffic capture is not enabled in TrafficCaptureManager"
 
+        # Always stop any existing capture first to avoid conflicts
+        await self._stop_any_existing_capture_async()
+
         if self._is_currently_capturing:
-            return True, "Traffic capture already started"
+            # This check is now less critical but we keep it for state management
+            logger.debug("Internal state says already capturing, but stop was sent anyway.")
 
         target_app_package = str(self.config_manager.get("app_package", ""))
         if not target_app_package:
@@ -213,7 +235,9 @@ class TrafficCaptureManager:
             start_command_args.extend(["-e", "api_key", str(api_key)])
         else:
             logger.warning(
-                "PCAPDROID_API_KEY not configured. User consent on device may be required."
+                "PCAPDROID_API_KEY not configured. "
+                "To avoid permission prompts, configure the API key in PCAPdroid app settings first: "
+                "Open PCAPdroid → Settings → API Control → Enable API Control and set the API key."
             )
 
         stdout, retcode = await self._run_adb_command_async(start_command_args)

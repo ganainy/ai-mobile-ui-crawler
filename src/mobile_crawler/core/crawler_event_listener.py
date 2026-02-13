@@ -45,7 +45,14 @@ class CrawlerEventListener(ABC):
         pass
 
     @abstractmethod
-    def on_crawl_completed(self, run_id: int, total_steps: int, total_duration_ms: float, reason: str) -> None:
+    def on_crawl_completed(
+        self,
+        run_id: int,
+        total_steps: int,
+        total_duration_ms: float,
+        reason: str,
+        ocr_avg_ms: float = 0.0
+    ) -> None:
         """Called when a crawl completes."""
         pass
 
@@ -75,6 +82,27 @@ class CrawlerEventListener(ABC):
     @abstractmethod
     def on_debug_log(self, run_id: int, step_number: int, message: str) -> None:
         """Called to emit a debug log message to the UI."""
+        pass
+
+    @abstractmethod
+    def on_ocr_completed(
+        self,
+        run_id: int,
+        step_number: int,
+        duration_ms: float,
+        element_count: int
+    ) -> None:
+        """Called after OCR grounding completes."""
+        pass
+
+    @abstractmethod
+    def on_screenshot_timing(
+        self,
+        run_id: int,
+        step_number: int,
+        duration_ms: float
+    ) -> None:
+        """Called after screenshot capture completes."""
         pass
 
     def on_recovery_started(self, run_id: int, step_number: int, attempt_number: int) -> None:

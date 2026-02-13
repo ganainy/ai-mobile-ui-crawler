@@ -142,8 +142,10 @@ class LogViewer(QWidget):
         level_name = level.name
         color = self._get_level_color(level_name)
 
-        # Format message
-        formatted_message = f"[{level_name}] {message}"
+        # Format message with timestamp
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        formatted_message = f"[{timestamp}] [{level_name}] {message}"
 
         # Move cursor to end and append
         cursor = self.log_text.textCursor()

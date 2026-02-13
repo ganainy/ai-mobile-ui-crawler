@@ -103,24 +103,38 @@ class StatsDashboard(QWidget):
         self.ai_response_time_label = QLabel("Avg Response: 0ms")
         stats_layout.addWidget(self.ai_response_time_label, 8, 1)
 
+        # Operation Timing section
+        operation_timing_label = QLabel("Operation Timing")
+        operation_timing_label.setFont(QFont("Arial", 10, QFont.Weight.Bold))
+        stats_layout.addWidget(operation_timing_label, 9, 0, 1, 2)
+
+        self.ocr_avg_label = QLabel("OCR Avg: 0ms")
+        stats_layout.addWidget(self.ocr_avg_label, 10, 0)
+
+        self.action_avg_label = QLabel("Action Avg: 0ms")
+        stats_layout.addWidget(self.action_avg_label, 10, 1)
+
+        self.screenshot_avg_label = QLabel("Screenshot Avg: 0ms")
+        stats_layout.addWidget(self.screenshot_avg_label, 11, 0)
+
         # Duration section
         duration_label = QLabel("Duration")
         duration_label.setFont(QFont("Arial", 10, QFont.Weight.Bold))
-        stats_layout.addWidget(duration_label, 9, 0, 1, 2)
+        stats_layout.addWidget(duration_label, 12, 0, 1, 2)
 
         self.duration_label = QLabel("Elapsed: 0s")
-        stats_layout.addWidget(self.duration_label, 10, 0)
+        stats_layout.addWidget(self.duration_label, 13, 0)
 
         # Time progress bar
         time_progress_label = QLabel("Time Progress:")
-        stats_layout.addWidget(time_progress_label, 11, 0)
+        stats_layout.addWidget(time_progress_label, 14, 0)
 
         self.time_progress_bar = QProgressBar()
         self.time_progress_bar.setRange(0, self._max_duration_seconds)
         self.time_progress_bar.setValue(0)
         self.time_progress_bar.setTextVisible(True)
         self.time_progress_bar.setFormat("%v / %m seconds")
-        stats_layout.addWidget(self.time_progress_bar, 11, 1)
+        stats_layout.addWidget(self.time_progress_bar, 14, 1)
 
         self.stats_content.setVisible(False)
         self.main_stats_layout.addWidget(self.stats_content)
@@ -175,6 +189,9 @@ class StatsDashboard(QWidget):
         ai_calls: int = 0,
         avg_ai_response_time_ms: float = 0.0,
         duration_seconds: float = 0.0,
+        ocr_avg_ms: float = 0.0,
+        action_avg_ms: float = 0.0,
+        screenshot_avg_ms: float = 0.0,
     ):
         """Update the statistics display.
         
@@ -188,6 +205,9 @@ class StatsDashboard(QWidget):
             ai_calls: Number of AI API calls
             avg_ai_response_time_ms: Average AI response time in ms
             duration_seconds: Elapsed time in seconds
+            ocr_avg_ms: Average OCR processing time in ms
+            action_avg_ms: Average action execution time in ms
+            screenshot_avg_ms: Average screenshot capture time in ms
         """
         # Show stats content and hide placeholder if we have activity
         if total_steps > 0 or ai_calls > 0 or duration_seconds > 0:
@@ -204,6 +224,11 @@ class StatsDashboard(QWidget):
         self.ai_calls_label.setText(f"AI Calls: {ai_calls}")
         self.ai_response_time_label.setText(f"Avg Response: {avg_ai_response_time_ms:.0f}ms")
         self.duration_label.setText(f"Elapsed: {duration_seconds:.0f}s")
+        
+        # Operation timing
+        self.ocr_avg_label.setText(f"OCR Avg: {ocr_avg_ms:.0f}ms")
+        self.action_avg_label.setText(f"Action Avg: {action_avg_ms:.0f}ms")
+        self.screenshot_avg_label.setText(f"Screenshot Avg: {screenshot_avg_ms:.0f}ms")
 
         # Update progress bars
         self.step_progress_bar.setValue(min(total_steps, self._max_steps))
@@ -226,6 +251,9 @@ class StatsDashboard(QWidget):
             ai_calls=0,
             avg_ai_response_time_ms=0.0,
             duration_seconds=0.0,
+            ocr_avg_ms=0.0,
+            action_avg_ms=0.0,
+            screenshot_avg_ms=0.0,
         )
 
     def get_total_steps(self) -> int:

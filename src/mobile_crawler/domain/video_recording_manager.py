@@ -149,25 +149,26 @@ class VideoRecordingManager:
 
             # Start recording using Appium's built-in method
             logger.debug("[DEBUG] Calling appium_driver.start_recording_screen()...")
-            try:
-                success = self.appium_driver.start_recording_screen()
-                logger.debug(f"[DEBUG] start_recording_screen() returned: {success}")
-            except Exception as e:
-                logger.error(f"[DEBUG] Exception in start_recording_screen(): {e}", exc_info=True)
+            success = False
+            for attempt in range(2):  # Retry once
+                try:
+                    success = self.appium_driver.start_recording_screen()
+                    logger.debug(f"[DEBUG] start_recording_screen() attempt {attempt+1} returned: {success}")
+                    if success:
+                        break
+                except Exception as e:
+                    logger.error(f"[DEBUG] Exception in start_recording_screen() attempt {attempt+1}: {e}", exc_info=True)
+                    if attempt == 0:  # Only retry on first attempt
+                        logger.debug("[DEBUG] Retrying start_recording_screen()...")
+                        time.sleep(1.0)  # Brief pause before retry
+                        continue
+                    else:
+                        break
+            
+            if not success:
                 self.video_file_path = None
                 self._is_recording = False
                 return False
-
-            if success:
-                self._is_recording = True
-                logger.info(f"Video recording started: {video_filename}")
-                logger.debug(f"[DEBUG] Video recording state: _is_recording={self._is_recording}, video_file_path={self.video_file_path}")
-            else:
-                self.video_file_path = None
-                logger.error("Failed to start video recording")
-                logger.debug("[DEBUG] start_recording_screen() returned False - check Appium driver and device capabilities")
-
-            return success
 
         except Exception as e:
             logger.error(f"Error starting video recording: {e}", exc_info=True)
