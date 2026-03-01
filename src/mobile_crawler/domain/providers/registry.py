@@ -171,6 +171,48 @@ class ProviderRegistry:
             # Return empty list - no reliable fallback for local models
             return []
 
+    def fetch_lmstudio_models(self, base_url: str = 'http://localhost:1234/v1') -> List[Dict[str, Any]]:
+        """Fetch available LMStudio models.
+
+        Args:
+            base_url: LMStudio API base URL
+
+        Returns:
+            List of model dictionaries with 'id', 'name', and 'supports_vision' keys
+        """
+        cache_key = f'lmstudio_{base_url}'
+        if cache_key in self._cache:
+            return self._cache[cache_key]
+
+        try:
+            response = requests.get(f'{base_url}/models', timeout=5)
+            response.raise_for_status()
+
+            data = response.json()
+            result = []
+
+            for model in data.get('data', []):
+                model_id = model['id']
+                model_info = {
+                    'id': model_id,
+                    'name': model_id,
+                    'provider': 'lmstudio',
+                    # Check for vision string in name, though local LLMs vary widely. Default to True if unsure to allow user to try.
+                    'supports_vision': self._is_lmstudio_vision_model(model)
+                }
+                result.append(model_info)
+
+            # Keep a fallback if it returns empty but connects
+            if not result:
+                result = [{'id': 'local-model', 'name': 'local-model', 'provider': 'lmstudio', 'supports_vision': True}]
+
+            self._cache[cache_key] = result
+            return result
+
+        except Exception as e:
+            logger.error(f"Failed to fetch LMStudio models: {e}")
+            return []
+
     def _is_gemini_vision_model(self, model_id: str) -> bool:
         """Check if a Gemini model supports vision.
 
@@ -270,6 +312,34 @@ class ProviderRegistry:
                 return True
 
         return False
+
+    def _is_lmstudio_vision_model(self, model: Dict[str, Any]) -> bool:
+        """Check if an LMStudio model supports vision.
+
+        Args:
+            model: Model dictionary from LMStudio API
+
+        Returns:
+            True if model supports vision. Defaults to True if unsure to allow user to try.
+        """
+        model_name = model.get('id', '').lower()
+
+        # Check for vision-related keywords in model name
+        vision_keywords = [
+            'llava',
+            'clip',
+            'vision',
+            'qwen-vl',
+            'vl',
+            'pixtral'
+        ]
+
+        # Check model name
+        if any(keyword in model_name for keyword in vision_keywords):
+            return True
+
+        # Assume True for local models by default if we can't tell, since they often just use 'chat' template
+        return True
 
     def clear_cache(self) -> None:
         """Clear the model cache."""

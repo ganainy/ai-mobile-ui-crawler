@@ -54,7 +54,7 @@ class PreCrawlValidator:
         Args:
             device_id: Target device identifier
             app_package: Target app package name
-            ai_provider: AI provider (gemini, openrouter, ollama)
+            ai_provider: AI provider (gemini, openrouter, ollama, lmstudio)
             ai_model: AI model name
 
         Returns:
@@ -275,8 +275,8 @@ class PreCrawlValidator:
         Returns:
             ValidationError if API key missing for cloud provider, None otherwise
         """
-        # Ollama doesn't require API key
-        if ai_provider == "ollama":
+        # Ollama and LMStudio don't require API key
+        if ai_provider in ("ollama", "lmstudio"):
             return None
 
         # Check for Gemini API key

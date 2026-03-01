@@ -25,6 +25,8 @@ class DatabaseManager:
 
     def get_connection(self) -> sqlite3.Connection:
         """Get database connection with row factory configured."""
+        # Ensure parent directory exists before connecting
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
         # Add timeout to handle busy database (especially on Windows)
         conn = sqlite3.connect(str(self.db_path), timeout=60.0)
         conn.row_factory = sqlite3.Row
@@ -52,7 +54,7 @@ class DatabaseManager:
                 start_time TEXT NOT NULL,
                 end_time TEXT,
                 status TEXT NOT NULL,           -- RUNNING, STOPPED, ERROR
-                ai_provider TEXT,               -- gemini, openrouter, ollama
+                ai_provider TEXT,               -- gemini, openrouter, ollama, lmstudio
                 ai_model TEXT,                  -- model name used
                 total_steps INTEGER DEFAULT 0,
                 unique_screens INTEGER DEFAULT 0,

@@ -1,7 +1,9 @@
 """AI interaction service for coordinating AI model calls."""
 
 import json
+import re
 import time
+import logging
 from datetime import datetime
 from typing import Optional, Protocol
 
@@ -10,6 +12,8 @@ from mobile_crawler.domain.model_adapters import ModelAdapter
 from mobile_crawler.domain.models import AIAction, AIResponse, BoundingBox
 from mobile_crawler.domain.prompt_builder import PromptBuilder
 from mobile_crawler.infrastructure.ai_interaction_repository import AIInteraction, AIInteractionRepository
+
+logger = logging.getLogger(__name__)
 
 
 class AIEventListener(Protocol):
@@ -117,6 +121,11 @@ class AIInteractionService:
             from mobile_crawler.domain.providers.ollama_adapter import OllamaAdapter
             adapter = OllamaAdapter()
             adapter.initialize({'model': model_name}, {})
+            return adapter
+        elif provider == 'lmstudio':
+            from mobile_crawler.domain.providers.lmstudio_adapter import LmstudioAdapter
+            adapter = LmstudioAdapter()
+            adapter.initialize({'model_name': model_name}, {})
             return adapter
         else:
             raise ValueError(f"Unknown AI provider: {provider}")
@@ -318,8 +327,11 @@ class AIInteractionService:
         if not response_text:
             raise ValueError("Empty response from AI model")
         
+        # Strip <think>...</think> tags which are output by some local models
+        import re
+        cleaned_text = re.sub(r'<think>.*?</think>', '', response_text, flags=re.DOTALL).strip()
+        
         # Strip markdown code fences if present
-        cleaned_text = response_text.strip()
         if cleaned_text.startswith("```"):
             # Remove opening fence (```json or ```)
             lines = cleaned_text.split('\n')
@@ -344,12 +356,13 @@ class AIInteractionService:
         if "actions" not in data:
             raise ValueError("Response missing 'actions' field")
         if "signup_completed" not in data:
-            raise ValueError("Response missing 'signup_completed' field")
+            logger.warning("Response missing 'signup_completed' field. Defaulting to False.")
+            data["signup_completed"] = False
         
         if not isinstance(data["actions"], list):
             raise ValueError("'actions' must be a list")
-        if not isinstance(data["signup_completed"], bool):
-            raise ValueError("'signup_completed' must be a boolean")
+        if not isinstance(data.get("signup_completed", False), bool):
+            data["signup_completed"] = False
         
         # Parse actions
         actions = []
