@@ -146,6 +146,7 @@ class AIModelSelector(QWidget):
             ("Gemini", "gemini"),
             ("OpenRouter", "openrouter"),
             ("Ollama (Local)", "ollama"),
+            ("LMStudio (Local)", "lmstudio"),
         ]
         
         for display_name, provider_id in providers:

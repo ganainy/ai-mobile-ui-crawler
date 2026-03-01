@@ -20,6 +20,7 @@ from mobile_crawler.infrastructure.database import DatabaseManager
 from mobile_crawler.infrastructure.gesture_handler import GestureHandler
 from mobile_crawler.infrastructure.run_repository import Run, RunRepository
 from mobile_crawler.infrastructure.screenshot_capture import ScreenshotCapture
+from mobile_crawler.infrastructure.session_folder_manager import SessionFolderManager
 from mobile_crawler.infrastructure.step_log_repository import StepLogRepository
 
 
@@ -174,13 +175,47 @@ class JSONEventListener(CrawlerEventListener):
         print(json.dumps(event), flush=True)
 
 
+    def on_debug_log(self, run_id: int, step_number: int, message: str) -> None:
+        """Handle debug log event."""
+        event = {
+            "event": "debug_log",
+            "run_id": run_id,
+            "step_number": step_number,
+            "message": message,
+            "timestamp": datetime.now().isoformat()
+        }
+        print(json.dumps(event), flush=True)
+
+    def on_ocr_completed(self, run_id: int, step_number: int, duration_ms: float, element_count: int) -> None:
+        """Handle OCR completed event."""
+        event = {
+            "event": "ocr_completed",
+            "run_id": run_id,
+            "step_number": step_number,
+            "duration_ms": duration_ms,
+            "element_count": element_count,
+            "timestamp": datetime.now().isoformat()
+        }
+        print(json.dumps(event), flush=True)
+
+    def on_screenshot_timing(self, run_id: int, step_number: int, duration_ms: float) -> None:
+        """Handle screenshot timing event."""
+        event = {
+            "event": "screenshot_timing",
+            "run_id": run_id,
+            "step_number": step_number,
+            "duration_ms": duration_ms,
+            "timestamp": datetime.now().isoformat()
+        }
+        print(json.dumps(event), flush=True)
+
 @click.command()
 @click.option('--device', required=True, help='Device ID to crawl')
 @click.option('--package', required=True, help='App package name to crawl')
 @click.option('--model', required=True, help='AI model to use')
 @click.option('--steps', type=int, help='Maximum number of crawl steps')
 @click.option('--duration', type=int, help='Maximum crawl duration in seconds')
-@click.option('--provider', help='AI provider (gemini, openrouter, ollama)')
+@click.option('--provider', help='AI provider (gemini, openrouter, ollama, lmstudio)')
 @click.option('--enable-traffic-capture', is_flag=True, help='Enable PCAPdroid traffic capture during crawl')
 @click.option('--enable-video-recording', is_flag=True, help='Enable video recording during crawl')
 @click.option('--enable-mobsf-analysis', is_flag=True, help='Enable MobSF static analysis after crawl')
@@ -253,6 +288,8 @@ def crawl(device: str, package: str, model: str, steps: Optional[int], duration:
             screen_similarity_threshold=screen_similarity_threshold,
             use_perceptual_hashing=use_perceptual_hashing
         )
+        
+        session_folder_manager = SessionFolderManager(app_data_dir)
 
         # Create crawler loop
         crawler_loop = CrawlerLoop(
@@ -265,6 +302,7 @@ def crawl(device: str, package: str, model: str, steps: Optional[int], duration:
             config_manager=config_manager,
             appium_driver=appium_driver,
             screen_tracker=screen_tracker,
+            session_folder_manager=session_folder_manager,
             event_listeners=[JSONEventListener()]
         )
 

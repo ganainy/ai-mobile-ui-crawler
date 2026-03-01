@@ -48,7 +48,7 @@ dev = [
 
 [project.scripts]
 mobile-crawler-cli = "mobile_crawler.cli.main:run"
-mobile-crawler-gui = "mobile_crawler.ui.main:run"
+mobile-crawler-gui = "mobile_crawler.ui.main_window:run"
 
 [tool.setuptools.packages.find]
 where = ["src"]

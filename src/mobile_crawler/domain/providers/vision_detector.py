@@ -53,6 +53,9 @@ class VisionDetector:
         elif provider == 'ollama':
             models = self._registry.fetch_ollama_models(base_url or 'http://localhost:11434')
 
+        elif provider == 'lmstudio':
+            models = self._registry.fetch_lmstudio_models(base_url or 'http://localhost:1234/v1')
+
         else:
             raise ValueError(f"Unsupported provider: {provider}")
 
@@ -66,7 +69,8 @@ class VisionDetector:
         self,
         gemini_api_key: Optional[str] = None,
         openrouter_api_key: Optional[str] = None,
-        ollama_base_url: str = 'http://localhost:11434'
+        ollama_base_url: str = 'http://localhost:11434',
+        lmstudio_base_url: str = 'http://localhost:1234/v1'
     ) -> Dict[str, List[Dict[str, Any]]]:
         """Get vision-capable models from all available providers.
 
@@ -74,6 +78,7 @@ class VisionDetector:
             gemini_api_key: Optional Gemini API key
             openrouter_api_key: Optional OpenRouter API key
             ollama_base_url: Base URL for Ollama
+            lmstudio_base_url: Base URL for LMStudio
 
         Returns:
             Dictionary mapping provider names to lists of vision models
@@ -99,6 +104,12 @@ class VisionDetector:
         except Exception as e:
             logger.warning(f"Failed to fetch Ollama models: {e}")
             result['ollama'] = []
+
+        try:
+            result['lmstudio'] = self.get_vision_models('lmstudio', base_url=lmstudio_base_url)
+        except Exception as e:
+            logger.warning(f"Failed to fetch LMStudio models: {e}")
+            result['lmstudio'] = []
 
         return result
 
@@ -156,6 +167,8 @@ class VisionDetector:
                 models = self._registry.fetch_openrouter_models(api_key)
             elif provider == 'ollama':
                 models = self._registry.fetch_ollama_models(base_url or 'http://localhost:11434')
+            elif provider == 'lmstudio':
+                models = self._registry.fetch_lmstudio_models(base_url or 'http://localhost:1234/v1')
             else:
                 return None
 

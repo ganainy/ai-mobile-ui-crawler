@@ -96,6 +96,7 @@ class CrawlerLoop:
 
         # Feature managers (initialized on demand)
         self._video_recording_manager: Optional[VideoRecordingManager] = None
+        self._traffic_capture_manager: Optional[TrafficCaptureManager] = None
         self._mobsf_manager: Optional[MobSFManager] = None
         self._stopped_early = False
         
@@ -903,8 +904,21 @@ class CrawlerLoop:
                     self._emit_event("on_debug_log", run_id, step_number,
                         f"EXECUTE {ai_action.action} (no coordinates required)")
 
-                # Execute action with automatic crash recovery (US Story 1)
-                result = self._execute_action_with_recovery(ai_action, bounds, run_id, step_number, i)
+                # Handle actions that require coordinates but don't have any
+                if not bounds and ai_action.action in ["click", "input", "long_press"]:
+                    error_msg = f"Cannot execute '{ai_action.action}': no valid coordinates or label found."
+                    logger.warning(error_msg)
+                    self._emit_event("on_debug_log", run_id, step_number, f"FAILED: {error_msg}")
+                    result = ActionResult(
+                        success=False,
+                        action_type=ai_action.action,
+                        target=str(ai_action.label_id) if ai_action.label_id is not None else "unknown",
+                        error_message=error_msg,
+                        duration_ms=0.0
+                    )
+                else:
+                    # Execute action with automatic crash recovery (US Story 1)
+                    result = self._execute_action_with_recovery(ai_action, bounds, run_id, step_number, i)
 
                 actions_executed += 1
                 self._emit_event("on_action_executed", run_id, step_number, i, result)
@@ -924,7 +938,7 @@ class CrawlerLoop:
                     target_bbox_json=json.dumps({
                         "top_left": list(ai_action.target_bounding_box.top_left) if ai_action.target_bounding_box else [bounds[0], bounds[1]],
                         "bottom_right": list(ai_action.target_bounding_box.bottom_right) if ai_action.target_bounding_box else [bounds[2], bounds[3]]
-                    }) if ai_action.action in ["click", "input", "long_press"] else None,
+                    }) if ai_action.action in ["click", "input", "long_press"] and (ai_action.target_bounding_box or bounds) else None,
                     input_text=ai_action.input_text,
                     execution_success=result.success,
                     error_message=str(result.error_message) if result.error_message else None,
