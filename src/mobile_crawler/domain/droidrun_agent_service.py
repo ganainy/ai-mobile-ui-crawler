@@ -345,9 +345,18 @@ class DroidRunAgentService:
                 steps_completed = 0
                 error_message = None
                 if hasattr(result, "success"):
-                    success = bool(getattr(result, "success"))
+                    raw_success = bool(getattr(result, "success"))
                     steps_completed = int(getattr(result, "steps", 0) or 0)
-                    error_message = None if success else str(getattr(result, "reason", ""))
+                    reason = str(getattr(result, "reason", ""))
+
+                    # DroidRun returns success=False when max steps is reached, but this is normal completion
+                    # Treat "reached max steps" as successful completion, not an error
+                    if not raw_success and reason and "maximum" in reason.lower():
+                        success = True  # Reached max steps is successful completion
+                        error_message = None
+                    else:
+                        success = raw_success
+                        error_message = None if success else reason
                 elif isinstance(result, dict):
                     success = result.get("success", False)
                     steps_completed = result.get("steps_completed", 0)
