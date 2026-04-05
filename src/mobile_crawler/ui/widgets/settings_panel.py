@@ -326,9 +326,9 @@ class SettingsPanel(QWidget):
         action_layout.setContentsMargins(15, 20, 15, 20)
 
         # Use ADB actions checkbox
-        self.use_adb_actions_checkbox = QCheckBox("Use ADB for Actions (Recommended with DroidRun)")
+        self.use_adb_actions_checkbox = QCheckBox("Use ADB for Actions (Recommended)")
         self.use_adb_actions_checkbox.setToolTip(
-            "Use ADB commands instead of Appium WebDriver for device actions"
+            "Use ADB commands for device actions"
         )
         action_layout.addWidget(self.use_adb_actions_checkbox)
 
@@ -341,6 +341,26 @@ class SettingsPanel(QWidget):
 
         action_group.setLayout(action_layout)
         layout.addWidget(action_group)
+
+        # Exploration Objective group
+        objective_group = QGroupBox("Exploration Objective / Prompt")
+        objective_layout = QVBoxLayout()
+        objective_layout.setSpacing(8)
+        objective_layout.setContentsMargins(15, 20, 15, 20)
+
+        objective_hint = QLabel(
+            "This prompt is sent to DroidRun as the exploration goal. Edit to customize the exploration behavior."
+        )
+        objective_hint.setWordWrap(True)
+        objective_hint.setStyleSheet("color: #666; font-size: 11px;")
+        objective_layout.addWidget(objective_hint)
+
+        self.exploration_objective_input = QTextEdit()
+        self.exploration_objective_input.setMaximumHeight(120)
+        objective_layout.addWidget(self.exploration_objective_input)
+
+        objective_group.setLayout(objective_layout)
+        layout.addWidget(objective_group)
 
         # Enable/disable controls based on main checkbox
         def on_droidrun_enabled_changed(enabled):
@@ -569,6 +589,17 @@ class SettingsPanel(QWidget):
         droidrun_telemetry = self._config_store.get_setting("droidrun_telemetry_enabled", default=False)
         self.droidrun_telemetry_checkbox.setChecked(droidrun_telemetry)
 
+        # Load exploration objective (pre-fill with default if not customized)
+        exploration_objective = self._config_store.get_setting("exploration_objective", default="")
+        if exploration_objective:
+            self.exploration_objective_input.setPlainText(exploration_objective)
+        else:
+            self.exploration_objective_input.setPlainText(
+                "Explore the app systematically. Navigate through different screens, "
+                "interact with UI elements, and discover the app's functionality. "
+                "Focus on user flows like registration, login, main features, and settings."
+            )
+
     def _load_mobsf_api_key_from_file(self) -> str:
         """Load MobSF API key from the startup script's output file.
         
@@ -731,6 +762,13 @@ class SettingsPanel(QWidget):
             droidrun_telemetry = self.droidrun_telemetry_checkbox.isChecked()
             self._config_store.set_setting("droidrun_telemetry_enabled", droidrun_telemetry, "bool")
 
+            # Save exploration objective
+            exploration_objective = self.exploration_objective_input.toPlainText().strip()
+            if exploration_objective:
+                self._config_store.set_setting("exploration_objective", exploration_objective, "string")
+            else:
+                self._config_store.delete_setting("exploration_objective")
+
             # Emit signal
             self.settings_saved.emit()
 
@@ -863,11 +901,19 @@ class SettingsPanel(QWidget):
 
     def get_use_adb_actions(self) -> bool:
         """Get whether ADB actions are enabled for DroidRun.
-        
+
         Returns:
             True if ADB actions are enabled
         """
         return self.use_adb_actions_checkbox.isChecked()
+
+    def get_exploration_objective(self) -> str:
+        """Get the current exploration objective / prompt for DroidRun.
+
+        Returns:
+            Current exploration objective text (empty string if not set)
+        """
+        return self.exploration_objective_input.toPlainText().strip()
 
 
     def get_pcapdroid_api_key(self) -> str:

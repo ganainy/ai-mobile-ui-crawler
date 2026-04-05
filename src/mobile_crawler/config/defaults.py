@@ -5,13 +5,6 @@ from typing import Dict, Any
 # Default configuration values
 # These are used when no other source provides a value
 DEFAULTS: Dict[str, Any] = {
-    # Appium settings
-    'appium_url': 'http://localhost:4723',
-    'appium_connection_timeout': 30,
-    'appium_implicit_wait': 10,
-    'uiautomator2_max_recovery_attempts': 3,
-    'uiautomator2_recovery_delay': 3.0,
-
     # Crawl settings
     'max_crawl_steps': 15,
     'max_crawl_duration_seconds': 600,
@@ -89,7 +82,7 @@ DEFAULTS: Dict[str, Any] = {
     'droidrun_streaming': False,
     # DroidRun agent retry count for failed operations
     'droidrun_retry_count': 2,
-    # Use ADB for actions instead of Appium (recommended with DroidRun)
+    # Use ADB for device actions (recommended with DroidRun)
     'use_adb_actions': True,
     # DroidRun telemetry and monitoring
     'droidrun_telemetry_enabled': False,

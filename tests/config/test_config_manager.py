@@ -47,7 +47,7 @@ class TestConfigManager:
     def test_precedence_defaults(self):
         """Test that defaults are used when no other source."""
         config = ConfigManager()
-        assert config.get('appium_url') == 'http://localhost:4723'
+        assert config.get('max_crawl_steps') == 15
 
     def test_precedence_fallback_to_provided_default(self):
         """Test fallback to provided default."""

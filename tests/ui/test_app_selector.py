@@ -5,7 +5,6 @@ from unittest.mock import Mock, patch
 from PySide6.QtWidgets import QApplication, QWidget
 
 from mobile_crawler.ui.widgets.app_selector import AppSelector
-from mobile_crawler.infrastructure.appium_driver import AppiumDriver
 
 
 @pytest.fixture
@@ -32,10 +31,8 @@ def mock_config_store():
 @pytest.fixture
 def app_selector(qapp, mock_config_store):
     """Create AppSelector instance for tests."""
-    mock_driver = Mock(spec=AppiumDriver)
     parent_widget = QWidget()
     selector = AppSelector(
-        appium_driver=mock_driver,
         config_store=mock_config_store,
         parent=parent_widget
     )
@@ -50,7 +47,6 @@ class TestAppSelectorInit:
 
     def test_initialization(self, qapp, app_selector):
         """Test that AppSelector initializes correctly."""
-        assert app_selector.appium_driver is not None
         assert app_selector.current_package() is None
 
 
@@ -153,15 +149,13 @@ class TestListInstalledApps:
 
     def test_list_apps_with_connected_device(self, qapp, app_selector):
         """Test listing apps with connected device."""
-        # Mock driver session and execute_script
-        mock_driver = Mock(spec=AppiumDriver)
-        mock_driver.session = Mock()
-        mock_driver.driver = Mock()
-        mock_driver.get_driver = Mock(return_value=mock_driver.driver)
-        mock_driver.driver.execute_script = Mock(return_value="package:com.example.app\npackage:com.test.app")
-
-        app_selector.appium_driver = mock_driver
-        app_selector._list_installed_apps()
+        app_selector.device_id = "emulator-5554"
+        with patch('subprocess.run') as mock_run:
+            mock_run.return_value = Mock(
+                returncode=0,
+                stdout="package:com.example.app\npackage:com.test.app"
+            )
+            app_selector._list_installed_apps()
 
         # Verify combo box is shown and populated
         assert app_selector.apps_combo.isVisible() is True
@@ -171,40 +165,27 @@ class TestListInstalledApps:
 
     def test_list_apps_with_no_device(self, qapp, app_selector):
         """Test listing apps when no device is connected."""
-        mock_driver = Mock(spec=AppiumDriver)
-        mock_driver.session = None
-        mock_driver.is_connected = Mock(return_value=False)
-
-        app_selector.appium_driver = mock_driver
         app_selector._list_installed_apps()
 
-        assert "No device connected" in app_selector.status_label.text()
+        assert "No device" in app_selector.status_label.text()
         assert app_selector.apps_combo.isVisible() is False
 
     def test_list_apps_with_error(self, qapp, app_selector):
         """Test listing apps when error occurs."""
-        mock_driver = Mock(spec=AppiumDriver)
-        mock_driver.session = Mock()
-        mock_driver.driver = Mock()
-        mock_driver.get_driver = Mock(return_value=mock_driver.driver)
-        mock_driver.driver.execute_script = Mock(side_effect=Exception("ADB error"))
-
-        app_selector.appium_driver = mock_driver
-        app_selector._list_installed_apps()
+        app_selector.device_id = "emulator-5554"
+        with patch('subprocess.run') as mock_run:
+            mock_run.side_effect = RuntimeError("ADB error")
+            app_selector._list_installed_apps()
 
         assert "Error" in app_selector.status_label.text()
         assert app_selector.apps_combo.isVisible() is False
 
     def test_list_apps_empty_result(self, qapp, app_selector):
         """Test listing apps when no apps found."""
-        mock_driver = Mock(spec=AppiumDriver)
-        mock_driver.session = Mock()
-        mock_driver.driver = Mock()
-        mock_driver.get_driver = Mock(return_value=mock_driver.driver)
-        mock_driver.driver.execute_script = Mock(return_value="")
-
-        app_selector.appium_driver = mock_driver
-        app_selector._list_installed_apps()
+        app_selector.device_id = "emulator-5554"
+        with patch('subprocess.run') as mock_run:
+            mock_run.return_value = Mock(returncode=0, stdout="")
+            app_selector._list_installed_apps()
 
         assert "No apps found" in app_selector.status_label.text()
         assert app_selector.apps_combo.isVisible() is False
@@ -215,14 +196,13 @@ class TestComboSelection:
 
     def test_combo_selection_updates_input(self, qapp, app_selector):
         """Test that selecting from combo box updates input."""
-        # Mock driver and populate combo box
-        mock_driver = Mock(spec=AppiumDriver)
-        mock_driver.session = Mock()
-        mock_driver.driver = Mock()
-        mock_driver.driver.execute_script = Mock(return_value="package:com.example.app")
-
-        app_selector.appium_driver = mock_driver
-        app_selector._list_installed_apps()
+        app_selector.device_id = "emulator-5554"
+        with patch('subprocess.run') as mock_run:
+            mock_run.return_value = Mock(
+                returncode=0,
+                stdout="package:com.example.app"
+            )
+            app_selector._list_installed_apps()
 
         # Select first app
         app_selector.apps_combo.setCurrentIndex(1)

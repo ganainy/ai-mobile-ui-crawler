@@ -31,21 +31,18 @@ class TestPreCrawlValidator:
 
     def test_init(self):
         """Test initialization."""
-        mock_appium = Mock()
         mock_device = Mock()
         mock_model = Mock()
         mock_config = Mock()
         mock_creds = Mock()
 
         validator = PreCrawlValidator(
-            appium_driver=mock_appium,
             device_detector=mock_device,
             model_detector=mock_model,
             config_manager=mock_config,
             credential_store=mock_creds,
         )
 
-        assert validator._appium_driver is mock_appium
         assert validator._device_detector is mock_device
         assert validator._model_detector is mock_model
         assert validator._config_manager is mock_config
@@ -53,7 +50,6 @@ class TestPreCrawlValidator:
 
     def test_validate_all_valid(self):
         """Test validation with all valid inputs."""
-        mock_appium = Mock()
         mock_device = Mock()
         mock_device.get_connected_devices.return_value = [
             Mock(id="emulator-5554", model="Pixel 5", android_version="13.0")
@@ -68,7 +64,6 @@ class TestPreCrawlValidator:
         mock_creds.get.return_value = "api_key"
 
         validator = PreCrawlValidator(
-            appium_driver=mock_appium,
             device_detector=mock_device,
             model_detector=mock_model,
             config_manager=mock_config,
@@ -86,7 +81,6 @@ class TestPreCrawlValidator:
 
     def test_validate_no_device(self):
         """Test validation with no device connected."""
-        mock_appium = Mock()
         mock_device = Mock()
         mock_device.get_connected_devices.return_value = []
         mock_model = Mock()
@@ -99,7 +93,6 @@ class TestPreCrawlValidator:
         mock_creds.get.return_value = "api_key"
 
         validator = PreCrawlValidator(
-            appium_driver=mock_appium,
             device_detector=mock_device,
             model_detector=mock_model,
             config_manager=mock_config,
@@ -122,7 +115,6 @@ class TestPreCrawlValidator:
 
     def test_validate_device_not_connected(self):
         """Test validation with specific device not connected."""
-        mock_appium = Mock()
         mock_device = Mock()
         mock_device.get_connected_devices.return_value = [
             Mock(id="emulator-5554", model="Pixel 5", android_version="13.0")
@@ -137,7 +129,6 @@ class TestPreCrawlValidator:
         mock_creds.get.return_value = "api_key"
 
         validator = PreCrawlValidator(
-            appium_driver=mock_appium,
             device_detector=mock_device,
             model_detector=mock_model,
             config_manager=mock_config,
@@ -157,7 +148,6 @@ class TestPreCrawlValidator:
 
     def test_validate_no_app_package(self):
         """Test validation with no app package - app_package None skips validation."""
-        mock_appium = Mock()
         mock_device = Mock()
         mock_device.get_connected_devices.return_value = [
             Mock(id="emulator-5554")
@@ -172,7 +162,6 @@ class TestPreCrawlValidator:
         mock_creds.get.return_value = "api_key"
 
         validator = PreCrawlValidator(
-            appium_driver=mock_appium,
             device_detector=mock_device,
             model_detector=mock_model,
             config_manager=mock_config,
@@ -191,7 +180,6 @@ class TestPreCrawlValidator:
 
     def test_validate_invalid_app_package_format(self):
         """Test validation with invalid app package format."""
-        mock_appium = Mock()
         mock_device = Mock()
         mock_device.get_connected_devices.return_value = [
             Mock(id="emulator-5554")
@@ -206,7 +194,6 @@ class TestPreCrawlValidator:
         mock_creds.get.return_value = "api_key"
 
         validator = PreCrawlValidator(
-            appium_driver=mock_appium,
             device_detector=mock_device,
             model_detector=mock_model,
             config_manager=mock_config,
@@ -226,7 +213,6 @@ class TestPreCrawlValidator:
 
     def test_validate_no_ai_provider(self):
         """Test validation with no AI provider."""
-        mock_appium = Mock()
         mock_device = Mock()
         mock_device.get_connected_devices.return_value = [
             Mock(id="emulator-5554")
@@ -240,7 +226,6 @@ class TestPreCrawlValidator:
         mock_creds = Mock()
 
         validator = PreCrawlValidator(
-            appium_driver=mock_appium,
             device_detector=mock_device,
             model_detector=mock_model,
             config_manager=mock_config,
@@ -260,7 +245,6 @@ class TestPreCrawlValidator:
 
     def test_validate_no_ai_model(self):
         """Test validation with no AI model."""
-        mock_appium = Mock()
         mock_device = Mock()
         mock_device.get_connected_devices.return_value = [
             Mock(id="emulator-5554")
@@ -274,7 +258,6 @@ class TestPreCrawlValidator:
         mock_creds = Mock()
 
         validator = PreCrawlValidator(
-            appium_driver=mock_appium,
             device_detector=mock_device,
             model_detector=mock_model,
             config_manager=mock_config,
@@ -294,7 +277,6 @@ class TestPreCrawlValidator:
 
     def test_validate_model_not_vision_capable(self):
         """Test validation with non-vision-capable model."""
-        mock_appium = Mock()
         mock_device = Mock()
         mock_device.get_connected_devices.return_value = [
             Mock(id="emulator-5554")
@@ -309,7 +291,6 @@ class TestPreCrawlValidator:
         mock_creds.get.return_value = "api_key"
 
         validator = PreCrawlValidator(
-            appium_driver=mock_appium,
             device_detector=mock_device,
             model_detector=mock_model,
             config_manager=mock_config,
@@ -330,7 +311,6 @@ class TestPreCrawlValidator:
 
     def test_validate_model_not_available(self):
         """Test validation with model not in available list."""
-        mock_appium = Mock()
         mock_device = Mock()
         mock_device.get_connected_devices.return_value = [
             Mock(id="emulator-5554")
@@ -343,7 +323,6 @@ class TestPreCrawlValidator:
         mock_creds = Mock()
 
         validator = PreCrawlValidator(
-            appium_driver=mock_appium,
             device_detector=mock_device,
             model_detector=mock_model,
             config_manager=mock_config,
@@ -364,7 +343,6 @@ class TestPreCrawlValidator:
 
     def test_validate_no_gemini_api_key(self):
         """Test validation with missing Gemini API key."""
-        mock_appium = Mock()
         mock_device = Mock()
         mock_device.get_connected_devices.return_value = [
             Mock(id="emulator-5554")
@@ -378,7 +356,6 @@ class TestPreCrawlValidator:
         mock_creds.get.return_value = None  # No API key
 
         validator = PreCrawlValidator(
-            appium_driver=mock_appium,
             device_detector=mock_device,
             model_detector=mock_model,
             config_manager=mock_config,
@@ -398,7 +375,6 @@ class TestPreCrawlValidator:
 
     def test_validate_no_openrouter_api_key(self):
         """Test validation with missing OpenRouter API key."""
-        mock_appium = Mock()
         mock_device = Mock()
         mock_device.get_connected_devices.return_value = [
             Mock(id="emulator-5554")
@@ -412,7 +388,6 @@ class TestPreCrawlValidator:
         mock_creds.get.return_value = None  # No API key
 
         validator = PreCrawlValidator(
-            appium_driver=mock_appium,
             device_detector=mock_device,
             model_detector=mock_model,
             config_manager=mock_config,
@@ -432,7 +407,6 @@ class TestPreCrawlValidator:
 
     def test_validate_ollama_no_api_key_required(self):
         """Test that Ollama doesn't require API key."""
-        mock_appium = Mock()
         mock_device = Mock()
         mock_device.get_connected_devices.return_value = [
             Mock(id="emulator-5554")
@@ -445,7 +419,6 @@ class TestPreCrawlValidator:
         mock_creds = Mock()
 
         validator = PreCrawlValidator(
-            appium_driver=mock_appium,
             device_detector=mock_device,
             model_detector=mock_model,
             config_manager=mock_config,
@@ -465,7 +438,6 @@ class TestPreCrawlValidator:
 
     def test_validate_mobsf_not_configured(self):
         """Test MobSF warning when not configured."""
-        mock_appium = Mock()
         mock_device = Mock()
         mock_device.get_connected_devices.return_value = [
             Mock(id="emulator-5554")
@@ -479,7 +451,6 @@ class TestPreCrawlValidator:
         mock_creds = Mock()
 
         validator = PreCrawlValidator(
-            appium_driver=mock_appium,
             device_detector=mock_device,
             model_detector=mock_model,
             config_manager=mock_config,
@@ -499,7 +470,6 @@ class TestPreCrawlValidator:
 
     def test_validate_pcapdroid_not_installed(self):
         """Test PCAPdroid warning when not installed."""
-        mock_appium = Mock()
         mock_device = Mock()
         mock_device.get_connected_devices.return_value = [
             Mock(id="emulator-5554")
@@ -513,7 +483,6 @@ class TestPreCrawlValidator:
         mock_creds = Mock()
 
         validator = PreCrawlValidator(
-            appium_driver=mock_appium,
             device_detector=mock_device,
             model_detector=mock_model,
             config_manager=mock_config,
@@ -533,7 +502,6 @@ class TestPreCrawlValidator:
 
     def test_validate_video_not_available(self):
         """Test video warning when not available."""
-        mock_appium = Mock()
         mock_device = Mock()
         mock_device.get_connected_devices.return_value = [
             Mock(id="emulator-5554")
@@ -547,7 +515,6 @@ class TestPreCrawlValidator:
         mock_creds = Mock()
 
         validator = PreCrawlValidator(
-            appium_driver=mock_appium,
             device_detector=mock_device,
             model_detector=mock_model,
             config_manager=mock_config,
@@ -567,7 +534,6 @@ class TestPreCrawlValidator:
 
     def test_has_errors(self):
         """Test has_errors method."""
-        mock_appium = Mock()
         mock_device = Mock()
         mock_device.get_connected_devices.return_value = []
         mock_model = Mock()
@@ -580,7 +546,6 @@ class TestPreCrawlValidator:
         mock_creds.get.return_value = "api_key"
 
         validator = PreCrawlValidator(
-            appium_driver=mock_appium,
             device_detector=mock_device,
             model_detector=mock_model,
             config_manager=mock_config,
@@ -598,7 +563,6 @@ class TestPreCrawlValidator:
 
     def test_has_errors_no_errors(self):
         """Test has_errors with no errors."""
-        mock_appium = Mock()
         mock_device = Mock()
         mock_device.get_connected_devices.return_value = [
             Mock(id="emulator-5554")
@@ -612,7 +576,6 @@ class TestPreCrawlValidator:
         mock_creds.get.return_value = "api_key"
 
         validator = PreCrawlValidator(
-            appium_driver=mock_appium,
             device_detector=mock_device,
             model_detector=mock_model,
             config_manager=mock_config,
@@ -630,7 +593,6 @@ class TestPreCrawlValidator:
 
     def test_has_warnings_only(self):
         """Test has_warnings_only with only warnings."""
-        mock_appium = Mock()
         mock_device = Mock()
         mock_device.get_connected_devices.return_value = [
             Mock(id="emulator-5554")
@@ -644,7 +606,6 @@ class TestPreCrawlValidator:
         mock_creds = Mock()
 
         validator = PreCrawlValidator(
-            appium_driver=mock_appium,
             device_detector=mock_device,
             model_detector=mock_model,
             config_manager=mock_config,
@@ -662,7 +623,6 @@ class TestPreCrawlValidator:
 
     def test_has_warnings_only_with_error(self):
         """Test has_warnings_only with error present."""
-        mock_appium = Mock()
         mock_device = Mock()
         mock_device.get_connected_devices.return_value = []
         mock_model = Mock()
@@ -675,7 +635,6 @@ class TestPreCrawlValidator:
         mock_creds.get.return_value = "api_key"
 
         validator = PreCrawlValidator(
-            appium_driver=mock_appium,
             device_detector=mock_device,
             model_detector=mock_model,
             config_manager=mock_config,
@@ -693,7 +652,6 @@ class TestPreCrawlValidator:
 
     def test_multiple_errors(self):
         """Test validation with multiple errors."""
-        mock_appium = Mock()
         mock_device = Mock()
         mock_device.get_connected_devices.return_value = []
         mock_model = Mock()
@@ -706,7 +664,6 @@ class TestPreCrawlValidator:
         mock_creds.get.return_value = None
 
         validator = PreCrawlValidator(
-            appium_driver=mock_appium,
             device_detector=mock_device,
             model_detector=mock_model,
             config_manager=mock_config,

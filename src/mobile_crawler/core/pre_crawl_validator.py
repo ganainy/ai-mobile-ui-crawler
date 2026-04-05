@@ -20,7 +20,6 @@ class PreCrawlValidator:
     """Validates all requirements before starting a crawl.
 
     Checks:
-    - Appium server reachable
     - Device connected
     - App selected
     - Model selected (vision-capable)
@@ -30,18 +29,16 @@ class PreCrawlValidator:
     - Optional: Video recording available (warn only)
     """
 
-    def __init__(self, appium_driver, device_detector, model_detector,
+    def __init__(self, device_detector, model_detector,
                  config_manager, credential_store):
         """Initialize the pre-crawl validator.
 
         Args:
-            appium_driver: AppiumDriver instance for connectivity check
             device_detector: DeviceDetector instance for device check
             model_detector: VisionDetector instance for model check
             config_manager: ConfigManager instance for configuration access
             credential_store: CredentialStore instance for API key check
         """
-        self._appium_driver = appium_driver
         self._device_detector = device_detector
         self._model_detector = model_detector
         self._config_manager = config_manager
@@ -65,13 +62,7 @@ class PreCrawlValidator:
         # Track if any required parameter is provided
         has_any_param = bool(device_id or app_package or ai_provider or ai_model)
 
-        # 1. Check Appium server reachable (required when any param is provided)
-        if has_any_param:
-            appium_error = self._check_appium_reachable()
-            if appium_error:
-                errors.append(appium_error)
-
-        # 2. Check device connected (required when device_id is provided)
+        # 1. Check device connected (required when device_id is provided)
         if device_id:
             device_error = self._check_device_connected(device_id)
             if device_error:
@@ -114,41 +105,6 @@ class PreCrawlValidator:
                 errors.append(video_warning)
 
         return errors
-
-    def _check_appium_reachable(self) -> Optional[ValidationError]:
-        """Check if Appium server is reachable.
-
-        Returns:
-            ValidationError if not reachable, None otherwise
-        """
-        try:
-            # Try to get Appium status
-            if hasattr(self._appium_driver, 'get_status'):
-                status = self._appium_driver.get_status()
-                if not status.get('ready', False):
-                    return ValidationError(
-                        field="appium",
-                        message="Appium server is not ready",
-                        severity="error"
-                    )
-            else:
-                # Try a simple connection check
-                if hasattr(self._appium_driver, 'is_connected'):
-                    if not self._appium_driver.is_connected():
-                        return ValidationError(
-                            field="appium",
-                            message="Cannot connect to Appium server at localhost:4723",
-                            severity="error"
-                        )
-        except Exception as e:
-            logger.error(f"Error checking Appium connectivity: {e}")
-            return ValidationError(
-                field="appium",
-                message=f"Failed to check Appium server: {e}",
-                severity="error"
-            )
-
-        return None
 
     def _check_device_connected(self, device_id: Optional[str]) -> Optional[ValidationError]:
         """Check if a device is connected.
@@ -428,7 +384,7 @@ class PreCrawlValidator:
             ValidationError if video not available (warning severity), None otherwise
         """
         try:
-            # Check if Appium supports screen recording
+            # Check if screen recording is available
             video_available = self._config_manager.get("VIDEO_RECORDING_AVAILABLE", True)
 
             if not video_available:

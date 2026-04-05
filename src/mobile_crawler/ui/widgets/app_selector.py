@@ -32,7 +32,6 @@ class AppSelector(QWidget):
     Persists last selected app package across sessions.
 
     Args:
-        appium_driver: Optional AppiumDriver instance (not required for ADB listing)
         config_store: UserConfigStore instance for persisting app package
         parent: Parent widget
     """
@@ -40,16 +39,14 @@ class AppSelector(QWidget):
     # Signal emitted when an app is selected
     app_selected = Signal(str)  # type: ignore
 
-    def __init__(self, appium_driver, config_store: "UserConfigStore", parent=None):
+    def __init__(self, config_store: "UserConfigStore", parent=None):
         """Initialize app selector widget.
 
         Args:
-            appium_driver: Optional AppiumDriver instance (not required for ADB listing)
             config_store: UserConfigStore instance for persisting app package
             parent: Parent widget
         """
         super().__init__(parent)
-        self.appium_driver = appium_driver
         self.device_id: Optional[str] = None
         self._config_store = config_store
         self._current_package: str = None

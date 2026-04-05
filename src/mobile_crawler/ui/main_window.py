@@ -1,5 +1,6 @@
 """Main window for the mobile-crawler GUI application."""
 
+import logging
 import sys
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -21,7 +22,6 @@ from PySide6.QtGui import QIcon
 
 # Service imports
 from mobile_crawler.infrastructure.device_detection import DeviceDetection
-from mobile_crawler.infrastructure.appium_driver import AppiumDriver
 from mobile_crawler.infrastructure.database import DatabaseManager
 from mobile_crawler.infrastructure.user_config_store import UserConfigStore
 from mobile_crawler.infrastructure.session_folder_manager import SessionFolderManager
@@ -34,7 +34,7 @@ from mobile_crawler.core.crawl_controller import CrawlController
 from mobile_crawler.config.config_manager import ConfigManager
 from mobile_crawler.core.crawler_loop import CrawlerLoop
 from mobile_crawler.core.crawl_state_machine import CrawlStateMachine, CrawlState
-from mobile_crawler.core.log_sinks import LogLevel
+from mobile_crawler.core.log_sinks import LogLevel, QLogHandler
 from mobile_crawler.core.stale_run_cleaner import StaleRunCleaner
 from mobile_crawler.infrastructure.screen_repository import ScreenRepository
 from mobile_crawler.infrastructure.step_log_repository import StepLogRepository
@@ -198,6 +198,7 @@ class MainWindow(QMainWindow):
         
         self._setup_window()
         self._setup_central_widget()
+        self._setup_python_logging()
         self._connect_statistics_signals()
 
     def _create_services(self):
@@ -215,7 +216,6 @@ class MainWindow(QMainWindow):
         
         # Device and app services
         device_detection = DeviceDetection()
-        appium_driver = AppiumDriver("dummy-device")  # Will be updated when device is selected
         
         # AI services
         provider_registry = ProviderRegistry()
@@ -246,7 +246,6 @@ class MainWindow(QMainWindow):
         
         return {
             'device_detection': device_detection,
-            'appium_driver': appium_driver,
             'provider_registry': provider_registry,
             'vision_detector': vision_detector,
             'crawl_controller': crawl_controller,
@@ -345,16 +344,6 @@ class MainWindow(QMainWindow):
             return
         
         try:
-            # Update Appium driver with the selected app package and reconnect
-            # Skip Appium entirely when DroidRun/ADB mode is enabled.
-            appium_driver = self._services['appium_driver']
-            if self.settings_panel.get_enable_droidrun_agent() or self.settings_panel.get_use_adb_actions():
-                appium_driver.disconnect()
-            else:
-                appium_driver.disconnect()
-                appium_driver.app_package = self._selected_package
-                appium_driver.connect()
-            
             # Create config manager with current settings
             config_manager = self._create_config_manager()
             
@@ -518,7 +507,13 @@ class MainWindow(QMainWindow):
         mobsf_api_key = self.settings_panel.get_mobsf_api_key()
         if mobsf_api_key:
             config_manager.set('mobsf_api_key', mobsf_api_key)
-        
+
+        # Set exploration objective from settings panel
+        exploration_objective = self.settings_panel.get_exploration_objective()
+        if exploration_objective:
+            config_manager.set('exploration_objective', exploration_objective)
+            self.signal_adapter.on_debug_log(0, 0, f"UI: Using custom exploration objective ({len(exploration_objective)} chars)")
+
         return config_manager
 
     def _create_run_record(self):
@@ -853,7 +848,6 @@ class MainWindow(QMainWindow):
         )
         self.device_selector.setObjectName("deviceSelector")
         self.app_selector = AppSelector(
-            self._services['appium_driver'],
             self._services['user_config_store']
         )
         self.app_selector.setObjectName("appSelector")
@@ -972,12 +966,6 @@ class MainWindow(QMainWindow):
         
         Validates API keys and updates start button state.
         """
-        # If DroidRun is enabled, ensure Appium is not connected.
-        if self.settings_panel.get_enable_droidrun_agent() or self.settings_panel.get_use_adb_actions():
-            appium_driver = self._services.get('appium_driver')
-            if appium_driver and appium_driver.is_connected():
-                appium_driver.disconnect()
-
         # Update control availability based on DroidRun setting
         if self.control_panel:
             droidrun_enabled = self.settings_panel.get_enable_droidrun_agent()
@@ -1047,12 +1035,6 @@ class MainWindow(QMainWindow):
         if self.app_selector:
             self.app_selector.set_device_id(device.device_id if device else None)
         
-        # Update the AppiumDriver with the selected device (connect only on crawl start)
-        if device:
-            appium_driver = self._services['appium_driver']
-            appium_driver.disconnect()
-            appium_driver.device_id = device.device_id
-        
         self._update_start_button_state()
 
     def _on_app_selected(self, package: str) -> None:
@@ -1114,6 +1096,65 @@ class MainWindow(QMainWindow):
         self.signal_adapter.action_executed.connect(self._on_action_executed_stats)
         self.signal_adapter.ai_response_received.connect(self._on_ai_response_stats)
         self.signal_adapter.crawl_completed.connect(self._on_crawl_completed_stats)
+
+    def _setup_python_logging(self) -> None:
+        """Bridge Python's standard logging to the UI log panel.
+
+        Creates a QLogHandler that forwards all Python log records
+        to the UI via the signal adapter's python_log signal. This
+        ensures that module-level logging (logger.info, logger.debug, etc.)
+        from DroidRun internals and all other modules appears in the UI,
+        not just in the terminal.
+        """
+        # Connect the python_log signal to our handler slot
+        self.signal_adapter.python_log.connect(self._on_python_log)
+
+        # Create and configure the handler
+        self._qlog_handler = QLogHandler(self._on_python_log_direct)
+        self._qlog_handler.setLevel(logging.DEBUG)
+
+        # Use a concise format that includes the logger name for context
+        formatter = logging.Formatter('%(name)s: %(message)s')
+        self._qlog_handler.setFormatter(formatter)
+
+        # Attach to the root logger so we capture ALL module logging
+        root_logger = logging.getLogger()
+        root_logger.addHandler(self._qlog_handler)
+        # Ensure root logger passes DEBUG+ through to our handler
+        if root_logger.level > logging.DEBUG:
+            root_logger.setLevel(logging.DEBUG)
+
+    def _on_python_log(self, level_name: str, message: str) -> None:
+        """Handle Python log message forwarded via Qt signal.
+
+        Args:
+            level_name: Log level name string (e.g. "DEBUG", "INFO")
+            message: Formatted log message
+        """
+        if not self.log_viewer:
+            return
+
+        level_map = {
+            "DEBUG": LogLevel.DEBUG,
+            "INFO": LogLevel.INFO,
+            "WARNING": LogLevel.WARNING,
+            "ERROR": LogLevel.ERROR,
+        }
+        level = level_map.get(level_name, LogLevel.DEBUG)
+        self.log_viewer.append_log(level, message)
+
+    def _on_python_log_direct(self, level: LogLevel, message: str) -> None:
+        """Direct callback from QLogHandler running on any thread.
+
+        This is called from the Python logging thread (which may be
+        the crawler worker thread). We emit the Qt signal here for
+        thread-safe delivery to the UI.
+
+        Args:
+            level: LogLevel enum value
+            message: Formatted log message
+        """
+        self.signal_adapter.python_log.emit(level.name, message)
 
     def _on_crawl_started_stats(self, run_id: int, target_package: str) -> None:
         """Initialize statistics tracking when crawl starts.

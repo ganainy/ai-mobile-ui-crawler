@@ -25,7 +25,6 @@ def mock_services():
     """Create mocked services for MainWindow testing."""
     services = {
         'device_detection': Mock(),
-        'appium_driver': Mock(),
         'provider_registry': Mock(),
         'vision_detector': Mock(),
         'crawl_controller': Mock(),

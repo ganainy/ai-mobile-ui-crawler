@@ -7,7 +7,6 @@ from datetime import datetime
 from mobile_crawler.infrastructure.database import DatabaseManager
 from mobile_crawler.infrastructure.run_repository import RunRepository, Run
 from mobile_crawler.domain.traffic_capture_manager import TrafficCaptureManager
-from mobile_crawler.domain.video_recording_manager import VideoRecordingManager
 
 logger = logging.getLogger(__name__)
 
@@ -24,19 +23,16 @@ class StaleRunCleaner:
         self,
         db_manager: DatabaseManager,
         traffic_capture_manager: Optional[TrafficCaptureManager] = None,
-        video_recording_manager: Optional[VideoRecordingManager] = None
     ):
         """Initialize stale run cleaner.
 
         Args:
             db_manager: Database manager for accessing runs
             traffic_capture_manager: Optional traffic capture manager for PCAP cleanup
-            video_recording_manager: Optional video recording manager for video cleanup
         """
         self.db_manager = db_manager
         self.run_repository = RunRepository(db_manager)
         self.traffic_capture_manager = traffic_capture_manager
-        self.video_recording_manager = video_recording_manager
 
     def cleanup_stale_runs(self) -> int:
         """Clean up all stale runs.
@@ -105,15 +101,6 @@ class StaleRunCleaner:
             run: The run to stop recordings for
         """
         device_id = run.device_id
-
-        # Stop video recording if manager available
-        if self.video_recording_manager:
-            try:
-                logger.info(f"Attempting to stop video recording for run {run.id}")
-                self.video_recording_manager.stop_and_save(device_id)
-                logger.info(f"Video recording stopped for run {run.id}")
-            except Exception as e:
-                logger.warning(f"Failed to stop video recording for run {run.id}: {e}")
 
         # Stop traffic capture if manager available
         if self.traffic_capture_manager:

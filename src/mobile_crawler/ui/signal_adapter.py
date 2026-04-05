@@ -48,6 +48,9 @@ class QtSignalAdapter(QObject):
     recovery_completed = Signal(int, int, bool, float)  # run_id, step, success, duration_ms
     recovery_exhausted = Signal(int, int, int, str)  # run_id, step, attempts, message
 
+    # Python logging bridge signal (level_name, formatted_message)
+    python_log = Signal(str, str)  # level_name (e.g. "DEBUG"), message
+
     def on_crawl_started(self, run_id: int, target_package: str) -> None:
         """Called when a crawl starts."""
         self.crawl_started.emit(run_id, target_package)

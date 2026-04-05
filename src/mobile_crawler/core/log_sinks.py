@@ -123,3 +123,60 @@ class DatabaseSink(LogSink):
             (datetime.now().isoformat(), level.value, message, extra_json)
         )
         conn.commit()
+
+
+class QLogHandler(logging.Handler):
+    """Python logging handler that bridges standard logging to the UI.
+
+    Attaches to the Python root logger (or any logger) and forwards
+    all log records to a callback function, which should emit a Qt signal
+    to update the UI log panel. This ensures that ALL module-level logging
+    (logger.info, logger.debug, etc.) appears in the UI, not just
+    event-driven messages from CrawlerLoop.
+    """
+
+    # Mapping from Python logging levels to our custom LogLevel enum
+    _LEVEL_MAP = {
+        logging.DEBUG: LogLevel.DEBUG,
+        logging.INFO: LogLevel.INFO,
+        logging.WARNING: LogLevel.WARNING,
+        logging.ERROR: LogLevel.ERROR,
+        logging.CRITICAL: LogLevel.ERROR,
+    }
+
+    # Third-party logger prefixes to suppress in the UI (too noisy for users).
+    _SUPPRESSED_PREFIXES = (
+        "httpcore.",
+        "httpx.",
+        "urllib3.",
+        "google_genai.",
+        "llama_index_instrumentation.",
+        "droidrun-telemetry",
+    )
+
+    def __init__(self, callback):
+        """Initialize the handler.
+
+        Args:
+            callback: Callable accepting (LogLevel, str) that routes
+                      the log message to the UI (typically a Qt signal emit).
+        """
+        super().__init__()
+        self._callback = callback
+
+    def emit(self, record: logging.LogRecord) -> None:
+        """Forward a log record to the UI callback.
+
+        Args:
+            record: The Python log record to forward.
+        """
+        try:
+            # Skip noisy third-party loggers that clutter the UI
+            if any(record.name.startswith(p) for p in self._SUPPRESSED_PREFIXES):
+                return
+            message = self.format(record)
+            level = self._LEVEL_MAP.get(record.levelno, LogLevel.DEBUG)
+            self._callback(level, message)
+        except Exception:
+            # Never let logging errors break the application
+            pass
