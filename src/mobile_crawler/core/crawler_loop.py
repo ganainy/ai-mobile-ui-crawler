@@ -160,14 +160,40 @@ class CrawlerLoop:
                 )
 
             exploration_objective = self.config_manager.get("exploration_objective", None)
-            result = self._run_async(
-                self._droidrun_agent_service.execute_exploration_task(
-                    run_id=run_id,
-                    app_package=run.app_package,
-                    max_steps=self.config_manager.get("max_crawl_steps", 15),
-                    exploration_objective=exploration_objective
-                )
-            )
+
+            # Run both execute and cleanup in the same event loop to ensure proper
+            # cleanup of async resources (e.g., google.genai.AsyncClient instances)
+            async def run_and_cleanup():
+                try:
+                    return await self._droidrun_agent_service.execute_exploration_task(
+                        run_id=run_id,
+                        app_package=run.app_package,
+                        max_steps=self.config_manager.get("max_crawl_steps", 15),
+                        exploration_objective=exploration_objective
+                    )
+                finally:
+                    # Always cleanup, even if execute fails
+                    await self._droidrun_agent_service.cleanup()
+                    # Force GC of google.genai objects while event loop is still running.
+                    # Their __del__ schedules aclose() tasks via create_task(), which only
+                    # works while the loop is active.
+                    import gc
+                    gc.collect()
+                    # Drain any __del__-scheduled cleanup tasks before the loop closes
+                    pending = [t for t in asyncio.all_tasks()
+                               if t is not asyncio.current_task()]
+                    if pending:
+                        try:
+                            await asyncio.wait_for(
+                                asyncio.gather(*pending, return_exceptions=True),
+                                timeout=5.0
+                            )
+                        except asyncio.TimeoutError:
+                            for task in pending:
+                                if not task.done():
+                                    task.cancel()
+
+            result = self._run_async(run_and_cleanup())
 
             duration_ms = (time.time() - start_time) * 1000
             if self._cancel_requested:
@@ -203,10 +229,6 @@ class CrawlerLoop:
         finally:
             if self._droidrun_agent_service:
                 self._droidrun_agent_service.clear_run_logging()
-                try:
-                    self._run_async(self._droidrun_agent_service.cleanup())
-                except Exception as cleanup_error:
-                    logger.warning(f"DroidRun cleanup failed: {cleanup_error}")
                 self._droidrun_agent_service = None
             self._transition_state("STOPPED", run_id)
 

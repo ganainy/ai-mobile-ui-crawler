@@ -263,7 +263,7 @@ class DroidRunAgentService:
             DroidRunGoal for app exploration
         """
         if exploration_objective:
-            description = f"Explore the {app_package} app with focus on: {exploration_objective}"
+            description = f"Explore the {app_package} app. {exploration_objective}"
         else:
             description = (
                 f"Explore the {app_package} app systematically. "
@@ -300,89 +300,157 @@ class DroidRunAgentService:
         start_time = time.time()
         goal: Optional[DroidRunGoal] = None
 
-        try:
-            # Initialize agent if needed
-            await self._initialize_agent()
+        # Crash recovery settings
+        max_crash_retries = 2
+        crash_retry_delay = 3.0  # seconds to wait after relaunch
 
-            # Create exploration goal
-            goal = self._create_exploration_goal(app_package, max_steps, exploration_objective)
-
-            # Log agent request
-            self._log_agent_interaction(run_id, goal, None, None)
-
-            # Execute the goal using DroidRun agent
-            logger.info(f"Executing DroidRun agent goal: {goal.description[:100]}...")
-
-            from droidrun.agent.droid.droid_agent import DroidAgent
-
-            self._droid_agent = DroidAgent(
-                goal=goal.description,
-                config=self._droidrun_config
-            )
-
-            result = self._droid_agent.run()
+        for attempt in range(max_crash_retries + 1):
             try:
-                from workflows.handler import WorkflowHandler
-            except Exception:
-                WorkflowHandler = None
+                # Initialize agent if needed
+                await self._initialize_agent()
 
-            if WorkflowHandler and isinstance(result, WorkflowHandler):
-                self._current_handler = result
-                self._handler_loop = asyncio.get_running_loop()
-                result = await result
-            else:
-                result = await result
+                # Create exploration goal
+                goal = self._create_exploration_goal(app_package, max_steps, exploration_objective)
 
-            duration_ms = (time.time() - start_time) * 1000
+                # Log agent request
+                self._log_agent_interaction(run_id, goal, None, None)
 
-            # Convert DroidRun result to our format
-            success = False
-            steps_completed = 0
-            error_message = None
-            if hasattr(result, "success"):
-                success = bool(getattr(result, "success"))
-                steps_completed = int(getattr(result, "steps", 0) or 0)
-                error_message = None if success else str(getattr(result, "reason", ""))
-            elif isinstance(result, dict):
-                success = result.get("success", False)
-                steps_completed = result.get("steps_completed", 0)
-                error_message = result.get("error_message")
+                # Execute the goal using DroidRun agent
+                logger.info(f"Executing DroidRun agent goal: {goal.description[:100]}...")
 
-            droid_result = DroidRunResult(
-                success=success,
-                steps_completed=steps_completed,
-                actions_taken=[],
-                final_state={},
-                error_message=error_message,
-                total_duration_ms=duration_ms
-            )
+                from droidrun.agent.droid.droid_agent import DroidAgent
 
-            # Log successful interaction
-            self._log_agent_interaction(run_id, goal, result, None)
+                self._droid_agent = DroidAgent(
+                    goal=goal.description,
+                    config=self._droidrun_config
+                )
 
-            logger.info(f"DroidRun agent completed: {droid_result.steps_completed} steps in {duration_ms:.1f}ms")
-            return droid_result
+                result = self._droid_agent.run()
+                try:
+                    from workflows.handler import WorkflowHandler
+                except Exception:
+                    WorkflowHandler = None
 
-        except Exception as e:
-            duration_ms = (time.time() - start_time) * 1000
-            error_msg = str(e)
+                if WorkflowHandler and isinstance(result, WorkflowHandler):
+                    self._current_handler = result
+                    self._handler_loop = asyncio.get_running_loop()
+                    result = await result
+                else:
+                    result = await result
 
-            # Log failed interaction
-            if goal is not None:
-                self._log_agent_interaction(run_id, goal, None, error_msg)
+                duration_ms = (time.time() - start_time) * 1000
 
-            logger.error(f"DroidRun agent execution failed: {error_msg}")
-            return DroidRunResult(
-                success=False,
-                steps_completed=0,
-                actions_taken=[],
-                final_state={},
-                error_message=error_msg,
-                total_duration_ms=duration_ms
-            )
-        finally:
-            self._current_handler = None
-            self._handler_loop = None
+                # Convert DroidRun result to our format
+                success = False
+                steps_completed = 0
+                error_message = None
+                if hasattr(result, "success"):
+                    success = bool(getattr(result, "success"))
+                    steps_completed = int(getattr(result, "steps", 0) or 0)
+                    error_message = None if success else str(getattr(result, "reason", ""))
+                elif isinstance(result, dict):
+                    success = result.get("success", False)
+                    steps_completed = result.get("steps_completed", 0)
+                    error_message = result.get("error_message")
+
+                droid_result = DroidRunResult(
+                    success=success,
+                    steps_completed=steps_completed,
+                    actions_taken=[],
+                    final_state={},
+                    error_message=error_message,
+                    total_duration_ms=duration_ms
+                )
+
+                # Log successful interaction
+                self._log_agent_interaction(run_id, goal, result, None)
+
+                logger.info(f"DroidRun agent completed: {droid_result.steps_completed} steps in {duration_ms:.1f}ms")
+                return droid_result
+
+            except Exception as e:
+                duration_ms = (time.time() - start_time) * 1000
+                error_msg = str(e)
+
+                # Check if error indicates app crash
+                is_app_crash = self._is_app_crash_error(error_msg)
+
+                if is_app_crash and attempt < max_crash_retries:
+                    logger.warning(
+                        f"App crash detected (attempt {attempt + 1}/{max_crash_retries}): {error_msg}"
+                    )
+
+                    # Attempt to relaunch the app
+                    try:
+                        from mobile_crawler.domain.adb_action_executor import ADBActionExecutor
+
+                        executor = ADBActionExecutor(device_id=self.device_id)
+                        logger.info(f"Attempting to relaunch app: {app_package}")
+
+                        launch_result = executor.launch_app(app_package)
+
+                        if launch_result.success:
+                            logger.info(f"App relaunched successfully, waiting {crash_retry_delay}s before retry...")
+                            await asyncio.sleep(crash_retry_delay)
+
+                            # Update start_time to exclude relaunch time from total duration
+                            start_time = time.time()
+
+                            # Retry the exploration
+                            continue
+                        else:
+                            logger.error(f"Failed to relaunch app: {launch_result.error_message}")
+                            # Fall through to error handling below
+                    except Exception as relaunch_error:
+                        logger.error(f"Error during app relaunch: {relaunch_error}")
+                        # Fall through to error handling below
+
+                # Log failed interaction
+                if goal is not None:
+                    self._log_agent_interaction(run_id, goal, None, error_msg)
+
+                logger.error(f"DroidRun agent execution failed: {error_msg}")
+                return DroidRunResult(
+                    success=False,
+                    steps_completed=0,
+                    actions_taken=[],
+                    final_state={},
+                    error_message=error_msg,
+                    total_duration_ms=duration_ms
+                )
+            finally:
+                self._current_handler = None
+                self._handler_loop = None
+
+        # Should not reach here, but handle the case
+        return DroidRunResult(
+            success=False,
+            steps_completed=0,
+            actions_taken=[],
+            final_state={},
+            error_message="Max crash retries exceeded",
+            total_duration_ms=(time.time() - start_time) * 1000
+        )
+
+    def _is_app_crash_error(self, error_message: str) -> bool:
+        """Check if error message indicates an app crash.
+
+        Args:
+            error_message: Error message to check
+
+        Returns:
+            True if error appears to be caused by app crash
+        """
+        crash_indicators = [
+            "No active window",
+            "root filtered out",
+            "Accessibility node info",
+            "WindowManager",
+            "android.view.WindowLeaked"
+        ]
+
+        error_lower = error_message.lower()
+        return any(indicator.lower() in error_lower for indicator in crash_indicators)
 
     def _log_agent_interaction(
         self,
@@ -519,14 +587,74 @@ class DroidRunAgentService:
         await self._shutdown_active_workflow()
         if self._droid_agent:
             try:
-                if hasattr(self._droid_agent, "cleanup"):
-                    await self._droid_agent.cleanup()
-                    logger.info("DroidRun agent cleaned up successfully")
+                # Close LLM clients to ensure AsyncClient.aclose() is called
+                await self._close_llm_clients()
             except Exception as e:
-                logger.warning(f"Error during DroidRun agent cleanup: {e}")
-            finally:
-                self._droid_agent = None
-                self._is_initialized = False
+                logger.warning(f"Error closing LLM clients: {e}")
+            try:
+                # Null out sub-agent references so GC can collect google.genai objects
+                for attr in ('manager_agent', 'executor_agent', 'action_ctx',
+                             'state_provider', 'registry', 'mcp_manager'):
+                    if hasattr(self._droid_agent, attr):
+                        setattr(self._droid_agent, attr, None)
+            except Exception:
+                pass
+        self._droid_agent = None
+        self._is_initialized = False
+
+    async def _close_llm_clients(self) -> None:
+        """Explicitly close google.genai.Client instances to prevent pending tasks."""
+        if not self._droid_agent:
+            return
+
+        # Google GenAI clients are stored in the agent's LLM instances
+        llm_attributes = [
+            'manager_llm', 'executor_llm', 'fast_agent_llm',
+            'app_opener_llm', 'structured_output_llm'
+        ]
+
+        closed_ids = set()  # Track by id() since some LLMs share the same object
+        for attr in llm_attributes:
+            llm = getattr(self._droid_agent, attr, None)
+            if llm is None or id(llm) in closed_ids:
+                continue
+
+            # Close the underlying google.genai client if it's a GoogleGenAI LLM
+            if llm.__class__.__name__ == 'GoogleGenAI':
+                await self._close_google_genai_client(llm, attr)
+                closed_ids.add(id(llm))
+
+            # Null out LLM reference so GC can collect the google.genai.Client
+            setattr(self._droid_agent, attr, None)
+
+    async def _close_google_genai_client(self, llm, attr_name: str) -> None:
+        """Close a google.genai.Client instance from a llama-index GoogleGenAI LLM.
+
+        The google.genai.Client has both sync and async cleanup:
+        - client.close() is SYNCHRONOUS (returns None)
+        - client.aio.aclose() is ASYNCHRONOUS (must be awaited)
+
+        We must close the async client first, then the sync client.
+        """
+        try:
+            # Access the internal google.genai.Client
+            if hasattr(llm, '_client'):
+                client = llm._client
+
+                # First, close the async client (this is what has pending tasks)
+                if hasattr(client, 'aio'):
+                    async_client = client.aio
+                    if hasattr(async_client, 'aclose'):
+                        await async_client.aclose()
+                        logger.debug(f"Closed google.genai.AsyncClient for {attr_name}")
+
+                # Then, close the sync client (this is synchronous, no await needed)
+                if hasattr(client, 'close'):
+                    client.close()  # This is sync, do NOT await
+                    logger.debug(f"Closed google.genai.Client for {attr_name}")
+
+        except Exception as e:
+            logger.warning(f"Failed to close client for {attr_name}: {e}")
 
     async def _shutdown_active_workflow(self) -> None:
         handler = self._current_handler
