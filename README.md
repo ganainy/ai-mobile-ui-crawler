@@ -4,12 +4,12 @@ AI-Powered Android Exploration Tool (Image-Only Mode)
 
 ## Overview
 
-Mobile Crawler is an automated exploration tool for Android mobile applications using AI-driven **visual-only analysis** and intelligent action decisions. It operates in **image-only mode**, meaning it uses screenshots and coordinate-based actions without accessing XML page source or DOM hierarchy. The crawler captures screenshots, analyzes them via pluggable AI providers (VLM), translates analysis into device commands, and executes them via Appium.
+Mobile Crawler is an automated exploration tool for Android mobile applications using AI-driven **visual-only analysis** and intelligent action decisions. The UI and session management live in this repo, while the traversal/decision loop is delegated to the DroidRun submodule (external/droidrun).
 
 ## Features
 
 - **Image-Only Operation**: Operates purely on visual feedback (screenshots) with coordinate-based actions - no XML/DOM access
-- **AI-Driven Exploration**: Uses vision-capable AI models (Gemini, OpenRouter, Ollama) to analyze screenshots and determine next actions
+- **AI-Driven Exploration**: Uses vision-capable AI models (Gemini, OpenRouter, Ollama) to analyze screenshots and determine next actions via DroidRun
 - **Multiple Interfaces**: Both GUI and CLI interfaces for different use cases
 - **Comprehensive Logging**: Detailed action logs, statistics, and reporting
 - **Network Traffic Capture**: PCAPdroid integration for capturing network traffic during crawl sessions
@@ -24,6 +24,11 @@ Mobile Crawler is an automated exploration tool for Android mobile applications 
 # Clone the repository
 git clone <repository-url>
 cd mobile-crawler
+
+# Initialize submodules (DroidRun is vendored via external/droidrun)
+git submodule update --init --recursive
+
+# DroidRun is provided by the submodule; do not install the pip package.
 
 # Create virtual environment
 python -m venv .venv

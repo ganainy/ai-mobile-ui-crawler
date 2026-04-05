@@ -36,16 +36,9 @@ from mobile_crawler.core.crawler_loop import CrawlerLoop
 from mobile_crawler.core.crawl_state_machine import CrawlStateMachine, CrawlState
 from mobile_crawler.core.log_sinks import LogLevel
 from mobile_crawler.core.stale_run_cleaner import StaleRunCleaner
-from mobile_crawler.infrastructure.screenshot_capture import ScreenshotCapture
-from mobile_crawler.infrastructure.gesture_handler import GestureHandler
-from mobile_crawler.infrastructure.ai_interaction_service import AIInteractionService
-from mobile_crawler.domain.action_executor import ActionExecutor
-from mobile_crawler.domain.screen_tracker import ScreenTracker
-from mobile_crawler.infrastructure.step_log_repository import StepLogRepository
 from mobile_crawler.infrastructure.screen_repository import ScreenRepository
+from mobile_crawler.infrastructure.step_log_repository import StepLogRepository
 from mobile_crawler.domain.models import ActionResult
-from mobile_crawler.infrastructure.mailosaur.service import MailosaurService
-from mobile_crawler.infrastructure.mailosaur.models import MailosaurConfig
 
 # Widget imports
 from mobile_crawler.ui.widgets.device_selector import DeviceSelector
@@ -353,10 +346,14 @@ class MainWindow(QMainWindow):
         
         try:
             # Update Appium driver with the selected app package and reconnect
+            # Skip Appium entirely when DroidRun/ADB mode is enabled.
             appium_driver = self._services['appium_driver']
-            appium_driver.disconnect()
-            appium_driver.app_package = self._selected_package
-            appium_driver.connect()
+            if self.settings_panel.get_enable_droidrun_agent() or self.settings_panel.get_use_adb_actions():
+                appium_driver.disconnect()
+            else:
+                appium_driver.disconnect()
+                appium_driver.app_package = self._selected_package
+                appium_driver.connect()
             
             # Create config manager with current settings
             config_manager = self._create_config_manager()
@@ -382,6 +379,16 @@ class MainWindow(QMainWindow):
             # Create crawler loop
             crawler_loop = self._create_crawler_loop(config_manager, run)
             self._crawler_loop = crawler_loop
+
+            # Disable pause/step-by-step when DroidRun agent is used
+            if self.settings_panel.get_enable_droidrun_agent():
+                self._step_by_step_enabled = False
+                self.control_panel.set_step_by_step(False)
+                self.control_panel.set_step_by_step_available(False)
+                self.control_panel.set_pause_available(False)
+            else:
+                self.control_panel.set_step_by_step_available(True)
+                self.control_panel.set_pause_available(True)
             
             # Apply step-by-step mode if enabled in UI
             if self._step_by_step_enabled:
@@ -547,65 +554,13 @@ class MainWindow(QMainWindow):
         Returns:
             CrawlerLoop instance
         """
-        run_id = run.id
-        # Get the connected AppiumDriver
-        appium_driver = self._services['appium_driver']
-        
-        state_machine = CrawlStateMachine()
-        screenshot_capture = ScreenshotCapture(
-            driver=appium_driver, 
-            run_id=run_id,
-            session_folder_manager=self._services['session_folder_manager']
-        )
-        ai_service = AIInteractionService.from_config(config_manager, event_listener=self.signal_adapter)
-        gesture_handler = GestureHandler(appium_driver)
-        
-        # Initialize MailosaurService for ActionExecutor
-        import os
-        mailosaur_api_key = os.environ.get('MAILOSAUR_API_KEY') or config_manager.get('mailosaur_api_key')
-        mailosaur_server_id = os.environ.get('MAILOSAUR_SERVER_ID') or config_manager.get('mailosaur_server_id')
-        
-        mailosaur_service = None
-        if mailosaur_api_key and mailosaur_server_id:
-            mailosaur_config = MailosaurConfig(
-                api_key=mailosaur_api_key,
-                server_id=mailosaur_server_id
-            )
-            mailosaur_service = MailosaurService(config=mailosaur_config)
-        
-        action_executor = ActionExecutor(
-            appium_driver, 
-            gesture_handler, 
-            mailosaur_service=mailosaur_service,
-            test_email=config_manager.get('test_email')
-        )
-        step_log_repo = StepLogRepository(self._services['database_manager'])
-        
-        # Get screen deduplication configuration
-        screen_similarity_threshold = config_manager.get("screen_similarity_threshold", 12)
-        use_perceptual_hashing = config_manager.get("use_perceptual_hashing", True)
-        screen_tracker = ScreenTracker(
-            self._services['database_manager'],
-            screen_similarity_threshold=screen_similarity_threshold,
-            use_perceptual_hashing=use_perceptual_hashing
-        )
-        
-        # Attach signal adapter as event listener
         event_listeners = [self.signal_adapter]
-        
+
         return CrawlerLoop(
-            crawl_state_machine=state_machine,
-            screenshot_capture=screenshot_capture,
-            ai_interaction_service=ai_service,
-            action_executor=action_executor,
-            step_log_repository=step_log_repo,
-            run_repository=self._services['run_repository'],
             config_manager=config_manager,
-            appium_driver=appium_driver,
-            screen_tracker=screen_tracker,
+            run_repository=self._services['run_repository'],
             session_folder_manager=self._services['session_folder_manager'],
-            event_listeners=event_listeners,
-            top_bar_height=config_manager.get('top_bar_height', 0)
+            event_listeners=event_listeners
         )
 
     def _on_crawl_finished(self) -> None:
@@ -1017,6 +972,18 @@ class MainWindow(QMainWindow):
         
         Validates API keys and updates start button state.
         """
+        # If DroidRun is enabled, ensure Appium is not connected.
+        if self.settings_panel.get_enable_droidrun_agent() or self.settings_panel.get_use_adb_actions():
+            appium_driver = self._services.get('appium_driver')
+            if appium_driver and appium_driver.is_connected():
+                appium_driver.disconnect()
+
+        # Update control availability based on DroidRun setting
+        if self.control_panel:
+            droidrun_enabled = self.settings_panel.get_enable_droidrun_agent()
+            self.control_panel.set_step_by_step_available(not droidrun_enabled)
+            self.control_panel.set_pause_available(not droidrun_enabled)
+
         # Validate API keys based on selected provider
         if self._ai_provider:
             api_key = self._get_api_key_for_provider(self._ai_provider)
@@ -1077,27 +1044,14 @@ class MainWindow(QMainWindow):
             device: AndroidDevice instance
         """
         self._selected_device = device
+        if self.app_selector:
+            self.app_selector.set_device_id(device.device_id if device else None)
         
-        # Update the AppiumDriver with the selected device and connect
+        # Update the AppiumDriver with the selected device (connect only on crawl start)
         if device:
             appium_driver = self._services['appium_driver']
-            # Disconnect any existing session
             appium_driver.disconnect()
-            # Update device ID and connect
             appium_driver.device_id = device.device_id
-            try:
-                appium_driver.connect()
-            except Exception as e:
-                from PySide6.QtWidgets import QMessageBox
-                QMessageBox.warning(
-                    self,
-                    "Appium Connection Failed",
-                    f"Failed to connect to device via Appium:\n\n{e}\n\n"
-                    "Please ensure:\n"
-                    "1. Appium server is running (npx appium -p 4723)\n"
-                    "2. The device is connected and authorized\n"
-                    "3. USB debugging is enabled"
-                )
         
         self._update_start_button_state()
 

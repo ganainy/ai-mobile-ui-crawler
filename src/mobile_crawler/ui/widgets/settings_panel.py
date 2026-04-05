@@ -548,7 +548,7 @@ class SettingsPanel(QWidget):
                 self._config_store.set_secret_plaintext("mobsf_api_key", mobsf_api_key)
 
         # Load DroidRun Agent settings
-        enable_droidrun = self._config_store.get_setting("use_droidrun_agent", default=False)
+        enable_droidrun = self._config_store.get_setting("use_droidrun_agent", default=True)
         self.enable_droidrun_checkbox.setChecked(enable_droidrun)
 
         droidrun_reasoning = self._config_store.get_setting("droidrun_reasoning_mode", default=True)
@@ -563,7 +563,7 @@ class SettingsPanel(QWidget):
         droidrun_retry_count = self._config_store.get_setting("droidrun_retry_count", default=2)
         self.droidrun_retry_count_input.setValue(droidrun_retry_count)
 
-        use_adb_actions = self._config_store.get_setting("use_adb_actions", default=False)
+        use_adb_actions = self._config_store.get_setting("use_adb_actions", default=True)
         self.use_adb_actions_checkbox.setChecked(use_adb_actions)
 
         droidrun_telemetry = self._config_store.get_setting("droidrun_telemetry_enabled", default=False)
@@ -852,6 +852,22 @@ class SettingsPanel(QWidget):
             True if MobSF analysis is enabled
         """
         return self.enable_mobsf_analysis_checkbox.isChecked()
+
+    def get_enable_droidrun_agent(self) -> bool:
+        """Get the current DroidRun agent enabled state.
+        
+        Returns:
+            True if DroidRun agent is enabled
+        """
+        return self.enable_droidrun_checkbox.isChecked()
+
+    def get_use_adb_actions(self) -> bool:
+        """Get whether ADB actions are enabled for DroidRun.
+        
+        Returns:
+            True if ADB actions are enabled
+        """
+        return self.use_adb_actions_checkbox.isChecked()
 
 
     def get_pcapdroid_api_key(self) -> str:

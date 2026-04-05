@@ -5,6 +5,7 @@ old-project-for-refrence/
 .venv/
 venv/
 env/
+.venv312/
 
 # Python cache
 __pycache__/

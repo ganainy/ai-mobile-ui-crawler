@@ -34,8 +34,6 @@ dependencies = [
     "pyyaml>=6.0.0",
     "pytesseract>=0.3.10",
     "easyocr>=1.7.0",
-    # DroidRun AI Agent Integration
-    "droidrun>=0.4.26",
 ]
 
 [project.optional-dependencies]

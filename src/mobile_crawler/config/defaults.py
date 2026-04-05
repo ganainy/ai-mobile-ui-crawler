@@ -80,7 +80,7 @@ DEFAULTS: Dict[str, Any] = {
 
     # DroidRun Agent Integration settings
     # Enable DroidRun's advanced AI agent system for multi-step planning
-    'use_droidrun_agent': False,
+    'use_droidrun_agent': True,
     # Use reasoning mode for complex planning (vs direct execution)
     'droidrun_reasoning_mode': True,
     # Maximum planning/execution cycles for DroidRun agent
@@ -90,7 +90,7 @@ DEFAULTS: Dict[str, Any] = {
     # DroidRun agent retry count for failed operations
     'droidrun_retry_count': 2,
     # Use ADB for actions instead of Appium (recommended with DroidRun)
-    'use_adb_actions': False,
+    'use_adb_actions': True,
     # DroidRun telemetry and monitoring
     'droidrun_telemetry_enabled': False,
 }

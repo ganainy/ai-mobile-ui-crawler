@@ -3,6 +3,8 @@
 import asyncio
 import json
 import logging
+import os
+import sys
 import time
 from dataclasses import dataclass
 from datetime import datetime
@@ -14,6 +16,36 @@ from mobile_crawler.domain.models import ActionResult, AIResponse, AIAction, Bou
 from mobile_crawler.infrastructure.ai_interaction_repository import AIInteraction, AIInteractionRepository
 
 logger = logging.getLogger(__name__)
+
+
+class DroidRunLogHandler(logging.Handler):
+    """Forward DroidRun logs to UI and JSONL file per run."""
+
+    def __init__(self, run_id: int, log_path: str, emit_debug, enable_ui: bool):
+        super().__init__()
+        self.run_id = run_id
+        self.log_path = log_path
+        self.emit_debug = emit_debug
+        self.enable_ui = enable_ui
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            message = record.getMessage()
+            payload = {
+                "timestamp": time.time(),
+                "level": record.levelname,
+                "run_id": self.run_id,
+                "message": message,
+            }
+
+            with open(self.log_path, "a", encoding="utf-8") as log_file:
+                log_file.write(json.dumps(payload, ensure_ascii=True) + "\n")
+
+            if self.enable_ui and self.emit_debug:
+                self.emit_debug(self.run_id, 0, message)
+        except Exception:
+            # Avoid log recursion on failures
+            pass
 
 
 @dataclass
@@ -42,7 +74,7 @@ class DroidRunAgentService:
     def __init__(
         self,
         config_manager: ConfigManager,
-        ai_interaction_repository: AIInteractionRepository,
+        ai_interaction_repository: Optional[AIInteractionRepository],
         device_id: str
     ):
         """Initialize DroidRun agent service.
@@ -56,6 +88,10 @@ class DroidRunAgentService:
         self.ai_interaction_repository = ai_interaction_repository
         self.device_id = device_id
         self._droid_agent = None
+        self._droidrun_config = None
+        self._current_handler = None
+        self._handler_loop = None
+        self._log_handler = None
         self._is_initialized = False
 
     def _get_droidrun_config(self) -> Dict[str, Any]:
@@ -78,65 +114,116 @@ class DroidRunAgentService:
 
         droid_provider = provider_mapping.get(ai_provider, 'GoogleGenAI')
 
+        def resolve_api_key(primary_key: str, env_keys: List[str]) -> Optional[str]:
+            key_value = self.config_manager.get(primary_key)
+            if not key_value:
+                try:
+                    key_value = self.config_manager.user_config_store.get_secret_plaintext(primary_key)
+                except Exception:
+                    key_value = None
+            if not key_value:
+                for env_key in env_keys:
+                    key_value = os.environ.get(env_key)
+                    if key_value:
+                        break
+            return key_value
+
         config = {
             'agent': {
                 'max_steps': self.config_manager.get('max_crawl_steps', 15),
                 'reasoning': self.config_manager.get('droidrun_reasoning_mode', True),
-                'streaming': False,
-                'max_retries': self.config_manager.get('ai_retry_count', 2)
+                'streaming': self.config_manager.get('droidrun_streaming', False),
             },
             'device': {
                 'platform': 'android',
-                'device_id': self.device_id,
+                'serial': self.device_id,
                 'auto_setup': False  # We handle device setup separately
             },
             'llm_profiles': {
                 'manager': {
                     'provider': droid_provider,
                     'model': ai_model,
-                    'temperature': 0.1
+                    'temperature': 0.1,
+                    'kwargs': {}
                 },
                 'executor': {
                     'provider': droid_provider,
                     'model': ai_model,
-                    'temperature': 0.0
+                    'temperature': 0.0,
+                    'kwargs': {}
                 },
                 'fast_agent': {
                     'provider': droid_provider,
                     'model': ai_model,
-                    'temperature': 0.0
+                    'temperature': 0.0,
+                    'kwargs': {}
+                },
+                'app_opener': {
+                    'provider': droid_provider,
+                    'model': ai_model,
+                    'temperature': 0.0,
+                    'kwargs': {}
+                },
+                'structured_output': {
+                    'provider': droid_provider,
+                    'model': ai_model,
+                    'temperature': 0.0,
+                    'kwargs': {}
                 }
             },
-            'tools': {
-                # Disable certain tools that conflict with our infrastructure
-                'disabled': ['portal_screenshot']  # We use our own screenshot capture
-            },
             'telemetry': {
-                'enabled': False  # Disable to avoid conflicts with our monitoring
+                'enabled': self.config_manager.get('droidrun_telemetry_enabled', False)
             }
         }
 
         # Add API keys based on provider
         if ai_provider == 'gemini':
-            api_key = self.config_manager.get('gemini_api_key')
+            api_key = resolve_api_key('gemini_api_key', ['GEMINI_API_KEY', 'GOOGLE_API_KEY'])
             if api_key:
-                config['llm_profiles']['manager']['api_key'] = api_key
-                config['llm_profiles']['executor']['api_key'] = api_key
-                config['llm_profiles']['fast_agent']['api_key'] = api_key
+                config['llm_profiles']['manager']['kwargs']['api_key'] = api_key
+                config['llm_profiles']['executor']['kwargs']['api_key'] = api_key
+                config['llm_profiles']['fast_agent']['kwargs']['api_key'] = api_key
+                config['llm_profiles']['app_opener']['kwargs']['api_key'] = api_key
+                config['llm_profiles']['structured_output']['kwargs']['api_key'] = api_key
+                os.environ['GEMINI_API_KEY'] = api_key
+                os.environ['GOOGLE_API_KEY'] = api_key
         elif ai_provider == 'openai':
-            api_key = self.config_manager.get('openai_api_key')
+            api_key = resolve_api_key('openai_api_key', ['OPENAI_API_KEY'])
             if api_key:
-                config['llm_profiles']['manager']['api_key'] = api_key
-                config['llm_profiles']['executor']['api_key'] = api_key
-                config['llm_profiles']['fast_agent']['api_key'] = api_key
+                config['llm_profiles']['manager']['kwargs']['api_key'] = api_key
+                config['llm_profiles']['executor']['kwargs']['api_key'] = api_key
+                config['llm_profiles']['fast_agent']['kwargs']['api_key'] = api_key
+                config['llm_profiles']['app_opener']['kwargs']['api_key'] = api_key
+                config['llm_profiles']['structured_output']['kwargs']['api_key'] = api_key
+                os.environ['OPENAI_API_KEY'] = api_key
         elif ai_provider == 'anthropic':
-            api_key = self.config_manager.get('anthropic_api_key')
+            api_key = resolve_api_key('anthropic_api_key', ['ANTHROPIC_API_KEY'])
             if api_key:
-                config['llm_profiles']['manager']['api_key'] = api_key
-                config['llm_profiles']['executor']['api_key'] = api_key
-                config['llm_profiles']['fast_agent']['api_key'] = api_key
+                config['llm_profiles']['manager']['kwargs']['api_key'] = api_key
+                config['llm_profiles']['executor']['kwargs']['api_key'] = api_key
+                config['llm_profiles']['fast_agent']['kwargs']['api_key'] = api_key
+                config['llm_profiles']['app_opener']['kwargs']['api_key'] = api_key
+                config['llm_profiles']['structured_output']['kwargs']['api_key'] = api_key
+                os.environ['ANTHROPIC_API_KEY'] = api_key
 
         return config
+
+    def configure_run_logging(self, run_id: int, log_dir: str, emit_debug, enable_ui: bool) -> None:
+        """Attach a DroidRun log handler for UI/debug and JSONL output."""
+        droid_logger = logging.getLogger("droidrun")
+        log_path = os.path.join(log_dir, "droidrun_trace.jsonl")
+        handler = DroidRunLogHandler(run_id, log_path, emit_debug, enable_ui)
+        handler.setLevel(logging.DEBUG)
+        droid_logger.addHandler(handler)
+        droid_logger.setLevel(logging.DEBUG)
+        self._log_handler = handler
+
+    def clear_run_logging(self) -> None:
+        """Detach DroidRun log handler if attached."""
+        if self._log_handler:
+            droid_logger = logging.getLogger("droidrun")
+            droid_logger.removeHandler(self._log_handler)
+            self._log_handler = None
 
     async def _initialize_agent(self) -> None:
         """Initialize DroidRun agent with current configuration."""
@@ -144,19 +231,13 @@ class DroidRunAgentService:
             return
 
         try:
+            self._ensure_droidrun_import()
             # Import DroidRun components
-            from droidrun.agent.droid.droid_agent import DroidAgent
-            from droidrun.config.droidrun_config import DroidRunConfig
+            from droidrun.config_manager.config_manager import DroidConfig
 
             # Create DroidRun configuration
             config_dict = self._get_droidrun_config()
-            config = DroidRunConfig.from_dict(config_dict)
-
-            # Initialize DroidRun agent
-            self._droid_agent = DroidAgent(config=config)
-
-            # Perform any necessary setup
-            await self._droid_agent.setup()
+            self._droidrun_config = DroidConfig.from_dict(config_dict)
 
             self._is_initialized = True
             logger.info("DroidRun agent initialized successfully")
@@ -217,6 +298,7 @@ class DroidRunAgentService:
             DroidRunResult with execution details
         """
         start_time = time.time()
+        goal: Optional[DroidRunGoal] = None
 
         try:
             # Initialize agent if needed
@@ -231,20 +313,47 @@ class DroidRunAgentService:
             # Execute the goal using DroidRun agent
             logger.info(f"Executing DroidRun agent goal: {goal.description[:100]}...")
 
-            result = await self._droid_agent.run(
+            from droidrun.agent.droid.droid_agent import DroidAgent
+
+            self._droid_agent = DroidAgent(
                 goal=goal.description,
-                max_steps=goal.max_steps
+                config=self._droidrun_config
             )
+
+            result = self._droid_agent.run()
+            try:
+                from workflows.handler import WorkflowHandler
+            except Exception:
+                WorkflowHandler = None
+
+            if WorkflowHandler and isinstance(result, WorkflowHandler):
+                self._current_handler = result
+                self._handler_loop = asyncio.get_running_loop()
+                result = await result
+            else:
+                result = await result
 
             duration_ms = (time.time() - start_time) * 1000
 
             # Convert DroidRun result to our format
+            success = False
+            steps_completed = 0
+            error_message = None
+            if hasattr(result, "success"):
+                success = bool(getattr(result, "success"))
+                steps_completed = int(getattr(result, "steps", 0) or 0)
+                error_message = None if success else str(getattr(result, "reason", ""))
+            elif isinstance(result, dict):
+                success = result.get("success", False)
+                steps_completed = result.get("steps_completed", 0)
+                error_message = result.get("error_message")
+
             droid_result = DroidRunResult(
-                success=result.get('success', False),
-                steps_completed=result.get('steps_completed', 0),
-                actions_taken=result.get('actions_taken', []),
-                final_state=result.get('final_state', {}),
-                error_message=result.get('error_message'),
+                success=success,
+                steps_completed=steps_completed,
+                actions_taken=[],
+                final_state={},
+                error_message=error_message,
                 total_duration_ms=duration_ms
             )
 
@@ -259,7 +368,8 @@ class DroidRunAgentService:
             error_msg = str(e)
 
             # Log failed interaction
-            self._log_agent_interaction(run_id, goal, None, error_msg)
+            if goal is not None:
+                self._log_agent_interaction(run_id, goal, None, error_msg)
 
             logger.error(f"DroidRun agent execution failed: {error_msg}")
             return DroidRunResult(
@@ -270,11 +380,14 @@ class DroidRunAgentService:
                 error_message=error_msg,
                 total_duration_ms=duration_ms
             )
+        finally:
+            self._current_handler = None
+            self._handler_loop = None
 
     def _log_agent_interaction(
         self,
         run_id: int,
-        goal: DroidRunGoal,
+        goal: Optional[DroidRunGoal],
         result: Optional[Dict[str, Any]],
         error_message: Optional[str]
     ) -> None:
@@ -286,14 +399,19 @@ class DroidRunAgentService:
             result: Agent execution result (if successful)
             error_message: Error message (if failed)
         """
+        if not self.ai_interaction_repository:
+            return
+
         try:
             # Create request data
-            request_data = {
-                "goal_description": goal.description,
-                "max_steps": goal.max_steps,
-                "reasoning_mode": goal.reasoning,
-                "app_package": goal.app_package
-            }
+            request_data = None
+            if goal is not None:
+                request_data = {
+                    "goal_description": goal.description,
+                    "max_steps": goal.max_steps,
+                    "reasoning_mode": goal.reasoning,
+                    "app_package": goal.app_package
+                }
 
             # Create response data
             response_data = None
@@ -311,7 +429,7 @@ class DroidRunAgentService:
                 run_id=run_id,
                 step_number=1,  # DroidRun handles multiple steps internally
                 timestamp=datetime.now(),
-                request_json=json.dumps(request_data),
+                request_json=json.dumps(request_data) if request_data else None,
                 screenshot_path=None,  # DroidRun handles screenshots internally
                 response_raw=json.dumps(response_data) if response_data else None,
                 response_parsed_json=json.dumps(response_data) if response_data else None,
@@ -327,6 +445,13 @@ class DroidRunAgentService:
 
         except Exception as e:
             logger.warning(f"Failed to log agent interaction: {e}")
+
+    def _ensure_droidrun_import(self) -> None:
+        """Ensure the DroidRun submodule is importable without pip install."""
+        repo_root = Path(__file__).resolve().parents[3]
+        droidrun_root = repo_root / "external" / "droidrun"
+        if droidrun_root.exists() and str(droidrun_root) not in sys.path:
+            sys.path.insert(0, str(droidrun_root))
 
     def convert_droidrun_actions_to_crawler_format(
         self,
@@ -391,12 +516,47 @@ class DroidRunAgentService:
 
     async def cleanup(self) -> None:
         """Cleanup DroidRun agent resources."""
+        await self._shutdown_active_workflow()
         if self._droid_agent:
             try:
-                await self._droid_agent.cleanup()
-                logger.info("DroidRun agent cleaned up successfully")
+                if hasattr(self._droid_agent, "cleanup"):
+                    await self._droid_agent.cleanup()
+                    logger.info("DroidRun agent cleaned up successfully")
             except Exception as e:
                 logger.warning(f"Error during DroidRun agent cleanup: {e}")
             finally:
                 self._droid_agent = None
                 self._is_initialized = False
+
+    async def _shutdown_active_workflow(self) -> None:
+        handler = self._current_handler
+        if not handler:
+            return
+
+        try:
+            if not handler.done():
+                await handler.cancel_run()
+                try:
+                    await asyncio.wait_for(handler, timeout=5)
+                except asyncio.TimeoutError:
+                    logger.warning("Timed out waiting for DroidRun workflow to finish")
+            if handler.ctx and handler.ctx.is_running:
+                await handler.ctx.shutdown()
+        except Exception as e:
+            logger.warning(f"Error while shutting down DroidRun workflow: {e}")
+        finally:
+            self._current_handler = None
+            self._handler_loop = None
+
+    def request_cancel(self) -> bool:
+        """Request cancellation of the active DroidRun workflow if available."""
+        handler = self._current_handler
+        loop = self._handler_loop
+        if not handler or not loop:
+            return False
+
+        if loop.is_running():
+            loop.call_soon_threadsafe(lambda: asyncio.create_task(handler.cancel_run()))
+            return True
+
+        return False

@@ -1,6 +1,8 @@
 """App selection widget for mobile-crawler GUI."""
 
 import re
+import subprocess
+from typing import Optional
 from typing import TYPE_CHECKING
 
 from PySide6.QtWidgets import (
@@ -15,7 +17,6 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Signal, QObject
 
-from mobile_crawler.infrastructure.appium_driver import AppiumDriver
 from mobile_crawler.ui.async_utils import AsyncOperation
 
 if TYPE_CHECKING:
@@ -31,7 +32,7 @@ class AppSelector(QWidget):
     Persists last selected app package across sessions.
 
     Args:
-        appium_driver: AppiumDriver instance for listing installed apps
+        appium_driver: Optional AppiumDriver instance (not required for ADB listing)
         config_store: UserConfigStore instance for persisting app package
         parent: Parent widget
     """
@@ -39,16 +40,17 @@ class AppSelector(QWidget):
     # Signal emitted when an app is selected
     app_selected = Signal(str)  # type: ignore
 
-    def __init__(self, appium_driver: AppiumDriver, config_store: "UserConfigStore", parent=None):
+    def __init__(self, appium_driver, config_store: "UserConfigStore", parent=None):
         """Initialize app selector widget.
 
         Args:
-            appium_driver: AppiumDriver instance for listing installed apps
+            appium_driver: Optional AppiumDriver instance (not required for ADB listing)
             config_store: UserConfigStore instance for persisting app package
             parent: Parent widget
         """
         super().__init__(parent)
         self.appium_driver = appium_driver
+        self.device_id: Optional[str] = None
         self._config_store = config_store
         self._current_package: str = None
         self._setup_ui()
@@ -152,12 +154,16 @@ class AppSelector(QWidget):
         pattern = r'^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$'
         return bool(re.match(pattern, package))
 
+    def set_device_id(self, device_id: Optional[str]) -> None:
+        """Update the active device id used for ADB calls."""
+        self.device_id = device_id
+
     def _list_installed_apps(self):
         """List installed apps from device."""
         self.status_label.setText("Loading apps...")
         self.status_label.setStyleSheet("color: orange; font-style: italic;")
 
-        if not self.appium_driver.is_connected():
+        if not self.device_id:
             # Show a more helpful message about needing a device connection
             QMessageBox.warning(
                 self,
@@ -180,15 +186,26 @@ class AppSelector(QWidget):
         self._list_thread.start()
 
     def _fetch_packages(self) -> str:
-        """Fetch installed packages from device via Appium.
+        """Fetch installed packages from device via ADB.
         
         Returns:
             Output of 'pm list packages -3'
         """
-        return self.appium_driver.get_driver().execute_script(
-            "mobile: shell",
-            {"command": "pm", "args": ["list", "packages", "-3"]}
+        if not self.device_id:
+            raise RuntimeError("No device selected")
+
+        result = subprocess.run(
+            ["adb", "-s", self.device_id, "shell", "pm", "list", "packages", "-3"],
+            capture_output=True,
+            text=True,
+            timeout=20
         )
+
+        if result.returncode != 0:
+            error_output = result.stderr.strip() or result.stdout.strip()
+            raise RuntimeError(error_output or "ADB command failed")
+
+        return result.stdout
 
     def _on_list_success(self, packages: str):
         """Handle successful package list retrieval.
@@ -232,14 +249,14 @@ class AppSelector(QWidget):
             error: Error message
         """
         error_msg = str(error).lower()
-        if "connection refused" in error_msg or "connection failed" in error_msg or "appium" in error_msg:
+        if "adb" in error_msg or "device" in error_msg or "not found" in error_msg:
             QMessageBox.critical(
                 self.parent(), 
-                "Appium Not Running", 
-                "Cannot connect to Appium server. Please:\n\n"
-                "1. Start Appium server: npx appium -p 4723\n"
-                "2. Ensure Appium is running on port 4723\n"
-                "3. Check that no firewall is blocking the connection\n\n"
+                "ADB Not Available", 
+                "Cannot access the device via ADB. Please:\n\n"
+                "1. Ensure the device is connected and authorized\n"
+                "2. Verify USB debugging is enabled\n"
+                "3. Confirm 'adb' is available in your PATH\n\n"
                 f"Error: {error}"
             )
         else:

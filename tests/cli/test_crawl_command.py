@@ -41,36 +41,22 @@ class TestCrawlCommand:
         mock_crawler_loop_cls.return_value = mock_crawler_loop
 
         # Mock the RunRepository
-        with patch('mobile_crawler.cli.commands.crawl.RunRepository') as mock_run_repo_cls:
+        with patch('mobile_crawler.cli.commands.crawl.RunRepository') as mock_run_repo_cls, \
+             patch('mobile_crawler.cli.commands.crawl.get_app_data_dir') as mock_get_app_data_dir:
             mock_run_repo_cls.return_value = mock_run_repo
+            mock_get_app_data_dir.return_value = Mock()
 
-            # Mock other dependencies
-            with patch('mobile_crawler.cli.commands.crawl.CrawlStateMachine') as mock_state_machine_cls, \
-                 patch('mobile_crawler.cli.commands.crawl.ScreenshotCapture') as mock_screenshot_cls, \
-                 patch('mobile_crawler.cli.commands.crawl.AIInteractionService') as mock_ai_cls, \
-                 patch('mobile_crawler.cli.commands.crawl.ActionExecutor') as mock_action_cls, \
-                 patch('mobile_crawler.cli.commands.crawl.StepLogRepository') as mock_step_log_cls, \
-                 patch('mobile_crawler.cli.commands.crawl.get_app_data_dir') as mock_get_app_data_dir:
+            runner = CliRunner()
+            result = runner.invoke(cli, [
+                'crawl',
+                '--device', 'emulator-5554',
+                '--package', 'com.example.app',
+                '--model', 'gemini-pro'
+            ])
 
-                # Configure mocks to return Mock instances when called
-                mock_state_machine_cls.return_value = Mock()
-                mock_screenshot_cls.side_effect = lambda *args, **kwargs: Mock()
-                mock_ai_cls.return_value = Mock()
-                mock_action_cls.return_value = Mock()
-                mock_step_log_cls.return_value = Mock()
-                mock_get_app_data_dir.return_value = Mock()
-
-                runner = CliRunner()
-                result = runner.invoke(cli, [
-                    'crawl',
-                    '--device', 'emulator-5554',
-                    '--package', 'com.example.app',
-                    '--model', 'gemini-pro'
-                ])
-
-                assert result.exit_code == 0
-                mock_run_repo.create_run.assert_called_once()
-                mock_crawler_loop.run.assert_called_once_with(123)
+            assert result.exit_code == 0
+            mock_run_repo.create_run.assert_called_once()
+            mock_crawler_loop.run.assert_called_once_with(123)
 
     @patch('mobile_crawler.cli.commands.crawl.DatabaseManager')
     @patch('mobile_crawler.cli.commands.crawl.ConfigManager')
@@ -83,14 +69,9 @@ class TestCrawlCommand:
         mock_db_manager = Mock()
         mock_db_manager_cls.return_value = mock_db_manager
 
-        with patch('mobile_crawler.cli.commands.crawl.RunRepository') as mock_run_repo_cls, \
-             patch('mobile_crawler.cli.commands.crawl.CrawlerLoop') as mock_crawler_loop_cls, \
-             patch('mobile_crawler.cli.commands.crawl.CrawlStateMachine') as mock_state_machine_cls, \
-             patch('mobile_crawler.cli.commands.crawl.ScreenshotCapture') as mock_screenshot_cls, \
-             patch('mobile_crawler.cli.commands.crawl.AIInteractionService') as mock_ai_cls, \
-             patch('mobile_crawler.cli.commands.crawl.ActionExecutor') as mock_action_cls, \
-             patch('mobile_crawler.cli.commands.crawl.StepLogRepository') as mock_step_log_cls, \
-             patch('mobile_crawler.cli.commands.crawl.get_app_data_dir') as mock_get_app_data_dir:
+           with patch('mobile_crawler.cli.commands.crawl.RunRepository') as mock_run_repo_cls, \
+               patch('mobile_crawler.cli.commands.crawl.CrawlerLoop') as mock_crawler_loop_cls, \
+               patch('mobile_crawler.cli.commands.crawl.get_app_data_dir') as mock_get_app_data_dir:
 
             mock_run_repo = Mock()
             mock_run_repo.create_run.return_value = 123
@@ -99,12 +80,6 @@ class TestCrawlCommand:
             mock_crawler_loop = Mock()
             mock_crawler_loop_cls.return_value = mock_crawler_loop
 
-            # Configure mocks
-            mock_state_machine_cls.return_value = Mock()
-            mock_screenshot_cls.side_effect = lambda *args, **kwargs: Mock()
-            mock_ai_cls.return_value = Mock()
-            mock_action_cls.return_value = Mock()
-            mock_step_log_cls.return_value = Mock()
             mock_get_app_data_dir.return_value = Mock()
 
             runner = CliRunner()

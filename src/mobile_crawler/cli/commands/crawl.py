@@ -8,19 +8,12 @@ import click
 
 from mobile_crawler.config import get_app_data_dir
 from mobile_crawler.config.config_manager import ConfigManager
-from mobile_crawler.core.crawl_state_machine import CrawlStateMachine
 from mobile_crawler.core.crawler_event_listener import CrawlerEventListener
 from mobile_crawler.domain.models import ActionResult
 from mobile_crawler.core.crawler_loop import CrawlerLoop
-from mobile_crawler.domain.action_executor import ActionExecutor
-from mobile_crawler.domain.screen_tracker import ScreenTracker
-from mobile_crawler.infrastructure.ai_interaction_service import AIInteractionService
-from mobile_crawler.infrastructure.appium_driver import AppiumDriver
 from mobile_crawler.infrastructure.database import DatabaseManager
-from mobile_crawler.infrastructure.gesture_handler import GestureHandler
 from mobile_crawler.infrastructure.run_repository import Run, RunRepository
-from mobile_crawler.infrastructure.screenshot_capture import ScreenshotCapture
-from mobile_crawler.infrastructure.step_log_repository import StepLogRepository
+from mobile_crawler.infrastructure.session_folder_manager import SessionFolderManager
 
 
 class JSONEventListener(CrawlerEventListener):
@@ -234,37 +227,11 @@ def crawl(device: str, package: str, model: str, steps: Optional[int], duration:
         )
         run_id = run_repo.create_run(run)
 
-        # Initialize Appium driver
-        appium_driver = AppiumDriver(device_id=device, app_package=package)
-        appium_driver.connect()
-
-        # Set up dependencies for CrawlerLoop
-        state_machine = CrawlStateMachine()
-        screenshot_capture = ScreenshotCapture(driver=appium_driver, run_id=run_id)
-        ai_service = AIInteractionService.from_config(config_manager)
-        action_executor = ActionExecutor(appium_driver, GestureHandler(appium_driver))
-        step_log_repo = StepLogRepository(db_manager)
-        
-        # Get screen deduplication configuration
-        screen_similarity_threshold = config_manager.get("screen_similarity_threshold", 12)
-        use_perceptual_hashing = config_manager.get("use_perceptual_hashing", True)
-        screen_tracker = ScreenTracker(
-            db_manager,
-            screen_similarity_threshold=screen_similarity_threshold,
-            use_perceptual_hashing=use_perceptual_hashing
-        )
-
-        # Create crawler loop
+        session_folder_manager = SessionFolderManager()
         crawler_loop = CrawlerLoop(
-            crawl_state_machine=state_machine,
-            screenshot_capture=screenshot_capture,
-            ai_interaction_service=ai_service,
-            action_executor=action_executor,
-            step_log_repository=step_log_repo,
-            run_repository=run_repo,
             config_manager=config_manager,
-            appium_driver=appium_driver,
-            screen_tracker=screen_tracker,
+            run_repository=run_repo,
+            session_folder_manager=session_folder_manager,
             event_listeners=[JSONEventListener()]
         )
 

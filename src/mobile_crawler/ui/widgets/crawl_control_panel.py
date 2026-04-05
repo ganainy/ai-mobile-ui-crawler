@@ -40,6 +40,8 @@ class CrawlControlPanel(QWidget):
         super().__init__(parent)
         self.crawl_controller = crawl_controller
         self._validation_passed: bool = False
+        self._pause_available: bool = True
+        self._step_by_step_available: bool = True
         self._setup_ui()
 
     def _setup_ui(self):
@@ -185,6 +187,16 @@ class CrawlControlPanel(QWidget):
             self.resume_button.setVisible(False)
             self.next_step_button.setVisible(False)
 
+        # Apply feature availability overrides
+        if not self._pause_available:
+            self.pause_button.setEnabled(False)
+            self.resume_button.setEnabled(False)
+
+        if not self._step_by_step_available:
+            self.step_by_step_checkbox.setEnabled(False)
+            self.next_step_button.setEnabled(False)
+            self.next_step_button.setVisible(False)
+
     def set_step_by_step(self, enabled: bool):
         """Set the step-by-step checkbox state.
 
@@ -192,6 +204,22 @@ class CrawlControlPanel(QWidget):
             enabled: True if step-by-step mode should be enabled
         """
         self.step_by_step_checkbox.setChecked(enabled)
+
+    def set_step_by_step_available(self, enabled: bool) -> None:
+        """Enable or disable step-by-step controls."""
+        self._step_by_step_available = enabled
+        self.step_by_step_checkbox.setEnabled(enabled)
+        if not enabled:
+            self.step_by_step_checkbox.setChecked(False)
+            self.next_step_button.setEnabled(False)
+            self.next_step_button.setVisible(False)
+
+    def set_pause_available(self, enabled: bool) -> None:
+        """Enable or disable pause/resume controls."""
+        self._pause_available = enabled
+        if not enabled:
+            self.pause_button.setEnabled(False)
+            self.resume_button.setEnabled(False)
 
     def set_validation_passed(self, passed: bool):
         """Set whether pre-crawl validation has passed.
