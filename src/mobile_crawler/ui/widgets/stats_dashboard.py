@@ -8,131 +8,181 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QGroupBox,
     QGridLayout,
+    QFrame,
 )
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QColor
+
+
+def _make_section_label(text: str) -> QLabel:
+    lbl = QLabel(text)
+    lbl.setFont(QFont("Arial", 9, QFont.Weight.Bold))
+    lbl.setStyleSheet("color: #aaa; text-transform: uppercase; letter-spacing: 1px;")
+    return lbl
+
+
+def _make_separator() -> QFrame:
+    sep = QFrame()
+    sep.setFrameShape(QFrame.Shape.HLine)
+    sep.setStyleSheet("color: #333;")
+    return sep
 
 
 class StatsDashboard(QWidget):
     """Widget for displaying real-time crawl statistics.
-    
-    Shows key metrics including steps, screens, errors, and AI performance.
-    Includes progress bars for step and time limits.
+
+    Shows key metrics including steps, screens, errors, AI performance,
+    success rate, and last action — all updating live during the run.
     """
 
     # Signal emitted when stats are updated
     stats_updated = Signal()  # type: ignore
 
     def __init__(self, parent=None):
-        """Initialize stats dashboard widget.
-        
-        Args:
-            parent: Parent widget
-        """
         super().__init__(parent)
         self._max_steps = 100
         self._max_duration_seconds = 300
         self._setup_ui()
 
+    # ------------------------------------------------------------------
+    # UI Setup
+    # ------------------------------------------------------------------
+
     def _setup_ui(self):
-        """Set up user interface."""
-        layout = QVBoxLayout()
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
 
-        # Group box for statistics
         self.stats_group = QGroupBox("Statistics")
-        self.main_stats_layout = QVBoxLayout(self.stats_group)
+        group_layout = QVBoxLayout(self.stats_group)
+        group_layout.setSpacing(4)
 
-        # Placeholder for when no crawl is running
+        # Placeholder shown before crawl starts
         self.placeholder_label = QLabel("Statistics will be shown once the crawler starts")
         self.placeholder_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.placeholder_label.setStyleSheet("color: #888; font-style: italic; padding: 40px;")
-        self.main_stats_layout.addWidget(self.placeholder_label)
+        group_layout.addWidget(self.placeholder_label)
 
-        # Container for actual statistics
+        # Real stats content
         self.stats_content = QWidget()
-        stats_layout = QGridLayout(self.stats_content)
+        grid = QGridLayout(self.stats_content)
+        grid.setHorizontalSpacing(16)
+        grid.setVerticalSpacing(4)
 
-        # Crawl Progress section
-        progress_label = QLabel("Crawl Progress")
-        progress_label.setFont(QFont("Arial", 10, QFont.Weight.Bold))
-        stats_layout.addWidget(progress_label, 0, 0, 1, 2)
+        row = 0
 
-        # Steps metrics
+        # ── Crawl Progress ──────────────────────────────────────
+        grid.addWidget(_make_section_label("Crawl Progress"), row, 0, 1, 2)
+        row += 1
+
         self.total_steps_label = QLabel("Total Steps: 0")
-        stats_layout.addWidget(self.total_steps_label, 1, 0)
+        grid.addWidget(self.total_steps_label, row, 0)
 
-        self.successful_steps_label = QLabel("Actions OK: 0")
-        stats_layout.addWidget(self.successful_steps_label, 1, 1)
+        self.current_step_label = QLabel("Current: —")
+        grid.addWidget(self.current_step_label, row, 1)
+        row += 1
 
-        self.failed_steps_label = QLabel("Actions Failed: 0")
-        stats_layout.addWidget(self.failed_steps_label, 2, 0)
-
-        # Step progress bar
-        step_progress_label = QLabel("Step Progress:")
-        stats_layout.addWidget(step_progress_label, 3, 0)
-
+        grid.addWidget(QLabel("Step Progress:"), row, 0)
         self.step_progress_bar = QProgressBar()
         self.step_progress_bar.setRange(0, self._max_steps)
         self.step_progress_bar.setValue(0)
         self.step_progress_bar.setTextVisible(True)
         self.step_progress_bar.setFormat("%v / %m steps")
-        stats_layout.addWidget(self.step_progress_bar, 3, 1)
+        grid.addWidget(self.step_progress_bar, row, 1)
+        row += 1
 
-        # Duration section
-        duration_label = QLabel("Duration")
-        duration_label.setFont(QFont("Arial", 10, QFont.Weight.Bold))
-        stats_layout.addWidget(duration_label, 4, 0, 1, 2)
+        grid.addWidget(_make_separator(), row, 0, 1, 2)
+        row += 1
+
+        # ── Actions ─────────────────────────────────────────────
+        grid.addWidget(_make_section_label("Actions"), row, 0, 1, 2)
+        row += 1
+
+        self.successful_steps_label = QLabel("Actions OK: 0")
+        self.successful_steps_label.setStyleSheet("color: #4caf50;")
+        grid.addWidget(self.successful_steps_label, row, 0)
+
+        self.failed_steps_label = QLabel("Actions Failed: 0")
+        self.failed_steps_label.setStyleSheet("color: #f44336;")
+        grid.addWidget(self.failed_steps_label, row, 1)
+        row += 1
+
+        self.success_rate_label = QLabel("Success Rate: —")
+        grid.addWidget(self.success_rate_label, row, 0)
+
+        self.last_action_label = QLabel("Last Action: —")
+        grid.addWidget(self.last_action_label, row, 1)
+        row += 1
+
+        grid.addWidget(_make_separator(), row, 0, 1, 2)
+        row += 1
+
+        # ── AI Performance ──────────────────────────────────────
+        grid.addWidget(_make_section_label("AI Performance"), row, 0, 1, 2)
+        row += 1
+
+        self.ai_calls_label = QLabel("AI Calls: 0")
+        grid.addWidget(self.ai_calls_label, row, 0)
+
+        self.ai_response_time_label = QLabel("Avg Response: —")
+        grid.addWidget(self.ai_response_time_label, row, 1)
+        row += 1
+
+        grid.addWidget(_make_separator(), row, 0, 1, 2)
+        row += 1
+
+        # ── Screens ─────────────────────────────────────────────
+        grid.addWidget(_make_section_label("Screens"), row, 0, 1, 2)
+        row += 1
+
+        self.unique_screens_label = QLabel("Unique Screens: 0")
+        grid.addWidget(self.unique_screens_label, row, 0)
+
+        self.screens_per_min_label = QLabel("Screens/min: —")
+        grid.addWidget(self.screens_per_min_label, row, 1)
+        row += 1
+
+        grid.addWidget(_make_separator(), row, 0, 1, 2)
+        row += 1
+
+        # ── Duration ─────────────────────────────────────────────
+        grid.addWidget(_make_section_label("Duration"), row, 0, 1, 2)
+        row += 1
 
         self.duration_label = QLabel("Elapsed: 0s")
-        stats_layout.addWidget(self.duration_label, 5, 0)
+        grid.addWidget(self.duration_label, row, 0)
+        row += 1
 
-        # Time progress bar
-        time_progress_label = QLabel("Time Progress:")
-        stats_layout.addWidget(time_progress_label, 6, 0)
-
+        grid.addWidget(QLabel("Time Progress:"), row, 0)
         self.time_progress_bar = QProgressBar()
         self.time_progress_bar.setRange(0, self._max_duration_seconds)
         self.time_progress_bar.setValue(0)
         self.time_progress_bar.setTextVisible(True)
         self.time_progress_bar.setFormat("%v / %m seconds")
-        stats_layout.addWidget(self.time_progress_bar, 6, 1)
+        grid.addWidget(self.time_progress_bar, row, 1)
+        row += 1
 
         self.stats_content.setVisible(False)
-        self.main_stats_layout.addWidget(self.stats_content)
+        group_layout.addWidget(self.stats_content)
 
-        layout.addWidget(self.stats_group)
-        
-        # Set the layout for this widget
-        self.setLayout(layout)
+        outer.addWidget(self.stats_group)
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
 
     def set_max_steps(self, max_steps: int):
-        """Set the maximum number of steps for progress bar.
-        
-        Args:
-            max_steps: Maximum number of steps
-        """
         self._max_steps = max_steps
         self.step_progress_bar.setRange(0, max_steps)
         self.step_progress_bar.setFormat(f"%v / {max_steps} steps")
 
     def set_max_duration(self, max_duration_seconds: int):
-        """Set the maximum duration for progress bar.
-        
-        Args:
-            max_duration_seconds: Maximum duration in seconds
-        """
         self._max_duration_seconds = max_duration_seconds
         self.time_progress_bar.setRange(0, max_duration_seconds)
         self.time_progress_bar.setFormat(f"%v / {max_duration_seconds} seconds")
 
     def set_progress_mode(self, mode: str):
-        """Set which progress bar to show based on crawl mode.
-        
-        Args:
-            mode: 'steps' to show step progress bar only,
-                  'duration' to show time progress bar only
-        """
-        if mode == 'steps':
+        """Show the relevant progress bar based on limit mode."""
+        if mode == "steps":
             self.step_progress_bar.setVisible(True)
             self.time_progress_bar.setVisible(False)
         else:
@@ -157,41 +207,57 @@ class StatsDashboard(QWidget):
         step_progress: str = "",
         success_rate: float = 0.0,
     ):
-        """Update the statistics display.
-
-        Args:
-            total_steps: Total number of steps taken
-            successful_steps: Number of successful steps
-            failed_steps: Number of failed steps
-            unique_screens: (Unused - kept for backward compatibility)
-            total_visits: (Unused - kept for backward compatibility)
-            screens_per_minute: (Unused - kept for backward compatibility)
-            ai_calls: (Unused - kept for backward compatibility)
-            avg_ai_response_time_ms: (Unused - kept for backward compatibility)
-            duration_seconds: Elapsed time in seconds
-            ocr_avg_ms: (Unused - kept for backward compatibility)
-            action_avg_ms: (Unused - kept for backward compatibility)
-            screenshot_avg_ms: (Unused - kept for backward compatibility)
-            last_action: Most recent action type
-            step_progress: Step progress string e.g. "7 / 15"
-            success_rate: Action success rate percentage
-        """
-        # Show stats content and hide placeholder if we have activity
+        """Update all statistics labels and progress bars."""
+        # Reveal stats content when activity starts
         if total_steps > 0 or duration_seconds > 0:
             self.placeholder_label.setVisible(False)
             self.stats_content.setVisible(True)
 
-        # Update labels
+        # ── Step progress ──────────────────────────────────────
         self.total_steps_label.setText(f"Total Steps: {total_steps}")
+
+        if step_progress:
+            self.current_step_label.setText(f"Current: {step_progress}")
+        elif total_steps > 0:
+            self.current_step_label.setText(f"Current: {total_steps}")
+        else:
+            self.current_step_label.setText("Current: —")
+
+        self.step_progress_bar.setValue(min(total_steps, self._max_steps))
+
+        # ── Actions ───────────────────────────────────────────
         self.successful_steps_label.setText(f"Actions OK: {successful_steps}")
         self.failed_steps_label.setText(f"Actions Failed: {failed_steps}")
-        self.duration_label.setText(f"Elapsed: {duration_seconds:.0f}s")
 
-        # Update progress bars
-        self.step_progress_bar.setValue(min(total_steps, self._max_steps))
+        if successful_steps + failed_steps > 0:
+            rate = round(successful_steps / (successful_steps + failed_steps) * 100)
+            color = "#4caf50" if rate >= 70 else "#ff9800" if rate >= 40 else "#f44336"
+            self.success_rate_label.setText(f"Success Rate: {rate}%")
+            self.success_rate_label.setStyleSheet(f"color: {color};")
+        else:
+            self.success_rate_label.setText("Success Rate: —")
+            self.success_rate_label.setStyleSheet("")
+
+        self.last_action_label.setText(f"Last Action: {last_action or '—'}")
+
+        # ── AI performance ────────────────────────────────────
+        self.ai_calls_label.setText(f"AI Calls: {ai_calls}")
+        if avg_ai_response_time_ms > 0:
+            self.ai_response_time_label.setText(f"Avg Response: {avg_ai_response_time_ms/1000:.1f}s")
+        else:
+            self.ai_response_time_label.setText("Avg Response: —")
+
+        # ── Screens ───────────────────────────────────────────
+        self.unique_screens_label.setText(f"Unique Screens: {unique_screens}")
+        if screens_per_minute > 0:
+            self.screens_per_min_label.setText(f"Screens/min: {screens_per_minute:.1f}")
+        else:
+            self.screens_per_min_label.setText("Screens/min: —")
+
+        # ── Duration ─────────────────────────────────────────
+        self.duration_label.setText(f"Elapsed: {duration_seconds:.0f}s")
         self.time_progress_bar.setValue(min(int(duration_seconds), self._max_duration_seconds))
 
-        # Emit signal
         self.stats_updated.emit()
 
     def reset(self):
@@ -206,15 +272,8 @@ class StatsDashboard(QWidget):
         )
 
     def get_total_steps(self) -> int:
-        """Get the current total steps value.
-
-        Returns:
-            Total steps value
-        """
         text = self.total_steps_label.text()
-        # Extract number from "Total Steps: X"
         try:
             return int(text.split(": ")[1])
         except (IndexError, ValueError):
             return 0
-

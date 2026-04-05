@@ -9,6 +9,7 @@ from typing import List, Optional
 
 from mobile_crawler.config.config_manager import ConfigManager
 from mobile_crawler.core.crawler_event_listener import CrawlerEventListener
+from mobile_crawler.core.log_sinks import LogLevel, capture_stdout_to_ui
 from mobile_crawler.domain.droidrun_agent_service import DroidRunAgentService
 from mobile_crawler.infrastructure.run_repository import RunRepository
 from mobile_crawler.infrastructure.session_folder_manager import SessionFolderManager
@@ -192,7 +193,14 @@ class CrawlerLoop:
                                 if not task.done():
                                     task.cancel()
 
-            result = self._run_async(run_and_cleanup())
+            # Build a UI-callback for stdout lines so DroidRun's print() output
+            # (step progress emoji lines, manager/executor responses) appears in the log panel.
+            def _ui_log_cb(level: LogLevel, message: str) -> None:
+                self._emit_event("on_debug_log", run_id, 0, message)
+
+            with capture_stdout_to_ui(_ui_log_cb):
+                result = self._run_async(run_and_cleanup())
+
 
             duration_ms = (time.time() - start_time) * 1000
             if self._cancel_requested:

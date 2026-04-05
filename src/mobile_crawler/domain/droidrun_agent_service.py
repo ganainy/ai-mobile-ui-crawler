@@ -42,7 +42,8 @@ class DroidRunLogHandler(logging.Handler):
                 log_file.write(json.dumps(payload, ensure_ascii=True) + "\n")
 
             if self.enable_ui and self.emit_debug:
-                self.emit_debug(self.run_id, 0, message)
+                # emit_debug is CrawlerLoop._emit_event — call with method name first
+                self.emit_debug("on_debug_log", self.run_id, 0, message)
         except Exception:
             # Avoid log recursion on failures
             pass

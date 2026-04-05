@@ -1,14 +1,17 @@
 """Log sinks for multi-sink logging architecture."""
 
+import io
 import json
 import logging
 import logging.handlers
 import sys
+import threading
 from abc import ABC, abstractmethod
+from contextlib import contextmanager
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 
 from mobile_crawler.config import get_app_data_dir
 from mobile_crawler.infrastructure.database import DatabaseManager
@@ -180,3 +183,88 @@ class QLogHandler(logging.Handler):
         except Exception:
             # Never let logging errors break the application
             pass
+
+
+class _LineCapturingStream:
+    """Wraps a stream and forwards complete lines to a callback.
+
+    Used to intercept DroidRun's direct print/stdout output that
+    bypasses Python's logging system.
+    """
+
+    def __init__(self, original: Any, callback: Callable[[str], None], level: LogLevel):
+        self._original = original
+        self._callback = callback
+        self._level = level
+        self._buf = ""
+        self._lock = threading.Lock()
+
+    def write(self, text: str) -> int:
+        if not text:
+            return 0
+        # Always forward to the real stream so terminal still works
+        try:
+            self._original.write(text)
+            self._original.flush()
+        except Exception:
+            pass
+
+        with self._lock:
+            self._buf += text
+            while "\n" in self._buf:
+                line, self._buf = self._buf.split("\n", 1)
+                line = line.rstrip("\r")
+                if line.strip():  # skip blank lines
+                    try:
+                        self._callback(line)
+                    except Exception:
+                        pass
+        return len(text)
+
+    def flush(self):
+        try:
+            self._original.flush()
+        except Exception:
+            pass
+
+    def fileno(self):
+        return self._original.fileno()
+
+    def isatty(self):
+        try:
+            return self._original.isatty()
+        except Exception:
+            return False
+
+    # Proxy all other attribute accesses to the real stream
+    def __getattr__(self, name: str):
+        return getattr(self._original, name)
+
+
+@contextmanager
+def capture_stdout_to_ui(callback: Callable[[LogLevel, str], None]):
+    """Context manager that redirects stdout/stderr to UI log callback.
+
+    Captures DroidRun's direct print output (step progress emoji lines,
+    manager/executor responses, etc.) which bypass Python's logging system.
+    Each complete line is forwarded to `callback(level, message)`.
+
+    Args:
+        callback: Callable accepting (LogLevel, str) to route captured lines to the UI.
+    """
+    def _stdout_cb(line: str):
+        callback(LogLevel.DEBUG, f"[stdout] {line}")
+
+    def _stderr_cb(line: str):
+        callback(LogLevel.DEBUG, f"[stderr] {line}")
+
+    old_stdout = sys.stdout
+    old_stderr = sys.stderr
+
+    try:
+        sys.stdout = _LineCapturingStream(old_stdout, _stdout_cb, LogLevel.DEBUG)
+        sys.stderr = _LineCapturingStream(old_stderr, _stderr_cb, LogLevel.DEBUG)
+        yield
+    finally:
+        sys.stdout = old_stdout
+        sys.stderr = old_stderr

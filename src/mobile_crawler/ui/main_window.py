@@ -606,22 +606,43 @@ class MainWindow(QMainWindow):
             self.right_tab_widget.setCurrentIndex(1)  # Index 1 is AI Monitor
 
     def _on_debug_log(self, run_id: int, step_number: int, message: str) -> None:
-        """Handle debug log message from crawler."""
+        """Handle debug log message from crawler (includes DroidRun stdout lines)."""
         if self.log_viewer:
             self.log_viewer.append_log(LogLevel.DEBUG, message)
 
-        # Parse DroidRun step progress messages to update statistics in real-time
-        # Matches both "🔄 Step N/M" and plain "Step N/M" formats
         if self._current_stats and self._current_stats.run_id == run_id:
-            match = re.search(r'Step\s+(\d+)\s*/\s*(\d+)', message)
-            if match:
-                current_step = int(match.group(1))
-                max_step = int(match.group(2))
-                if current_step > self._current_stats.last_step_number:
-                    self._current_stats.total_steps = current_step
-                    self._current_stats.last_step_number = current_step
-                    self._current_stats.current_step_of_max = f"{current_step} / {max_step}"
-                    self._update_dashboard_stats()
+            self._parse_droidrun_progress(run_id, message)
+
+    def _parse_droidrun_progress(self, run_id: int, message: str) -> None:
+        """Parse DroidRun log/stdout messages to update live statistics.
+
+        Extracts:
+        - Step N/M patterns for step progress bar
+        - Action type from executor JSON response lines
+        """
+        if not self._current_stats:
+            return
+
+        # Match "Step N/M" (with optional emoji prefix like 🔄)
+        match = re.search(r'Step\s+(\d+)\s*/\s*(\d+)', message)
+        if match:
+            current_step = int(match.group(1))
+            max_step = int(match.group(2))
+            if current_step > self._current_stats.last_step_number:
+                self._current_stats.total_steps = current_step
+                self._current_stats.last_step_number = current_step
+                self._current_stats.current_step_of_max = f"{current_step} / {max_step}"
+                self._update_dashboard_stats()
+            return
+
+        # Parse last action type from DroidRun executor JSON responses.
+        # Executor replies look like: {"action": "click", ...} or {"action":"swipe", ...}
+        action_match = re.search(r'"action"\s*:\s*"([^"]+)"', message)
+        if action_match:
+            action_type = action_match.group(1)
+            if action_type and action_type != self._current_stats.last_action_type:
+                self._current_stats.last_action_type = action_type
+                self._update_dashboard_stats()
 
     def _pause_crawl(self) -> None:
         """Pause the current crawl."""
@@ -1170,6 +1191,12 @@ class MainWindow(QMainWindow):
         }
         level = level_map.get(level_name, LogLevel.DEBUG)
         self.log_viewer.append_log(level, message)
+
+        # Also parse step progress from Python logging path (DroidRun internal logs)
+        # This covers the case where the message came via the logging bridge rather
+        # than the stdout capture path.
+        if self._current_stats:
+            self._parse_droidrun_progress(self._current_stats.run_id, message)
 
     def _on_python_log_direct(self, level: LogLevel, message: str) -> None:
         """Direct callback from QLogHandler running on any thread.
