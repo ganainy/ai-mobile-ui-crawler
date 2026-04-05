@@ -209,13 +209,23 @@ class DroidRunAgentService:
         return config
 
     def configure_run_logging(self, run_id: int, log_dir: str, emit_debug, enable_ui: bool) -> None:
-        """Attach a DroidRun log handler for UI/debug and JSONL output."""
-        droid_logger = logging.getLogger("droidrun")
+        """Attach a DroidRun log handler for UI/debug and JSONL output.
+
+        Always enables UI forwarding so logs reach both the JSONL file
+        and the root QLogHandler bridge in MainWindow.
+        """
         log_path = os.path.join(log_dir, "droidrun_trace.jsonl")
-        handler = DroidRunLogHandler(run_id, log_path, emit_debug, enable_ui)
+        handler = DroidRunLogHandler(run_id, log_path, emit_debug, True)
         handler.setLevel(logging.DEBUG)
+
+        # Patch the droidrun logger and known children to ensure propagation
+        for name in ["droidrun", "droidrun.agent", "droidrun.tools", "droidrun.config_manager"]:
+            lg = logging.getLogger(name)
+            lg.propagate = True
+            lg.setLevel(logging.DEBUG)
+
+        droid_logger = logging.getLogger("droidrun")
         droid_logger.addHandler(handler)
-        droid_logger.setLevel(logging.DEBUG)
         self._log_handler = handler
 
     def clear_run_logging(self) -> None:
@@ -362,11 +372,29 @@ class DroidRunAgentService:
                     steps_completed = result.get("steps_completed", 0)
                     error_message = result.get("error_message")
 
+                # Extract action history from DroidRun agent's internal state
+                actions_taken = []
+                action_outcomes = []
+                if hasattr(self._droid_agent, 'shared_state'):
+                    shared_state = self._droid_agent.shared_state
+                    if hasattr(shared_state, 'action_history'):
+                        actions_taken = shared_state.action_history or []
+                    if hasattr(shared_state, 'action_outcomes'):
+                        action_outcomes = shared_state.action_outcomes or []
+
+                # Count successful vs failed actions
+                successful_count = sum(1 for outcome in action_outcomes if outcome is True)
+                failed_count = sum(1 for outcome in action_outcomes if outcome is False)
+
                 droid_result = DroidRunResult(
                     success=success,
                     steps_completed=steps_completed,
-                    actions_taken=[],
-                    final_state={},
+                    actions_taken=actions_taken,
+                    final_state={
+                        'successful_actions': successful_count,
+                        'failed_actions': failed_count,
+                        'total_actions': len(action_outcomes)
+                    },
                     error_message=error_message,
                     total_duration_ms=duration_ms
                 )

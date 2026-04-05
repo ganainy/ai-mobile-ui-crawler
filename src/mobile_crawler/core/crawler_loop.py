@@ -150,14 +150,13 @@ class CrawlerLoop:
                 device_id=run.device_id
             )
 
-            if self.config_manager.get("droidrun_streaming", False):
-                logs_dir = self.session_folder_manager.get_subfolder(run, "logs")
-                self._droidrun_agent_service.configure_run_logging(
-                    run_id,
-                    logs_dir,
-                    self._emit_event,
-                    True
-                )
+            logs_dir = self.session_folder_manager.get_subfolder(run, "logs")
+            self._droidrun_agent_service.configure_run_logging(
+                run_id,
+                logs_dir,
+                self._emit_event,
+                True
+            )
 
             exploration_objective = self.config_manager.get("exploration_objective", None)
 
@@ -206,6 +205,12 @@ class CrawlerLoop:
                 status = "ERROR"
                 reason = result.error_message or "DroidRun failed"
 
+            # Extract action statistics from DroidRun result's final_state
+            final_state = result.final_state or {}
+            successful_actions = final_state.get('successful_actions', 0)
+            failed_actions = final_state.get('failed_actions', 0)
+            total_actions = final_state.get('total_actions', 0)
+
             self.run_repository.update_run_stats(
                 run_id=run_id,
                 total_steps=result.steps_completed,
@@ -214,12 +219,17 @@ class CrawlerLoop:
                 end_time=datetime.now()
             )
 
+            # Emit crawl completed with action stats encoded in reason for backward compatibility
+            # Format: "reason | successful=X failed=Y total=Z"
+            stats_suffix = f" | successful={successful_actions} failed={failed_actions} total={total_actions}"
+            reason_with_stats = reason + stats_suffix
+
             self._emit_event(
                 "on_crawl_completed",
                 run_id,
                 result.steps_completed,
                 duration_ms,
-                reason,
+                reason_with_stats,
                 0.0
             )
 

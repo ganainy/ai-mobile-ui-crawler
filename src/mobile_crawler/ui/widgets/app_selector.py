@@ -5,16 +5,7 @@ import subprocess
 from typing import Optional
 from typing import TYPE_CHECKING
 
-from PySide6.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
-    QHBoxLayout,
-    QLabel,
-    QLineEdit,
-    QPushButton,
-    QMessageBox,
-    QComboBox
-)
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QMessageBox, QComboBox
 from PySide6.QtCore import Signal, QObject
 
 from mobile_crawler.ui.async_utils import AsyncOperation
@@ -148,7 +139,7 @@ class AppSelector(QWidget):
         # - Can contain letters, digits, and underscores
         # - Must have at least one dot
         # - Each segment must start with a lowercase letter
-        pattern = r'^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$'
+        pattern = r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$"
         return bool(re.match(pattern, package))
 
     def set_device_id(self, device_id: Optional[str]) -> None:
@@ -167,7 +158,7 @@ class AppSelector(QWidget):
                 "No Device Session",
                 "No active device session.\n\n"
                 "Please select a device from the Device Selector first.\n"
-                "The device must be connected and authorized."
+                "The device must be connected and authorized.",
             )
             self.status_label.setText("No device connected")
             self.status_label.setStyleSheet("color: red; font-style: italic;")
@@ -184,7 +175,7 @@ class AppSelector(QWidget):
 
     def _fetch_packages(self) -> str:
         """Fetch installed packages from device via ADB.
-        
+
         Returns:
             Output of 'pm list packages -3'
         """
@@ -195,7 +186,7 @@ class AppSelector(QWidget):
             ["adb", "-s", self.device_id, "shell", "pm", "list", "packages", "-3"],
             capture_output=True,
             text=True,
-            timeout=20
+            timeout=60,
         )
 
         if result.returncode != 0:
@@ -213,10 +204,10 @@ class AppSelector(QWidget):
         # Parse output
         package_list = []
         if packages:
-            for line in packages.split('\n'):
+            for line in packages.split("\n"):
                 line = line.strip()
-                if line.startswith('package:'):
-                    package = line.replace('package:', '').strip()
+                if line.startswith("package:"):
+                    package = line.replace("package:", "").strip()
                     package_list.append(package)
 
         if package_list:
@@ -248,17 +239,17 @@ class AppSelector(QWidget):
         error_msg = str(error).lower()
         if "adb" in error_msg or "device" in error_msg or "not found" in error_msg:
             QMessageBox.critical(
-                self.parent(), 
-                "ADB Not Available", 
+                self.parent(),
+                "ADB Not Available",
                 "Cannot access the device via ADB. Please:\n\n"
                 "1. Ensure the device is connected and authorized\n"
                 "2. Verify USB debugging is enabled\n"
                 "3. Confirm 'adb' is available in your PATH\n\n"
-                f"Error: {error}"
+                f"Error: {error}",
             )
         else:
             QMessageBox.critical(self.parent(), "App List Error", str(error))
-        
+
         self.status_label.setText(f"Error: {error}")
         self.status_label.setStyleSheet("color: red; font-style: italic;")
 

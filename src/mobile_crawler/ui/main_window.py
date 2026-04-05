@@ -1,6 +1,7 @@
 """Main window for the mobile-crawler GUI application."""
 
 import logging
+import re
 import sys
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -87,6 +88,10 @@ class CrawlStatistics:
     # Screenshot capture timing
     screenshot_total_time_ms: float = 0.0
     screenshot_count: int = 0
+
+    # Additional crawl metrics
+    last_action_type: str = ""       # most recent action type (tap, scroll, input...)
+    current_step_of_max: str = ""    # e.g. "7 / 15"
     
     def avg_ai_response_time(self) -> float:
         """Calculate average AI response time in milliseconds."""
@@ -218,8 +223,8 @@ class MainWindow(QMainWindow):
         device_detection = DeviceDetection()
         
         # AI services
-        provider_registry = ProviderRegistry()
-        vision_detector = VisionDetector()
+        provider_registry = ProviderRegistry(config_store=user_config_store)
+        vision_detector = VisionDetector(registry=provider_registry)
         
         # Crawl services
         crawl_controller = CrawlController()
@@ -604,6 +609,19 @@ class MainWindow(QMainWindow):
         """Handle debug log message from crawler."""
         if self.log_viewer:
             self.log_viewer.append_log(LogLevel.DEBUG, message)
+
+        # Parse DroidRun step progress messages to update statistics in real-time
+        # Matches both "🔄 Step N/M" and plain "Step N/M" formats
+        if self._current_stats and self._current_stats.run_id == run_id:
+            match = re.search(r'Step\s+(\d+)\s*/\s*(\d+)', message)
+            if match:
+                current_step = int(match.group(1))
+                max_step = int(match.group(2))
+                if current_step > self._current_stats.last_step_number:
+                    self._current_stats.total_steps = current_step
+                    self._current_stats.last_step_number = current_step
+                    self._current_stats.current_step_of_max = f"{current_step} / {max_step}"
+                    self._update_dashboard_stats()
 
     def _pause_crawl(self) -> None:
         """Pause the current crawl."""
@@ -1231,6 +1249,10 @@ class MainWindow(QMainWindow):
             self._current_stats.successful_actions += 1
         else:
             self._current_stats.failed_actions += 1
+
+        # Track last action type
+        if hasattr(result, 'action_type') and result.action_type:
+            self._current_stats.last_action_type = result.action_type
         
         # Update dashboard
         self._update_dashboard_stats()
@@ -1302,38 +1324,62 @@ class MainWindow(QMainWindow):
             screens_per_minute=stats.screens_per_minute(),
             ai_calls=stats.ai_call_count,
             avg_ai_response_time_ms=stats.avg_ai_response_time(),
-            duration_seconds=stats.elapsed_seconds()
+            duration_seconds=stats.elapsed_seconds(),
+            action_avg_ms=stats.avg_action_time_ms(),
+            ocr_avg_ms=stats.avg_ocr_time_ms(),
+            screenshot_avg_ms=stats.avg_screenshot_time_ms(),
+            last_action=stats.last_action_type,
+            step_progress=stats.current_step_of_max or str(stats.total_steps),
+            success_rate=(
+                round(stats.successful_actions / max(stats.successful_actions + stats.failed_actions, 1) * 100)
+            ),
         )
 
     def _update_elapsed_time(self) -> None:
         """Timer callback to update elapsed time (called every 1 second).
-        
+
         Triggers a full dashboard update to refresh time-dependent metrics.
+        Never overwrites total_steps — that would corrupt real data from
+        step events or DroidRun log parsing.
         """
         if not self._current_stats:
             return
-        
-        # Full dashboard update includes elapsed time
+
         self._update_dashboard_stats()
 
-    def _on_crawl_completed_stats(self, run_id: int, total_steps: int, 
+    def _on_crawl_completed_stats(self, run_id: int, total_steps: int,
                                    total_duration_ms: float, reason: str) -> None:
         """Finalize statistics when crawl completes.
-        
+
         Stops the timer and preserves final statistics on the dashboard.
         Does NOT clear statistics immediately to prevent UI flicker.
         """
-        # Stop timer
         self._elapsed_timer.stop()
-        
-        # Perform one final update with current in-memory values
-        # This ensures the final state is displayed correctly
-        if self._current_stats:
-            # Use the total_steps from the completion event for accuracy
-            self._current_stats.total_steps = total_steps
-            self._update_dashboard_stats()
-        
-        # Clear statistics object (but dashboard retains last values)
+
+        if not self._current_stats:
+            return
+
+        # Always trust the completion event's step count over our running estimate
+        self._current_stats.total_steps = total_steps
+
+        # Parse action stats from reason suffix if present
+        # Format: "reason | successful=X failed=Y total=Z"
+        if ' | ' in reason:
+            try:
+                stats_part = reason.split(' | ', 1)[1]
+                parsed = {}
+                for item in stats_part.split():
+                    if '=' in item:
+                        k, v = item.split('=', 1)
+                        parsed[k] = v
+                if 'successful' in parsed:
+                    self._current_stats.successful_actions = int(parsed['successful'])
+                if 'failed' in parsed:
+                    self._current_stats.failed_actions = int(parsed['failed'])
+            except (ValueError, IndexError, AttributeError):
+                pass
+
+        self._update_dashboard_stats()
         self._current_stats = None
 
     def _query_final_statistics(self, run_id: int) -> Dict[str, Any]:

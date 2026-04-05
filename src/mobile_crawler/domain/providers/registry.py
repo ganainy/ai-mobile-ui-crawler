@@ -1,6 +1,8 @@
 """Provider registry for fetching and managing AI models."""
 
+import json
 import logging
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 import requests
@@ -8,23 +10,26 @@ import requests
 logger = logging.getLogger(__name__)
 
 
+# Cache expiration time (7 days)
+CACHE_EXPIRATION_DAYS = 7
+
+
 class ProviderRegistry:
     """Registry for fetching available models from AI providers."""
 
-    def __init__(self):
-        """Initialize the provider registry."""
-        self._cache: Dict[str, List[Dict[str, Any]]] = {}
-
-    def clear_cache(self, provider: Optional[str] = None) -> None:
-        """Clear the model cache.
+    def __init__(self, config_store=None):
+        """Initialize the provider registry.
 
         Args:
-            provider: Optional provider name to clear. If None, clears all.
+            config_store: Optional UserConfigStore for persistent caching.
+                         If provided, models will be cached to disk with expiration.
         """
-        if provider:
-            self._cache.pop(provider, None)
-        else:
-            self._cache.clear()
+        self._cache: Dict[str, List[Dict[str, Any]]] = {}
+        self._config_store = config_store
+
+        # Load cached models from persistent storage if available
+        if self._config_store:
+            self._load_persistent_cache()
 
     def fetch_gemini_models(self, api_key: str) -> List[Dict[str, Any]]:
         """Fetch available Gemini models.
@@ -81,6 +86,7 @@ class ProviderRegistry:
                         })
 
             self._cache[cache_key] = result
+            self._save_persistent_cache()
             return result
 
         except Exception as e:
@@ -121,6 +127,7 @@ class ProviderRegistry:
                 result.append(model_info)
 
             self._cache[cache_key] = result
+            self._save_persistent_cache()
             return result
 
         except Exception as e:
@@ -164,6 +171,7 @@ class ProviderRegistry:
                 result.append(model_info)
 
             self._cache[cache_key] = result
+            self._save_persistent_cache()
             return result
 
         except Exception as e:
@@ -271,6 +279,73 @@ class ProviderRegistry:
 
         return False
 
-    def clear_cache(self) -> None:
-        """Clear the model cache."""
-        self._cache.clear()
+    def clear_cache(self, provider: Optional[str] = None) -> None:
+        """Clear the model cache.
+
+        Args:
+            provider: Optional provider name to clear. If None, clears all.
+        """
+        if provider:
+            self._cache.pop(provider, None)
+        else:
+            self._cache.clear()
+
+        # Also clear persistent cache
+        if self._config_store:
+            try:
+                self._config_store.delete_setting("model_cache")
+                logger.info("Cleared persistent model cache")
+            except Exception as e:
+                logger.warning(f"Failed to clear persistent cache: {e}")
+
+    def _load_persistent_cache(self) -> None:
+        """Load cached models from persistent storage if available and not expired."""
+        if not self._config_store:
+            return
+
+        try:
+            cache_data = self._config_store.get_setting("model_cache", default=None)
+            if not cache_data:
+                return
+
+            cached_at_str = cache_data.get("cached_at")
+            if not cached_at_str:
+                return
+
+            # Parse cache timestamp
+            try:
+                cached_at = datetime.fromisoformat(cached_at_str)
+            except (ValueError, AttributeError):
+                logger.warning("Invalid cache timestamp, ignoring persistent cache")
+                return
+
+            # Check if cache is expired
+            cache_age = datetime.now(timezone.utc) - cached_at
+            if cache_age > timedelta(days=CACHE_EXPIRATION_DAYS):
+                logger.info(f"Model cache expired ({cache_age.days} days old), ignoring")
+                return
+
+            # Load cached models into memory
+            models_by_provider = cache_data.get("models", {})
+            for provider, models in models_by_provider.items():
+                if models:  # Only cache non-empty lists
+                    self._cache[provider] = models
+                    logger.info(f"Loaded {len(models)} cached models for {provider}")
+
+        except Exception as e:
+            logger.warning(f"Failed to load persistent cache: {e}")
+
+    def _save_persistent_cache(self) -> None:
+        """Save current in-memory cache to persistent storage."""
+        if not self._config_store:
+            return
+
+        try:
+            cache_data = {
+                "cached_at": datetime.now(timezone.utc).isoformat(),
+                "models": self._cache
+            }
+            self._config_store.set_setting("model_cache", cache_data, "json")
+            logger.debug(f"Saved {len(self._cache)} provider caches to persistent storage")
+        except Exception as e:
+            logger.warning(f"Failed to save persistent cache: {e}")

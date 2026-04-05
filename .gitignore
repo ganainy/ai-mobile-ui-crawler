@@ -71,3 +71,4 @@ screenshots/
 
 # AI Agent directory
 .agent/
+.planning/
