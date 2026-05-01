@@ -5,31 +5,27 @@
 .DESCRIPTION
     Starts the complete mobile-crawler application stack:
     - MobSF (Mobile Security Framework) Docker container on port 8000
-    - Appium server on port 4723
     - Main UI application (Python)
-    
+
     Checks for dependencies and displays warnings if components are missing.
     Handles graceful shutdown on Ctrl+C.
 
 .PARAMETER NoMobsf
     Skip starting the MobSF Docker container
 
-.PARAMETER NoAppium
-    Skip starting the Appium server
-
 .PARAMETER UiOnly
-    Start only the main UI (implies -NoMobsf and -NoAppium)
+    Start only the main UI (implies -NoMobsf)
 
 .PARAMETER Help
     Display usage information
 
 .EXAMPLE
     .\start.ps1
-    Starts all components (MobSF, Appium, UI)
+    Starts all components (MobSF + UI)
 
 .EXAMPLE
     .\start.ps1 -NoMobsf
-    Starts only Appium and UI
+    Starts only the UI
 
 .EXAMPLE
     .\start.ps1 -UiOnly
@@ -37,13 +33,12 @@
 
 .NOTES
     Author: Mobile Crawler Team
-    Requires: PowerShell 5.1+, Docker Desktop, Node.js (npm/npx), Python 3.x
+    Requires: PowerShell 5.1+, Docker Desktop, Python 3.x
 #>
 
 [CmdletBinding()]
 param(
     [switch]$NoMobsf,
-    [switch]$NoAppium,
     [switch]$UiOnly,
     [switch]$Help
 )
@@ -53,8 +48,6 @@ param(
 # ============================================================================
 
 $script:MOBSF_PORT = 8000
-$script:APPIUM_PORT = 4723
-$script:APPIUM_ADDRESS = "127.0.0.1"
 $script:MOBSF_IMAGE = "opensecurity/mobile-security-framework-mobsf"
 $script:MOBSF_CONTAINER_NAME = "mobile-crawler-mobsf"
 $script:STARTUP_TIMEOUT = 60
@@ -152,14 +145,12 @@ function Test-Dependencies {
         Checks all dependencies and returns status
     #>
     param(
-        [switch]$CheckMobsf,
-        [switch]$CheckAppium
+        [switch]$CheckMobsf
     )
-    
+
     $status = @{
         Docker        = $false
         DockerRunning = $false
-        Npm           = $false
         Python        = $false
     }
     
@@ -181,18 +172,6 @@ function Test-Dependencies {
         else {
             Write-Status "Docker: Not installed - MobSF will not be started" -Status WARN
             Write-Host "           Install from: https://www.docker.com/products/docker-desktop/" -ForegroundColor Yellow
-        }
-    }
-    
-    # Check npm/npx for Appium
-    if ($CheckAppium) {
-        if (Test-CommandExists "npx") {
-            $status.Npm = $true
-            Write-Status "npm/npx: Available" -Status OK
-        }
-        else {
-            Write-Status "npm/npx: Not installed - Appium will not be started" -Status WARN
-            Write-Host "           Install from: https://nodejs.org/" -ForegroundColor Yellow
         }
     }
     
@@ -248,34 +227,6 @@ function Start-MobSF {
     }
     
     Write-Status "Failed to start MobSF container" -Status ERROR
-    return $false
-}
-
-function Start-Appium {
-    <#
-    .SYNOPSIS
-        Starts the Appium server
-    #>
-    
-    # Check if port is already in use
-    if (Test-PortInUse -Port $script:APPIUM_PORT) {
-        Write-Status "Port $($script:APPIUM_PORT) is already in use - Appium may already be running" -Status WARN
-        Write-Host "           Skipping Appium startup." -ForegroundColor Yellow
-        return $true
-    }
-    
-    Write-Status "Starting Appium server on port $($script:APPIUM_PORT)..." -Status START
-    
-    # Use cmd.exe to run npx (npx.cmd doesn't work directly with Start-Process on Windows)
-    $appiumArgs = "appium --address $($script:APPIUM_ADDRESS) --port $($script:APPIUM_PORT) --relaxed-security"
-    $process = Start-Process -FilePath "cmd.exe" -ArgumentList "/c", "npx $appiumArgs" -PassThru -WindowStyle Hidden
-    
-    if ($process) {
-        $script:StartedProcesses += $process
-        return $true
-    }
-    
-    Write-Status "Failed to start Appium server" -Status ERROR
     return $false
 }
 
@@ -469,18 +420,16 @@ function Show-Help {
     Write-Host ""
     Write-Host "Options:" -ForegroundColor Yellow
     Write-Host "  -NoMobsf    Skip starting MobSF Docker container"
-    Write-Host "  -NoAppium   Skip starting Appium server"
-    Write-Host "  -UiOnly     Start only the UI (same as -NoMobsf -NoAppium)"
+    Write-Host "  -UiOnly     Start only the UI (same as -NoMobsf)"
     Write-Host "  -Help       Show this help message"
     Write-Host ""
     Write-Host "Examples:" -ForegroundColor Yellow
-    Write-Host "  .\start.ps1              # Start everything"
-    Write-Host "  .\start.ps1 -NoMobsf     # Start Appium + UI only"
+    Write-Host "  .\start.ps1              # Start everything (MobSF + UI)"
+    Write-Host "  .\start.ps1 -NoMobsf     # Start UI only"
     Write-Host "  .\start.ps1 -UiOnly      # Start UI only"
     Write-Host ""
     Write-Host "Requirements:" -ForegroundColor Yellow
     Write-Host "  - Docker Desktop (for MobSF)"
-    Write-Host "  - Node.js with npm/npx (for Appium)"
     Write-Host "  - Python 3.x (for main UI)"
     Write-Host ""
     Write-Host "Press Ctrl+C to stop all components." -ForegroundColor Gray
@@ -491,10 +440,9 @@ function Show-Help {
 # Main Execution
 # ============================================================================
 
-# Handle -UiOnly flag (implies both -NoMobsf and -NoAppium)
+# Handle -UiOnly flag (implies -NoMobsf)
 if ($UiOnly) {
     $NoMobsf = $true
-    $NoAppium = $true
 }
 
 # Show help if requested
@@ -512,16 +460,16 @@ try {
     Write-Host ""
     
     # Check dependencies
-    $deps = Test-Dependencies -CheckMobsf:(-not $NoMobsf) -CheckAppium:(-not $NoAppium)
-    
+    $deps = Test-Dependencies -CheckMobsf:(-not $NoMobsf)
+
     # Verify Python is available (required)
     if (-not $deps.Python) {
         Write-Status "Cannot continue without Python" -Status ERROR
         exit 1
     }
-    
+
     Write-Host ""
-    
+
     # Start MobSF if requested and Docker is available
     if (-not $NoMobsf) {
         if ($deps.Docker -and $deps.DockerRunning) {
@@ -531,30 +479,16 @@ try {
     else {
         Write-Status "Skipping MobSF (--NoMobsf flag)" -Status INFO
     }
-    
-    # Start Appium if requested and npm is available
-    if (-not $NoAppium) {
-        if ($deps.Npm) {
-            Start-Appium | Out-Null
-        }
-    }
-    else {
-        Write-Status "Skipping Appium (--NoAppium flag)" -Status INFO
-    }
-    
+
     # Wait for services to be ready
     Write-Host ""
-    
+
     if (-not $NoMobsf -and $deps.Docker -and $deps.DockerRunning) {
         Wait-ForService -Name "MobSF" -Port $script:MOBSF_PORT -TimeoutSeconds $script:STARTUP_TIMEOUT | Out-Null
     }
-    
-    if (-not $NoAppium -and $deps.Npm) {
-        Wait-ForService -Name "Appium" -Port $script:APPIUM_PORT -TimeoutSeconds 30 | Out-Null
-    }
-    
+
     Write-Host ""
-    
+
     # Start the main UI (runs in foreground)
     $uiProcess = Start-MainUI
     

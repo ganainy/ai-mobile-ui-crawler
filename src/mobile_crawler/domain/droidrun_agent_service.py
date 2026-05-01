@@ -116,7 +116,13 @@ class DroidRunResult:
 
 
 class DroidRunAgentService:
-    """Service for integrating DroidRun AI agents with the mobile crawler."""
+    """Service for integrating DroidRun AI agents with the mobile crawler.
+
+    All device actions (tap, scroll, input, navigate) are executed exclusively
+    via ADB commands through the DroidRun agent. There is no Appium or other
+    device provider abstraction. The ADB path is the single supported device
+    interaction layer.
+    """
 
     def __init__(
         self,
@@ -129,7 +135,8 @@ class DroidRunAgentService:
         Args:
             config_manager: Configuration manager for crawler settings
             ai_interaction_repository: Repository for logging AI interactions
-            device_id: ADB device identifier
+            device_id: ADB device serial identifier. All device interactions route
+                       through ADB using this serial.
         """
         self.config_manager = config_manager
         self.ai_interaction_repository = ai_interaction_repository

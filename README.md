@@ -13,7 +13,7 @@ Mobile Crawler is an automated exploration tool for Android mobile applications 
 - **Multiple Interfaces**: Both GUI and CLI interfaces for different use cases
 - **Comprehensive Logging**: Detailed action logs, statistics, and reporting
 - **Network Traffic Capture**: PCAPdroid integration for capturing network traffic during crawl sessions
-- **Video Recording**: Automatic screen recording of crawl sessions using Appium's built-in recording
+- **Video Recording**: Automatic screen recording of crawl sessions using Android's built-in screen recording via ADB
 - **Security Analysis**: MobSF integration for static security analysis of Android applications
 - **Flexible Configuration**: Environment variables, database settings, and user preferences with validation
 - **Enhanced Reporting**: Generates human-readable HTML reports (printer-friendly) and machine-readable JSON reports with correlated timeline of actions and network requests
@@ -67,7 +67,7 @@ pip install -e ".[dev]"
 
 ### ✅ Completed (Phase 3 - Feature Integrations)
 - **Traffic Capture**: PCAPdroid integration for network traffic analysis during crawl sessions
-- **Video Recording**: Appium-based screen recording with automatic saving to session directories
+- **Video Recording**: ADB-based screen recording with automatic saving to session directories
 - **MobSF Analysis**: Static security analysis with PDF/JSON report generation and security score tracking
 - **Configuration Management**: UI and CLI configuration with validation and persistence
 - **Prerequisite Validation**: Pre-crawl checks for feature dependencies (PCAPdroid, MobSF server, video support)
@@ -81,7 +81,7 @@ pip install -e ".[dev]"
 
 ### ✅ Completed (Phase 5 - Fault Tolerance & Recovery)
 - **UiAutomator2 Crash Recovery**: Automatic detection and recovery from UiAutomator2 crashes during crawling
-- **Intelligent Retries**: Transparently restarts Appium session and retries failed actions with configurable limits
+- **Intelligent Retries**: Automatically retries failed ADB actions with configurable limits
 - **Session Restoration**: Restores app foreground state and resumes exploration after recovery
 - **Recovery Metrics**: Detailed tracking of recovery events, duration, and success rates in database logs
 
@@ -90,7 +90,7 @@ pip install -e ".[dev]"
 The easiest way to start the application is using the startup script which handles all dependencies:
 
 ```powershell
-# Start everything (MobSF, Appium, UI)
+# Start everything (MobSF, UI)
 .\scripts\start.ps1
 
 # Start without MobSF
@@ -108,7 +108,6 @@ The script will:
 - ✅ Display clear warnings with installation URLs if dependencies are missing
 - ✅ Start MobSF Docker container on port 8000
 - ✅ **Automatically extract and save the MobSF API key** for the app to use
-- ✅ Start Appium server on port 4723
 - ✅ Wait for services to be ready
 - ✅ Launch the main UI application
 - ✅ Clean up all processes on Ctrl+C
@@ -153,7 +152,7 @@ mobile-crawler-gui
 
 - Python 3.9+
 - Android device or emulator
-- Appium server
+- ADB (Android Debug Bridge)
 - AI provider API keys (Gemini, OpenRouter, or Ollama)
 
 ### Optional Requirements (for additional features)
