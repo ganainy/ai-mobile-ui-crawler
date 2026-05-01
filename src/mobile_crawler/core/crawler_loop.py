@@ -1,6 +1,7 @@
 """DroidRun-backed crawler loop wrapper."""
 
 import asyncio
+import json
 import logging
 import threading
 import time
@@ -11,6 +12,13 @@ from mobile_crawler.config.config_manager import ConfigManager
 from mobile_crawler.core.crawler_event_listener import CrawlerEventListener
 from mobile_crawler.core.log_sinks import LogLevel, capture_stdout_to_ui
 from mobile_crawler.domain.droidrun_agent_service import DroidRunAgentService
+from mobile_crawler.domain.errors import (
+    CrawlerError,
+    FatalError,
+    RecorderError,
+    CheckpointError,
+    ErrorContext,
+)
 from mobile_crawler.infrastructure.run_repository import RunRepository
 from mobile_crawler.infrastructure.session_folder_manager import SessionFolderManager
 
@@ -251,9 +259,19 @@ class CrawlerLoop:
                 0.0
             )
 
-        except Exception as e:
+        except CrawlerError as e:
+            logger.error(json.dumps(e.to_log_dict()))
             self._transition_state("ERROR", run_id)
             self._emit_event("on_error", run_id, None, e)
+        except Exception as e:
+            wrapped = FatalError(
+                f"Unexpected error: {e}",
+                context=ErrorContext(run_id=run_id),
+                cause=e,
+            )
+            logger.error(json.dumps(wrapped.to_log_dict()))
+            self._transition_state("ERROR", run_id)
+            self._emit_event("on_error", run_id, None, wrapped)
         finally:
             if self._droidrun_agent_service:
                 self._droidrun_agent_service.clear_run_logging()
@@ -276,11 +294,17 @@ class CrawlerLoop:
             self._emit_event("on_state_changed", run_id, old_state, new_state)
 
     def _emit_event(self, method_name: str, *args) -> None:
-        """Emit events to listeners if they implement the method."""
+        """Emit events to listeners. Recorder/checkpoint failures halt the run."""
         for listener in list(self.event_listeners):
             handler = getattr(listener, method_name, None)
             if handler:
                 try:
                     handler(*args)
-                except Exception:
-                    continue
+                except (RecorderError, CheckpointError):
+                    # Fail-closed: recorder/checkpoint failure must halt the run
+                    raise
+                except Exception as e:
+                    # Log but don't halt for non-critical listener failures (UI, logging)
+                    logger.warning(
+                        f"Listener {type(listener).__name__}.{method_name} failed: {e}"
+                    )

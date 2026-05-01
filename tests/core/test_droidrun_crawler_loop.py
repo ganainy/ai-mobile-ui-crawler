@@ -1,6 +1,7 @@
 """Tests for DroidRun-backed crawler loop wrapper."""
 
-from unittest.mock import Mock, patch
+import asyncio
+from unittest.mock import AsyncMock, Mock, patch
 
 from mobile_crawler.core.crawler_loop import CrawlerLoop
 
@@ -57,7 +58,8 @@ def test_droidrun_wrapper_happy_path():
 
     with patch("mobile_crawler.core.crawler_loop.DroidRunAgentService") as service_cls:
         service = service_cls.return_value
-        service.execute_exploration_task.return_value = result
+        service.execute_exploration_task = AsyncMock(return_value=result)
+        service.cleanup = AsyncMock()
         loop.run(1)
 
     assert ("started", 1, "com.example.app") in listener.events

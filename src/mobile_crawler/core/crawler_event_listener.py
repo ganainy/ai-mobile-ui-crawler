@@ -58,7 +58,14 @@ class CrawlerEventListener(ABC):
 
     @abstractmethod
     def on_error(self, run_id: int, step_number: Optional[int], error: Exception) -> None:
-        """Called when an error occurs."""
+        """Called when an error occurs.
+
+        Args:
+            run_id: The run ID where the error occurred
+            step_number: Step number if error occurred during a step, else None
+            error: The exception. May be a CrawlerError with structured context
+                   accessible via error.context and error.to_log_dict().
+        """
         pass
 
     @abstractmethod
