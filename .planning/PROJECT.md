@@ -29,6 +29,16 @@ Maximize reliable discovery of unique app screens and states while preserving re
 - Fully autonomous account/login bypass and CAPTCHA solving — excluded for safety/reliability and non-core value
 - Cloud multi-device orchestration — deferred; current target is single internal operator workflow
 
+## Current Milestone: v1.0 Crawl Stability & Resumability
+
+**Goal:** Make the crawler reliably survive crashes, handle errors properly, and resume from where it left off.
+
+**Target features:**
+- Durable run state — atomic step state machine, idempotent checkpoints, crash recovery
+- Error model overhaul — typed exceptions, structured logging, fail-closed on critical paths
+- UI sync hardening — explicit waits, post-action verification, adaptive backoff
+- Context guardrails — native/webview drift handling, context normalization before actions
+
 ## Context
 
 - Existing brownfield Python codebase with GUI (`PySide6`) + CLI (`Click`) and layered modules under `src/mobile_crawler/`.
@@ -72,4 +82,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-01 after initialization*
+*Last updated: 2026-05-01 after milestone v1.0 definition*
