@@ -4,6 +4,7 @@ Provides:
 - DeviceContext / DeviceContextCapture for app-switch detection (Plan 01)
 - UIDumpValidator / UIDumpValidationResult for UI dump validation gate (Plan 02)
 - StepSkipReason enum for skip reason tracking (Plan 02+)
+- AppSwitchRecovery / RecoveryAttempt for app-switch recovery loop (Plan 03)
 """
 
 import enum
@@ -11,7 +12,7 @@ import logging
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Callable, Optional
+from typing import Any, Callable, List, Optional, Tuple
 
 from mobile_crawler.domain.adb_action_executor import ADBActionExecutor
 
@@ -294,3 +295,96 @@ class UIDumpValidator:
             )
 
         return result
+
+
+@dataclass
+class RecoveryAttempt:
+    """Record of a single app-switch recovery attempt."""
+
+    attempt_number: int
+    success: bool
+    package_before: str
+    package_after: str
+    duration_ms: float
+
+
+class AppSwitchRecovery:
+    """Detects app switches and recovers by relaunching to the target app.
+
+    Per D-06: Aborts after 3 consecutive failed recovery attempts.
+    Per D-05: Uses am start with launcher activity for recovery.
+    Per D-07: Always relaunches to main launcher activity, never deep activity.
+    """
+
+    MAX_CONSECUTIVE_FAILURES = 3
+
+    def __init__(
+        self,
+        target_package: str,
+        adb_executor: ADBActionExecutor,
+        context_capture: DeviceContextCapture,
+    ):
+        """Initialize app-switch recovery.
+
+        Args:
+            target_package: The expected app package name.
+            adb_executor: ADBActionExecutor instance for running am start recovery.
+            context_capture: DeviceContextCapture for verifying recovery success.
+        """
+        self.target_package = target_package
+        self.adb_executor = adb_executor
+        self.context_capture = context_capture
+        self._consecutive_failures = 0
+        self._total_recoveries = 0
+
+    async def detect_and_recover(self) -> Tuple[bool, List[RecoveryAttempt]]:
+        """Detect app switch and attempt recovery. Returns (recovered, attempts).
+
+        If recovered=True, the app is back on target.
+        If recovered=False, MAX_CONSECUTIVE_FAILURES reached — caller should abort.
+
+        Returns:
+            Tuple of (recovered: bool, attempts: list of RecoveryAttempt).
+        """
+        attempts: List[RecoveryAttempt] = []
+
+        for attempt_num in range(1, self.MAX_CONSECUTIVE_FAILURES + 1):
+            # Try recovery via am start
+            result = self.adb_executor.am_start_recovery(self.target_package)
+
+            # Re-capture context to verify recovery
+            new_ctx = await self.context_capture.capture()
+
+            attempt = RecoveryAttempt(
+                attempt_number=attempt_num,
+                success=new_ctx.is_target_app,
+                package_before="",  # filled by caller if needed
+                package_after=new_ctx.package,
+                duration_ms=result.duration_ms,
+            )
+            attempts.append(attempt)
+
+            if new_ctx.is_target_app:
+                self._consecutive_failures = 0
+                self._total_recoveries += 1
+                logger.info(
+                    f"App switch recovery succeeded on attempt {attempt_num} "
+                    f"(package: {new_ctx.package})"
+                )
+                return True, attempts
+
+            self._consecutive_failures += 1
+            logger.warning(
+                f"App switch recovery attempt {attempt_num} failed: "
+                f"package_after={new_ctx.package}, expected={self.target_package}"
+            )
+
+        # All attempts failed — signal abort
+        logger.error(
+            f"App switch recovery failed after {len(attempts)} attempts — aborting"
+        )
+        return False, attempts
+
+    def should_abort(self) -> bool:
+        """Check if consecutive failures warrant run abort."""
+        return self._consecutive_failures >= self.MAX_CONSECUTIVE_FAILURES

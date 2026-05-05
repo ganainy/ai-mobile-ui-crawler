@@ -15,7 +15,8 @@ from mobile_crawler.config.config_manager import ConfigManager
 from mobile_crawler.domain.models import ActionResult, AIResponse, AIAction, BoundingBox
 from mobile_crawler.infrastructure.ai_interaction_repository import AIInteraction, AIInteractionRepository
 
-from mobile_crawler.domain.context_guard import DeviceContextCapture, UIDumpValidator, StepSkipReason
+from mobile_crawler.domain.context_guard import DeviceContextCapture, UIDumpValidator, StepSkipReason, AppSwitchRecovery
+from mobile_crawler.domain.errors import FatalError, ErrorContext
 from mobile_crawler.domain.step_phase import StepPhase, StepPhaseStateMachine
 from mobile_crawler.domain.step_phase_models import StepPhaseTransition
 from mobile_crawler.infrastructure.step_phase_repository import StepPhaseRepository
@@ -364,6 +365,10 @@ class DroidRunAgentService:
         self._target_package: Optional[str] = None
         self._current_device_context = None  # Set during context capture for downstream recovery
 
+        # App-switch recovery (Plan 03: detect and recover from app switches)
+        self._app_switch_recovery: Optional[AppSwitchRecovery] = None
+        self._adb_executor: Optional[ADBActionExecutor] = None
+
         logger.info(f"Step phase tracking initialized for run {run_id}")
 
     def _wire_observers_to_agent(self) -> None:
@@ -398,9 +403,17 @@ class DroidRunAgentService:
                 target_package=self._target_package,
                 adb_executor=adb_executor,
             )
+            self._adb_executor = adb_executor
+
+            # Wire app-switch recovery (Plan 03)
+            self._app_switch_recovery = AppSwitchRecovery(
+                target_package=self._target_package,
+                adb_executor=adb_executor,
+                context_capture=self._context_capture,
+            )
             logger.info(
-                f"DeviceContextCapture wired with target_package="
-                f"{self._target_package}"
+                f"DeviceContextCapture and AppSwitchRecovery wired with "
+                f"target_package={self._target_package}"
             )
 
         # Set after_sleep_action to 0.0 to disable DroidRun's fixed delay
@@ -496,12 +509,46 @@ class DroidRunAgentService:
                 self._current_device_context = device_ctx
 
                 if not device_ctx.is_target_app:
-                    logger.warning(
-                        f"Step {self._current_step_number}: app mismatch detected "
-                        f"(current={device_ctx.package}, target="
-                        f"{self._target_package}). Skipping DECIDE/EXECUTE."
-                    )
-                    skip_reason = StepSkipReason.TARGET_APP_MISMATCH
+                    # App switch detected — try recovery before skipping (Plan 03)
+                    if self._app_switch_recovery:
+                        logger.warning(
+                            f"Step {self._current_step_number}: app switch detected "
+                            f"(captured={device_ctx.package}, expected="
+                            f"{self._target_package}). Attempting recovery."
+                        )
+                        recovered, attempts = await self._app_switch_recovery.detect_and_recover()
+
+                        if recovered:
+                            # Re-capture context after successful recovery
+                            device_ctx = await self._context_capture.capture()
+                            self._current_device_context = device_ctx
+                            logger.info(
+                                f"Step {self._current_step_number}: app switch recovery "
+                                f"succeeded on attempt {attempts[-1].attempt_number}. "
+                                f"Continuing with fresh context."
+                            )
+                            # Continue with the step normally — no skip
+                        else:
+                            # MAX_CONSECUTIVE_FAILURES reached — abort the run
+                            logger.error(
+                                f"Step {self._current_step_number}: app switch recovery "
+                                f"failed after {len(attempts)} attempts. Aborting run."
+                            )
+                            # Record transition with abort metadata
+                            self._step_phase_machine.transition_to(StepPhase.CHECKPOINT)
+                            raise FatalError(
+                                f"Aborting: {len(attempts)} consecutive app-switch "
+                                f"recovery failures",
+                                context=ErrorContext(run_id=self._current_run_id),
+                            )
+                    else:
+                        # No recovery handler available — fall back to skip behavior
+                        logger.warning(
+                            f"Step {self._current_step_number}: app mismatch detected "
+                            f"(current={device_ctx.package}, target="
+                            f"{self._target_package}). Skipping DECIDE/EXECUTE."
+                        )
+                        skip_reason = StepSkipReason.TARGET_APP_MISMATCH
             except Exception as e:
                 logger.warning(
                     f"Step {self._current_step_number}: context capture failed: {e}"
