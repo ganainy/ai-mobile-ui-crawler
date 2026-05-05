@@ -15,6 +15,12 @@ from mobile_crawler.config.config_manager import ConfigManager
 from mobile_crawler.domain.models import ActionResult, AIResponse, AIAction, BoundingBox
 from mobile_crawler.infrastructure.ai_interaction_repository import AIInteraction, AIInteractionRepository
 
+from mobile_crawler.domain.step_phase import StepPhase, StepPhaseStateMachine
+from mobile_crawler.domain.step_phase_models import StepPhaseTransition
+from mobile_crawler.infrastructure.step_phase_repository import StepPhaseRepository
+from mobile_crawler.domain.ui_wait_predicate import UIWaitPredicate, AdaptiveWaitConfig
+from mobile_crawler.domain.action_verifier import ActionVerifier
+
 logger = logging.getLogger(__name__)
 
 
@@ -149,6 +155,15 @@ class DroidRunAgentService:
         self._is_initialized = False
         self._ui_context_manager = None
         self._omni_parser_client = None
+
+        # Step phase machine and observers (set per-run via begin_step_tracking)
+        self._step_phase_machine: Optional[StepPhaseStateMachine] = None
+        self._step_phase_repository: Optional[StepPhaseRepository] = None
+        self._ui_wait_predicate: Optional[UIWaitPredicate] = None
+        self._action_verifier: Optional[ActionVerifier] = None
+        self._current_run_id: Optional[int] = None
+        self._current_step_number: int = 0
+        self._emit_step_phase_event = None  # Callback to CrawlerLoop._emit_event
 
         # Initialize OmniParser if available
         if OMNIPARSER_AVAILABLE:
@@ -311,6 +326,204 @@ class DroidRunAgentService:
             self._omni_parser_client = None
             self._ui_context_manager = None
 
+    def begin_step_tracking(
+        self,
+        run_id: int,
+        emit_step_phase_event=None,
+    ) -> None:
+        """Initialize step phase tracking for a run.
+
+        Args:
+            run_id: The current run ID.
+            emit_step_phase_event: Callback to emit phase transition events
+                                    to CrawlerLoop listeners. Signature:
+                                    (method_name, *args) -> None
+        """
+        self._current_run_id = run_id
+        self._current_step_number = 0
+        self._emit_step_phase_event = emit_step_phase_event
+
+        # Initialize step phase machine with a listener that persists transitions
+        self._step_phase_machine = StepPhaseStateMachine()
+        self._step_phase_machine.add_listener(self._on_phase_transition)
+
+        # Initialize repository for persistence
+        from mobile_crawler.infrastructure.database import DatabaseManager
+        db_manager = DatabaseManager()
+        self._step_phase_repository = StepPhaseRepository(db_manager)
+
+        # Initialize wait predicate and verifier (lazy -- will be fully wired
+        # when DroidRun agent provides state_provider/driver)
+        self._ui_wait_predicate = None  # Wired after agent init
+        self._action_verifier = None    # Wired after agent init
+
+        logger.info(f"Step phase tracking initialized for run {run_id}")
+
+    def _wire_observers_to_agent(self) -> None:
+        """Wire UIWaitPredicate and ActionVerifier to DroidRun's state_provider and driver.
+
+        Called after DroidRun agent is initialized, when state_provider and driver
+        are available on the agent object.
+        """
+        if not self._droid_agent:
+            return
+
+        state_provider = getattr(self._droid_agent, "state_provider", None)
+        driver = getattr(self._droid_agent, "driver", None)
+
+        if state_provider:
+            self._ui_wait_predicate = UIWaitPredicate(
+                state_provider=state_provider,
+                config=AdaptiveWaitConfig(self.config_manager),
+            )
+            if driver:
+                self._action_verifier = ActionVerifier(
+                    state_provider=state_provider,
+                    driver=driver,
+                )
+
+        # Set after_sleep_action to 0.0 to disable DroidRun's fixed delay
+        # Our explicit wait predicates replace it
+        if self._droidrun_config:
+            try:
+                self._droidrun_config.agent.after_sleep_action = 0.0
+            except Exception:
+                logger.debug("Could not set after_sleep_action=0.0")
+
+    def _on_phase_transition(self, old_phase: StepPhase, new_phase: StepPhase) -> None:
+        """Listener callback for state machine transitions.
+
+        Persists the transition to the database and emits events to the UI.
+        """
+        if not self._current_run_id or not self._step_phase_repository:
+            return
+
+        duration_ms = None
+        if self._step_phase_machine:
+            duration_ms = self._step_phase_machine.get_phase_duration(old_phase)
+            if duration_ms is not None:
+                duration_ms = duration_ms * 1000  # Convert seconds to ms
+
+        transition = StepPhaseTransition(
+            id=None,
+            run_id=self._current_run_id,
+            step_number=self._current_step_number,
+            from_phase=old_phase.value,
+            to_phase=new_phase.value,
+            timestamp=datetime.now(),
+            action_type=None,
+            duration_ms=duration_ms,
+            metadata_json=None,
+        )
+
+        try:
+            self._step_phase_repository.record_transition(transition)
+            self._step_phase_repository.update_step_current_phase(
+                self._current_run_id,
+                self._current_step_number,
+                new_phase.value,
+            )
+        except Exception as e:
+            logger.warning(f"Failed to persist phase transition: {e}")
+
+        # Emit event to CrawlerLoop listeners
+        if self._emit_step_phase_event:
+            try:
+                self._emit_step_phase_event(
+                    "on_step_phase_transition",
+                    self._current_run_id,
+                    self._current_step_number,
+                    old_phase.value,
+                    new_phase.value,
+                    duration_ms or 0.0,
+                )
+            except Exception as e:
+                logger.warning(f"Failed to emit step phase event: {e}")
+
+    async def _handle_tool_execution_event(self, event) -> None:
+        """Handle a ToolExecutionEvent from DroidRun's event stream.
+
+        Drives the step phase machine through transitions based on
+        tool execution events. Captures pre-state before EXECUTE,
+        waits for UI to settle, then verifies post-state in RECORD.
+        """
+        if not self._step_phase_machine:
+            return
+
+        tool_name = getattr(event, "tool_name", "unknown")
+        success = getattr(event, "success", False)
+
+        # Increment step number on each tool execution
+        self._current_step_number += 1
+
+        logger.debug(
+            f"Step {self._current_step_number}: tool={tool_name} "
+            f"success={success}"
+        )
+
+        try:
+            # CAPTURE -> DECIDE (AI has decided, now executing)
+            self._step_phase_machine.transition_to(StepPhase.DECIDE)
+
+            # DECIDE -> EXECUTE
+            self._step_phase_machine.transition_to(StepPhase.EXECUTE)
+
+            # Capture pre-state BEFORE waiting (for post-action verification)
+            pre_state = {}
+            if self._action_verifier:
+                try:
+                    pre_state = await self._action_verifier.capture_pre_state()
+                    logger.debug(
+                        f"Step {self._current_step_number}: captured pre_state "
+                        f"pkg={pre_state.get('package', '?')}"
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"Step {self._current_step_number}: pre_state capture failed: {e}"
+                    )
+
+            # Wait for UI to settle after action
+            if self._ui_wait_predicate:
+                settled = await self._ui_wait_predicate.wait_for_ui_settled(tool_name)
+                if not settled:
+                    logger.debug(
+                        f"UI did not settle after {tool_name} "
+                        f"(step {self._current_step_number})"
+                    )
+
+            # EXECUTE -> RECORD
+            self._step_phase_machine.transition_to(StepPhase.RECORD)
+
+            # Verify post-action state in RECORD phase
+            if self._action_verifier and pre_state:
+                try:
+                    verification = await self._action_verifier.verify(
+                        pre_state, tool_name
+                    )
+                    logger.info(
+                        f"Step {self._current_step_number}: verification "
+                        f"result={verification} for action={tool_name}"
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"Step {self._current_step_number}: verification failed: {e}"
+                    )
+
+            # RECORD -> CHECKPOINT
+            self._step_phase_machine.transition_to(StepPhase.CHECKPOINT)
+
+            # CHECKPOINT -> CAPTURE (ready for next step)
+            self._step_phase_machine.transition_to(StepPhase.CAPTURE)
+
+        except ValueError as e:
+            logger.warning(
+                f"Invalid phase transition at step {self._current_step_number}: {e}"
+            )
+        except Exception as e:
+            logger.warning(
+                f"Phase transition error at step {self._current_step_number}: {e}"
+            )
+
     def _create_exploration_goal(
         self, app_package: str, max_steps: int, exploration_objective: Optional[str] = None
     ) -> DroidRunGoal:
@@ -395,6 +608,9 @@ class DroidRunAgentService:
 
                 self._droid_agent = DroidAgent(goal=goal.description, config=self._droidrun_config)
 
+                # Wire observers to the DroidRun agent's state_provider and driver
+                self._wire_observers_to_agent()
+
                 result = self._droid_agent.run()
                 try:
                     from workflows.handler import WorkflowHandler
@@ -406,6 +622,25 @@ class DroidRunAgentService:
                 if WorkflowHandler and isinstance(result, WorkflowHandler):
                     self._current_handler = result
                     self._handler_loop = asyncio.get_running_loop()
+
+                    # Consume ToolExecutionEvent stream for step phase tracking
+                    event_consumer_task = None
+                    if self._step_phase_machine:
+                        async def _consume_step_events():
+                            """Background task: consume DroidRun events and drive step phase machine."""
+                            try:
+                                from droidrun.agent.common.events import ToolExecutionEvent
+
+                                async for event in result.stream_events():
+                                    if isinstance(event, ToolExecutionEvent):
+                                        await self._handle_tool_execution_event(event)
+                            except asyncio.CancelledError:
+                                pass
+                            except Exception as e:
+                                logger.warning(f"Step event consumer error: {e}")
+
+                        event_consumer_task = asyncio.create_task(_consume_step_events())
+
                     if max_duration_seconds is not None:
                         try:
                             result = await asyncio.wait_for(result, timeout=max_duration_seconds)
@@ -415,6 +650,14 @@ class DroidRunAgentService:
                             await self._shutdown_active_workflow()
                     else:
                         result = await result
+
+                    # Cancel event consumer when main workflow finishes
+                    if event_consumer_task is not None:
+                        event_consumer_task.cancel()
+                        try:
+                            await event_consumer_task
+                        except asyncio.CancelledError:
+                            pass
                 else:
                     if max_duration_seconds is not None:
                         task = asyncio.create_task(result)

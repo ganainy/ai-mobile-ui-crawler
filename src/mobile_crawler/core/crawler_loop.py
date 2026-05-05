@@ -159,6 +159,12 @@ class CrawlerLoop:
                 device_id=run.device_id
             )
 
+            # Initialize step phase tracking per D-01 (wrap at action level)
+            self._droidrun_agent_service.begin_step_tracking(
+                run_id=run_id,
+                emit_step_phase_event=self._emit_event,
+            )
+
             logs_dir = self.session_folder_manager.get_subfolder(run, "logs")
             self._droidrun_agent_service.configure_run_logging(
                 run_id,
