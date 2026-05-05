@@ -62,9 +62,8 @@ class TestProviderRegistryInitialization:
 class TestProviderRegistryGemini:
     """Tests for Gemini model fetching."""
 
-    def _mock_genai_module(self):
-        """Create a mock google.genai module."""
-        mock_genai = Mock()
+    def _setup_mock_genai_client(self, mock_client_class):
+        """Set up a mock genai Client class."""
         mock_client = Mock()
         mock_model = Mock()
         mock_model.name = "models/gemini-1.5-flash"
@@ -72,47 +71,46 @@ class TestProviderRegistryGemini:
         mock_model.description = "Fast multimodal model"
         mock_model.supported_actions = ["generateContent"]
         mock_client.models.list.return_value = [mock_model]
-        mock_genai.Client.return_value = mock_client
-        return mock_genai
+        mock_client_class.return_value = mock_client
+        return mock_client
 
-    def test_fetch_gemini_models(self, registry):
+    @patch('google.genai.Client')
+    def test_fetch_gemini_models(self, mock_client_class, registry):
         """Test fetch_gemini_models returns model list."""
-        mock_genai = self._mock_genai_module()
-        with patch.dict('sys.modules', {'google.genai': mock_genai}):
-            models = registry.fetch_gemini_models(api_key="test_key")
+        self._setup_mock_genai_client(mock_client_class)
+        models = registry.fetch_gemini_models(api_key="test_key")
 
         assert len(models) > 0
         assert models[0]["id"] == "gemini-1.5-flash"
         assert models[0]["provider"] == "google"
         assert models[0]["supports_vision"] is True
 
-    def test_fetch_gemini_models_caches_result(self, registry):
+    @patch('google.genai.Client')
+    def test_fetch_gemini_models_caches_result(self, mock_client_class, registry):
         """Test fetch_gemini_models caches results."""
-        mock_genai = self._mock_genai_module()
-        with patch.dict('sys.modules', {'google.genai': mock_genai}):
-            models1 = registry.fetch_gemini_models(api_key="test_key")
-            models2 = registry.fetch_gemini_models(api_key="test_key")
+        mock_client = self._setup_mock_genai_client(mock_client_class)
+        models1 = registry.fetch_gemini_models(api_key="test_key")
+        models2 = registry.fetch_gemini_models(api_key="test_key")
 
         # Should only call API once
-        mock_genai.Client.return_value.models.list.assert_called_once()
+        mock_client.models.list.assert_called_once()
 
-    def test_fetch_gemini_models_adds_preview_models(self, registry):
+    @patch('google.genai.Client')
+    def test_fetch_gemini_models_adds_preview_models(self, mock_client_class, registry):
         """Test fetch_gemini_models manually adds preview models."""
-        mock_genai = self._mock_genai_module()
-        with patch.dict('sys.modules', {'google.genai': mock_genai}):
-            models = registry.fetch_gemini_models(api_key="test_key")
+        self._setup_mock_genai_client(mock_client_class)
+        models = registry.fetch_gemini_models(api_key="test_key")
 
         ids = [m["id"] for m in models]
         assert "gemini-3-pro-preview" in ids
         assert "gemini-3-flash-preview" in ids
 
-    def test_fetch_gemini_models_error(self, registry):
+    @patch('google.genai.Client')
+    def test_fetch_gemini_models_error(self, mock_client_class, registry):
         """Test fetch_gemini_models raises RuntimeError on failure."""
-        mock_genai = Mock()
-        mock_genai.Client.side_effect = Exception("API error")
-        with patch.dict('sys.modules', {'google.genai': mock_genai}):
-            with pytest.raises(RuntimeError, match="Failed to fetch Gemini models"):
-                registry.fetch_gemini_models(api_key="bad_key")
+        mock_client_class.side_effect = Exception("API error")
+        with pytest.raises(RuntimeError, match="Failed to fetch Gemini models"):
+            registry.fetch_gemini_models(api_key="bad_key")
 
 
 class TestProviderRegistryOpenRouter:
