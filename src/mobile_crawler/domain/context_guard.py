@@ -12,7 +12,7 @@ import logging
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Callable, List, Optional, Tuple
+from typing import Any, Awaitable, Callable, List, Optional, Tuple
 
 from mobile_crawler.domain.adb_action_executor import ADBActionExecutor
 
@@ -255,9 +255,9 @@ class UIDumpValidator:
             element_count=child_count,
         )
 
-    def validate_ui_dump_with_retry(
+    async def validate_ui_dump_with_retry(
         self,
-        ui_data_getter: Callable[[], Any],
+        ui_data_getter: Callable[[], Awaitable[Any]],
         max_retries: int = 1,
     ) -> UIDumpValidationResult:
         """Validate UI dump with one retry for transient failures (per D-04).
@@ -274,7 +274,7 @@ class UIDumpValidator:
         Returns:
             UIDumpValidationResult for the final validation attempt.
         """
-        result = self.validate(ui_data_getter())
+        result = self.validate(await ui_data_getter())
 
         if result.is_valid:
             return result
@@ -285,7 +285,7 @@ class UIDumpValidator:
                 f"UI dump validation failed ({result.error}), "
                 f"retrying ({retries + 1}/{max_retries})"
             )
-            result = self.validate(ui_data_getter())
+            result = self.validate(await ui_data_getter())
             retries += 1
 
         if not result.is_valid:

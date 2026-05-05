@@ -1,0 +1,8 @@
+{
+  "integration": "speckit",
+  "version": "0.8.5.dev0",
+  "installed_at": "2026-05-01T17:35:47.687912+00:00",
+  "files": {
+    ".specify/templates/constitution-template.md": "ce7549540fa45543cca797a150201d868e64495fdff39dc38246fb17bd4024b3"
+  }
+}

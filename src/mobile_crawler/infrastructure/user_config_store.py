@@ -25,6 +25,7 @@ class UserConfigStore:
         if db_path is None:
             # Late import to avoid circular import with config module
             from mobile_crawler.config.paths import get_app_data_dir
+
             app_data_dir = get_app_data_dir()
             db_path = app_data_dir / "user_config.db"
 
@@ -34,12 +35,12 @@ class UserConfigStore:
 
     def get_connection(self) -> sqlite3.Connection:
         """Get database connection with row factory configured.
-        
+
         Uses thread-local storage to ensure each thread gets its own connection,
         which is required for SQLite thread safety.
         """
         # Check if this thread already has a connection
-        if not hasattr(self._local, 'connection') or self._local.connection is None:
+        if not hasattr(self._local, "connection") or self._local.connection is None:
             self._local.connection = sqlite3.connect(str(self.db_path), check_same_thread=False)
             self._local.connection.row_factory = sqlite3.Row
             self._local.connection.execute("PRAGMA foreign_keys=ON")
@@ -47,7 +48,7 @@ class UserConfigStore:
 
     def close(self):
         """Close database connection for current thread."""
-        if hasattr(self._local, 'connection') and self._local.connection:
+        if hasattr(self._local, "connection") and self._local.connection:
             self._local.connection.close()
             self._local.connection = None
 
@@ -92,10 +93,7 @@ class UserConfigStore:
         conn = self.get_connection()
         cursor = conn.cursor()
 
-        cursor.execute(
-            "SELECT value, value_type FROM user_config WHERE key = ?",
-            (key,)
-        )
+        cursor.execute("SELECT value, value_type FROM user_config WHERE key = ?", (key,))
         row = cursor.fetchone()
 
         if row is None:
@@ -122,12 +120,16 @@ class UserConfigStore:
         cursor = conn.cursor()
 
         import datetime
+
         updated_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT OR REPLACE INTO user_config (key, value, value_type, updated_at)
             VALUES (?, ?, ?, ?)
-        """, (key, value_str, value_type, updated_at))
+        """,
+            (key, value_str, value_type, updated_at),
+        )
 
         conn.commit()
 
@@ -168,8 +170,72 @@ class UserConfigStore:
 
         return settings
 
+    def _get_machine_identifier(self) -> str:
+        """Get a stable machine-specific identifier.
+
+        Uses platform-specific stable identifiers that don't change
+        due to network adapter state, power management, etc.
+
+        Returns:
+            Stable machine identifier string
+        """
+        system = platform.system()
+
+        # Windows: MachineGuid from registry (stable across reboots, network changes)
+        if system == "Windows":
+            try:
+                import subprocess
+
+                result = subprocess.run(
+                    [
+                        "powershell",
+                        "-Command",
+                        "Get-ItemProperty -Path 'HKLM:\\SOFTWARE\\Microsoft\\Cryptography' "
+                        "-Name 'MachineGuid' | Select-Object -ExpandProperty MachineGuid",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+                if result.returncode == 0 and result.stdout.strip():
+                    return result.stdout.strip()
+            except (subprocess.SubprocessError, FileNotFoundError, subprocess.TimeoutExpired):
+                pass
+
+        # macOS: IOPlatformUUID from ioreg
+        elif system == "Darwin":
+            try:
+                import subprocess
+
+                result = subprocess.run(
+                    ["ioreg", "-rd1", "-c", "IOPlatformExpertDevice"], capture_output=True, text=True, timeout=5
+                )
+                if result.returncode == 0:
+                    for line in result.stdout.split("\n"):
+                        if "IOPlatformUUID" in line:
+                            return line.split('"')[-2]
+            except (subprocess.SubprocessError, FileNotFoundError, subprocess.TimeoutExpired):
+                pass
+
+        # Linux: machine-id from /etc
+        elif system == "Linux":
+            try:
+                for path in ["/etc/machine-id", "/var/lib/dbus/machine-id"]:
+                    try:
+                        with open(path, "r") as f:
+                            machine_id = f.read().strip()
+                            if machine_id:
+                                return machine_id
+                    except FileNotFoundError:
+                        continue
+            except Exception:
+                pass
+
+        # Fallback: use computer name (less stable but better than volatile MAC)
+        return platform.node()
+
     def _derive_machine_key(self) -> bytes:
-        """Derive a machine-bound encryption key using hardware identifiers.
+        """Derive a machine-bound encryption key using stable hardware identifiers.
 
         Returns:
             32-byte key for Fernet encryption
@@ -182,38 +248,9 @@ class UserConfigStore:
         identifiers.append(platform.machine())
         identifiers.append(platform.node())  # Computer name
 
-        # Try to get CPU info (cross-platform)
-        try:
-            import psutil
-            cpu_info = psutil.cpu_freq()
-            if cpu_info:
-                identifiers.append(str(cpu_info.max))
-        except (ImportError, AttributeError):
-            pass
-
-        # Try to get disk serial (Windows-specific but safe to try)
-        try:
-            import subprocess
-            if platform.system() == "Windows":
-                result = subprocess.run(
-                    ["wmic", "diskdrive", "get", "serialnumber"],
-                    capture_output=True, text=True, timeout=5
-                )
-                if result.returncode == 0 and result.stdout.strip():
-                    lines = result.stdout.strip().split('\n')
-                    if len(lines) > 1:
-                        serial = lines[1].strip()
-                        if serial:
-                            identifiers.append(serial)
-        except (subprocess.SubprocessError, FileNotFoundError, subprocess.TimeoutExpired):
-            pass
-
-        # Use MAC address as fallback/additional identifier
-        try:
-            mac = uuid.getnode()
-            identifiers.append(str(mac))
-        except Exception:
-            pass
+        # Stable machine identifier (Windows MachineGuid, macOS IOPlatformUUID, Linux machine-id)
+        machine_id = self._get_machine_identifier()
+        identifiers.append(machine_id)
 
         # Combine all identifiers
         combined = "|".join(identifiers)
@@ -287,13 +324,21 @@ class UserConfigStore:
         encrypted = self.get_secret(key)
         if encrypted is None:
             return None
-        
+
         try:
             return self.decrypt_secret(encrypted)
         except Exception:
             # Decryption failed (e.g., key changed, corrupted data)
-            # Delete the corrupted secret and return None
-            self.delete_secret(key)
+            # DO NOT delete the secret - it might be recoverable if the
+            # encryption key is restored or migrated. Just log and return None.
+            import logging
+
+            logger = logging.getLogger(__name__)
+            logger.warning(
+                f"Failed to decrypt secret '{key}'. The secret may have been "
+                f"encrypted with a different key. The stored value is preserved "
+                f"in case key migration is possible."
+            )
             return None
 
     def get_secret(self, key: str) -> Optional[bytes]:
@@ -324,12 +369,16 @@ class UserConfigStore:
         cursor = conn.cursor()
 
         import datetime
+
         updated_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT OR REPLACE INTO secrets (key, encrypted_value, updated_at)
             VALUES (?, ?, ?)
-        """, (key, encrypted_value, updated_at))
+        """,
+            (key, encrypted_value, updated_at),
+        )
 
         conn.commit()
 
@@ -370,6 +419,7 @@ class UserConfigStore:
             return "true" if value else "false"
         elif value_type == "json":
             import json
+
             return json.dumps(value)
         else:
             return str(value)
@@ -384,6 +434,7 @@ class UserConfigStore:
             return float(value_str)
         elif value_type == "json":
             import json
+
             return json.loads(value_str)
         else:
             return value_str

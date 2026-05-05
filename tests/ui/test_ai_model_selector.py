@@ -291,7 +291,38 @@ class TestModelSorting:
 
         ai_model_selector.provider_combo.setCurrentIndex(1)  # Select "Gemini"
 
-        # Check models are sorted (skip placeholder at index 0)
-        assert ai_model_selector.model_combo.itemText(1) == "alpha-model"
-        assert ai_model_selector.model_combo.itemText(2) == "beta-model"
-        assert ai_model_selector.model_combo.itemText(3) == "zeta-model"
+        # Check models are sorted by id (skip placeholder at index 0)
+        assert ai_model_selector.model_combo.itemData(1) == "alpha-model"
+        assert ai_model_selector.model_combo.itemData(2) == "beta-model"
+        assert ai_model_selector.model_combo.itemData(3) == "zeta-model"
+
+    def test_models_with_pricing_shown_in_display(self, qapp, ai_model_selector):
+        """Test that models with pricing show pricing in display text."""
+        ai_model_selector.set_api_key_callback(lambda p: "fake_key")
+        models_with_pricing = [
+            {"id": "anthropic/claude-3.5-sonnet", "pricing": {"prompt_per_1M": "3.0000", "completion_per_1M": "15.0000", "image_per_1M": "3.0000"}},
+        ]
+
+        ai_model_selector.vision_detector.get_vision_models = Mock(return_value=models_with_pricing)
+
+        ai_model_selector.provider_combo.setCurrentIndex(1)  # Select "Gemini"
+
+        display_text = ai_model_selector.model_combo.itemText(1)
+        assert "anthropic/claude-3.5-sonnet" in display_text
+        assert "$3.0000/M" in display_text
+        assert "$15.0000/M" in display_text
+        assert ai_model_selector.model_combo.itemData(1) == "anthropic/claude-3.5-sonnet"
+
+    def test_models_without_pricing_show_only_id(self, qapp, ai_model_selector):
+        """Test that models without pricing only show the model ID."""
+        ai_model_selector.set_api_key_callback(lambda p: "fake_key")
+        models_without_pricing = [
+            {"id": "some-model"},
+        ]
+
+        ai_model_selector.vision_detector.get_vision_models = Mock(return_value=models_without_pricing)
+
+        ai_model_selector.provider_combo.setCurrentIndex(1)  # Select "Gemini"
+
+        assert ai_model_selector.model_combo.itemText(1) == "some-model"
+        assert ai_model_selector.model_combo.itemData(1) == "some-model"

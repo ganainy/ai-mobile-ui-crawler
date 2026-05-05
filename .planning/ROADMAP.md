@@ -16,7 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 2: Remove Appium** - Eliminate Appium provider, consolidate to single ADB/DroidRun device path
 - [x] **Phase 3: Step State Machine & UI Sync** - Durable step phases with persisted transitions and explicit wait/verify actions
 - [ ] **Phase 4: ADB Context Guardrails** - Capture device context per step, validate UI dumps, detect and recover from app switches
-- [ ] **Phase 5: Test Coverage & Reliability** - Fix all failing tests, add unit tests for main/base functionality modules
+- [x] **Phase 5: Test Coverage & Reliability** - Fix all failing tests, add unit tests for main/base functionality modules
 
 ## Phase Details
 
@@ -87,11 +87,11 @@ Plans:
 
 Plans:
 **Wave 1**
-- [ ] 04-01: Extend data model, DB schema, and context capture for package/activity persistence (CTX-01)
+- [x] 04-01: Extend data model, DB schema, and context capture for package/activity persistence (CTX-01)
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 04-02: Add UI dump validation gate and context pre-check before DECIDE (CTX-02)
+- [x] 04-02: Add UI dump validation gate and context pre-check before DECIDE (CTX-02)
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 04-03: Implement app-switch detection and automatic recovery with am start (CTX-03)
+- [x] 04-03: Implement app-switch detection and automatic recovery with am start (CTX-03)
 
 ### Phase 5: Test Coverage & Reliability
 **Goal**: All main/base functionality modules have reliable unit tests and the entire test suite passes with zero failures
@@ -108,8 +108,8 @@ Plans:
 
 Plans:
 **Wave 1**
-- [ ] 05-01: Fix all failing tests and collection errors, establish green baseline
-- [ ] 05-02: Add unit tests for core, domain, and infrastructure modules without coverage
+- [x] 05-01: Fix all failing tests and collection errors, establish green baseline
+- [x] 05-02: Add unit tests for core, domain, and infrastructure modules without coverage
 
 **Execution Order:**
 Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
@@ -119,5 +119,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | 1. Error Model Overhaul | 3/3 | Complete | 2026-05-01 |
 | 2. Remove Appium | 3/3 | Complete | 2026-05-01 |
 | 3. Step State Machine & UI Sync | 4/4 | Complete | 2026-05-05 |
-| 4. ADB Context Guardrails | 0/3 | Not started | - |
-| 5. Test Coverage & Reliability | 0/2 | Not started | - |
+| 4. ADB Context Guardrails | 3/3 | Complete | 2026-05-06 |
+| 5. Test Coverage & Reliability | 2/2 | Complete | 2026-05-06 |

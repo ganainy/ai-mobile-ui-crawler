@@ -182,7 +182,13 @@ class DroidRunAgentService:
         ai_model = self.config_manager.get("ai_model", "gemini-1.5-flash")
 
         # Map crawler providers to DroidRun format
-        provider_mapping = {"gemini": "GoogleGenAI", "openai": "OpenAI", "anthropic": "AnthropicAI", "ollama": "Ollama"}
+        provider_mapping = {
+            "gemini": "GoogleGenAI",
+            "openai": "OpenAI",
+            "anthropic": "AnthropicAI",
+            "ollama": "Ollama",
+            "openrouter": "OpenAILike",
+        }
 
         droid_provider = provider_mapping.get(ai_provider, "GoogleGenAI")
 
@@ -259,6 +265,14 @@ class DroidRunAgentService:
                 config["llm_profiles"]["app_opener"]["kwargs"]["api_key"] = api_key
                 config["llm_profiles"]["structured_output"]["kwargs"]["api_key"] = api_key
                 os.environ["ANTHROPIC_API_KEY"] = api_key
+        elif ai_provider == "openrouter":
+            api_key = resolve_api_key("openrouter_api_key", ["OPENROUTER_API_KEY"])
+            base_url = self.config_manager.get("openrouter_base_url", "https://openrouter.ai/api/v1")
+            for profile in config["llm_profiles"].values():
+                profile["provider"] = "OpenAILike"
+                profile["base_url"] = base_url
+                if api_key:
+                    profile["kwargs"]["api_key"] = api_key
 
         return config
 
@@ -457,6 +471,19 @@ class DroidRunAgentService:
                 self._current_step_number,
                 new_phase.value,
             )
+
+            # Record device context for normal steps
+            if self._adb_executor:
+                package = self._adb_executor.get_current_package()
+                activity = self._adb_executor.get_current_activity()
+                if package and activity:
+                    try:
+                        self._step_phase_repository.record_device_context(
+                            self._current_run_id, self._current_step_number, package, activity
+                        )
+                    except Exception as e:
+                        logger.warning(f"Failed to record device context: {e}")
+
         except Exception as e:
             logger.warning(f"Failed to persist phase transition: {e}")
 
@@ -557,33 +584,35 @@ class DroidRunAgentService:
         # --- UI dump validation (D-03): check parseable and non-empty ---
         if skip_reason is None and self._ui_dump_validator:
             try:
-                # Get UI data from DroidRun agent's state, if available
-                ui_data = None
-                if self._droid_agent and hasattr(self._droid_agent, "state_provider"):
-                    state_provider = self._droid_agent.state_provider
-                    if state_provider and hasattr(state_provider, "get_state"):
-                        state = await state_provider.get_state()
-                        if state and isinstance(state, dict):
-                            ui_data = state.get("a11y_tree")
+                async def get_ui_data():
+                    """Get fresh UI data from DroidRun agent's state."""
+                    ui_data = None
+                    if self._droid_agent and hasattr(self._droid_agent, "state_provider"):
+                        state_provider = self._droid_agent.state_provider
+                        if state_provider and hasattr(state_provider, "get_state"):
+                            state = await state_provider.get_state()
+                            if state and isinstance(state, dict):
+                                ui_data = state.get("a11y_tree")
 
-                # If no a11y_tree from state_provider, try shared_state
-                if ui_data is None and self._droid_agent:
-                    shared_state = getattr(self._droid_agent, "shared_state", None)
-                    if shared_state and hasattr(shared_state, "action_history"):
-                        # Last action may have state attached
-                        pass  # Fall through to validate None
+                    # If no a11y_tree from state_provider, try shared_state
+                    if ui_data is None and self._droid_agent:
+                        shared_state = getattr(self._droid_agent, "shared_state", None)
+                        if shared_state and hasattr(shared_state, "action_history"):
+                            # Last action may have state attached
+                            pass  # Fall through to validate None
 
-                if ui_data is not None:
-                    # Use simple validate (no retry getter available in this context)
-                    validation = self._ui_dump_validator.validate(ui_data)
+                    return ui_data
 
-                    if not validation.is_valid:
-                        logger.warning(
-                            f"Step {self._current_step_number}: UI dump invalid "
-                            f"({validation.error}, elements={validation.element_count}). "
-                            f"Skipping DECIDE/EXECUTE."
-                        )
-                        skip_reason = StepSkipReason.INVALID_UI_DUMP
+                # Use validate with retry for transient failures (per D-04)
+                validation = await self._ui_dump_validator.validate_ui_dump_with_retry(get_ui_data, max_retries=1)
+
+                if not validation.is_valid:
+                    logger.warning(
+                        f"Step {self._current_step_number}: UI dump invalid "
+                        f"({validation.error}, elements={validation.element_count}). "
+                        f"Skipping DECIDE/EXECUTE."
+                    )
+                    skip_reason = StepSkipReason.INVALID_UI_DUMP
                 # If ui_data is None, proceed without validation —
                 # DroidRun may not have state_provider in all execution paths
 
@@ -732,6 +761,48 @@ class DroidRunAgentService:
             app_package=app_package,
         )
 
+    def _preflight_app_launch(self, app_package: str) -> None:
+        """Ensure the target app is in the foreground before any AI calls."""
+        from mobile_crawler.domain.adb_action_executor import ADBActionExecutor
+
+        adb_executor = ADBActionExecutor(device_id=self.device_id)
+
+        resumed = adb_executor.get_resumed_activity()
+        if resumed and resumed[0] == app_package:
+            logger.info(f"Preflight: {app_package} already in foreground")
+            return
+
+        logger.info(f"Preflight: launching {app_package} via ADB")
+        launch_result = adb_executor.am_start_recovery(app_package)
+        if not launch_result.success:
+            logger.warning(
+                f"Preflight: failed to launch {app_package}: {launch_result.error_message}"
+            )
+            return
+
+        resumed = adb_executor.get_resumed_activity()
+        if resumed and resumed[0] == app_package:
+            logger.info(f"Preflight: {app_package} verified in foreground")
+            return
+
+        if resumed and resumed[0] == "com.android.vending":
+            logger.warning(
+                "Preflight: Play Store intercepted launch; force-stopping and retrying"
+            )
+            adb_executor.force_stop_package("com.android.vending")
+            adb_executor.am_start_recovery(app_package)
+            resumed = adb_executor.get_resumed_activity()
+            if resumed and resumed[0] == app_package:
+                logger.info(f"Preflight: {app_package} verified after Play Store intercept")
+                return
+
+        if resumed:
+            logger.warning(
+                f"Preflight: foreground app remains {resumed[0]}/{resumed[1]} after launch"
+            )
+        else:
+            logger.warning("Preflight: unable to verify foreground app after launch")
+
     async def execute_exploration_task(
         self,
         run_id: int,
@@ -764,6 +835,9 @@ class DroidRunAgentService:
 
         for attempt in range(max_crash_retries + 1):
             try:
+                # Preflight: ensure target app is open before any AI calls
+                self._preflight_app_launch(app_package)
+
                 # Initialize agent if needed
                 await self._initialize_agent(max_steps)
 

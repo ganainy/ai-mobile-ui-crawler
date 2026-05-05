@@ -72,3 +72,11 @@ screenshots/
 # AI Agent directory
 .agent/
 .planning/
+
+# Ignore all speckit files and directories
+.specify/
+.github/agents/speckit*
+.github/prompts/speckit*
+.github/workflows/speckit*
+src/**/speckit*
+tests/**/speckit*

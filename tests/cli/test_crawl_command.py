@@ -69,9 +69,9 @@ class TestCrawlCommand:
         mock_db_manager = Mock()
         mock_db_manager_cls.return_value = mock_db_manager
 
-           with patch('mobile_crawler.cli.commands.crawl.RunRepository') as mock_run_repo_cls, \
-               patch('mobile_crawler.cli.commands.crawl.CrawlerLoop') as mock_crawler_loop_cls, \
-               patch('mobile_crawler.cli.commands.crawl.get_app_data_dir') as mock_get_app_data_dir:
+        with patch('mobile_crawler.cli.commands.crawl.RunRepository') as mock_run_repo_cls, \
+             patch('mobile_crawler.cli.commands.crawl.CrawlerLoop') as mock_crawler_loop_cls, \
+             patch('mobile_crawler.cli.commands.crawl.get_app_data_dir') as mock_get_app_data_dir:
 
             mock_run_repo = Mock()
             mock_run_repo.create_run.return_value = 123

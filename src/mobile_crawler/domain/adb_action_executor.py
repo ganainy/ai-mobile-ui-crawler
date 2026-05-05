@@ -464,6 +464,54 @@ class ADBActionExecutor:
             logger.error(f"Failed to get current activity: {e}")
             return None
 
+    def get_resumed_activity(self) -> Optional[Tuple[str, str]]:
+        """Get the resumed (foreground) activity from ActivityManager.
+
+        Uses dumpsys activity activities to capture the resumed activity,
+        which is often more reliable than window focus when launch is
+        intercepted by another app (e.g., Play Store).
+
+        Returns:
+            Tuple of (package, activity) or None if not found.
+        """
+        try:
+            success, output, _ = self._execute_adb_command([
+                'shell', 'dumpsys activity activities | grep -E "mResumedActivity|ResumedActivity"'
+            ])
+
+            if success and output:
+                match = re.search(r'([a-zA-Z0-9_.]+)/([a-zA-Z0-9_.]+)', output)
+                if match:
+                    activity = match.group(2).rstrip('})')
+                    return match.group(1), activity
+            return None
+
+        except Exception as e:
+            logger.error(f"Failed to get resumed activity: {e}")
+            return None
+
+    def force_stop_package(self, package_name: str) -> ActionResult:
+        """Force-stop a package via ActivityManager.
+
+        Args:
+            package_name: Package name to stop
+
+        Returns:
+            ActionResult indicating success/failure
+        """
+        success, output, duration_ms = self._execute_adb_command([
+            'shell', 'am', 'force-stop', package_name
+        ])
+
+        return ActionResult(
+            success=success,
+            action_type="force_stop",
+            target=package_name,
+            duration_ms=duration_ms,
+            error_message=output if not success else None,
+            navigated_away=False
+        )
+
     def resolve_launcher_activity(self, package_name: str) -> Optional[str]:
         """Resolve the main launcher activity for a given package.
 
