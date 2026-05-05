@@ -16,6 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 2: Remove Appium** - Eliminate Appium provider, consolidate to single ADB/DroidRun device path
 - [ ] **Phase 3: Step State Machine & UI Sync** - Durable step phases with persisted transitions and explicit wait/verify actions
 - [ ] **Phase 4: ADB Context Guardrails** - Capture device context per step, validate UI dumps, detect and recover from app switches
+- [ ] **Phase 5: Test Coverage & Reliability** - Fix all failing tests, add unit tests for main/base functionality modules
 
 ## Phase Details
 
@@ -89,10 +90,26 @@ Plans:
 - [ ] 04-02: Add UI tree dump validation before decision processing
 - [ ] 04-03: Implement app-switch detection and recovery
 
-## Progress
+### Phase 5: Test Coverage & Reliability
+**Goal**: All main/base functionality modules have reliable unit tests and the entire test suite passes with zero failures
+**Depends on**: Phase 3 (step state machine, error model, and Appium removal must be stable for test fixes)
+**Requirements**: TEST-01, TEST-02, TEST-03
+**Success Criteria** (what must be TRUE):
+  1. `pytest tests/` exits with 0 failures and 0 collection errors
+  2. Every core module (crawler_loop, crawler_event_listener, crawl_controller, log_sinks, logging_service) has a test file with ≥3 meaningful test cases
+  3. Every key domain service (droidrun_agent_service, adb_action_executor, ui_context, models, providers/registry) has a test file with ≥3 meaningful test cases
+  4. All previously-failing 56 tests are fixed and passing
+  5. All 5 collection errors are resolved (syntax errors fixed, import mismatches corrected, duplicate modules removed)
+  6. No test file duplicates exist (unit/ and domain/ or ui/ copies of same test)
+**Plans**: 2 plans
+
+Plans:
+**Wave 1**
+- [ ] 05-01: Fix all failing tests and collection errors, establish green baseline
+- [ ] 05-02: Add unit tests for core, domain, and infrastructure modules without coverage
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 3 -> 4
+Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -100,3 +117,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | 2. Remove Appium | 3/3 | Complete | 2026-05-01 |
 | 3. Step State Machine & UI Sync | 3/4 | In progress | - |
 | 4. ADB Context Guardrails | 0/3 | Not started | - |
+| 5. Test Coverage & Reliability | 0/2 | Not started | - |

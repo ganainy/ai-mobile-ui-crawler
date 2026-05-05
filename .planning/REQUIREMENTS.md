@@ -36,6 +36,12 @@
 - [ ] **CTX-02**: UI tree dump is validated (succeeded, parseable, non-empty) before decision layer processes it
 - [ ] **CTX-03**: Unintended app switches (home press, notification pull, recents) are detected and trigger recovery back to target app
 
+### Test Coverage (TEST)
+
+- [ ] **TEST-01**: The entire test suite passes with zero failures and zero collection errors (`pytest tests/` exits 0)
+- [ ] **TEST-02**: Every core module (crawler_loop, crawler_event_listener, crawl_controller, log_sinks, logging_service) has a corresponding test file with ≥3 meaningful test cases covering main functionality
+- [ ] **TEST-03**: Every key domain service (droidrun_agent_service, adb_action_executor, ui_context, models, providers/registry) has a corresponding test file with ≥3 meaningful test cases covering main functionality
+
 ## v2 Requirements
 
 Deferred to future milestone.
@@ -91,10 +97,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CTX-01 | Phase 4 | Pending |
 | CTX-02 | Phase 4 | Pending |
 | CTX-03 | Phase 4 | Pending |
+| TEST-01 | Phase 5 | Pending |
+| TEST-02 | Phase 5 | Pending |
+| TEST-03 | Phase 5 | Pending |
 
 **Coverage:**
-- v1.0 requirements: 16 total
-- Mapped to phases: 16
+- v1.0 requirements: 19 total
+- Mapped to phases: 19
 - Unmapped: 0
 
 ---

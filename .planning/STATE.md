@@ -1,11 +1,10 @@
 ---
 milestone: "v1.0"
 milestone_name: "Crawl Stability & Resumability"
-status: phase_3_in_progress
+status: phase_5_planned
 progress:
-  phases_total: 4
-  phases_complete: 2
-  plans_total: 13
+  phases_total: 5
+  plans_total: 15
   plans_complete: 9
 ---
 
@@ -18,14 +17,14 @@ See: .planning/PROJECT.md (updated 2026-05-01)
 
 ## Current Position
 
-Phase: 3 of 4 (Step State Machine & UI Sync)
-Plan: 3 of 4 in current phase (Wave 2 in progress)
-Status: Wave 2 in progress (03-02 complete, 03-04 pending)
-Last activity: 2026-05-05 -- 03-02 complete: observability queries + event listener callback
+Phase: 5 of 5 (Test Coverage & Reliability)
+Plan: 0 of 2 in current phase (planned, not started)
+Status: Phase 5 planned — 2 plans to fix failing tests and add core module coverage
+Last activity: 2026-05-05 -- Phase 5 planned
 
 Progress:
-Phases: [████░░░░░░] 50%
-Plans:  [████████░░] 69%
+Phases: [█████████░] 50%
+Plans:  [█████████░] 60%
 
 ## Performance Metrics
 
@@ -42,6 +41,7 @@ Plans:  [████████░░] 69%
 | 2. Remove Appium | 3/3 | - | - |
 | 3. Step State Machine & UI Sync | 3/4 | - | - |
 | 4. ADB Context Guardrails | 0/3 | - | - |
+| 5. Test Coverage & Reliability | 0/2 | - | - |
 
 ## Recent Trend:
 - Last 5 plans: 03-02, 03-01, 03-03, 02-01, 02-02
@@ -78,5 +78,5 @@ Items acknowledged and carried forward:
 ## Session Continuity
 
 Last session: 2026-05-05
-Stopped at: Phase 3 Wave 2 in progress (03-02 done, 03-04 pending)
+Stopped at: Phase 5 planned (2 plans created, ready for execution)
 Resume file: None
