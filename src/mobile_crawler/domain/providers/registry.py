@@ -52,19 +52,26 @@ class ProviderRegistry:
 
             result = []
             found_ids = set()
-            
+
             for model in models:
                 model_id = model.name
                 # Strip models/ prefix if present
                 if model_id.startswith('models/'):
                     model_id = model_id.replace('models/', '')
-                    
+
                 model_info = {
                     'id': model_id,
                     'name': model.display_name or model_id,
                     'provider': 'google',
-                    'supports_vision': self._is_gemini_vision_model(model_id)
+                    'supports_vision': self._is_gemini_vision_model(model_id, model=model),
                 }
+                # Store description and supported_actions if available
+                description = getattr(model, 'description', None)
+                supported_actions = getattr(model, 'supported_actions', None)
+                if description:
+                    model_info['description'] = description
+                if supported_actions:
+                    model_info['supported_actions'] = supported_actions
                 result.append(model_info)
                 found_ids.add(model_id)
 
@@ -118,11 +125,34 @@ class ProviderRegistry:
             result = []
 
             for model in data.get('data', []):
+                architecture = model.get('architecture', {})
+                input_modalities = architecture.get('input_modalities', []) if isinstance(architecture, dict) else []
+                pricing_raw = model.get('pricing', {})
+                pricing = {}
+                if isinstance(pricing_raw, dict):
+                    try:
+                        prompt_price = float(pricing_raw.get('prompt', 0))
+                        completion_price = float(pricing_raw.get('completion', 0))
+                        image_price = float(pricing_raw.get('image', 0))
+                        pricing = {
+                            'prompt_per_1M': f"{prompt_price * 1_000_000:.4f}",
+                            'completion_per_1M': f"{completion_price * 1_000_000:.4f}",
+                            'image_per_1M': f"{image_price * 1_000_000:.4f}",
+                        }
+                    except (ValueError, TypeError):
+                        pricing = {
+                            'prompt_per_1M': 'N/A',
+                            'completion_per_1M': 'N/A',
+                            'image_per_1M': 'N/A',
+                        }
+
                 model_info = {
                     'id': model['id'],
                     'name': model['name'],
                     'provider': 'openrouter',
-                    'supports_vision': self._is_openrouter_vision_model(model)
+                    'supports_vision': self._is_openrouter_vision_model(model),
+                    'input_modalities': input_modalities,
+                    'pricing': pricing,
                 }
                 result.append(model_info)
 
@@ -134,10 +164,10 @@ class ProviderRegistry:
             logger.error(f"Failed to fetch OpenRouter models: {e}")
             # Return fallback list with known vision models
             return [
-                {'id': 'anthropic/claude-3.5-sonnet', 'name': 'Claude 3.5 Sonnet', 'provider': 'openrouter', 'supports_vision': True},
-                {'id': 'anthropic/claude-3-opus', 'name': 'Claude 3 Opus', 'provider': 'openrouter', 'supports_vision': True},
-                {'id': 'anthropic/claude-3-haiku', 'name': 'Claude 3 Haiku', 'provider': 'openrouter', 'supports_vision': True},
-                {'id': 'google/gemini-pro-1.5', 'name': 'Gemini Pro 1.5', 'provider': 'openrouter', 'supports_vision': True},
+                {'id': 'anthropic/claude-3.5-sonnet', 'name': 'Claude 3.5 Sonnet', 'provider': 'openrouter', 'supports_vision': True, 'input_modalities': ['text', 'image'], 'pricing': {'prompt_per_1M': '3.0000', 'completion_per_1M': '15.0000', 'image_per_1M': '3.0000'}},
+                {'id': 'anthropic/claude-3-opus', 'name': 'Claude 3 Opus', 'provider': 'openrouter', 'supports_vision': True, 'input_modalities': ['text', 'image'], 'pricing': {'prompt_per_1M': '15.0000', 'completion_per_1M': '75.0000', 'image_per_1M': '15.0000'}},
+                {'id': 'anthropic/claude-3-haiku', 'name': 'Claude 3 Haiku', 'provider': 'openrouter', 'supports_vision': True, 'input_modalities': ['text', 'image'], 'pricing': {'prompt_per_1M': '0.2500', 'completion_per_1M': '1.2500', 'image_per_1M': '0.2500'}},
+                {'id': 'google/gemini-pro-1.5', 'name': 'Gemini Pro 1.5', 'provider': 'openrouter', 'supports_vision': True, 'input_modalities': ['text', 'image'], 'pricing': {'prompt_per_1M': '1.2500', 'completion_per_1M': '5.0000', 'image_per_1M': '1.2500'}},
             ]
 
     def fetch_ollama_models(self, base_url: str = 'http://localhost:11434') -> List[Dict[str, Any]]:
@@ -179,33 +209,86 @@ class ProviderRegistry:
             # Return empty list - no reliable fallback for local models
             return []
 
-    def _is_gemini_vision_model(self, model_id: str) -> bool:
-        """Check if a Gemini model supports vision.
+    def _is_gemini_vision_model(self, model_id: str, model: Any = None) -> bool:
+        """Check if a Gemini model supports vision using hybrid detection.
+
+        Uses a three-layer approach:
+        1. API metadata (supported_actions) to filter non-content models
+        2. Description-based detection for models with modality info
+        3. Name-pattern fallback for models without description metadata
 
         Args:
-            model_id: Model identifier
+            model_id: Model identifier (e.g., 'gemini-2.5-flash')
+            model: Optional Gemini Model object with description and supported_actions
 
         Returns:
-            True if model supports vision
+            True if model likely supports vision input
         """
         model_lower = model_id.lower()
-        
-        # Exclude text-only models explicitly
-        text_only_patterns = [
+
+        # Step 0: Exclude models that are clearly not vision-capable based on name
+        # (These are never vision models regardless of other signals)
+        always_text_only_patterns = [
             'text-',
             'embedding',
             'aqa',
             'tuning',
+            'imagen',   # Image generation, not understanding
+            'veo',      # Video generation
+            'lyria',    # Audio generation
+            'gemma',    # Text-only open models (small variants)
         ]
-        if any(pattern in model_lower for pattern in text_only_patterns):
+        if any(pattern in model_lower for pattern in always_text_only_patterns):
             return False
-        
-        # All Gemini 1.x, 2.x, 3.x and Pro models support vision
+
+        # Step 1: Use API metadata (supported_actions) when available
+        # Models must support 'generateContent' to be considered for vision.
+        # This filters out embedding-only models (embedContent),
+        # video generation (predictLongRunning), and image generation (predict).
+        if model is not None:
+            supported_actions = getattr(model, 'supported_actions', None) or []
+            if isinstance(supported_actions, (list, tuple)) and len(supported_actions) > 0:
+                if 'generateContent' not in supported_actions:
+                    return False
+
+                # Exclude TTS (text-to-speech) models - they have generateContent
+                # but are for audio generation, not visual analysis
+                if 'bidiGenerateContent' in supported_actions and 'createCachedContent' not in supported_actions:
+                    return False
+
+        # Step 2: Use description-based detection when available
+        # The description field sometimes contains "multimodal", "image",
+        # "vision", or "video" keywords that confirm vision capability.
+        if model is not None:
+            description = getattr(model, 'description', None)
+            if description and isinstance(description, str) and len(description.strip()) > 0:
+                desc_lower = description.lower()
+
+                # Check for text-only signals in description
+                text_only_desc_keywords = ['text-only', 'language model only', 'text generation only']
+                if any(kw in desc_lower for kw in text_only_desc_keywords):
+                    return False
+
+                # Check for vision-capable signals in description
+                vision_desc_keywords = ['multimodal', 'image', 'vision', 'video']
+                if any(kw in desc_lower for kw in vision_desc_keywords):
+                    return True
+
+        # Step 3: Name-pattern fallback for models without modality info in description
+        # Many Gemini models have sparse descriptions (e.g., "Gemini 2.0 Flash")
+        # so we fall back to the model ID naming convention.
+        #
+        # Exclude TTS/audio models by name (these have generateContent but aren't for vision)
+        tts_audio_patterns = ['-tts', '-native-audio', '-live']
+        if any(pattern in model_lower for pattern in tts_audio_patterns):
+            return False
+
+        # Core Gemini models (1.x, 2.x, 3.x generations) all support vision
         vision_patterns = [
             'gemini-1.',
             'gemini-2.',
-            'gemini-3', # Changed from gemini-3. to gemini-3 to match gemini-3-pro-preview
-            'gemini-pro',
+            'gemini-3',     # Matches gemini-3-pro-preview, gemini-3-flash-preview
+            'gemini-pro',   # Matches gemini-pro, gemini-pro-vision
             'gemini-flash',
             'gemini-ultra',
             'gemini-exp',
@@ -213,15 +296,21 @@ class ProviderRegistry:
         return any(pattern in model_lower for pattern in vision_patterns)
 
     def _is_openrouter_vision_model(self, model: Dict[str, Any]) -> bool:
-        """Check if an OpenRouter model supports vision.
+        """Check if an OpenRouter model supports image input.
 
         Args:
             model: Model dictionary from OpenRouter API
 
         Returns:
-            True if model supports vision
+            True if model supports image input
         """
-        # Check for vision-related keywords in model ID or name first
+        architecture = model.get('architecture', {})
+        if isinstance(architecture, dict):
+            input_modalities = architecture.get('input_modalities', [])
+            if isinstance(input_modalities, list) and 'image' in input_modalities:
+                return True
+
+        # Fallback: check for vision-related keywords in model ID or name
         model_id = model.get('id', '').lower()
         model_name = model.get('name', '').lower()
 
@@ -238,8 +327,7 @@ class ProviderRegistry:
         if any(keyword in model_id or keyword in model_name for keyword in vision_keywords):
             return True
 
-        # Check modalities in architecture
-        architecture = model.get('architecture', {})
+        # Check legacy modals/modalities fields
         if isinstance(architecture, dict):
             modalities = architecture.get('modals', architecture.get('modalities', []))
             if isinstance(modalities, list):

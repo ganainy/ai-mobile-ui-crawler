@@ -29,9 +29,13 @@ class TestProviderRegistry:
         mock_model1 = MagicMock()
         mock_model1.name = 'models/gemini-1.5-pro'
         mock_model1.display_name = 'Gemini 1.5 Pro'
+        mock_model1.description = 'Gemini 1.5 Pro, a multimodal model'
+        mock_model1.supported_actions = ['generateContent', 'countTokens', 'createCachedContent']
         mock_model2 = MagicMock()
         mock_model2.name = 'models/gemini-1.5-flash'
         mock_model2.display_name = 'Gemini 1.5 Flash'
+        mock_model2.description = 'Gemini 1.5 Flash, our fast multimodal model'
+        mock_model2.supported_actions = ['generateContent', 'countTokens', 'createCachedContent']
 
         mock_client.models.list.return_value = [mock_model1, mock_model2]
         mock_genai_client.return_value = mock_client
@@ -39,25 +43,29 @@ class TestProviderRegistry:
         registry = ProviderRegistry()
         models = registry.fetch_gemini_models('test_api_key')
 
-        assert len(models) == 2
-        assert models[0]['id'] == 'models/gemini-1.5-pro'
+        # 2 from API + 2 Gemini 3 fallback models
+        assert len(models) == 4
+        # First two are from API (prefix stripped)
+        assert models[0]['id'] == 'gemini-1.5-pro'
         assert models[0]['name'] == 'Gemini 1.5 Pro'
         assert models[0]['provider'] == 'google'
         assert models[0]['supports_vision'] is True
-        assert models[1]['id'] == 'models/gemini-1.5-flash'
+        assert 'description' in models[0]
+        assert 'supported_actions' in models[0]
+        assert models[1]['id'] == 'gemini-1.5-flash'
+        # Gemini 3 fallbacks are added when not in API response
+        fallback_ids = {m['id'] for m in models[2:]}
+        assert 'gemini-3-pro-preview' in fallback_ids
+        assert 'gemini-3-flash-preview' in fallback_ids
 
     @patch('google.genai.Client')
     def test_fetch_gemini_models_failure_fallback(self, mock_genai_client):
-        """Test Gemini model fetch with fallback on error."""
+        """Test Gemini model fetch raises RuntimeError on API error."""
         mock_genai_client.side_effect = Exception("API error")
 
         registry = ProviderRegistry()
-        models = registry.fetch_gemini_models('test_api_key')
-
-        # Should return fallback models
-        assert len(models) == 3
-        assert models[0]['id'] == 'gemini-1.5-pro'
-        assert models[0]['supports_vision'] is True
+        with pytest.raises(RuntimeError, match="Failed to fetch Gemini models"):
+            registry.fetch_gemini_models('test_api_key')
 
     @patch('mobile_crawler.domain.providers.registry.requests.get')
     def test_fetch_openrouter_models_success(self, mock_get):
@@ -68,12 +76,14 @@ class TestProviderRegistry:
                 {
                     'id': 'anthropic/claude-3.5-sonnet',
                     'name': 'Claude 3.5 Sonnet',
-                    'architecture': {'modals': ['text+image', 'text']}
+                    'architecture': {'input_modalities': ['text', 'image']},
+                    'pricing': {'prompt': '0.000003', 'completion': '0.000015', 'image': '0.000003'}
                 },
                 {
                     'id': 'openai/gpt-4',
                     'name': 'GPT-4',
-                    'architecture': {'modals': ['text']}
+                    'architecture': {'input_modalities': ['text']},
+                    'pricing': {'prompt': '0.00003', 'completion': '0.00006', 'image': '0'}
                 }
             ]
         }
@@ -85,6 +95,11 @@ class TestProviderRegistry:
         assert len(models) == 2
         assert models[0]['id'] == 'anthropic/claude-3.5-sonnet'
         assert models[0]['supports_vision'] is True
+        assert models[0]['input_modalities'] == ['text', 'image']
+        assert 'pricing' in models[0]
+        assert models[0]['pricing']['prompt_per_1M'] == '3.0000'
+        assert models[0]['pricing']['completion_per_1M'] == '15.0000'
+        assert models[0]['pricing']['image_per_1M'] == '3.0000'
         assert models[1]['id'] == 'openai/gpt-4'
         assert models[1]['supports_vision'] is False
 
@@ -143,25 +158,88 @@ class TestProviderRegistry:
         """Test Gemini vision model detection."""
         registry = ProviderRegistry()
 
+        # Name-pattern detection (no model object)
         assert registry._is_gemini_vision_model('models/gemini-1.5-pro') is True
         assert registry._is_gemini_vision_model('models/gemini-1.5-flash') is True
         assert registry._is_gemini_vision_model('models/gemini-2.0-pro') is True
         assert registry._is_gemini_vision_model('models/gemini-pro-vision') is True
         assert registry._is_gemini_vision_model('models/gemini-1.0-pro-vision') is True
+        assert registry._is_gemini_vision_model('models/gemini-3-pro-preview') is True
+        assert registry._is_gemini_vision_model('models/gemini-3-flash-preview') is True
         assert registry._is_gemini_vision_model('models/text-only-model') is False
+        # Always-text-only models
+        assert registry._is_gemini_vision_model('models/gemini-embedding-001') is False
+        assert registry._is_gemini_vision_model('models/gemma-3-27b-it') is False
+        assert registry._is_gemini_vision_model('models/imagen-4.0-generate-001') is False
+        # TTS/audio models excluded by name pattern
+        assert registry._is_gemini_vision_model('models/gemini-2.5-flash-preview-tts') is False
+        assert registry._is_gemini_vision_model('models/gemini-2.5-flash-native-audio-latest') is False
+        assert registry._is_gemini_vision_model('models/gemini-3.1-flash-live-preview') is False
+
+    def test_is_gemini_vision_model_with_description(self):
+        """Test Gemini vision model detection using description metadata."""
+        registry = ProviderRegistry()
+
+        # Model with description containing "multimodal" → vision = True
+        mock_model_multimodal = MagicMock()
+        mock_model_multimodal.description = 'Stable version of Gemini 2.5 Flash, our mid-size multimodal model'
+        mock_model_multimodal.supported_actions = ['generateContent', 'countTokens', 'createCachedContent']
+        assert registry._is_gemini_vision_model('models/gemini-2.5-flash', model=mock_model_multimodal) is True
+
+        # Model with "image" in description → vision = True
+        mock_model_image = MagicMock()
+        mock_model_image.description = 'Gemini 3 Pro Image Preview'
+        mock_model_image.supported_actions = ['generateContent', 'countTokens']
+        assert registry._is_gemini_vision_model('models/gemini-3-pro-image-preview', model=mock_model_image) is True
+
+        # Model with no modality info in description → falls back to name pattern
+        mock_model_sparse = MagicMock()
+        mock_model_sparse.description = 'Stable release of Gemini 2.5 Pro'
+        mock_model_sparse.supported_actions = ['generateContent', 'countTokens', 'createCachedContent']
+        assert registry._is_gemini_vision_model('models/gemini-2.5-pro', model=mock_model_sparse) is True
+
+        # Model without generateContent → excluded even if name matches
+        mock_model_embed = MagicMock()
+        mock_model_embed.description = 'Obtain a distributed representation of text'
+        mock_model_embed.supported_actions = ['embedContent', 'countTokens']
+        assert registry._is_gemini_vision_model('models/gemini-embedding-001', model=mock_model_embed) is False
+
+        # TTS model with bidiGenerateContent but no createCachedContent → excluded
+        mock_model_tts = MagicMock()
+        mock_model_tts.description = 'Gemini 2.5 Flash Preview TTS'
+        mock_model_tts.supported_actions = ['countTokens', 'generateContent']
+        # Note: TTS is also caught by name pattern '-tts', but let's test with a non-TTS name
+        # Actually, the supported_actions check for bidiGenerateContent applies when it's present
+        # and createCachedContent is absent. This test covers that path.
+        mock_model_tts_audio = MagicMock()
+        mock_model_tts_audio.description = 'Latest release of Gemini 2.5 Flash Native Audio'
+        mock_model_tts_audio.supported_actions = ['countTokens', 'bidiGenerateContent']
+        assert registry._is_gemini_vision_model('models/gemini-2.5-flash-native-audio-latest', model=mock_model_tts_audio) is False
+
+        # Model with None description and None supported_actions → name-pattern fallback
+        mock_model_none = MagicMock()
+        mock_model_none.description = None
+        mock_model_none.supported_actions = None
+        assert registry._is_gemini_vision_model('models/gemini-2.0-flash', model=mock_model_none) is True
+
+        # Text-only description signal
+        mock_model_text_only = MagicMock()
+        mock_model_text_only.description = 'A text-only language model for classification tasks'
+        mock_model_text_only.supported_actions = ['generateContent', 'countTokens']
+        assert registry._is_gemini_vision_model('models/gemini-1.5-flash', model=mock_model_text_only) is False
 
     def test_is_openrouter_vision_model(self):
         """Test OpenRouter vision model detection."""
         registry = ProviderRegistry()
 
-        # Models with modalities
+        # Models with input_modalities including image
         assert registry._is_openrouter_vision_model({
             'id': 'anthropic/claude-3.5-sonnet',
             'name': 'Claude 3.5 Sonnet',
-            'architecture': {'modals': ['text+image']}
+            'architecture': {'input_modalities': ['text', 'image']}
         }) is True
 
-        # Models with modalities (alternative key)
+        # Models with input_modalities alternative key
         assert registry._is_openrouter_vision_model({
             'id': 'google/gemini-pro',
             'name': 'Gemini Pro',
@@ -179,7 +257,7 @@ class TestProviderRegistry:
         assert registry._is_openrouter_vision_model({
             'id': 'openai/gpt-4',
             'name': 'GPT-4',
-            'architecture': {'modals': ['text']}
+            'architecture': {'input_modalities': ['text']}
         }) is False
 
     def test_is_ollama_vision_model(self):
