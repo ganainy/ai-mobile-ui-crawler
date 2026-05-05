@@ -100,6 +100,7 @@ class DatabaseManager:
                 was_retried BOOLEAN DEFAULT 0,
                 retry_count INTEGER DEFAULT 0,
                 recovery_time_ms REAL,
+                current_phase TEXT DEFAULT 'capture',
                 FOREIGN KEY (run_id) REFERENCES runs(id),
                 FOREIGN KEY (from_screen_id) REFERENCES screens(id),
                 FOREIGN KEY (to_screen_id) REFERENCES screens(id)
@@ -261,6 +262,22 @@ class DatabaseManager:
             )
         """)
 
+        # step_phase_transitions table
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS step_phase_transitions (
+                id INTEGER PRIMARY KEY,
+                run_id INTEGER NOT NULL,
+                step_number INTEGER NOT NULL,
+                from_phase TEXT NOT NULL,
+                to_phase TEXT NOT NULL,
+                timestamp TEXT NOT NULL,
+                action_type TEXT,
+                duration_ms REAL,
+                metadata_json TEXT,
+                FOREIGN KEY (run_id) REFERENCES runs(id)
+            )
+        """)
+
         # Create indexes for performance
         conn.execute("CREATE INDEX IF NOT EXISTS idx_step_logs_run ON step_logs(run_id, step_number)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_screens_hash ON screens(composite_hash)")
@@ -269,6 +286,7 @@ class DatabaseManager:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_ai_interactions_run ON ai_interactions(run_id, step_number)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_logs_timestamp ON logs(timestamp)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_omni_cache_screen ON omni_parser_cache(screen_key)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_phase_transitions_run ON step_phase_transitions(run_id, step_number)")
 
         conn.commit()
 
@@ -303,6 +321,12 @@ class DatabaseManager:
                 conn.execute("ALTER TABLE run_stats ADD COLUMN uiautomator_recovery_count INTEGER DEFAULT 0")
             if "avg_recovery_time_ms" not in columns:
                 conn.execute("ALTER TABLE run_stats ADD COLUMN avg_recovery_time_ms REAL")
+
+            # Migration for step_logs.current_phase
+            cursor = conn.execute("PRAGMA table_info(step_logs)")
+            columns = [row["name"] for row in cursor.fetchall()]
+            if "current_phase" not in columns:
+                conn.execute("ALTER TABLE step_logs ADD COLUMN current_phase TEXT DEFAULT 'capture'")
 
             conn.commit()
         except sqlite3.OperationalError as e:
