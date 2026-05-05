@@ -1,6 +1,7 @@
 """ADB-based action executor for mobile crawler."""
 
 import logging
+import re
 import subprocess
 import time
 from typing import Optional, Tuple, List
@@ -413,29 +414,53 @@ class ADBActionExecutor:
     def get_current_package(self) -> Optional[str]:
         """Get the currently focused app package.
 
+        Uses adb shell with a single command string (pipe processed on device)
+        to avoid the bug where '|' was passed as a literal subprocess argument.
+
         Returns:
             Package name of current app or None if failed
         """
         try:
             success, output, _ = self._execute_adb_command([
-                'shell', 'dumpsys', 'window', '|', 'grep', '-E', 'mCurrentFocus|mFocusedApp'
+                'shell', 'dumpsys window | grep -E mCurrentFocus'
             ])
 
             if success and output:
-                # Parse output like "mCurrentFocus=Window{...com.example.app/...}"
-                for line in output.split('\n'):
-                    if 'mCurrentFocus' in line or 'mFocusedApp' in line:
-                        # Extract package name between spaces and '/'
-                        parts = line.split()
-                        for part in parts:
-                            if '/' in part:
-                                package = part.split('/')[0]
-                                if '.' in package:  # Valid package format
-                                    return package.split('{')[-1]  # Remove any prefixes
+                match = re.search(r'([a-zA-Z0-9_.]+)/([a-zA-Z0-9_.]+)', output)
+                if match:
+                    return match.group(1)
             return None
 
         except Exception as e:
             logger.error(f"Failed to get current package: {e}")
+            return None
+
+    def get_current_activity(self) -> Optional[str]:
+        """Get the currently focused app activity component.
+
+        Extracts the activity name from dumpsys window output, returning
+        the component after the '/' (e.g., 'com.example.app.MainActivity').
+
+        Returns:
+            Activity component string, or None if extraction fails.
+        """
+        try:
+            success, output, _ = self._execute_adb_command([
+                'shell', 'dumpsys window | grep -E mCurrentFocus'
+            ])
+
+            if success and output:
+                match = re.search(r'([a-zA-Z0-9_.]+)/([a-zA-Z0-9_.]+)', output)
+                if match:
+                    # Return the full activity component: package.activity
+                    activity = match.group(2)
+                    # Remove trailing } or ) that may appear in dumpsys output
+                    activity = activity.rstrip('})')
+                    return activity
+            return None
+
+        except Exception as e:
+            logger.error(f"Failed to get current activity: {e}")
             return None
 
     def launch_app(self, package_name: str) -> ActionResult:
