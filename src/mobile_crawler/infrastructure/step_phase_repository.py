@@ -1,6 +1,7 @@
 """Repository for managing step phase transitions in crawler.db."""
 
 import sqlite3
+from collections import defaultdict
 from contextlib import closing
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -201,6 +202,83 @@ class StepPhaseRepository:
                 context=ErrorContext(run_id=run_id),
                 cause=e,
             ) from e
+
+    def get_run_phase_stats(self, run_id: int) -> Dict[str, Any]:
+        """Get aggregated phase statistics for an entire run.
+
+        Returns dict with:
+            total_steps: number of distinct step_numbers
+            total_transitions: total transition rows
+            phases_completed: count of CHECKPOINT->CAPTURE transitions (full cycles)
+            avg_step_duration_ms: average time from first to last transition per step
+        """
+        transitions = self.get_transitions_for_run(run_id)
+        if not transitions:
+            return {
+                "total_steps": 0,
+                "total_transitions": 0,
+                "phases_completed": 0,
+                "avg_step_duration_ms": None,
+            }
+
+        step_numbers = set(t.step_number for t in transitions)
+        phases_completed = sum(
+            1 for t in transitions
+            if t.from_phase == "checkpoint" and t.to_phase == "capture"
+        )
+
+        # Compute per-step durations (span from first to last transition per step)
+        step_times: Dict[int, List[datetime]] = defaultdict(list)
+        for t in transitions:
+            step_times[t.step_number].append(t.timestamp)
+
+        durations = []
+        for step_num, times_list in step_times.items():
+            if len(times_list) >= 2:
+                delta = (max(times_list) - min(times_list)).total_seconds() * 1000
+                durations.append(delta)
+
+        return {
+            "total_steps": len(step_numbers),
+            "total_transitions": len(transitions),
+            "phases_completed": phases_completed,
+            "avg_step_duration_ms": sum(durations) / len(durations) if durations else None,
+        }
+
+    def get_phase_durations_for_step(self, run_id: int, step_number: int) -> Dict[str, float]:
+        """Get average duration (ms) spent in each phase for a step.
+
+        Args:
+            run_id: The run ID.
+            step_number: The step number.
+
+        Returns:
+            Dict mapping from_phase to accumulated duration_ms from transitions.
+        """
+        transitions = self.get_transitions_for_step(run_id, step_number)
+        durations: Dict[str, float] = {}
+        for t in transitions:
+            if t.duration_ms is not None:
+                durations[t.from_phase] = durations.get(t.from_phase, 0) + t.duration_ms
+        return durations
+
+    def get_latest_step_for_run(self, run_id: int) -> int:
+        """Get the highest step_number with recorded transitions for a run.
+
+        Args:
+            run_id: The run ID.
+
+        Returns:
+            The maximum step_number, or 0 if no transitions exist.
+        """
+        conn = self.db_manager.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT MAX(step_number) FROM step_phase_transitions WHERE run_id = ?",
+            (run_id,),
+        )
+        row = cursor.fetchone()
+        return row[0] if row and row[0] is not None else 0
 
     def _row_to_transition(self, row) -> StepPhaseTransition:
         """Convert a database row to a StepPhaseTransition.
