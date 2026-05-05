@@ -1,12 +1,12 @@
 ---
 milestone: "v1.0"
 milestone_name: "Crawl Stability & Resumability"
-status: phase_2_complete
+status: phase_3_in_progress
 progress:
   phases_total: 4
   phases_complete: 2
   plans_total: 13
-  plans_complete: 6
+  plans_complete: 8
 ---
 
 ## Project Reference
@@ -14,23 +14,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-01)
 
 **Core value:** Maximize reliable discovery of unique app screens and states while preserving resumable run history for analysis.
-**Current focus:** Phase 2 - Remove Appium
+**Current focus:** Phase 3 - Step State Machine & UI Sync
 
 ## Current Position
 
-Phase: 2 of 4 (Remove Appium)
-Plan: 3 of 3 in current phase
-Status: Complete
-Last activity: 2026-05-01 -- Phase 2 execution completed (3 plans, 10 new tests green)
+Phase: 3 of 4 (Step State Machine & UI Sync)
+Plan: 2 of 4 in current phase (Wave 1 complete)
+Status: Wave 1 complete (03-01, 03-03), Wave 2 ready
+Last activity: 2026-05-05 -- Wave 1 complete: step phase state machine + UI wait predicates
 
 Progress:
 Phases: [████░░░░░░] 50%
-Plans:  [██████░░░░] 46%
+Plans:  [███████░░░] 62%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 6
+- Total plans completed: 8
 - Average duration: -
 - Total execution time: -
 
@@ -40,11 +40,11 @@ Plans:  [██████░░░░] 46%
 |-------|-------|-------|----------|
 | 1. Error Model Overhaul | 3/3 | - | - |
 | 2. Remove Appium | 3/3 | - | - |
-| 3. Step State Machine & UI Sync | 0/4 | - | - |
+| 3. Step State Machine & UI Sync | 2/4 | - | - |
 | 4. ADB Context Guardrails | 0/3 | - | - |
 
 ## Recent Trend:
-- Last 5 plans: 02-01, 02-02, 02-03, 01-03, 01-02
+- Last 5 plans: 03-01, 03-03, 02-01, 02-02, 02-03
 - Trend: Stable execution with all plans completing on spec
 
 ## Accumulated Context
@@ -77,6 +77,6 @@ Items acknowledged and carried forward:
 
 ## Session Continuity
 
-Last session: 2026-05-01
-Stopped at: Phase 2 complete, ready for Phase 3 planning
+Last session: 2026-05-05
+Stopped at: Phase 3 Wave 1 complete, ready for Wave 2 (03-02, 03-04)
 Resume file: None

@@ -68,8 +68,8 @@ Plans:
 
 Plans:
 **Wave 1** (parallel, no dependencies between them)
-- [ ] 03-01: Implement step state machine with persisted phase transitions (DURB-01, DURB-02)
-- [ ] 03-03: Replace fixed sleeps with explicit wait predicates (SYNC-01)
+- [x] 03-01: Implement step state machine with persisted phase transitions (DURB-01, DURB-02)
+- [x] 03-03: Replace fixed sleeps with explicit wait predicates (SYNC-01)
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 03-02: Add step observability queries and event listener callback (DURB-03)
 - [ ] 03-04: Wire action verifier, adaptive wait, and event stream into DroidRun (SYNC-02, SYNC-03)
@@ -97,6 +97,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Error Model Overhaul | 3/3 | Complete | 2026-05-01 |
-| 2. Remove Appium | 0/3 | Not started | - |
-| 3. Step State Machine & UI Sync | 0/4 | Not started | - |
+| 2. Remove Appium | 3/3 | Complete | 2026-05-01 |
+| 3. Step State Machine & UI Sync | 2/4 | In progress | - |
 | 4. ADB Context Guardrails | 0/3 | Not started | - |
