@@ -7,33 +7,25 @@ import tempfile
 
 from mobile_crawler.infrastructure.mobsf_manager import (
     MobSFManager,
-    MobSFConfig,
     MobSFAnalysisResult,
 )
 
 
-class TestMobSFConfig:
-    """Tests for MobSFConfig dataclass."""
-
-    def test_creation(self):
-        """Test MobSFConfig creation."""
-        config = MobSFConfig(
-            enabled=True,
-            api_url="http://localhost:8080",
-            api_key="test_key",
-        )
-
-        assert config.enabled is True
-        assert config.api_url == "http://localhost:8080"
-        assert config.api_key == "test_key"
-
-    def test_defaults(self):
-        """Test MobSFConfig with defaults."""
-        config = MobSFConfig(enabled=False)
-
-        assert config.enabled is False
-        assert config.api_url == "http://localhost:8000"
-        assert config.api_key is None
+def _make_config_manager(**overrides):
+    """Create a mock ConfigManager with MobSF defaults."""
+    defaults = {
+        "mobsf_api_key": "test_key",
+        "mobsf_api_url": "http://localhost:8000",
+        "enable_mobsf_analysis": True,
+        "mobsf_request_timeout": 300,
+        "mobsf_scan_timeout": 900,
+        "mobsf_poll_interval": 2,
+        "adb_executable_path": "adb",
+    }
+    defaults.update(overrides)
+    config = Mock()
+    config.get.side_effect = lambda key, default=None: defaults.get(key, default)
+    return config
 
 
 class TestMobSFAnalysisResult:
@@ -73,388 +65,286 @@ class TestMobSFManager:
 
     def test_init(self):
         """Test initialization."""
+        config = _make_config_manager()
         adb_client = Mock()
-        config = MobSFConfig(enabled=True)
-        manager = MobSFManager(adb_client=adb_client, config=config)
+        manager = MobSFManager(config_manager=config, adb_client=adb_client)
 
-        assert manager._adb_client is adb_client
-        assert manager._config is config
-        assert manager._session_folder_manager is None
+        assert manager.config_manager is config
+        assert manager.adb_client is adb_client
+        assert manager.session_folder_manager is None
 
     def test_init_with_defaults(self):
         """Test initialization with default config."""
-        manager = MobSFManager()
+        config = _make_config_manager()
+        manager = MobSFManager(config_manager=config)
 
-        assert manager._adb_client is None
-        assert manager._config.enabled is False
-        assert manager._session_folder_manager is None
+        assert manager.adb_client is None
+        assert manager.session_folder_manager is None
 
-    def test_configure(self):
-        """Test configure method."""
-        config = MobSFConfig(enabled=True, api_url="http://test.com")
-        manager = MobSFManager()
-
-        manager.configure(config)
-
-        assert manager._config is config
-
-    def test_set_session_folder_manager(self):
-        """Test setting session folder manager."""
-        manager = MobSFManager()
-        session_manager = Mock()
-
-        manager.set_session_folder_manager(session_manager)
-
-        assert manager._session_folder_manager is session_manager
+    def test_init_raises_without_api_url(self):
+        """Test initialization raises when api_url is empty."""
+        config = _make_config_manager(mobsf_api_url="")
+        with pytest.raises(ValueError, match="MOBSF_API_URL must be set"):
+            MobSFManager(config_manager=config)
 
     def test_analyze_disabled(self):
-        """Test analyze when MobSF is disabled."""
-        config = MobSFConfig(enabled=False)
-        manager = MobSFManager(config=config)
+        """Test analyze_run when MobSF is disabled."""
+        config = _make_config_manager(enable_mobsf_analysis=False)
+        manager = MobSFManager(config_manager=config)
 
-        result = manager.analyze("com.example.app", "device123")
+        run = Mock()
+        run.app_package = "com.example.app"
+        run.id = 1
+        result = manager.analyze_run(run, "device123")
 
         assert result.success is False
         assert "disabled" in result.error.lower()
 
-    def test_analyze_no_api_key(self):
-        """Test analyze when API key is not configured."""
-        config = MobSFConfig(enabled=True, api_key=None)
-        manager = MobSFManager(config=config)
+    @patch.object(MobSFManager, "perform_complete_scan")
+    def test_analyze_run_with_perform_complete_scan_failure(self, mock_perform):
+        """Test analyze_run wraps perform_complete_scan failure."""
+        mock_perform.return_value = (False, {"error": "Scan failed"})
 
-        result = manager.analyze("com.example.app", "device123")
+        config = _make_config_manager()
+        manager = MobSFManager(config_manager=config)
+
+        run = Mock()
+        run.app_package = "com.example.app"
+        run.id = 1
+        run.session_path = "/tmp/session"
+        result = manager.analyze_run(run, "device123")
 
         assert result.success is False
-        assert "api key" in result.error.lower()
+        assert "scan failed" in result.error.lower()
 
-    @patch("os.unlink")
-    @patch("os.path.exists")
-    @patch("builtins.open", new_callable=mock_open, read_data=b"fake apk data")
-    @patch("requests.post")
-    @patch("tempfile.gettempdir")
-    def test_analyze_success(
-        self,
-        mock_gettempdir,
-        mock_post,
-        mock_file_open,
-        mock_exists,
-        mock_unlink
-    ):
-        """Test successful analysis."""
-        mock_gettempdir.return_value = "/tmp"
-        mock_exists.return_value = True
+    @patch.object(MobSFManager, "perform_complete_scan")
+    def test_analyze_run_with_perform_complete_scan_success(self, mock_perform):
+        """Test analyze_run wraps perform_complete_scan success."""
+        mock_perform.return_value = (True, {
+            "pdf_report": "/tmp/report.pdf",
+            "json_report": "/tmp/report.json",
+            "file_hash": "abc123",
+            "security_score": {"score": 90},
+        })
 
-        # Mock ADB responses
-        adb_client = Mock()
-        adb_client.execute.side_effect = [
-            "package:/data/app/com.example.app/base.apk",  # pm path
-            "",  # pull command (empty stdout means success)
-        ]
+        config = _make_config_manager()
+        manager = MobSFManager(config_manager=config)
 
-        # Mock MobSF responses
-        upload_response = Mock()
-        upload_response.status_code = 200
-        upload_response.json.return_value = {"hash": "scan123"}
-        
-        pdf_response = Mock()
-        pdf_response.status_code = 200
-        pdf_response.content = b"fake pdf content"
-        
-        json_response = Mock()
-        json_response.status_code = 200
-        json_response.text = '{"fake": "json"}'
-        
-        mock_post.side_effect = [upload_response, pdf_response, json_response]
-
-        config = MobSFConfig(enabled=True, api_key="test_key")
-        manager = MobSFManager(adb_client=adb_client, config=config)
-
-        result = manager.analyze("com.example.app", "device123")
+        run = Mock()
+        run.app_package = "com.example.app"
+        run.id = 1
+        run.session_path = "/tmp/session"
+        result = manager.analyze_run(run, "device123")
 
         assert result.success is True
-        assert result.scan_id == "scan123"
-        # Reports should be downloaded to temp dir
-        assert result.report_path == "/tmp\\com.example.app_mobsf_report.pdf"
-        assert result.json_path == "/tmp\\com.example.app_mobsf_report.json"
+        assert result.scan_id == "abc123"
+        assert result.report_path == "/tmp/report.pdf"
+        assert result.json_path == "/tmp/report.json"
 
     @patch("os.unlink")
     @patch("os.path.exists")
     @patch("builtins.open", new_callable=mock_open, read_data=b"fake apk data")
-    @patch("requests.post")
     @patch("tempfile.gettempdir")
-    def test_analyze_upload_failure(
+    @patch("subprocess.run")
+    @patch("time.sleep")
+    def test_perform_complete_scan_success(
         self,
+        mock_sleep,
+        mock_subprocess,
         mock_gettempdir,
-        mock_post,
         mock_file_open,
         mock_exists,
         mock_unlink
     ):
-        """Test analyze when upload fails."""
+        """Test successful complete scan."""
         mock_gettempdir.return_value = "/tmp"
         mock_exists.return_value = True
 
         # Mock ADB responses
-        adb_client = Mock()
-        adb_client.execute.side_effect = [
-            "package:/data/app/com.example.app/base.apk",
-            "",
+        mock_subprocess.return_value = Mock(
+            returncode=0,
+            stdout="package:/data/app/com.example.app/base.apk\n",
+            stderr=""
+        )
+
+        config = _make_config_manager()
+        manager = MobSFManager(config_manager=config)
+
+        # Mock _make_api_request to avoid actual HTTP calls and polling loop
+        def mock_api_request(endpoint, method="GET", data=None, files=None, stream=False, timeout=None):
+            if endpoint == "upload":
+                return True, {"hash": "scan123"}
+            elif endpoint == "scan":
+                return True, {"status": "ok"}
+            elif endpoint == "scan_logs":
+                return True, {"logs": [{"status": "Completed", "message": "Done", "timestamp": "2024-01-01T00:00:00"}]}
+            elif endpoint == "report_json":
+                return True, {"security_score": 80}
+            elif endpoint == "download_pdf":
+                return True, b"fake pdf"
+            elif endpoint == "scorecard":
+                return True, {"score": 85}
+            return True, {}
+
+        manager._make_api_request = Mock(side_effect=mock_api_request)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            success, summary = manager.perform_complete_scan(
+                package_name="com.example.app",
+                session_path=tmpdir,
+            )
+
+        assert success is True
+        assert summary["file_hash"] == "scan123"
+
+    @patch("subprocess.run")
+    def test_extract_apk_from_device_success(self, mock_subprocess):
+        """Test extracting APK from device."""
+        mock_subprocess.side_effect = [
+            Mock(returncode=0, stdout="package:/data/app/com.example.app/base.apk\n", stderr=""),
+            Mock(returncode=0, stdout="", stderr=""),
         ]
 
-        # Mock MobSF upload failure
-        upload_response = Mock()
-        upload_response.status_code = 500
-        mock_post.return_value = upload_response
+        config = _make_config_manager()
+        manager = MobSFManager(config_manager=config)
 
-        config = MobSFConfig(enabled=True, api_key="test_key")
-        manager = MobSFManager(adb_client=adb_client, config=config)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = manager.extract_apk_from_device("com.example.app", output_dir=tmpdir)
 
-        result = manager.analyze("com.example.app", "device123")
+        assert result is not None
+        assert result.endswith("com.example.app.apk")
 
-        assert result.success is False
-        assert "upload" in result.error.lower()
+    @patch("subprocess.run")
+    def test_extract_apk_from_device_failure(self, mock_subprocess):
+        """Test extracting APK when pm path fails."""
+        mock_subprocess.return_value = Mock(
+            returncode=1,
+            stdout="",
+            stderr="Error"
+        )
 
-    @patch("os.unlink")
-    @patch("os.path.exists")
-    @patch("builtins.open", new_callable=mock_open, read_data=b"fake apk data")
+        config = _make_config_manager()
+        manager = MobSFManager(config_manager=config)
+
+        result = manager.extract_apk_from_device("com.example.app")
+
+        assert result is None
+
+    def test_upload_apk_file_not_found(self):
+        """Test upload when APK file doesn't exist."""
+        config = _make_config_manager()
+        manager = MobSFManager(config_manager=config)
+
+        success, result = manager.upload_apk("/nonexistent/path.apk")
+
+        assert success is False
+        assert "not found" in result.get("error", "").lower()
+
     @patch("requests.post")
-    @patch("tempfile.gettempdir")
-    def test_analyze_extract_apk_failure(
-        self,
-        mock_gettempdir,
-        mock_post,
-        mock_file_open,
-        mock_exists,
-        mock_unlink
-    ):
-        """Test analyze when APK extraction fails."""
-        mock_gettempdir.return_value = "/tmp"
-        mock_exists.return_value = True
+    def test_upload_apk_success(self, mock_post):
+        """Test successful APK upload."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"hash": "abc123", "status": "ok"}
+        mock_post.return_value = mock_response
 
-        # Mock ADB failure
-        adb_client = Mock()
-        adb_client.execute.return_value = None
+        config = _make_config_manager()
+        manager = MobSFManager(config_manager=config)
 
-        config = MobSFConfig(enabled=True, api_key="test_key")
-        manager = MobSFManager(adb_client=adb_client, config=config)
+        with tempfile.NamedTemporaryFile(suffix=".apk", delete=False) as tmp:
+            tmp.write(b"fake apk")
+            tmp_path = tmp.name
 
-        result = manager.analyze("com.example.app", "device123")
+        try:
+            success, result = manager.upload_apk(tmp_path)
+            assert success is True
+            assert result["hash"] == "abc123"
+        finally:
+            os.unlink(tmp_path)
 
-        assert result.success is False
-        assert "extract" in result.error.lower()
-
-    @patch("os.unlink")
-    @patch("os.path.exists")
-    @patch("builtins.open", new_callable=mock_open, read_data=b"fake apk data")
     @patch("requests.post")
-    @patch("tempfile.gettempdir")
-    def test_analyze_package_not_found(
-        self,
-        mock_gettempdir,
-        mock_post,
-        mock_file_open,
-        mock_exists,
-        mock_unlink
-    ):
-        """Test analyze when package is not found on device."""
-        mock_gettempdir.return_value = "/tmp"
-        mock_exists.return_value = True
+    def test_scan_apk_success(self, mock_post):
+        """Test scanning uploaded APK."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"status": "ok"}
+        mock_post.return_value = mock_response
 
-        # Mock ADB response - package not found
-        adb_client = Mock()
-        adb_client.execute.return_value = "package not found"
+        config = _make_config_manager()
+        manager = MobSFManager(config_manager=config)
 
-        config = MobSFConfig(enabled=True, api_key="test_key")
-        manager = MobSFManager(adb_client=adb_client, config=config)
+        success, result = manager.scan_apk("abc123")
 
-        result = manager.analyze("com.example.app", "device123")
+        assert success is True
 
-        assert result.success is False
-        assert "package" in result.error.lower()
-
-    def test_analyze_run_no_session_manager(self):
-        """Test analyze_run when session folder manager is not configured."""
-        config = MobSFConfig(enabled=True, api_key="test_key")
-        manager = MobSFManager(config=config)
-
-        result = manager.analyze_run(1, "com.example.app", "device123")
-
-        assert result.success is False
-        assert "session folder manager" in result.error.lower()
-
-    @patch("os.unlink")
-    @patch("os.rename")
-    @patch("os.path.exists")
-    @patch("builtins.open", new_callable=mock_open, read_data=b"fake apk data")
     @patch("requests.post")
-    @patch("tempfile.gettempdir")
-    def test_analyze_run_success(
-        self,
-        mock_gettempdir,
-        mock_post,
-        mock_file_open,
-        mock_exists,
-        mock_rename,
-        mock_unlink
-    ):
-        """Test analyze_run with successful analysis."""
-        mock_gettempdir.return_value = "/tmp"
-        mock_exists.return_value = True
+    def test_get_report_json_success(self, mock_post):
+        """Test getting JSON report."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"security_score": 80}
+        mock_post.return_value = mock_response
 
-        # Mock ADB responses
-        adb_client = Mock()
-        adb_client.execute.side_effect = [
-            "package:/data/app/com.example.app/base.apk",
-            "",
-        ]
+        config = _make_config_manager()
+        manager = MobSFManager(config_manager=config)
 
-        # Mock MobSF upload response
-        upload_response = Mock()
-        upload_response.status_code = 200
-        upload_response.json.return_value = {"hash": "scan123"}
-        mock_post.return_value = upload_response
+        success, result = manager.get_report_json("abc123")
 
-        # Mock session folder manager
-        session_manager = Mock()
-        session_manager.get_session_folder.return_value = "/session/folder"
+        assert success is True
+        assert result["security_score"] == 80
 
-        config = MobSFConfig(enabled=True, api_key="test_key")
-        manager = MobSFManager(adb_client=adb_client, config=config)
-        manager.set_session_folder_manager(session_manager)
+    @patch("requests.post")
+    def test_get_pdf_report_success(self, mock_post):
+        """Test getting PDF report."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.content = b"fake pdf"
+        mock_response.headers = {"Content-Type": "application/pdf"}
+        mock_post.return_value = mock_response
 
-        result = manager.analyze_run(1, "com.example.app", "device123")
+        config = _make_config_manager()
+        manager = MobSFManager(config_manager=config)
 
-        assert result.success is True
-        assert result.scan_id == "scan123"
+        success, result = manager.get_pdf_report("abc123")
 
-    def test_is_available_disabled(self):
-        """Test is_available when MobSF is disabled."""
-        config = MobSFConfig(enabled=False)
-        manager = MobSFManager(config=config)
+        assert success is True
+        assert result == b"fake pdf"
 
-        assert manager.is_available() is False
+    @patch("requests.post")
+    def test_get_security_score_success(self, mock_post):
+        """Test getting security score."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"score": 90}
+        mock_post.return_value = mock_response
 
-    def test_is_available_no_api_key(self):
-        """Test is_available when API key is not configured."""
-        config = MobSFConfig(enabled=True, api_key=None)
-        manager = MobSFManager(config=config)
+        config = _make_config_manager()
+        manager = MobSFManager(config_manager=config)
 
-        assert manager.is_available() is False
+        success, result = manager.get_security_score("abc123")
+
+        assert success is True
+        assert result["score"] == 90
 
     @patch("requests.get")
-    def test_is_available_success(self, mock_get):
-        """Test is_available when MobSF is reachable."""
-        response = Mock()
-        response.status_code = 200
-        mock_get.return_value = response
+    def test_api_request_connection_error(self, mock_get):
+        """Test API request handling connection error."""
+        import requests
+        mock_get.side_effect = requests.exceptions.ConnectionError("Connection refused")
 
-        config = MobSFConfig(enabled=True, api_key="test_key")
-        manager = MobSFManager(config=config)
+        config = _make_config_manager()
+        manager = MobSFManager(config_manager=config)
 
-        assert manager.is_available() is True
+        success, result = manager._make_api_request("about")
 
-    @patch("requests.get")
-    def test_is_available_failure(self, mock_get):
-        """Test is_available when MobSF is not reachable."""
-        mock_get.side_effect = Exception("Connection error")
-
-        config = MobSFConfig(enabled=True, api_key="test_key")
-        manager = MobSFManager(config=config)
-
-        assert manager.is_available() is False
+        assert success is False
+        assert "Connection Error" in result
 
     def test_get_config(self):
         """Test get_config method."""
-        config = MobSFConfig(enabled=True, api_url="http://test.com")
-        manager = MobSFManager(config=config)
+        config = _make_config_manager()
+        manager = MobSFManager(config_manager=config)
 
-        result = manager.get_config()
+        result = manager.config_manager
 
         assert result is config
-
-    @patch("os.unlink")
-    @patch("os.path.exists")
-    @patch("builtins.open", new_callable=mock_open, read_data=b"fake apk data")
-    @patch("requests.post")
-    @patch("tempfile.gettempdir")
-    def test_execute_adb_command_with_client(
-        self,
-        mock_gettempdir,
-        mock_post,
-        mock_file_open,
-        mock_exists,
-        mock_unlink
-    ):
-        """Test _execute_adb_command uses ADB client when available."""
-        adb_client = Mock()
-        adb_client.execute.return_value = "test_output"
-        manager = MobSFManager(adb_client=adb_client)
-
-        result = manager._execute_adb_command("shell test")
-
-        assert result == "test_output"
-        adb_client.execute.assert_called_once_with("shell test")
-
-    @patch("subprocess.run")
-    def test_execute_adb_command_without_client(self, mock_run):
-        """Test _execute_adb_command falls back to subprocess when no client."""
-        from subprocess import CompletedProcess
-        mock_run.return_value = CompletedProcess(
-            args=["adb", "shell", "test"],
-            returncode=0,
-            stdout="test_output"
-        )
-        manager = MobSFManager()
-
-        result = manager._execute_adb_command("shell test")
-
-        assert result == "test_output"
-        mock_run.assert_called_once()
-
-    @patch("subprocess.run")
-    def test_execute_adb_command_timeout(self, mock_run):
-        """Test _execute_adb_command handles timeout."""
-        from subprocess import TimeoutExpired
-        mock_run.side_effect = TimeoutExpired("adb", 30)
-        manager = MobSFManager()
-
-        result = manager._execute_adb_command("shell test")
-
-        assert result is None
-
-    @patch("subprocess.run")
-    def test_execute_adb_command_file_not_found(self, mock_run):
-        """Test _execute_adb_command handles ADB not found."""
-        mock_run.side_effect = FileNotFoundError()
-        manager = MobSFManager()
-
-        result = manager._execute_adb_command("shell test")
-
-        assert result is None
-
-    @patch("requests.post")
-    def test_upload_to_mobsf_no_requests(self, mock_post):
-        """Test _upload_to_mobsf when requests library is not available."""
-        mock_post.side_effect = ImportError("requests not available")
-
-        manager = MobSFManager()
-        manager.configure(MobSFConfig(enabled=True, api_key="test_key"))
-
-        result = manager._upload_to_mobsf("/tmp/test.apk")
-
-        assert result is None
-
-    @patch("requests.post")
-    def test_upload_to_mobsf_missing_scan_id(self, mock_post):
-        """Test _upload_to_mobsf when response is missing scan ID."""
-        response = Mock()
-        response.status_code = 200
-        response.json.return_value = {}
-        mock_post.return_value = response
-
-        manager = MobSFManager()
-        manager.configure(MobSFConfig(enabled=True, api_key="test_key"))
-
-        result = manager._upload_to_mobsf("/tmp/test.apk")
-
-        assert result is None
