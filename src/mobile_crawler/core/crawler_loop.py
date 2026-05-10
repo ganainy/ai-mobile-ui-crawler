@@ -1,6 +1,7 @@
 """DroidRun-backed crawler loop wrapper."""
 
 import asyncio
+import inspect
 import json
 import logging
 import threading
@@ -19,6 +20,7 @@ from mobile_crawler.domain.errors import (
     CheckpointError,
     ErrorContext,
 )
+from mobile_crawler.domain.video_recording_manager import VideoRecordingManager
 from mobile_crawler.infrastructure.run_repository import RunRepository
 from mobile_crawler.infrastructure.session_folder_manager import SessionFolderManager
 
@@ -51,6 +53,7 @@ class CrawlerLoop:
         self._crawl_thread: Optional[threading.Thread] = None
         self._current_run_id: Optional[int] = None
         self._droidrun_agent_service: Optional[DroidRunAgentService] = None
+        self._video_recording_manager: Optional[VideoRecordingManager] = None
         self._cancel_requested = False
         self._state = "IDLE"
 
@@ -187,6 +190,23 @@ class CrawlerLoop:
             # Run both execute and cleanup in the same event loop to ensure proper
             # cleanup of async resources (e.g., google.genai.AsyncClient instances)
             async def run_and_cleanup():
+                if self.config_manager.get("enable_video_recording", False) is True:
+                    self._video_recording_manager = VideoRecordingManager(
+                        config_manager=self.config_manager,
+                        device_id=run.device_id,
+                    )
+                    started, message = await self._video_recording_manager.start_recording_async(
+                        run_id=run_id,
+                        session_path=session_path,
+                        app_package=run.app_package,
+                    )
+                    status_text = "started" if started else "not started"
+                    self._emit_event(
+                        "on_debug_log",
+                        run_id,
+                        0,
+                        f"Video recording {status_text}: {message}",
+                    )
                 try:
                     return await self._droidrun_agent_service.execute_exploration_task(
                         run_id=run_id,
@@ -196,8 +216,38 @@ class CrawlerLoop:
                         max_duration_seconds=max_duration if limit_type == "duration" else None
                     )
                 finally:
+                    if self._video_recording_manager:
+                        try:
+                            video_path = await self._video_recording_manager.stop_recording_and_save_async()
+                            if video_path:
+                                self._emit_event(
+                                    "on_debug_log",
+                                    run_id,
+                                    0,
+                                    f"Video recording saved: {video_path}",
+                                )
+                            else:
+                                self._emit_event(
+                                    "on_debug_log",
+                                    run_id,
+                                    0,
+                                    "Video recording did not produce a saved segment.",
+                                )
+                        except Exception as e:
+                            logger.warning("Failed to stop video recording: %s", e)
+                            self._emit_event(
+                                "on_debug_log",
+                                run_id,
+                                0,
+                                f"Video recording stop failed: {e}",
+                            )
+                        finally:
+                            self._video_recording_manager = None
+
                     # Always cleanup, even if execute fails
-                    await self._droidrun_agent_service.cleanup()
+                    cleanup_result = self._droidrun_agent_service.cleanup()
+                    if inspect.isawaitable(cleanup_result):
+                        await cleanup_result
                     # Force GC of google.genai objects while event loop is still running.
                     # Their __del__ schedules aclose() tasks via create_task(), which only
                     # works while the loop is active.
@@ -227,21 +277,22 @@ class CrawlerLoop:
 
 
             duration_ms = (time.time() - start_time) * 1000
-            if self._cancel_requested:
-                status = "STOPPED"
-                reason = "Stopped by user"
-            elif result.success:
-                status = "COMPLETED"
-                reason = "DroidRun completed"
-            else:
-                status = "ERROR"
-                reason = result.error_message or "DroidRun failed"
-
             # Extract action statistics from DroidRun result's final_state
             final_state = result.final_state or {}
             successful_actions = final_state.get('successful_actions', 0)
             failed_actions = final_state.get('failed_actions', 0)
             total_actions = final_state.get('total_actions', 0)
+            completion_reason = final_state.get("completion_reason")
+
+            if self._cancel_requested:
+                status = "STOPPED"
+                reason = "Stopped by user"
+            elif result.success:
+                status = "COMPLETED"
+                reason = completion_reason or "DroidRun completed"
+            else:
+                status = "ERROR"
+                reason = result.error_message or "DroidRun failed"
 
             self.run_repository.update_run_stats(
                 run_id=run_id,
@@ -279,6 +330,7 @@ class CrawlerLoop:
             self._transition_state("ERROR", run_id)
             self._emit_event("on_error", run_id, None, wrapped)
         finally:
+            self._video_recording_manager = None
             if self._droidrun_agent_service:
                 self._droidrun_agent_service.clear_run_logging()
                 self._droidrun_agent_service = None

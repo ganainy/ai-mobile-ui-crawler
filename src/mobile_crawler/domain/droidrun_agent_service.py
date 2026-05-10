@@ -962,9 +962,8 @@ class DroidRunAgentService:
                     steps_completed = int(getattr(result, "steps", 0) or 0)
                     reason = str(getattr(result, "reason", ""))
 
-                    # DroidRun returns success=False when max steps is reached, but this is normal completion
-                    # Treat "reached max steps" as successful completion, not an error
-                    if not raw_success and reason and "maximum" in reason.lower():
+                    # DroidRun returns success=False when max steps is reached, but this is normal completion.
+                    if not raw_success and self._is_max_step_completion_reason(reason):
                         success = True  # Reached max steps is successful completion
                         error_message = None
                     else:
@@ -1000,6 +999,7 @@ class DroidRunAgentService:
                         "successful_actions": successful_count,
                         "failed_actions": failed_count,
                         "total_actions": len(action_outcomes),
+                        "completion_reason": reason if "reason" in locals() and reason else None,
                     },
                     error_message=error_message,
                     total_duration_ms=duration_ms,
@@ -1111,6 +1111,21 @@ class DroidRunAgentService:
 
         error_lower = error_message.lower()
         return any(indicator.lower() in error_lower for indicator in crash_indicators)
+
+    @staticmethod
+    def _is_max_step_completion_reason(reason: str) -> bool:
+        """Return True when DroidRun ended normally at the configured step limit."""
+        normalized = (reason or "").lower()
+        return any(
+            token in normalized
+            for token in (
+                "max step",
+                "max steps",
+                "maximum step",
+                "maximum steps",
+                "reached max step count",
+            )
+        )
 
     def _log_agent_interaction(
         self, run_id: int, goal: Optional[DroidRunGoal], result: Optional[Dict[str, Any]], error_message: Optional[str]

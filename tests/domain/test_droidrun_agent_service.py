@@ -108,6 +108,18 @@ class TestDroidRunAgentServiceInitialization:
         assert service._ui_wait_predicate is None
         assert service._action_verifier is None
 
+    def test_max_step_reason_is_normal_completion(self):
+        """DroidRun max-step reasons should not be treated as crawl errors."""
+        assert DroidRunAgentService._is_max_step_completion_reason(
+            "Reached max step count of 1 steps"
+        )
+        assert DroidRunAgentService._is_max_step_completion_reason(
+            "Reached maximum steps"
+        )
+        assert not DroidRunAgentService._is_max_step_completion_reason(
+            "Unable to locate target app"
+        )
+
 
 class TestDroidRunAgentServiceStepTracking:
     """Tests for step tracking functionality."""

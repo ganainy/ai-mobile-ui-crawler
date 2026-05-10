@@ -1,7 +1,7 @@
 """Tests for CrawlerLoop lifecycle, event emission, and error handling."""
 
 import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch, MagicMock, AsyncMock
 
 from mobile_crawler.core.crawler_loop import CrawlerLoop
 from mobile_crawler.domain.models import ActionResult
@@ -110,6 +110,62 @@ class TestCrawlerLoopLifecycle:
 
         # Verify on_crawl_started was called
         mock_listener.on_crawl_started.assert_called_once_with(1, "com.example.app")
+
+    @patch('mobile_crawler.core.crawler_loop.VideoRecordingManager')
+    @patch('mobile_crawler.core.crawler_loop.DroidRunAgentService')
+    def test_run_starts_and_stops_video_recording_when_enabled(
+        self,
+        mock_droid_service_class,
+        mock_video_manager_class,
+        crawler_loop,
+        mock_config_manager,
+        mock_run_repository,
+        mock_session_folder_manager,
+        mock_listener,
+    ):
+        """Video recording flag should produce best-effort start/stop lifecycle calls."""
+        mock_config_manager.get.side_effect = lambda key, default=None: {
+            "enable_video_recording": True,
+            "limit_type": "steps",
+            "max_crawl_steps": 1,
+            "max_crawl_duration_seconds": 300,
+        }.get(key, default)
+
+        mock_run = Mock()
+        mock_run.app_package = "com.example.app"
+        mock_run.device_id = "device123"
+        mock_run_repository.get_run_by_id.return_value = mock_run
+        mock_session_folder_manager.create_session_folder.return_value = "/tmp/session"
+
+        mock_video_manager = Mock()
+        mock_video_manager.start_recording_async = AsyncMock(return_value=(True, "Video recording started"))
+        mock_video_manager.stop_recording_and_save_async = AsyncMock(return_value="/tmp/session/videos/part001.mp4")
+        mock_video_manager_class.return_value = mock_video_manager
+
+        mock_service = Mock()
+        mock_droid_service_class.return_value = mock_service
+
+        async def mock_explore(*args, **kwargs):
+            mock_result = Mock()
+            mock_result.success = True
+            mock_result.steps_completed = 1
+            mock_result.error_message = None
+            mock_result.final_state = {"completion_reason": "Reached max step count of 1 steps"}
+            return mock_result
+
+        mock_service.execute_exploration_task = mock_explore
+        mock_service.cleanup = AsyncMock()
+
+        crawler_loop.run(1)
+
+        mock_video_manager.start_recording_async.assert_awaited_once_with(
+            run_id=1,
+            session_path="/tmp/session",
+            app_package="com.example.app",
+        )
+        mock_video_manager.stop_recording_and_save_async.assert_awaited_once()
+        mock_run_repository.update_run_stats.assert_called_once()
+        assert mock_run_repository.update_run_stats.call_args.kwargs["status"] == "COMPLETED"
 
     @patch('mobile_crawler.core.crawler_loop.DroidRunAgentService')
     def test_run_transitions_through_states(self, mock_droid_service_class, crawler_loop, mock_run_repository, mock_session_folder_manager, mock_listener):

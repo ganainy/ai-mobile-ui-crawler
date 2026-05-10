@@ -377,7 +377,8 @@ class LogViewer(QWidget):
         return any(word in lower_message for word in ("warning", "warn:", "retry", "timeout", "slow"))
 
     def _has_error_words(self, lower_message: str) -> bool:
-        return any(word in lower_message for word in ("error", "failed", "failure", "exception", "traceback", "crash"))
+        normalized = re.sub(r"\bfailed=\d+\b", "", lower_message)
+        return any(word in normalized for word in ("error", "failed", "failure", "exception", "traceback", "crash"))
 
     def _badge(self, text: str, color: str, background: str) -> str:
         return (

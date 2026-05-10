@@ -151,6 +151,17 @@ class TestLogDisplay:
         assert "[WARNING] [WARN] Warning message" in text
         assert "[ERROR] [ERROR] Error message" in text
 
+    def test_completion_stats_failed_zero_is_not_error_badged(self, log_viewer):
+        """A normal completion stats suffix with failed=0 should stay informational."""
+        log_viewer.append_log(
+            LogLevel.INFO,
+            "Crawl completed: 1 steps in 25.6s - Reached max step count of 1 steps | successful=0 failed=0 total=0",
+        )
+
+        text = log_viewer.log_text.toPlainText()
+        assert "[INFO] [ERROR]" not in text
+        assert "[INFO] [OK] Crawl completed:" in text
+
     def test_rebuild_after_filter_change_preserves_order_and_format(self, log_viewer):
         """Test filter rebuild keeps message order and rich-classified content."""
         log_viewer.append_log(LogLevel.DEBUG, "[stdout] raw line")
