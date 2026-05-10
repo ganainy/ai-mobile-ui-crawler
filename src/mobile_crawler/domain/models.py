@@ -6,7 +6,7 @@ from typing import List, Optional, Tuple
 
 @dataclass
 class UIElement:
-    """UI element extracted from UiAutomator2 XML hierarchy."""
+    """UI element metadata used for coordinate targeting."""
     element_id: str              # Unique identifier for this element
     bounds: Tuple[int, int, int, int]  # (x1, y1, x2, y2) pixel coordinates
     text: str                    # Visible text content

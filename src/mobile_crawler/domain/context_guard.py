@@ -58,9 +58,17 @@ class DeviceContextCapture:
         package = self.adb_executor.get_current_package()
         activity = self.adb_executor.get_current_activity()
 
-        # Default to empty strings if ADB returns None (device offline, etc.)
-        package = package or ""
         activity = activity or ""
+
+        if not package:
+            # ADB returned None - transient state during Activity transitions.
+            # Don't treat this as a confirmed app switch; let the next step verify.
+            return DeviceContext(
+                package="",
+                activity=activity,
+                is_target_app=True,
+                captured_at=datetime.now(),
+            )
 
         is_target_app = package == self.target_package if self.target_package else False
 

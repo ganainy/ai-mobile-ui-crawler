@@ -86,7 +86,7 @@ See [research.md](research.md) for detailed research findings.
 ### Key Research Areas
 
 1. **App Switching with Appium**: How to reliably switch between target app and Gmail app
-2. **Gmail OTP Extraction**: Methods for extracting OTP codes from Gmail emails using image-only approach
+2. **Gmail OTP Extraction**: Methods for extracting OTP codes from Gmail emails using visual runtime context
 3. **Credential Storage Schema**: Database design for storing encrypted credentials per app package
 4. **Authentication Detection**: How to detect signup/login screens using visual analysis
 

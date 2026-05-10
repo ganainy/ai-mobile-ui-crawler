@@ -1,4 +1,4 @@
-"""ADB input handler for text input without XML/DOM access."""
+"""ADB input handler for Android text input."""
 
 import subprocess
 import shlex
@@ -9,10 +9,9 @@ logger = logging.getLogger(__name__)
 
 
 class ADBInputHandler:
-    """Handles text input via ADB shell commands without accessing DOM/XML.
+    """Handles text input via ADB shell commands.
 
-    This handler provides text input capabilities using ADB's shell input command,
-    which bypasses the need for find_element or XML page source access.
+    This handler provides text input capabilities using ADB's shell input command.
     """
 
     def __init__(self, device_id: Optional[str] = None):

@@ -30,14 +30,14 @@
 
 ---
 
-### 2. Gmail OTP Extraction (Image-Only Mode)
+### 2. Gmail OTP Extraction
 
-**Question**: How to extract OTP codes or find confirmation links from Gmail emails using image-only approach?
+**Question**: How to extract OTP codes or find confirmation links from Gmail emails using visual runtime context?
 
 **Decision**: Use OCR (Optical Character Recognition) on Gmail screenshots to extract OTP codes, and use AI vision model to identify and click confirmation links.
 
 **Rationale**:
-- The crawler already operates in image-only mode, so we must use screenshots
+- The crawler can use screenshots for visual verification
 - OCR service already exists in the codebase (`ocr_service.py` based on project structure)
 - AI vision model can identify clickable links in email content
 - OTP codes are typically displayed as large, clear text in verification emails
@@ -46,7 +46,7 @@
 **Alternatives Considered**:
 - Gmail API: Requires OAuth setup, complex, not available on device
 - Email parsing via IMAP: Requires credentials, not device-native
-- XML/DOM access: Violates image-only mode principle
+- Native email APIs: Not aligned with device-level crawl behavior
 
 **Implementation Notes**:
 - Navigate to Gmail inbox, search for verification emails from target app domain
@@ -110,9 +110,8 @@ CREATE TABLE app_credentials (
 - Can detect verification screens: "Enter OTP", "Verify Email" text
 
 **Alternatives Considered**:
-- XML/DOM analysis: Violates image-only mode
 - Hardcoded package list: Not scalable, requires maintenance
-- URL/activity detection: Not available in image-only mode
+- URL/activity detection: Not reliable across target apps
 
 **Implementation Notes**:
 - Add authentication detection to AI prompt context
@@ -181,8 +180,8 @@ CREATE TABLE app_credentials (
 | Component | Technology | Rationale |
 |-----------|-----------|-----------|
 | App Switching | Appium `activate_app()` | Standard, reliable, already available |
-| OTP Extraction | OCR + Regex | Works with image-only mode, existing OCR service |
-| Link Clicking | AI Vision + Coordinates | Consistent with crawler's image-only approach |
+| OTP Extraction | OCR + Regex | Works with screenshots and existing OCR service |
+| Link Clicking | AI Vision + Coordinates | Consistent with visual app interaction |
 | Credential Storage | SQLite + Fernet Encryption | Reuses existing infrastructure, secure |
 | Auth Detection | AI Vision Analysis | Leverages existing AI capabilities |
 | Email Config | Encrypted Secret Storage | Consistent with other sensitive data |

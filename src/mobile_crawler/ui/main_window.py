@@ -51,6 +51,7 @@ from mobile_crawler.ui.widgets.stats_dashboard import StatsDashboard
 from mobile_crawler.ui.widgets.settings_panel import SettingsPanel
 from mobile_crawler.ui.widgets.run_history_view import RunHistoryView
 from mobile_crawler.ui.widgets.ai_monitor_panel import AIMonitorPanel, StepDetailWidget
+from mobile_crawler.ui.log_cleaner import LogCleaner
 
 # Signal adapter
 from mobile_crawler.ui.signal_adapter import QtSignalAdapter
@@ -178,6 +179,7 @@ class MainWindow(QMainWindow):
         self.settings_panel: SettingsPanel = None
         self.run_history_view: RunHistoryView = None
         self.ai_monitor_panel: AIMonitorPanel = None
+        self._log_cleaner = LogCleaner()
 
         # Signal adapter for thread-safe event bridging
         self.signal_adapter: QtSignalAdapter = QtSignalAdapter()
@@ -620,16 +622,14 @@ class MainWindow(QMainWindow):
 
     def _on_step_paused(self, run_id: int, step_number: int) -> None:
         """Handle step paused event."""
-        if self.log_viewer:
-            self.log_viewer.append_log(LogLevel.INFO, f"Step {step_number} finished. Paused for review.")
+        self._append_clean_log(LogLevel.INFO, f"Step {step_number} finished. Paused for review.", "ui")
 
         if self.right_tab_widget:
             self.right_tab_widget.setCurrentIndex(1)  # Index 1 is AI Monitor
 
     def _on_debug_log(self, run_id: int, step_number: int, message: str) -> None:
         """Handle debug log message from crawler (includes DroidRun stdout lines)."""
-        if self.log_viewer:
-            self.log_viewer.append_log(LogLevel.DEBUG, message)
+        self._append_clean_log(LogLevel.DEBUG, message, "debug_log")
 
         if self._current_stats and self._current_stats.run_id == run_id:
             self._parse_droidrun_progress(run_id, message)
@@ -777,8 +777,7 @@ class MainWindow(QMainWindow):
             step_number: Step number
         """
         message = f"Starting step {step_number}"
-        if self.log_viewer:
-            self.log_viewer.append_log(LogLevel.INFO, message)
+        self._append_clean_log(LogLevel.INFO, message, "ui")
 
     def _on_ai_response_received(self, run_id: int, step_number: int, response_data: dict) -> None:
         """Handle AI response received event.
@@ -806,8 +805,7 @@ class MainWindow(QMainWindow):
         success_text = "SUCCESS" if result.success else "FAILED"
         message = f"Step {step_number}.{action_index}: {result.action_type} - {success_text}"
         level = LogLevel.ACTION if result.success else LogLevel.WARNING
-        if self.log_viewer:
-            self.log_viewer.append_log(level, message)
+        self._append_clean_log(level, message, "ui")
 
         # Accumulate action timing for statistics
         if self._current_stats and result.execution_time_ms > 0:
@@ -861,8 +859,7 @@ class MainWindow(QMainWindow):
         """
         # For now, just log the completion. Full stats update would need more data
         message = f"Completed step {step_number} ({actions_count} actions, {duration_ms:.0f}ms)"
-        if self.log_viewer:
-            self.log_viewer.append_log(LogLevel.INFO, message)
+        self._append_clean_log(LogLevel.INFO, message, "ui")
 
         # Note: Full stats update would require accumulating data from run repository
         # For MVP, we'll keep it simple
@@ -883,8 +880,7 @@ class MainWindow(QMainWindow):
         if ocr_avg_ms > 0:
             message += f" (OCR Avg: {ocr_avg_ms:.0f}ms)"
 
-        if self.log_viewer:
-            self.log_viewer.append_log(LogLevel.INFO, message)
+        self._append_clean_log(LogLevel.INFO, message, "ui")
 
         # Update run history
         if self.run_history_view:
@@ -906,8 +902,7 @@ class MainWindow(QMainWindow):
         # Log screen discovery
         if is_new:
             message = f"NEW Screen #{screen_id} discovered (total: {total_screens})"
-            if self.log_viewer:
-                self.log_viewer.append_log(LogLevel.INFO, message)
+            self._append_clean_log(LogLevel.INFO, message, "ui")
 
         # Update stats dashboard with screen metrics
         if self.stats_dashboard and self._current_stats:
@@ -1204,6 +1199,8 @@ class MainWindow(QMainWindow):
         from DroidRun internals and all other modules appears in the UI,
         not just in the terminal.
         """
+        self._suppress_noisy_library_loggers()
+
         # Connect the python_log signal to our handler slot
         self.signal_adapter.python_log.connect(self._on_python_log)
 
@@ -1222,6 +1219,29 @@ class MainWindow(QMainWindow):
         if root_logger.level > logging.DEBUG:
             root_logger.setLevel(logging.DEBUG)
 
+    def _suppress_noisy_library_loggers(self) -> None:
+        """Raise noisy library loggers to WARNING before records hit handlers."""
+        silent_loggers = [
+            "PIL",
+            "PIL.PngImagePlugin",
+            "PIL.JpegImagePlugin",
+            "PIL.Image",
+            "httpx",
+            "openai._base_client",
+            "hpack",
+            "httpcore",
+        ]
+        for name in silent_loggers:
+            logging.getLogger(name).setLevel(logging.WARNING)
+
+    def _append_clean_log(self, level: LogLevel, message: str, logger_name: str = "") -> None:
+        """Clean a log message and append it to the UI if it remains relevant."""
+        if not self.log_viewer:
+            return
+        cleaned = self._log_cleaner.clean(logger_name, message)
+        if cleaned is not None:
+            self.log_viewer.append_log(level, cleaned)
+
     def _on_python_log(self, level_name: str, message: str) -> None:
         """Handle Python log message forwarded via Qt signal.
 
@@ -1239,7 +1259,8 @@ class MainWindow(QMainWindow):
             "ERROR": LogLevel.ERROR,
         }
         level = level_map.get(level_name, LogLevel.DEBUG)
-        self.log_viewer.append_log(level, message)
+        logger_name = message.split(":", 1)[0] if ":" in message else "python"
+        self._append_clean_log(level, message, logger_name)
 
         # Also parse step progress from Python logging path (DroidRun internal logs)
         # This covers the case where the message came via the logging bridge rather

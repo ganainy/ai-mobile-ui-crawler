@@ -68,5 +68,5 @@ src/mobile_crawler/
 
 | Violation | Why Needed | Simpler Alternative Rejected Because |
 |-----------|------------|-------------------------------------|
-| New Dependency (`EasyOCR`) | Essential for text grounding | Screen-reading APIs (Appium XML) break "Image-Only" philosophy |
+| New Dependency (`EasyOCR`) | Essential for text grounding | Platform-specific screen readers do not provide consistent visual grounding |
 

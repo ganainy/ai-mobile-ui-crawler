@@ -176,7 +176,7 @@ class CrawlerLoop:
             exploration_objective = self.config_manager.get("exploration_objective", None)
             
             limit_type = self.config_manager.get("limit_type", "steps")
-            max_steps = self.config_manager.get("max_steps", self.config_manager.get("max_crawl_steps", 15))
+            max_steps = self.config_manager.get("max_steps", self.config_manager.get("max_crawl_steps", 100))
             max_duration = self.config_manager.get("max_duration_seconds", self.config_manager.get("max_crawl_duration_seconds", 300))
             
             if limit_type == "duration":

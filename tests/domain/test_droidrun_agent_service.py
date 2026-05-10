@@ -7,6 +7,8 @@ import asyncio
 import json
 import logging
 import os
+import sys
+import types
 from datetime import datetime
 from unittest.mock import Mock, patch, MagicMock, AsyncMock
 
@@ -19,7 +21,7 @@ from mobile_crawler.domain.droidrun_agent_service import (
     DroidRunLogHandler,
     CancelledErrorFilter,
 )
-from mobile_crawler.domain.models import AIAction, BoundingBox
+from mobile_crawler.domain.models import AIAction, BoundingBox, ActionResult
 from mobile_crawler.domain.step_phase import StepPhase
 
 
@@ -44,6 +46,7 @@ def mock_config_manager():
         "replicate_api_key": "fake_replicate_key",
         "openai_api_key": None,
         "anthropic_api_key": None,
+        "openrouter_api_key": None,
     }.get(key, default)
     config.user_config_store = Mock()
     config.user_config_store.get_secret_plaintext = Mock(side_effect=KeyError("not found"))
@@ -436,12 +439,72 @@ class TestDroidRunAgentServiceConfig:
         assert config["device"]["auto_setup"] is False
         assert "llm_profiles" in config
         assert "manager" in config["llm_profiles"]
+        assert config["llm_profiles"]["manager"]["kwargs"]["max_tokens"] == 2048
+        assert config["llm_profiles"]["executor"]["kwargs"]["max_tokens"] == 512
+        assert config["llm_profiles"]["fast_agent"]["kwargs"]["max_tokens"] == 1024
 
     @patch.dict(os.environ, {}, clear=False)
     def test_get_droidrun_config_gemini_provider(self, droidrun_service, mock_config_manager):
         """Test _get_droidrun_config maps gemini provider correctly."""
         config = droidrun_service._get_droidrun_config()
         assert config["llm_profiles"]["manager"]["provider"] == "GoogleGenAI"
+
+    @patch.dict(os.environ, {}, clear=False)
+    def test_get_droidrun_config_openrouter_provider(self, droidrun_service, mock_config_manager):
+        """Test _get_droidrun_config maps openrouter provider correctly."""
+        settings = {
+            "ai_provider": "openrouter",
+            "ai_model": "qwen/qwen3.6-plus",
+            "openrouter_api_key": "sk-or-test-key",
+            "droidrun_reasoning_mode": True,
+            "droidrun_streaming": False,
+            "droidrun_telemetry_enabled": False,
+            "ui_parser_mode": "omniparser",
+            "omniparser_backend": "replicate",
+            "replicate_api_key": "fake_replicate_key",
+        }
+        mock_config_manager.get.side_effect = lambda key, default=None: settings.get(key, default)
+
+        config = droidrun_service._get_droidrun_config()
+
+        for profile in config["llm_profiles"].values():
+            assert profile["provider"] == "OpenRouter"
+            assert profile["model"] == "qwen/qwen3.6-plus"
+            assert profile["kwargs"]["api_key"] == "sk-or-test-key"
+        assert os.environ["OPENROUTER_API_KEY"] == "sk-or-test-key"
+
+    @patch.dict(os.environ, {"OPENROUTER_API_KEY": "sk-or-env-key"}, clear=False)
+    def test_get_droidrun_config_openrouter_uses_env_api_key(self, droidrun_service, mock_config_manager):
+        """Test OpenRouter API key can come from OPENROUTER_API_KEY."""
+        settings = {
+            "ai_provider": "openrouter",
+            "ai_model": "qwen/qwen3.6-plus",
+            "openrouter_api_key": None,
+            "droidrun_reasoning_mode": True,
+            "droidrun_streaming": False,
+            "droidrun_telemetry_enabled": False,
+            "ui_parser_mode": "omniparser",
+            "omniparser_backend": "replicate",
+            "replicate_api_key": "fake_replicate_key",
+        }
+        mock_config_manager.get.side_effect = lambda key, default=None: settings.get(key, default)
+
+        config = droidrun_service._get_droidrun_config()
+
+        for profile in config["llm_profiles"].values():
+            assert profile["kwargs"]["api_key"] == "sk-or-env-key"
+
+    @patch.dict(os.environ, {}, clear=False)
+    def test_get_droidrun_config_unknown_provider_raises(self, droidrun_service, mock_config_manager):
+        """Test unknown providers do not silently fall back to Gemini."""
+        settings = {
+            "ai_provider": "unknown",
+            "ai_model": "some-model",
+        }
+        mock_config_manager.get.side_effect = lambda key, default=None: settings.get(key, default)
+
+        with pytest.raises(ValueError, match="Unsupported AI provider: unknown"):
+            droidrun_service._get_droidrun_config()
 
     @patch.dict(os.environ, {}, clear=False)
     def test_get_droidrun_config_telemetry(self, droidrun_service, mock_config_manager):
@@ -451,6 +514,103 @@ class TestDroidRunAgentServiceConfig:
         assert config["telemetry"]["enabled"] is False
 
 
+class TestDroidRunAgentServiceTargetPreflight:
+    """Tests for launching/verifying the target app before DroidRun starts."""
+
+    @pytest.mark.asyncio
+    async def test_execute_preflight_already_in_target_does_not_launch(self, droidrun_service):
+        mock_adb = Mock()
+        mock_adb.get_current_package.return_value = "com.example.app"
+
+        with patch("mobile_crawler.domain.adb_action_executor.ADBActionExecutor", return_value=mock_adb), \
+             patch.object(droidrun_service, "_initialize_agent", new=AsyncMock()), \
+             patch.object(droidrun_service, "_log_agent_interaction"), \
+             patch.dict(sys.modules, self._fake_droidrun_modules(success=True)):
+            droidrun_service._droidrun_config = Mock()
+            result = await droidrun_service.execute_exploration_task(
+                run_id=1,
+                app_package="com.example.app",
+                max_steps=3,
+            )
+
+        assert result.success is True
+        mock_adb.am_start_recovery.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_execute_preflight_launches_and_verifies_before_droidrun(self, droidrun_service):
+        mock_adb = Mock()
+        mock_adb.get_current_package.side_effect = ["com.android.launcher", "com.example.app"]
+        mock_adb.am_start_recovery.return_value = ActionResult(
+            success=True,
+            action_type="am_start_recovery",
+            target="com.example.app",
+        )
+
+        with patch("mobile_crawler.domain.adb_action_executor.ADBActionExecutor", return_value=mock_adb), \
+             patch.object(droidrun_service, "_initialize_agent", new=AsyncMock()), \
+             patch.object(droidrun_service, "_log_agent_interaction"), \
+             patch.dict(sys.modules, self._fake_droidrun_modules(success=True)):
+            droidrun_service._droidrun_config = Mock()
+            result = await droidrun_service.execute_exploration_task(
+                run_id=1,
+                app_package="com.example.app",
+                max_steps=3,
+            )
+
+        assert result.success is True
+        mock_adb.am_start_recovery.assert_called_once_with("com.example.app")
+
+    @pytest.mark.asyncio
+    async def test_execute_preflight_failure_returns_without_creating_droid_agent(self, droidrun_service):
+        mock_adb = Mock()
+        mock_adb.get_current_package.return_value = "com.android.launcher"
+        mock_adb.am_start_recovery.return_value = ActionResult(
+            success=False,
+            action_type="am_start_recovery",
+            target="com.example.app",
+            error_message="not found",
+        )
+
+        fake_modules = self._fake_droidrun_modules(success=True)
+        fake_agent = fake_modules["droidrun.agent.droid.droid_agent"].DroidAgent
+
+        with patch("mobile_crawler.domain.adb_action_executor.ADBActionExecutor", return_value=mock_adb), \
+             patch.object(droidrun_service, "_initialize_agent", new=AsyncMock()), \
+             patch.object(droidrun_service, "_log_agent_interaction"), \
+             patch.dict(sys.modules, fake_modules):
+            result = await droidrun_service.execute_exploration_task(
+                run_id=1,
+                app_package="com.example.app",
+                max_steps=3,
+            )
+
+        assert result.success is False
+        assert "Unable to open target app" in result.error_message
+        fake_agent.assert_not_called()
+
+    @staticmethod
+    def _fake_droidrun_modules(success: bool):
+        async def _run_result():
+            return types.SimpleNamespace(success=success, steps=1, reason="")
+
+        agent_instance = Mock()
+        agent_instance.run.side_effect = _run_result
+        agent_instance.shared_state = types.SimpleNamespace(
+            action_history=[],
+            action_outcomes=[],
+        )
+
+        droid_agent_module = types.ModuleType("droidrun.agent.droid.droid_agent")
+        droid_agent_module.DroidAgent = Mock(return_value=agent_instance)
+
+        return {
+            "droidrun": types.ModuleType("droidrun"),
+            "droidrun.agent": types.ModuleType("droidrun.agent"),
+            "droidrun.agent.droid": types.ModuleType("droidrun.agent.droid"),
+            "droidrun.agent.droid.droid_agent": droid_agent_module,
+        }
+
+
 class TestDroidRunAgentServiceLogging:
     """Tests for run logging configuration."""
 
@@ -458,25 +618,37 @@ class TestDroidRunAgentServiceLogging:
         """Test configure_run_logging attaches handler."""
         log_dir = str(tmp_path)
         emit_debug = Mock()
+        droid_logger = logging.getLogger("droidrun")
+        original_propagate = droid_logger.propagate
 
-        with patch('mobile_crawler.domain.droidrun_agent_service.DroidRunLogHandler') as mock_handler_class:
-            mock_handler = Mock()
-            mock_handler_class.return_value = mock_handler
-            droidrun_service.configure_run_logging(1, log_dir, emit_debug, True)
-            assert droidrun_service._log_handler is not None
-            mock_handler_class.assert_called_once()
+        try:
+            with patch('mobile_crawler.domain.droidrun_agent_service.DroidRunLogHandler') as mock_handler_class:
+                mock_handler = Mock()
+                mock_handler_class.return_value = mock_handler
+                droidrun_service.configure_run_logging(1, log_dir, emit_debug, True)
+                assert droidrun_service._log_handler is not None
+                assert droid_logger.propagate is False
+                mock_handler_class.assert_called_once()
+        finally:
+            droid_logger.propagate = original_propagate
 
     def test_clear_run_logging(self, droidrun_service, tmp_path):
         """Test clear_run_logging removes handler."""
         log_dir = str(tmp_path)
         emit_debug = Mock()
+        droid_logger = logging.getLogger("droidrun")
+        original_propagate = droid_logger.propagate
 
-        with patch('mobile_crawler.domain.droidrun_agent_service.DroidRunLogHandler') as mock_handler_class:
-            mock_handler = Mock()
-            mock_handler_class.return_value = mock_handler
-            droidrun_service.configure_run_logging(1, log_dir, emit_debug, True)
-            droidrun_service.clear_run_logging()
-            assert droidrun_service._log_handler is None
+        try:
+            with patch('mobile_crawler.domain.droidrun_agent_service.DroidRunLogHandler') as mock_handler_class:
+                mock_handler = Mock()
+                mock_handler_class.return_value = mock_handler
+                droidrun_service.configure_run_logging(1, log_dir, emit_debug, True)
+                droidrun_service.clear_run_logging()
+                assert droidrun_service._log_handler is None
+                assert droid_logger.propagate is True
+        finally:
+            droid_logger.propagate = original_propagate
 
 
 class TestDroidRunAgentServiceActionConversion:

@@ -1,228 +1,217 @@
 # Mobile Crawler
 
-AI-Powered Android Exploration Tool (Image-Only Mode)
+Mobile Crawler is a developer tool for running AI-assisted exploration of Android apps. The application owns the UI, CLI, run/session persistence, settings, logs, and reporting infrastructure; the active exploration runtime is delegated to the DroidRun submodule in `external/droidrun`.
 
-## Overview
-
-Mobile Crawler is an automated exploration tool for Android mobile applications using AI-driven **visual-only analysis** and intelligent action decisions. The UI and session management live in this repo, while the traversal/decision loop is delegated to the DroidRun submodule (external/droidrun).
-
-## Features
-
-- **Image-Only Operation**: Operates purely on visual feedback (screenshots) with coordinate-based actions - no XML/DOM access
-- **AI-Driven Exploration**: Uses vision-capable AI models (Gemini, OpenRouter, Ollama) to analyze screenshots and determine next actions via DroidRun
-- **Multiple Interfaces**: Both GUI and CLI interfaces for different use cases
-- **Comprehensive Logging**: Detailed action logs, statistics, and reporting
-- **Network Traffic Capture**: PCAPdroid integration for capturing network traffic during crawl sessions
-- **Video Recording**: Automatic screen recording of crawl sessions using Android's built-in screen recording via ADB
-- **Security Analysis**: MobSF integration for static security analysis of Android applications
-- **Flexible Configuration**: Environment variables, database settings, and user preferences with validation
-- **Enhanced Reporting**: Generates human-readable HTML reports (printer-friendly) and machine-readable JSON reports with correlated timeline of actions and network requests
-
-## Installation
-
-```bash
-# Clone the repository
-git clone <repository-url>
-cd mobile-crawler
-
-# Initialize submodules (DroidRun is vendored via external/droidrun)
-git submodule update --init --recursive
-
-# DroidRun is provided by the submodule; do not install the pip package.
-
-# Create virtual environment
-python -m venv .venv
-
-# Activate virtual environment (Windows)
-.\.venv\Scripts\Activate.ps1
-
-# Install project
-pip install -e .
-
-# Install development dependencies (optional)
-pip install -e ".[dev]"
-```
-
-## Development Status
-
-### ✅ Completed (Phase 0)
-- Project structure and packaging
-- Linting and formatting setup (Ruff, Black)
-- Testing framework (pytest)
-- Virtual environment isolation
-
-### ✅ Completed (Phase 1 - Database Layer)
-- **crawler.db schema**: Complete SQLite schema with 6 tables (runs, screens, step_logs, transitions, run_stats, ai_interactions)
-- **user_config.db schema**: User preferences and encrypted secrets storage
-- **Secrets encryption**: Fernet encryption with machine-bound key derivation for API keys
-- **RunRepository**: Complete CRUD operations for runs table with cascading deletes
-- Database connection management with WAL mode and foreign keys
-- Comprehensive test coverage for all database operations
-
-### ✅ Completed (Phase 2 - Image-Only Mode)
-- **Image-Only Architecture**: Removed all XML/DOM access, now operates purely on screenshots and coordinates
-- **ADB Text Input**: Implemented ADB-based text input handler to avoid DOM access
-- **Coordinate-Based Actions**: All actions use visual coordinates from VLM, no element selectors
-- **Updated Prompts**: System prompts explicitly request coordinate-based actions
-
-### ✅ Completed (Phase 3 - Feature Integrations)
-- **Traffic Capture**: PCAPdroid integration for network traffic analysis during crawl sessions
-- **Video Recording**: ADB-based screen recording with automatic saving to session directories
-- **MobSF Analysis**: Static security analysis with PDF/JSON report generation and security score tracking
-- **Configuration Management**: UI and CLI configuration with validation and persistence
-- **Prerequisite Validation**: Pre-crawl checks for feature dependencies (PCAPdroid, MobSF server, video support)
-- **Graceful Degradation**: Crawl continues successfully even if optional features fail
-
-### ✅ Completed (Phase 4 - Enhanced Reporting)
-- **HTML/JSON Report Generator**: Transitioned from basic PDF to rich, printer-friendly HTML and structured JSON reports
-- **Context-Enriched Timeline**: Correlates network requests (HTTP/DNS) from PCAP files with specific crawl steps based on timestamps
-- **Integrated Analysis**: Aggregates MobSF security findings and network traffic summaries into a single unified report
-- **Modular Reporting Architecture**: Decoupled parsers (PCAP, MobSF) and generators (Jinja2) for extensibility
-
-### ✅ Completed (Phase 5 - Fault Tolerance & Recovery)
-- **UiAutomator2 Crash Recovery**: Automatic detection and recovery from UiAutomator2 crashes during crawling
-- **Intelligent Retries**: Automatically retries failed ADB actions with configurable limits
-- **Session Restoration**: Restores app foreground state and resumes exploration after recovery
-- **Recovery Metrics**: Detailed tracking of recovery events, duration, and success rates in database logs
+Mobile Crawler runs through the editable DroidRun runtime in `external/droidrun`.
 
 ## Quick Start
 
-The easiest way to start the application is using the startup script which handles all dependencies:
+```powershell
+git clone <repository-url>
+cd mobile-crawler
+
+git submodule update --init --recursive
+
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+
+pip install -e .
+# Install DroidRun dependencies from the local submodule, not the published package.
+pip install -e external/droidrun
+```
+
+For development tools:
 
 ```powershell
-# Start everything (MobSF, UI)
-.\scripts\start.ps1
-
-# Start without MobSF
-.\scripts\start.ps1 -NoMobsf
-
-# Start only the UI
-.\scripts\start.ps1 -UiOnly
-
-# Show help
-.\scripts\start.ps1 -Help
+pip install -e ".[dev]"
 ```
 
-The script will:
-- ✅ Check if Docker, npm, and Python are installed
-- ✅ Display clear warnings with installation URLs if dependencies are missing
-- ✅ Start MobSF Docker container on port 8000
-- ✅ **Automatically extract and save the MobSF API key** for the app to use
-- ✅ Wait for services to be ready
-- ✅ Launch the main UI application
-- ✅ Clean up all processes on Ctrl+C
+Run the GUI:
 
-### MobSF API Key Auto-Configuration
-
-When you start MobSF using the startup script, it automatically:
-1. Captures the REST API key from MobSF's Docker output
-2. Saves it to `.mobsf_api_key` in the project root
-3. The app auto-loads this key on startup—no manual configuration needed!
-
-## Usage
-
-### CLI
-
-Basic crawl:
-```bash
-mobile-crawler-cli crawl --package com.example.app --device emulator-5554 --model gemini-1.5-pro --provider gemini
-```
-
-With optional features:
-```bash
-# Enable traffic capture
-mobile-crawler-cli crawl --package com.example.app --device emulator-5554 --model gemini-1.5-pro --provider gemini --enable-traffic-capture
-
-# Enable video recording
-mobile-crawler-cli crawl --package com.example.app --device emulator-5554 --model gemini-1.5-pro --provider gemini --enable-video-recording
-
-# Enable MobSF analysis
-mobile-crawler-cli crawl --package com.example.app --device emulator-5554 --model gemini-1.5-pro --provider gemini --enable-mobsf-analysis
-
-# Enable all features
-mobile-crawler-cli crawl --package com.example.app --device emulator-5554 --model gemini-1.5-pro --provider gemini --enable-traffic-capture --enable-video-recording --enable-mobsf-analysis
-```
-
-### GUI
-```bash
+```powershell
+python run_ui.py
+# or, after editable install:
 mobile-crawler-gui
+```
+
+Run a crawl from the CLI:
+
+```powershell
+python run_cli.py crawl --device emulator-5554 --package com.example.app --provider gemini --model gemini-1.5-flash --steps 15
+# or, after editable install:
+mobile-crawler-cli crawl --device emulator-5554 --package com.example.app --provider gemini --model gemini-1.5-flash --steps 15
+```
+
+Optional startup helper:
+
+```powershell
+.\scripts\start.ps1          # start MobSF, then the UI
+.\scripts\start.ps1 -NoMobsf # start only the UI
+.\scripts\start.ps1 -UiOnly  # start only the UI
 ```
 
 ## Requirements
 
-- Python 3.9+
-- Android device or emulator
-- ADB (Android Debug Bridge)
-- AI provider API keys (Gemini, OpenRouter, or Ollama)
+- Python 3.11+ for the current DroidRun-backed runtime. The Mobile Crawler package metadata allows Python 3.9+, but the vendored DroidRun submodule declares Python 3.11 to 3.13.
+- Android device or emulator reachable through ADB.
+- AI provider credentials for the selected provider. Current config mapping supports Gemini, OpenAI, Anthropic, Ollama, and OpenRouter in `DroidRunAgentService`.
+- `external/droidrun` initialized as a git submodule.
 
-### Optional Requirements (for additional features)
+Optional integrations:
 
-- **PCAPdroid** (for traffic capture): Install from [F-Droid](https://f-droid.org/packages/com.emanuelef.remote_capture/)
-- **MobSF Server** (for security analysis): Running MobSF instance with API access
-- **ADB** (Android Debug Bridge): Required for PCAPdroid control and APK extraction
+- PCAPdroid for traffic capture.
+- MobSF server for static APK analysis.
+- Android screen recording support for session video capture.
+- Replicate or local OmniParser configuration when using the default `ui_parser_mode`.
 
-## Development
+## Usage
 
-```bash
-# Run tests
-pytest
+### GUI
 
-# Run linter
-ruff check .
+The GUI entry point is `run_ui.py`, which inserts `src` into `sys.path` and calls `mobile_crawler.ui.main_window.run()`. `MainWindow` builds the PySide6 interface, creates services and repositories, bridges Python logging into the log panel, creates run records, and launches crawl execution on a worker thread.
 
-# Format code
-black .
+The UI exposes device selection, app selection, AI model/provider selection, crawl controls, settings, logs, run history, statistics, and AI monitoring. Settings are persisted through `UserConfigStore` and copied into a `ConfigManager` when a crawl starts.
 
-# Generate coverage report
-pytest --cov=mobile_crawler --cov-report=html
+### CLI
+
+The CLI entry point is `run_cli.py`, which calls `mobile_crawler.cli.main.run()`. The `crawl` command:
+
+1. Creates the app data directory and configuration store.
+2. Applies command-line settings such as device, package, model, provider, step or duration limits, and optional feature flags.
+3. Migrates the SQLite schema and creates a run record.
+4. Creates a `CrawlerLoop` with a JSON event listener.
+5. Runs the crawler and emits lifecycle/debug events as JSON on stdout.
+
+Useful flags:
+
+```powershell
+mobile-crawler-cli crawl `
+  --device emulator-5554 `
+  --package com.example.app `
+  --provider gemini `
+  --model gemini-1.5-flash `
+  --steps 15
+
+mobile-crawler-cli crawl --device emulator-5554 --package com.example.app --provider openrouter --model <model> --duration 300
+mobile-crawler-cli crawl --device emulator-5554 --package com.example.app --provider gemini --model gemini-1.5-flash --enable-traffic-capture
+mobile-crawler-cli crawl --device emulator-5554 --package com.example.app --provider gemini --model gemini-1.5-flash --enable-video-recording
+mobile-crawler-cli crawl --device emulator-5554 --package com.example.app --provider gemini --model gemini-1.5-flash --enable-mobsf-analysis
 ```
 
-## Project Structure
+## Runtime Architecture
 
-```
-src/mobile_crawler/
-├── core/              # Business logic and domain models
-├── infrastructure/    # External services and persistence
-├── domain/           # Use cases and business rules
-├── ui/               # User interface components
-├── cli/              # Command-line interface
-├── config/           # Configuration management
-└── utils/            # Utility functions
+The current crawl flow is:
 
-tests/                # Test suite
-├── infrastructure/   # Infrastructure layer tests
-└── ...
+1. `run_cli.py` or `run_ui.py` starts the CLI or GUI.
+2. The CLI `crawl` command or GUI `MainWindow` creates a run record, prepares `ConfigManager`, repositories, and `SessionFolderManager`, then runs `CrawlerLoop`.
+3. `CrawlerLoop` creates a timestamped session folder, stores the session path on the run, emits lifecycle events, attaches DroidRun logging, and calls `DroidRunAgentService.execute_exploration_task()`.
+4. `DroidRunAgentService` translates Mobile Crawler settings into a DroidRun `DroidConfig`, ensures the target package is active through ADB preflight checks, creates a DroidRun `DroidAgent`, and runs the DroidRun workflow.
+5. During execution, Mobile Crawler consumes DroidRun tool events for step phase tracking, forwards logs and stdout to UI/CLI listeners, handles duration limits and cancellation, tracks action outcomes from DroidRun shared state, retries app-crash-like failures, and cleans up async LLM clients.
+6. `CrawlerLoop` updates final run stats and emits completion or error events.
+
+`CrawlerLoop` is intentionally thin. It manages Mobile Crawler run state, session folders, event forwarding, cancellation, logging, cleanup, and final stats; it does not own the exploration loop.
+
+## How DroidRun Is Used
+
+DroidRun is currently loaded from `external/droidrun`. `DroidRunAgentService._ensure_droidrun_import()` inserts that submodule path into `sys.path` before importing DroidRun classes such as `DroidConfig`, `DroidAgent`, and `ToolExecutionEvent`.
+
+Mobile Crawler does not own DroidRun's core exploration loop. DroidRun owns screenshot and UI-state capture, LLM planning and execution, agent workflows, and ADB-backed device actions.
+
+Mobile Crawler wraps DroidRun with:
+
+- Run and session persistence.
+- GUI/CLI event listeners.
+- SQLite repositories and configuration storage.
+- Session folders for screenshots, reports, PCAP files, videos, logs, data, and APKs.
+- DroidRun log forwarding to JSONL and UI logs.
+- Target-app preflight and app-switch/context guards.
+- Step phase tracking and action verification hooks.
+- Duration limits, cancellation requests, crash recovery, and LLM client cleanup.
+- Optional MobSF, PCAPdroid, video, and report/artifact infrastructure.
+
+## How OmniParser Works With DroidRun
+
+Mobile Crawler passes OmniParser settings into DroidRun through `DroidRunAgentService` when it builds the DroidRun `DroidConfig`. DroidRun then owns the active screenshot capture, UI parsing, formatted state text, indexed element lookup, and ADB-backed action execution used during the crawl.
+
+The `ui_parser_mode` setting controls which UI source DroidRun uses:
+
+- `omniparser`: always parse screenshots with OmniParser.
+- `boost`: use accessibility data when it has enough elements, otherwise fall back to OmniParser.
+- `accessibility`: use accessibility data only.
+
+When OmniParser is used, DroidRun converts OmniParser bounding boxes into indexed UI elements with tap-ready bounds before presenting them to the agent. Mobile Crawler's local `OmniParserClient` and `UIContextManager` appear to be auxiliary diagnostic/cache code; they are not the active crawl path.
+
+## Project Boundaries
+
+Mobile Crawler owns:
+
+- PySide6 GUI and Click CLI.
+- Device and app selection UX.
+- Settings, secrets, defaults, and provider selection.
+- SQLite storage for runs, screens, step logs, transitions, stats, AI interactions, and step phases.
+- Session folder creation and artifact layout.
+- Reporting, run history, MobSF integration, PCAPdroid integration, and video capture hooks.
+- DroidRun orchestration, log forwarding, lifecycle events, and run-level status.
+
+DroidRun owns:
+
+- `DroidAgent` and active UI-agent execution.
+- Manager, executor, fast-agent, app-opener, and structured-output workflows.
+- Prompt templates and agent internals.
+- Android driver, state provider, UI action tools, and ADB-backed device actions.
+- LLM adapter implementations used by the agent runtime.
+
+## Configuration Notes
+
+Default values live in `src/mobile_crawler/config/defaults.py`. Notable defaults include:
+
+- `max_crawl_steps`: `15`
+- `max_crawl_duration_seconds`: `600`
+- `use_droidrun_agent`: `True`
+- `droidrun_reasoning_mode`: `True`
+- `droidrun_streaming`: `False`
+- `droidrun_telemetry_enabled`: `False`
+- `ui_parser_mode`: `omniparser`
+- `omniparser_backend`: `replicate`
+- optional traffic capture, video recording, and MobSF analysis disabled by default
+
+API keys can come from persisted secrets/settings or environment variables. `DroidRunAgentService` resolves provider keys and passes them into DroidRun LLM profiles.
 
 ## Data Organization
 
-The crawler organizes all session data into a unified directory structure for easy access and portability.
-
-### Session Folder Structure
-By default, all artifacts are stored in `output_data/` (or platform-specific AppData directory):
+`SessionFolderManager` creates per-run folders under the app data directory's `output_data` folder by default:
 
 ```text
-output_data/run_{ID}_{TIMESTAMP}/
-├── screenshots/      # All full and annotated screenshots
-├── reports/          # PDF crawl reports and MobSF analysis results
-└── data/             # JSON run exports and database snippets
+output_data/
+└── run_{ID}_{YYYYMMDD_HHMMSS}/
+    ├── screenshots/
+    ├── reports/
+    ├── pcap/
+    ├── videos/
+    ├── logs/
+    ├── data/
+    └── apks/
 ```
 
-Each run's `session_path` is persisted in the database, allowing the UI to open the correct folder directly.
+The session path is stored on the run record so the UI can resolve artifacts later.
+
+## Current Limitations
+
+- Pause, resume, step-by-step mode, and manual next-step advancement are not supported in DroidRun mode. The current `CrawlerLoop` methods emit debug messages for those controls and do not pause the DroidRun workflow.
+- Current crawl execution is DroidRun-first through the editable runtime in `external/droidrun`.
+- The `use_droidrun_agent` setting remains in the UI/config, but the current `CrawlerLoop` implementation delegates traversal to DroidRun.
+- Removing `external/droidrun` requires vendoring or rewriting the active UI-agent runtime, including agent workflows, prompts, state capture, LLM adapters, and Android action tools.
+
+## Development
+
+```powershell
+pytest
+ruff check .
+black .
+pytest --cov=mobile_crawler --cov-report=html
 ```
 
-## Database Schema
-
-### crawler.db
-- `runs` - Crawl session metadata
-- `screens` - Discovered screen states with perceptual hashes
-- `step_logs` - Per-step action history
-- `transitions` - Screen-to-screen navigation graph
-- `run_stats` - Comprehensive crawl statistics
-- `ai_interactions` - AI request/response logging
-
-### user_config.db
-- `user_config` - Key-value user settings
-- `secrets` - Encrypted API keys and credentials
+Documentation-only README edits do not require code tests. For runtime changes, prefer targeted tests around the modified module and a smoke run through the CLI or GUI path.
 
 ## License
 

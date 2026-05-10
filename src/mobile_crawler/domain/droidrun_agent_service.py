@@ -126,10 +126,8 @@ class DroidRunResult:
 class DroidRunAgentService:
     """Service for integrating DroidRun AI agents with the mobile crawler.
 
-    All device actions (tap, scroll, input, navigate) are executed exclusively
-    via ADB commands through the DroidRun agent. There is no Appium or other
-    device provider abstraction. The ADB path is the single supported device
-    interaction layer.
+    All device actions (tap, scroll, input, navigate) are executed through the
+    DroidRun agent's ADB-backed Android runtime.
     """
 
     def __init__(
@@ -171,7 +169,11 @@ class DroidRunAgentService:
         if OMNIPARSER_AVAILABLE:
             self._initialize_omni_parser()
 
-    def _get_droidrun_config(self, max_steps: int = 15) -> Dict[str, Any]:
+    def _get_droidrun_config(
+        self,
+        max_steps: int = 15,
+        target_package: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """Convert crawler configuration to DroidRun format.
 
         Returns:
@@ -187,10 +189,13 @@ class DroidRunAgentService:
             "openai": "OpenAI",
             "anthropic": "AnthropicAI",
             "ollama": "Ollama",
-            "openrouter": "OpenAILike",
+            "openrouter": "OpenRouter",
         }
 
-        droid_provider = provider_mapping.get(ai_provider, "GoogleGenAI")
+        if ai_provider not in provider_mapping:
+            raise ValueError(f"Unsupported AI provider: {ai_provider}")
+
+        droid_provider = provider_mapping[ai_provider]
 
         def resolve_api_key(primary_key: str, env_keys: List[str]) -> Optional[str]:
             key_value = self.config_manager.get(primary_key)
@@ -220,6 +225,7 @@ class DroidRunAgentService:
             "ui_parser_mode": self.config_manager.get("ui_parser_mode", "omniparser"),
             "omniparser_backend": self.config_manager.get("omniparser_backend", "replicate"),
             "omniparser_api_key": resolve_api_key("replicate_api_key", ["REPLICATE_API_KEY"]) or "",
+            "target_package": target_package,
         }
 
         # Set Replicate API key in environment for DroidRun
@@ -228,51 +234,40 @@ class DroidRunAgentService:
             os.environ["REPLICATE_API_KEY"] = replicate_key
 
         config["llm_profiles"] = {
-            "manager": {"provider": droid_provider, "model": ai_model, "temperature": 0.1, "kwargs": {}},
-            "executor": {"provider": droid_provider, "model": ai_model, "temperature": 0.0, "kwargs": {}},
-            "fast_agent": {"provider": droid_provider, "model": ai_model, "temperature": 0.0, "kwargs": {}},
-            "app_opener": {"provider": droid_provider, "model": ai_model, "temperature": 0.0, "kwargs": {}},
-            "structured_output": {"provider": droid_provider, "model": ai_model, "temperature": 0.0, "kwargs": {}},
+            "manager": {"provider": droid_provider, "model": ai_model, "temperature": 0.1, "kwargs": {"max_tokens": 2048}},
+            "executor": {"provider": droid_provider, "model": ai_model, "temperature": 0.0, "kwargs": {"max_tokens": 512}},
+            "fast_agent": {"provider": droid_provider, "model": ai_model, "temperature": 0.0, "kwargs": {"max_tokens": 1024}},
+            "app_opener": {"provider": droid_provider, "model": ai_model, "temperature": 0.0, "kwargs": {"max_tokens": 512}},
+            "structured_output": {"provider": droid_provider, "model": ai_model, "temperature": 0.0, "kwargs": {"max_tokens": 1024}},
         }
         config["telemetry"] = {"enabled": self.config_manager.get("droidrun_telemetry_enabled", False)}
+
+        def set_llm_api_key(api_key: str) -> None:
+            for profile in config["llm_profiles"].values():
+                profile["kwargs"]["api_key"] = api_key
 
         # Add API keys based on provider
         if ai_provider == "gemini":
             api_key = resolve_api_key("gemini_api_key", ["GEMINI_API_KEY", "GOOGLE_API_KEY"])
             if api_key:
-                config["llm_profiles"]["manager"]["kwargs"]["api_key"] = api_key
-                config["llm_profiles"]["executor"]["kwargs"]["api_key"] = api_key
-                config["llm_profiles"]["fast_agent"]["kwargs"]["api_key"] = api_key
-                config["llm_profiles"]["app_opener"]["kwargs"]["api_key"] = api_key
-                config["llm_profiles"]["structured_output"]["kwargs"]["api_key"] = api_key
+                set_llm_api_key(api_key)
                 os.environ["GEMINI_API_KEY"] = api_key
                 os.environ["GOOGLE_API_KEY"] = api_key
         elif ai_provider == "openai":
             api_key = resolve_api_key("openai_api_key", ["OPENAI_API_KEY"])
             if api_key:
-                config["llm_profiles"]["manager"]["kwargs"]["api_key"] = api_key
-                config["llm_profiles"]["executor"]["kwargs"]["api_key"] = api_key
-                config["llm_profiles"]["fast_agent"]["kwargs"]["api_key"] = api_key
-                config["llm_profiles"]["app_opener"]["kwargs"]["api_key"] = api_key
-                config["llm_profiles"]["structured_output"]["kwargs"]["api_key"] = api_key
+                set_llm_api_key(api_key)
                 os.environ["OPENAI_API_KEY"] = api_key
         elif ai_provider == "anthropic":
             api_key = resolve_api_key("anthropic_api_key", ["ANTHROPIC_API_KEY"])
             if api_key:
-                config["llm_profiles"]["manager"]["kwargs"]["api_key"] = api_key
-                config["llm_profiles"]["executor"]["kwargs"]["api_key"] = api_key
-                config["llm_profiles"]["fast_agent"]["kwargs"]["api_key"] = api_key
-                config["llm_profiles"]["app_opener"]["kwargs"]["api_key"] = api_key
-                config["llm_profiles"]["structured_output"]["kwargs"]["api_key"] = api_key
+                set_llm_api_key(api_key)
                 os.environ["ANTHROPIC_API_KEY"] = api_key
         elif ai_provider == "openrouter":
             api_key = resolve_api_key("openrouter_api_key", ["OPENROUTER_API_KEY"])
-            base_url = self.config_manager.get("openrouter_base_url", "https://openrouter.ai/api/v1")
-            for profile in config["llm_profiles"].values():
-                profile["provider"] = "OpenAILike"
-                profile["base_url"] = base_url
-                if api_key:
-                    profile["kwargs"]["api_key"] = api_key
+            if api_key:
+                set_llm_api_key(api_key)
+                os.environ["OPENROUTER_API_KEY"] = api_key
 
         return config
 
@@ -286,14 +281,14 @@ class DroidRunAgentService:
         handler = DroidRunLogHandler(run_id, log_path, emit_debug, True)
         handler.setLevel(logging.DEBUG)
 
-        # Patch the droidrun logger and known children to ensure propagation
+        # Patch the droidrun logger and known children for debug visibility.
         for name in ["droidrun", "droidrun.agent", "droidrun.tools", "droidrun.config_manager"]:
             lg = logging.getLogger(name)
-            lg.propagate = True
             lg.setLevel(logging.DEBUG)
 
         droid_logger = logging.getLogger("droidrun")
         droid_logger.addHandler(handler)
+        droid_logger.propagate = False
         self._log_handler = handler
 
     def clear_run_logging(self) -> None:
@@ -301,11 +296,19 @@ class DroidRunAgentService:
         if self._log_handler:
             droid_logger = logging.getLogger("droidrun")
             droid_logger.removeHandler(self._log_handler)
+            droid_logger.propagate = True
             self._log_handler = None
 
-    async def _initialize_agent(self, max_steps: int = 15) -> None:
+    async def _initialize_agent(
+        self,
+        max_steps: int = 15,
+        target_package: Optional[str] = None,
+    ) -> None:
         """Initialize DroidRun agent with current configuration."""
         if self._is_initialized:
+            if self._droidrun_config is not None:
+                self._droidrun_config.agent.max_steps = max_steps
+                self._droidrun_config.target_package = target_package
             return
 
         try:
@@ -314,7 +317,7 @@ class DroidRunAgentService:
             from droidrun.config_manager.config_manager import DroidConfig
 
             # Create DroidRun configuration
-            config_dict = self._get_droidrun_config(max_steps)
+            config_dict = self._get_droidrun_config(max_steps, target_package=target_package)
             self._droidrun_config = DroidConfig.from_dict(config_dict)
 
             self._is_initialized = True
@@ -323,6 +326,66 @@ class DroidRunAgentService:
         except Exception as e:
             logger.error(f"Failed to initialize DroidRun agent: {e}")
             raise
+
+    async def _ensure_target_app_active_before_droidrun(
+        self,
+        app_package: str,
+    ) -> None:
+        """Launch and verify the target package before any DroidRun work starts."""
+        from mobile_crawler.domain.adb_action_executor import ADBActionExecutor
+
+        attempts = int(self.config_manager.get("target_app_launch_attempts", 3) or 3)
+        adb_executor = ADBActionExecutor(device_id=self.device_id)
+        current_package = adb_executor.get_current_package()
+
+        if current_package == app_package:
+            logger.info("Target app already active before DroidRun startup: %s", app_package)
+            return
+
+        logger.info(
+            "Target app is not active before DroidRun startup "
+            "(current=%s, target=%s). Launching target app.",
+            current_package,
+            app_package,
+        )
+
+        last_error = None
+        for attempt in range(1, attempts + 1):
+            launch_result = adb_executor.am_start_recovery(app_package)
+            if not launch_result.success:
+                last_error = launch_result.error_message or "ADB launch command failed"
+                logger.warning(
+                    "Target app launch attempt %s/%s failed: %s",
+                    attempt,
+                    attempts,
+                    last_error,
+                )
+
+            await asyncio.sleep(0.5)
+            current_package = adb_executor.get_current_package()
+            if current_package == app_package:
+                logger.info(
+                    "Target app active after preflight launch attempt %s/%s: %s",
+                    attempt,
+                    attempts,
+                    app_package,
+                )
+                return
+
+            logger.warning(
+                "Target app preflight verification failed on attempt %s/%s "
+                "(current=%s, target=%s)",
+                attempt,
+                attempts,
+                current_package,
+                app_package,
+            )
+
+        detail = f"last_error={last_error}" if last_error else f"current_package={current_package}"
+        raise RuntimeError(
+            f"Unable to open target app '{app_package}' before DroidRun startup after "
+            f"{attempts} attempts ({detail})"
+        )
 
     def _initialize_omni_parser(self) -> None:
         """Initialize OmniParser client and UI context manager."""
@@ -586,22 +649,29 @@ class DroidRunAgentService:
             try:
                 async def get_ui_data():
                     """Get fresh UI data from DroidRun agent's state."""
-                    ui_data = None
+                    # 1. Try a11y_tree from state_provider.get_state() (live fetch)
                     if self._droid_agent and hasattr(self._droid_agent, "state_provider"):
                         state_provider = self._droid_agent.state_provider
                         if state_provider and hasattr(state_provider, "get_state"):
-                            state = await state_provider.get_state()
-                            if state and isinstance(state, dict):
-                                ui_data = state.get("a11y_tree")
+                            try:
+                                state = await state_provider.get_state()
+                                if state and isinstance(state, dict):
+                                    a11y = state.get("a11y_tree")
+                                    if a11y:
+                                        return a11y
+                            except Exception:
+                                pass
 
-                    # If no a11y_tree from state_provider, try shared_state
-                    if ui_data is None and self._droid_agent:
+                    # 2. Fall back to shared_state.a11y_tree - this is where DroidRun writes
+                    #    OmniParser results (manager_agent.py:412, stateless_manager_agent.py:206)
+                    if self._droid_agent:
                         shared_state = getattr(self._droid_agent, "shared_state", None)
-                        if shared_state and hasattr(shared_state, "action_history"):
-                            # Last action may have state attached
-                            pass  # Fall through to validate None
+                        if shared_state:
+                            a11y = getattr(shared_state, "a11y_tree", None)
+                            if a11y:
+                                return a11y
 
-                    return ui_data
+                    return None
 
                 # Use validate with retry for transient failures (per D-04)
                 validation = await self._ui_dump_validator.validate_ui_dump_with_retry(get_ui_data, max_retries=1)
@@ -761,48 +831,6 @@ class DroidRunAgentService:
             app_package=app_package,
         )
 
-    def _preflight_app_launch(self, app_package: str) -> None:
-        """Ensure the target app is in the foreground before any AI calls."""
-        from mobile_crawler.domain.adb_action_executor import ADBActionExecutor
-
-        adb_executor = ADBActionExecutor(device_id=self.device_id)
-
-        resumed = adb_executor.get_resumed_activity()
-        if resumed and resumed[0] == app_package:
-            logger.info(f"Preflight: {app_package} already in foreground")
-            return
-
-        logger.info(f"Preflight: launching {app_package} via ADB")
-        launch_result = adb_executor.am_start_recovery(app_package)
-        if not launch_result.success:
-            logger.warning(
-                f"Preflight: failed to launch {app_package}: {launch_result.error_message}"
-            )
-            return
-
-        resumed = adb_executor.get_resumed_activity()
-        if resumed and resumed[0] == app_package:
-            logger.info(f"Preflight: {app_package} verified in foreground")
-            return
-
-        if resumed and resumed[0] == "com.android.vending":
-            logger.warning(
-                "Preflight: Play Store intercepted launch; force-stopping and retrying"
-            )
-            adb_executor.force_stop_package("com.android.vending")
-            adb_executor.am_start_recovery(app_package)
-            resumed = adb_executor.get_resumed_activity()
-            if resumed and resumed[0] == app_package:
-                logger.info(f"Preflight: {app_package} verified after Play Store intercept")
-                return
-
-        if resumed:
-            logger.warning(
-                f"Preflight: foreground app remains {resumed[0]}/{resumed[1]} after launch"
-            )
-        else:
-            logger.warning("Preflight: unable to verify foreground app after launch")
-
     async def execute_exploration_task(
         self,
         run_id: int,
@@ -835,11 +863,10 @@ class DroidRunAgentService:
 
         for attempt in range(max_crash_retries + 1):
             try:
-                # Preflight: ensure target app is open before any AI calls
-                self._preflight_app_launch(app_package)
+                await self._ensure_target_app_active_before_droidrun(app_package)
 
                 # Initialize agent if needed
-                await self._initialize_agent(max_steps)
+                await self._initialize_agent(max_steps, target_package=app_package)
 
                 # Create exploration goal
                 goal = self._create_exploration_goal(app_package, max_steps, exploration_objective)
