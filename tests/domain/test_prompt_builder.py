@@ -27,7 +27,6 @@ class TestPromptBuilder:
         config_manager.get.side_effect = lambda key, default=None: {
             'test_username': 'testuser',
             'test_password': 'testpass',
-            'test_email': 'test@example.com'
         }.get(key, default)
         step_log_repo = Mock()
         
@@ -36,7 +35,6 @@ class TestPromptBuilder:
         
         assert "Username: testuser" in prompt
         assert "Password: testpass" in prompt
-        assert "Email: test@example.com" in prompt
 
     def test_build_user_prompt_basic(self):
         """Test basic user prompt building."""

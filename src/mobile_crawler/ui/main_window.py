@@ -14,8 +14,6 @@ from PySide6.QtWidgets import (
     QSplitter,
     QMenuBar,
     QMenu,
-    QTabWidget,
-    QTabBar,
     QApplication,
 )
 from PySide6.QtCore import Qt, QThread, Signal, QTimer
@@ -50,7 +48,6 @@ from mobile_crawler.ui.widgets.log_viewer import LogViewer
 from mobile_crawler.ui.widgets.stats_dashboard import StatsDashboard
 from mobile_crawler.ui.widgets.settings_panel import SettingsPanel
 from mobile_crawler.ui.widgets.run_history_view import RunHistoryView
-from mobile_crawler.ui.widgets.ai_monitor_panel import AIMonitorPanel, StepDetailWidget
 from mobile_crawler.ui.log_cleaner import LogCleaner
 
 # Signal adapter
@@ -178,7 +175,6 @@ class MainWindow(QMainWindow):
         self.stats_dashboard: StatsDashboard = None
         self.settings_panel: SettingsPanel = None
         self.run_history_view: RunHistoryView = None
-        self.ai_monitor_panel: AIMonitorPanel = None
         self._log_cleaner = LogCleaner()
 
         # Signal adapter for thread-safe event bridging
@@ -318,9 +314,6 @@ class MainWindow(QMainWindow):
         self.signal_adapter.action_executed.connect(self._on_action_executed)
         self.signal_adapter.step_completed.connect(self._on_step_completed)
         self.signal_adapter.crawl_completed.connect(self._on_crawl_completed)
-        self.signal_adapter.ai_request_sent.connect(self.ai_monitor_panel.add_request)
-        self.signal_adapter.screenshot_captured.connect(self.ai_monitor_panel.add_screenshot_path)
-        self.signal_adapter.ai_response_received.connect(self._on_ai_response_received)
         self.signal_adapter.screen_processed.connect(self._on_screen_processed)
         self.signal_adapter.step_paused.connect(self._on_step_paused)
         self.signal_adapter.debug_log.connect(self._on_debug_log)
@@ -470,9 +463,6 @@ class MainWindow(QMainWindow):
         # Set test credentials from settings panel
         config_manager.set("test_username", self.settings_panel.get_test_username())
         config_manager.set("test_password", self.settings_panel.get_test_password())
-        config_manager.set("test_email", self.settings_panel.get_test_email())
-        config_manager.set("mailosaur_api_key", self.settings_panel.get_mailosaur_api_key())
-        config_manager.set("mailosaur_server_id", self.settings_panel.get_mailosaur_server_id())
 
         # Set screen configuration
         top_height = self.settings_panel.get_top_bar_height()
@@ -623,9 +613,6 @@ class MainWindow(QMainWindow):
     def _on_step_paused(self, run_id: int, step_number: int) -> None:
         """Handle step paused event."""
         self._append_clean_log(LogLevel.INFO, f"Step {step_number} finished. Paused for review.", "ui")
-
-        if self.right_tab_widget:
-            self.right_tab_widget.setCurrentIndex(1)  # Index 1 is AI Monitor
 
     def _on_debug_log(self, run_id: int, step_number: int, message: str) -> None:
         """Handle debug log message from crawler (includes DroidRun stdout lines)."""
@@ -778,20 +765,6 @@ class MainWindow(QMainWindow):
         """
         message = f"Starting step {step_number}"
         self._append_clean_log(LogLevel.INFO, message, "ui")
-
-    def _on_ai_response_received(self, run_id: int, step_number: int, response_data: dict) -> None:
-        """Handle AI response received event.
-
-        Args:
-            run_id: Run ID
-            step_number: Step number
-            response_data: Response data dictionary
-        """
-        # Forward to AI monitor panel only if it contains full response data
-        # Summary responses from CrawlerLoop are ignored by the Monitor
-        if self.ai_monitor_panel:
-            if self.ai_monitor_panel._is_full_response(response_data):
-                self.ai_monitor_panel.add_response(run_id, step_number, response_data)
 
     def _on_action_executed(self, run_id: int, step_number: int, action_index: int, result) -> None:
         """Handle action executed event.
@@ -986,34 +959,14 @@ class MainWindow(QMainWindow):
         return panel
 
     def _create_right_panel(self) -> QWidget:
-        """Create the right panel with tabbed log viewer and AI monitor."""
+        """Create the right panel with log viewer."""
         panel = QWidget()
         layout = QVBoxLayout(panel)
 
-        # Create tab widget and store reference
-        self.right_tab_widget = QTabWidget()
-
-        # Instantiate widgets
         self.log_viewer = LogViewer()
         self.log_viewer.setObjectName("logViewer")
 
-        self.ai_monitor_panel = AIMonitorPanel()
-        self.ai_monitor_panel.setObjectName("aiMonitorPanel")
-
-        # Connect show step details signal
-        self.ai_monitor_panel.show_step_details.connect(self._on_show_step_details)
-
-        # Add tabs
-        self.right_tab_widget.addTab(self.log_viewer, "Logs")
-        self.right_tab_widget.addTab(self.ai_monitor_panel, "AI Monitor")
-
-        # Enable closeable tabs but hide close button on main tabs
-        self.right_tab_widget.setTabsClosable(True)
-        self.right_tab_widget.tabBar().setTabButton(0, QTabBar.ButtonPosition.RightSide, None)
-        self.right_tab_widget.tabBar().setTabButton(1, QTabBar.ButtonPosition.RightSide, None)
-        self.right_tab_widget.tabCloseRequested.connect(self._on_tab_close_requested)
-
-        layout.addWidget(self.right_tab_widget)
+        layout.addWidget(self.log_viewer)
 
         return panel
 
@@ -1063,60 +1016,6 @@ class MainWindow(QMainWindow):
                 # Show warning but don't prevent saving
                 pass
         self._update_start_button_state()
-
-    def _on_show_step_details(
-        self,
-        step_number: int,
-        timestamp,
-        success: bool,
-        prompt: str,
-        response: str,
-        actions: list,
-        error_msg,
-        screenshot_path: str = None,
-    ):
-        """Handle request to show step details in a new tab.
-
-        Args:
-            step_number: Step number
-            timestamp: When interaction occurred
-            success: Whether interaction succeeded
-            prompt: Complete prompt text
-            response: Complete response text
-            actions: Parsed action details
-            error_msg: Error message if failed
-            screenshot_path: Path to screenshot file
-        """
-        from datetime import datetime
-
-        # Create detail widget
-        detail_widget = StepDetailWidget(
-            step_number=step_number,
-            timestamp=timestamp if isinstance(timestamp, datetime) else datetime.now(),
-            success=success,
-            full_prompt=prompt,
-            full_response=response,
-            parsed_actions=actions or [],
-            error_message=error_msg,
-            screenshot_path=screenshot_path,
-        )
-
-        # Add as new tab
-        tab_title = f"Step {step_number}"
-        tab_index = self.right_tab_widget.addTab(detail_widget, tab_title)
-
-        # Switch to the new tab
-        self.right_tab_widget.setCurrentIndex(tab_index)
-
-    def _on_tab_close_requested(self, index: int):
-        """Handle tab close request.
-
-        Args:
-            index: Tab index to close
-        """
-        # Don't allow closing the main tabs (Logs and AI Monitor)
-        if index > 1:  # Only allow closing detail tabs
-            self.right_tab_widget.removeTab(index)
 
     def _on_device_selected(self, device) -> None:
         """Handle device selection.

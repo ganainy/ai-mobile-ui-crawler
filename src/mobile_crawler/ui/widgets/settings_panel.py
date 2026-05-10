@@ -21,7 +21,6 @@ from PySide6.QtWidgets import (
     QComboBox,
 )
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QFont
 
 if TYPE_CHECKING:
     from mobile_crawler.infrastructure.user_config_store import UserConfigStore
@@ -59,17 +58,11 @@ class SettingsPanel(QWidget):
         # 1. General Tab (Limits, Screen Config)
         self.tab_widget.addTab(self._setup_general_tab(), "General")
 
-        # 2. AI Settings Tab (API Keys, System Prompt)
-        self.tab_widget.addTab(self._setup_ai_tab(), "AI Settings")
+        # 2. AI & Agent Tab (Provider keys, DroidRun, parser, prompts, test credentials)
+        self.tab_widget.addTab(self._setup_ai_tab(), "AI & Agent")
 
         # 3. Integrations Tab (Traffic, Video, MobSF)
         self.tab_widget.addTab(self._setup_integrations_tab(), "Integrations")
-
-        # 4. DroidRun Agent Tab (AI Agent Settings)
-        self.tab_widget.addTab(self._setup_droidrun_tab(), "DroidRun Agent")
-
-        # 5. Credentials Tab (Test Credentials)
-        self.tab_widget.addTab(self._setup_credentials_tab(), "Credentials")
 
         main_layout.addWidget(self.tab_widget)
 
@@ -155,12 +148,13 @@ class SettingsPanel(QWidget):
         return self._wrap_in_scroll_area(tab)
 
     def _setup_ai_tab(self) -> QWidget:
-        """Create the AI Settings tab."""
+        """Create the AI and agent settings tab."""
         tab = QWidget()
         layout = QVBoxLayout(tab)
+        layout.setSpacing(15)
 
         # Group box for API Keys
-        api_keys_group = QGroupBox("API Keys")
+        api_keys_group = QGroupBox("AI Provider Keys")
         api_keys_layout = QVBoxLayout()
 
         # Gemini API Key
@@ -186,7 +180,146 @@ class SettingsPanel(QWidget):
         api_keys_group.setLayout(api_keys_layout)
         layout.addWidget(api_keys_group)
 
-        # layout.addStretch()
+        # Test Credentials group
+        credentials_group = QGroupBox("App Test Credentials")
+        credentials_layout = QVBoxLayout()
+        credentials_layout.setSpacing(12)
+        credentials_layout.setContentsMargins(15, 20, 15, 20)
+
+        def create_credential_field(label_text, placeholder, is_password=False):
+            field_layout = QVBoxLayout()
+            field_layout.setSpacing(4)
+            label = QLabel(label_text)
+            label.setStyleSheet("font-weight: bold;")
+            field_layout.addWidget(label)
+            edit = QLineEdit()
+            edit.setPlaceholderText(placeholder)
+            edit.setMinimumHeight(30)
+            if is_password:
+                edit.setEchoMode(QLineEdit.EchoMode.Password)
+            field_layout.addWidget(edit)
+            return field_layout, edit
+
+        l, self.test_username_input = create_credential_field("Test Username:", "Enter test username")
+        credentials_layout.addLayout(l)
+
+        l, self.test_password_input = create_credential_field("Test Password:", "Enter test password", True)
+        credentials_layout.addLayout(l)
+
+        credentials_group.setLayout(credentials_layout)
+        layout.addWidget(credentials_group)
+
+        # DroidRun Agent group
+        droidrun_group = QGroupBox("DroidRun Agent")
+        droidrun_layout = QVBoxLayout()
+        droidrun_layout.setSpacing(12)
+        droidrun_layout.setContentsMargins(15, 20, 15, 20)
+
+        self.enable_droidrun_checkbox = QCheckBox("Enable DroidRun AI Agent")
+        self.enable_droidrun_checkbox.setToolTip(
+            "Use DroidRun's advanced multi-step planning agent instead of single-shot AI responses"
+        )
+        droidrun_layout.addWidget(self.enable_droidrun_checkbox)
+
+        self.droidrun_reasoning_checkbox = QCheckBox("Use Reasoning Mode")
+        self.droidrun_reasoning_checkbox.setToolTip(
+            "Enable complex planning with ManagerAgent -> ExecutorAgent cycles (vs direct execution)"
+        )
+        self.droidrun_reasoning_checkbox.setChecked(True)
+        droidrun_layout.addWidget(self.droidrun_reasoning_checkbox)
+
+        max_cycles_layout = QHBoxLayout()
+        max_cycles_layout.addWidget(QLabel("Max Planning Cycles:"))
+        self.droidrun_max_cycles_input = QSpinBox()
+        self.droidrun_max_cycles_input.setRange(1, 20)
+        self.droidrun_max_cycles_input.setValue(5)
+        self.droidrun_max_cycles_input.setToolTip("Maximum planning/execution cycles for DroidRun agent")
+        max_cycles_layout.addWidget(self.droidrun_max_cycles_input)
+        max_cycles_layout.addStretch()
+        droidrun_layout.addLayout(max_cycles_layout)
+
+        self.droidrun_streaming_checkbox = QCheckBox("Enable Streaming Output")
+        self.droidrun_streaming_checkbox.setToolTip("Show real-time agent planning and execution updates")
+        droidrun_layout.addWidget(self.droidrun_streaming_checkbox)
+
+        retry_layout = QHBoxLayout()
+        retry_layout.addWidget(QLabel("Agent Retry Count:"))
+        self.droidrun_retry_count_input = QSpinBox()
+        self.droidrun_retry_count_input.setRange(0, 10)
+        self.droidrun_retry_count_input.setValue(2)
+        self.droidrun_retry_count_input.setToolTip("Number of retries for failed agent operations")
+        retry_layout.addWidget(self.droidrun_retry_count_input)
+        retry_layout.addStretch()
+        droidrun_layout.addLayout(retry_layout)
+
+        self.droidrun_telemetry_checkbox = QCheckBox("Enable DroidRun Telemetry")
+        self.droidrun_telemetry_checkbox.setToolTip("Enable DroidRun's built-in monitoring and tracing")
+        droidrun_layout.addWidget(self.droidrun_telemetry_checkbox)
+
+        droidrun_group.setLayout(droidrun_layout)
+        layout.addWidget(droidrun_group)
+
+        # UI Parser group
+        parser_group = QGroupBox("UI Parser")
+        parser_layout = QVBoxLayout()
+        parser_layout.setSpacing(12)
+        parser_layout.setContentsMargins(15, 20, 15, 20)
+
+        parser_mode_layout = QHBoxLayout()
+        parser_mode_layout.addWidget(QLabel("Parser Mode:"))
+        self.ui_parser_mode_combo = QComboBox()
+        self.ui_parser_mode_combo.addItems(["boost", "omniparser", "accessibility"])
+        self.ui_parser_mode_combo.setCurrentText("omniparser")
+        self.ui_parser_mode_combo.setToolTip(
+            "UI parser mode: 'omniparser' (vision-based, recommended), 'boost' (auto), or 'accessibility' (legacy)"
+        )
+        parser_mode_layout.addWidget(self.ui_parser_mode_combo)
+        parser_mode_layout.addStretch()
+        parser_layout.addLayout(parser_mode_layout)
+
+        replicate_layout = QHBoxLayout()
+        replicate_layout.addWidget(QLabel("Replicate API Key:"))
+        self.replicate_api_key_input = QLineEdit()
+        self.replicate_api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.replicate_api_key_input.setPlaceholderText("Enter Replicate API key for OmniParser")
+        self.replicate_api_key_input.setToolTip("API key for Replicate (used by OmniParser vision model)")
+        replicate_layout.addWidget(self.replicate_api_key_input)
+        parser_layout.addLayout(replicate_layout)
+
+        parser_group.setLayout(parser_layout)
+        layout.addWidget(parser_group)
+
+        # Exploration Objective group
+        objective_group = QGroupBox("Exploration Objective")
+        objective_layout = QVBoxLayout()
+        objective_layout.setSpacing(8)
+        objective_layout.setContentsMargins(15, 20, 15, 20)
+
+        objective_hint = QLabel(
+            "This prompt is sent to DroidRun as the exploration goal. Edit to customize the exploration behavior."
+        )
+        objective_hint.setWordWrap(True)
+        objective_hint.setStyleSheet("color: #666; font-size: 11px;")
+        objective_layout.addWidget(objective_hint)
+
+        self.exploration_objective_input = QTextEdit()
+        self.exploration_objective_input.setMaximumHeight(120)
+        objective_layout.addWidget(self.exploration_objective_input)
+
+        objective_group.setLayout(objective_layout)
+        layout.addWidget(objective_group)
+
+        def on_droidrun_enabled_changed(enabled):
+            self.droidrun_reasoning_checkbox.setEnabled(enabled)
+            self.droidrun_max_cycles_input.setEnabled(enabled)
+            self.droidrun_streaming_checkbox.setEnabled(enabled)
+            self.droidrun_retry_count_input.setEnabled(enabled)
+            self.droidrun_telemetry_checkbox.setEnabled(enabled)
+
+        self.enable_droidrun_checkbox.toggled.connect(on_droidrun_enabled_changed)
+        on_droidrun_enabled_changed(self.enable_droidrun_checkbox.isChecked())
+
+        layout.addStretch()
         return self._wrap_in_scroll_area(tab)
 
     def _setup_integrations_tab(self) -> QWidget:
@@ -250,210 +383,8 @@ class SettingsPanel(QWidget):
         layout.addStretch()
         return self._wrap_in_scroll_area(tab)
 
-    def _setup_droidrun_tab(self) -> QWidget:
-        """Create the DroidRun Agent settings tab."""
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.setSpacing(15)
-
-        # DroidRun Agent group
-        droidrun_group = QGroupBox("DroidRun AI Agent Integration")
-        droidrun_layout = QVBoxLayout()
-        droidrun_layout.setSpacing(12)
-        droidrun_layout.setContentsMargins(15, 20, 15, 20)
-
-        # Enable DroidRun Agent checkbox
-        self.enable_droidrun_checkbox = QCheckBox("Enable DroidRun AI Agent")
-        self.enable_droidrun_checkbox.setToolTip(
-            "Use DroidRun's advanced multi-step planning agent instead of single-shot AI responses"
-        )
-        droidrun_layout.addWidget(self.enable_droidrun_checkbox)
-
-        # Reasoning mode checkbox
-        self.droidrun_reasoning_checkbox = QCheckBox("Use Reasoning Mode")
-        self.droidrun_reasoning_checkbox.setToolTip(
-            "Enable complex planning with ManagerAgent → ExecutorAgent cycles (vs direct execution)"
-        )
-        self.droidrun_reasoning_checkbox.setChecked(True)
-        droidrun_layout.addWidget(self.droidrun_reasoning_checkbox)
-
-        # Max cycles setting
-        max_cycles_layout = QHBoxLayout()
-        max_cycles_label = QLabel("Max Planning Cycles:")
-        max_cycles_layout.addWidget(max_cycles_label)
-        self.droidrun_max_cycles_input = QSpinBox()
-        self.droidrun_max_cycles_input.setRange(1, 20)
-        self.droidrun_max_cycles_input.setValue(5)
-        self.droidrun_max_cycles_input.setToolTip("Maximum planning/execution cycles for DroidRun agent")
-        max_cycles_layout.addWidget(self.droidrun_max_cycles_input)
-        max_cycles_layout.addStretch()
-        droidrun_layout.addLayout(max_cycles_layout)
-
-        # Enable streaming checkbox
-        self.droidrun_streaming_checkbox = QCheckBox("Enable Streaming Output")
-        self.droidrun_streaming_checkbox.setToolTip("Show real-time agent planning and execution updates")
-        droidrun_layout.addWidget(self.droidrun_streaming_checkbox)
-
-        # Agent retry count
-        retry_layout = QHBoxLayout()
-        retry_label = QLabel("Agent Retry Count:")
-        retry_layout.addWidget(retry_label)
-        self.droidrun_retry_count_input = QSpinBox()
-        self.droidrun_retry_count_input.setRange(0, 10)
-        self.droidrun_retry_count_input.setValue(2)
-        self.droidrun_retry_count_input.setToolTip("Number of retries for failed agent operations")
-        retry_layout.addWidget(self.droidrun_retry_count_input)
-        retry_layout.addStretch()
-        droidrun_layout.addLayout(retry_layout)
-
-        droidrun_group.setLayout(droidrun_layout)
-        layout.addWidget(droidrun_group)
-
-        # Action Execution group
-        action_group = QGroupBox("Action Execution")
-        action_layout = QVBoxLayout()
-        action_layout.setSpacing(12)
-        action_layout.setContentsMargins(15, 20, 15, 20)
-
-        # Telemetry checkbox
-        self.droidrun_telemetry_checkbox = QCheckBox("Enable DroidRun Telemetry")
-        self.droidrun_telemetry_checkbox.setToolTip("Enable DroidRun's built-in monitoring and tracing")
-        action_layout.addWidget(self.droidrun_telemetry_checkbox)
-
-        action_group.setLayout(action_layout)
-        layout.addWidget(action_group)
-
-        # UI Parser group
-        parser_group = QGroupBox("UI Parser")
-        parser_layout = QVBoxLayout()
-        parser_layout.setSpacing(12)
-        parser_layout.setContentsMargins(15, 20, 15, 20)
-
-        # UI Parser mode selector
-        parser_mode_layout = QHBoxLayout()
-        parser_mode_label = QLabel("Parser Mode:")
-        parser_mode_layout.addWidget(parser_mode_label)
-        self.ui_parser_mode_combo = QComboBox()
-        self.ui_parser_mode_combo.addItems(["boost", "omniparser", "accessibility"])
-        self.ui_parser_mode_combo.setCurrentText("omniparser")
-        self.ui_parser_mode_combo.setToolTip(
-            "UI parser mode: 'omniparser' (vision-based, recommended), 'boost' (auto), or 'accessibility' (legacy)"
-        )
-        parser_mode_layout.addWidget(self.ui_parser_mode_combo)
-        parser_mode_layout.addStretch()
-        parser_layout.addLayout(parser_mode_layout)
-
-        # Replicate API Key
-        replicate_layout = QHBoxLayout()
-        replicate_label = QLabel("Replicate API Key:")
-        replicate_layout.addWidget(replicate_label)
-        self.replicate_api_key_input = QLineEdit()
-        self.replicate_api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
-        self.replicate_api_key_input.setPlaceholderText("Enter Replicate API key for OmniParser")
-        self.replicate_api_key_input.setToolTip("API key for Replicate (used by OmniParser vision model)")
-        replicate_layout.addWidget(self.replicate_api_key_input)
-        parser_layout.addLayout(replicate_layout)
-
-        parser_group.setLayout(parser_layout)
-        layout.addWidget(parser_group)
-
-        # Exploration Objective group
-        objective_group = QGroupBox("Exploration Objective / Prompt")
-        objective_layout = QVBoxLayout()
-        objective_layout.setSpacing(8)
-        objective_layout.setContentsMargins(15, 20, 15, 20)
-
-        objective_hint = QLabel(
-            "This prompt is sent to DroidRun as the exploration goal. Edit to customize the exploration behavior."
-        )
-        objective_hint.setWordWrap(True)
-        objective_hint.setStyleSheet("color: #666; font-size: 11px;")
-        objective_layout.addWidget(objective_hint)
-
-        self.exploration_objective_input = QTextEdit()
-        self.exploration_objective_input.setMaximumHeight(120)
-        objective_layout.addWidget(self.exploration_objective_input)
-
-        objective_group.setLayout(objective_layout)
-        layout.addWidget(objective_group)
-
-        # Enable/disable controls based on main checkbox
-        def on_droidrun_enabled_changed(enabled):
-            self.droidrun_reasoning_checkbox.setEnabled(enabled)
-            self.droidrun_max_cycles_input.setEnabled(enabled)
-            self.droidrun_streaming_checkbox.setEnabled(enabled)
-            self.droidrun_retry_count_input.setEnabled(enabled)
-            self.droidrun_telemetry_checkbox.setEnabled(enabled)
-
-        self.enable_droidrun_checkbox.toggled.connect(on_droidrun_enabled_changed)
-
-        # Initially disable if not checked
-        on_droidrun_enabled_changed(self.enable_droidrun_checkbox.isChecked())
-
-        layout.addStretch()
-        return self._wrap_in_scroll_area(tab)
-
-    def _setup_credentials_tab(self) -> QWidget:
-        """Create the Credentials tab. Implements US5 (proper spacing)."""
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.setSpacing(15)  # Increased vertical spacing between group boxes
-
-        # Test Credentials group
-        credentials_group = QGroupBox("App & Service Credentials")
-        # Use form-like layout with more spacing
-        credentials_layout = QVBoxLayout()
-        credentials_layout.setSpacing(12)  # Vertical spacing between items
-        credentials_layout.setContentsMargins(15, 20, 15, 20)
-
-        # Helper to create spaced field
-        def create_field(label_text, placeholder, is_password=False):
-            field_layout = QVBoxLayout()
-            field_layout.setSpacing(4)
-            label = QLabel(label_text)
-            label.setStyleSheet("font-weight: bold;")
-            field_layout.addWidget(label)
-            edit = QLineEdit()
-            edit.setPlaceholderText(placeholder)
-            edit.setMinimumHeight(30)
-            if is_password:
-                edit.setEchoMode(QLineEdit.EchoMode.Password)
-            field_layout.addWidget(edit)
-            return field_layout, edit
-
-        # Username
-        l, self.test_username_input = create_field("Test Username:", "Enter test username")
-        credentials_layout.addLayout(l)
-
-        # Password
-        l, self.test_password_input = create_field("Test Password:", "Enter test password", True)
-        credentials_layout.addLayout(l)
-
-        # Email
-        l, self.test_email_input = create_field("Test Email:", "e.g. user@abc12345.mailosaur.net")
-        credentials_layout.addLayout(l)
-
-        # Mailosaur section
-        mailosaur_label = QLabel("Mailosaur Integration:")
-        mailosaur_label.setStyleSheet("font-weight: bold; margin-top: 10px; color: #555;")
-        credentials_layout.addWidget(mailosaur_label)
-
-        l, self.mailosaur_api_key_input = create_field("API Key:", "Enter Mailosaur API key", True)
-        credentials_layout.addLayout(l)
-
-        l, self.mailosaur_server_id_input = create_field("Server ID:", "Enter Mailosaur Server ID")
-        credentials_layout.addLayout(l)
-
-        credentials_group.setLayout(credentials_layout)
-        layout.addWidget(credentials_group)
-
-        layout.addStretch()
-        return self._wrap_in_scroll_area(tab)
-
     def _wrap_in_scroll_area(self, widget: QWidget) -> QWidget:
         """Wrap a widget in a QScrollArea for handling small screens."""
-        from PySide6.QtWidgets import QScrollArea
-
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setWidget(widget)
@@ -532,18 +463,6 @@ class SettingsPanel(QWidget):
         test_password = self._config_store.get_secret_plaintext("test_password")
         if test_password:
             self.test_password_input.setText(test_password)
-
-        # Load test email
-        test_email = self._config_store.get_setting("test_email") or ""
-        self.test_email_input.setText(test_email)
-
-        # Load Mailosaur credentials
-        mailosaur_api_key = self._config_store.get_secret_plaintext("mailosaur_api_key")
-        if mailosaur_api_key:
-            self.mailosaur_api_key_input.setText(mailosaur_api_key)
-
-        mailosaur_server_id = self._config_store.get_setting("mailosaur_server_id") or ""
-        self.mailosaur_server_id_input.setText(mailosaur_server_id)
 
         # Load traffic capture settings
         enable_traffic_capture = self._config_store.get_setting("enable_traffic_capture", default=False)
@@ -695,25 +614,6 @@ class SettingsPanel(QWidget):
             else:
                 self._config_store.delete_secret("test_password")
 
-            test_email = self.test_email_input.text().strip()
-            if test_email:
-                self._config_store.set_setting("test_email", test_email, "string")
-            else:
-                self._config_store.delete_setting("test_email")
-
-            # Save Mailosaur credentials
-            mailosaur_api_key = self.mailosaur_api_key_input.text().strip()
-            if mailosaur_api_key:
-                self._config_store.set_secret_plaintext("mailosaur_api_key", mailosaur_api_key)
-            else:
-                self._config_store.delete_secret("mailosaur_api_key")
-
-            mailosaur_server_id = self.mailosaur_server_id_input.text().strip()
-            if mailosaur_server_id:
-                self._config_store.set_setting("mailosaur_server_id", mailosaur_server_id, "string")
-            else:
-                self._config_store.delete_setting("mailosaur_server_id")
-
             # Cleanup old config keys
             self._config_store.delete_setting("test_gmail_account")
 
@@ -853,18 +753,6 @@ class SettingsPanel(QWidget):
     def get_test_password(self) -> str:
         """Get the current test password value."""
         return self.test_password_input.text()
-
-    def get_test_email(self) -> str:
-        """Get the current test email value."""
-        return self.test_email_input.text()
-
-    def get_mailosaur_api_key(self) -> str:
-        """Get the current Mailosaur API key."""
-        return self.mailosaur_api_key_input.text()
-
-    def get_mailosaur_server_id(self) -> str:
-        """Get the current Mailosaur Server ID."""
-        return self.mailosaur_server_id_input.text()
 
     def get_enable_traffic_capture(self) -> bool:
         """Get the current traffic capture enabled state.

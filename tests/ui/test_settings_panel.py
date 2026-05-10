@@ -181,6 +181,16 @@ class TestSettingsPanelInit:
         assert hasattr(panel, "settings_saved")
         assert panel.settings_saved is not None
 
+    def test_settings_tabs_are_grouped_by_workflow(self, qt_app, mock_config_store):
+        """Test settings tabs use the consolidated workflow grouping."""
+        panel = _create_settings_panel(mock_config_store)
+        assert panel.tab_widget.count() == 3
+        assert [panel.tab_widget.tabText(i) for i in range(panel.tab_widget.count())] == [
+            "General",
+            "AI & Agent",
+            "Integrations",
+        ]
+
 
 class TestAPIKeyInputs:
     """Tests for API key input fields."""

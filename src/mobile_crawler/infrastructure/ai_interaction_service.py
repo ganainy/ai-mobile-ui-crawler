@@ -397,7 +397,7 @@ class AIInteractionService:
         # Validate action type
         valid_actions = [
             "click", "input", "long_press", "scroll_up", "scroll_down", 
-            "scroll_left", "scroll_right", "back", "extract_otp", "click_verification_link"
+            "scroll_left", "scroll_right", "back"
         ]
         if action_data["action"] not in valid_actions:
             raise ValueError(f"Invalid action type: {action_data['action']}")
@@ -434,7 +434,7 @@ class AIInteractionService:
         input_text = action_data.get("input_text")
         if action_data["action"] == "input" and input_text is None:
             raise ValueError("Input action requires input_text")
-        if action_data["action"] not in ["input", "extract_otp", "click_verification_link"] and input_text is not None:
+        if action_data["action"] != "input" and input_text is not None:
             raise ValueError(f"Action '{action_data['action']}' cannot have input_text")
         
         return AIAction(
