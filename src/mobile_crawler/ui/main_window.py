@@ -521,10 +521,6 @@ class MainWindow(QMainWindow):
             # Use default if not set in UI
             config_manager.set("mobsf_api_url", "http://localhost:8000")
 
-        mobsf_api_key = self.settings_panel.get_mobsf_api_key()
-        if mobsf_api_key:
-            config_manager.set("mobsf_api_key", mobsf_api_key)
-
         # Set DroidRun UI parser settings from settings panel
         ui_parser_mode = self.settings_panel.get_ui_parser_mode()
         config_manager.set("ui_parser_mode", ui_parser_mode)

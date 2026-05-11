@@ -371,14 +371,6 @@ class SettingsPanel(QWidget):
         mobsf_url_layout.addWidget(self.mobsf_api_url_input)
         mobsf_layout.addLayout(mobsf_url_layout)
 
-        mobsf_key_layout = QHBoxLayout()
-        mobsf_key_layout.addWidget(QLabel("API Key:"))
-        self.mobsf_api_key_input = QLineEdit()
-        self.mobsf_api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
-        self.mobsf_api_key_input.setEnabled(False)
-        mobsf_key_layout.addWidget(self.mobsf_api_key_input)
-        mobsf_layout.addLayout(mobsf_key_layout)
-
         self.enable_mobsf_analysis_checkbox.toggled.connect(self._on_mobsf_toggled)
         mobsf_group.setLayout(mobsf_layout)
         layout.addWidget(mobsf_group)
@@ -424,7 +416,6 @@ class SettingsPanel(QWidget):
             checked: Whether MobSF analysis is enabled
         """
         self.mobsf_api_url_input.setEnabled(checked)
-        self.mobsf_api_key_input.setEnabled(checked)
 
     def _load_settings(self):
         """Load settings from user_config.db."""
@@ -488,17 +479,6 @@ class SettingsPanel(QWidget):
         mobsf_api_url = self._config_store.get_setting("mobsf_api_url", default="http://localhost:8000")
         self.mobsf_api_url_input.setText(mobsf_api_url)
 
-        mobsf_api_key = self._config_store.get_secret_plaintext("mobsf_api_key")
-        if mobsf_api_key:
-            self.mobsf_api_key_input.setText(mobsf_api_key)
-        else:
-            # Try to auto-load from startup script's .mobsf_api_key file
-            mobsf_api_key = self._load_mobsf_api_key_from_file()
-            if mobsf_api_key:
-                self.mobsf_api_key_input.setText(mobsf_api_key)
-                # Auto-save the key to the config store for future use
-                self._config_store.set_secret_plaintext("mobsf_api_key", mobsf_api_key)
-
         # Load DroidRun Agent settings
         enable_droidrun = self._config_store.get_setting("use_droidrun_agent", default=True)
         self.enable_droidrun_checkbox.setChecked(enable_droidrun)
@@ -533,33 +513,6 @@ class SettingsPanel(QWidget):
                 "interact with UI elements, and discover the app's functionality. "
                 "Focus on user flows like registration, login, main features, and settings."
             )
-
-    def _load_mobsf_api_key_from_file(self) -> str:
-        """Load MobSF API key from the startup script's output file.
-
-        The startup script (scripts/start.ps1) automatically extracts the
-        MobSF REST API key from Docker logs and saves it to .mobsf_api_key.
-
-        Returns:
-            The API key string, or empty string if not found.
-        """
-        import os
-        import logging
-
-        logger = logging.getLogger(__name__)
-        api_key_file = ".mobsf_api_key"
-
-        try:
-            if os.path.exists(api_key_file):
-                with open(api_key_file, "r", encoding="utf-8") as f:
-                    api_key = f.read().strip()
-                    if api_key:
-                        logger.info(f"Auto-loaded MobSF API key from {api_key_file}")
-                        return api_key
-        except Exception as e:
-            logger.warning(f"Failed to read MobSF API key file: {e}")
-
-        return ""
 
     def _on_save_clicked(self):
         """Handle save button click."""
@@ -640,12 +593,6 @@ class SettingsPanel(QWidget):
                 self._config_store.set_setting("mobsf_api_url", mobsf_api_url, "string")
             else:
                 self._config_store.set_setting("mobsf_api_url", "http://localhost:8000", "string")
-
-            mobsf_api_key = self.mobsf_api_key_input.text().strip()
-            if mobsf_api_key:
-                self._config_store.set_secret_plaintext("mobsf_api_key", mobsf_api_key)
-            else:
-                self._config_store.delete_secret("mobsf_api_key")
 
             # Save DroidRun Agent settings
             enable_droidrun = self.enable_droidrun_checkbox.isChecked()
@@ -822,14 +769,6 @@ class SettingsPanel(QWidget):
             MobSF API URL
         """
         return self.mobsf_api_url_input.text().strip()
-
-    def get_mobsf_api_key(self) -> str:
-        """Get the current MobSF API key.
-
-        Returns:
-            MobSF API key
-        """
-        return self.mobsf_api_key_input.text().strip()
 
     def reset(self):
         """Reset all settings to default values."""

@@ -217,6 +217,11 @@ class TestAPIKeyInputs:
         panel = _create_settings_panel(mock_config_store)
         assert panel.openrouter_api_key_input.echoMode() == QLineEdit.EchoMode.Password
 
+    def test_mobsf_api_key_input_does_not_exist(self, qt_app, mock_config_store):
+        """MobSF no longer exposes manual API key entry."""
+        panel = _create_settings_panel(mock_config_store)
+        assert not hasattr(panel, "mobsf_api_key_input")
+
     def test_get_gemini_api_key(self, qt_app, mock_config_store):
         """Test getting Gemini API key value."""
         panel = _create_settings_panel(mock_config_store)
@@ -471,3 +476,19 @@ class TestSettingsPersistence:
         saved_password = mock_config_store.get_secret_plaintext("test_password")
         assert saved_username == "testuser123"
         assert saved_password == "testpass456"
+
+    def test_saving_settings_does_not_write_mobsf_api_key(self, qt_app, mock_config_store, monkeypatch):
+        """Saving SettingsPanel must not persist or delete manual MobSF secrets."""
+        mock_config_store.set_secret_plaintext("mobsf_api_key", "legacy-key")
+        panel = _create_settings_panel(mock_config_store)
+        panel.enable_mobsf_analysis_checkbox.setChecked(True)
+        panel.mobsf_api_url_input.setText("http://localhost:8000")
+
+        def mock_information(parent, title, message):
+            pass
+
+        monkeypatch.setattr(QMessageBox, "information", mock_information)
+
+        panel._on_save_clicked()
+
+        assert mock_config_store.get_secret_plaintext("mobsf_api_key") == "legacy-key"

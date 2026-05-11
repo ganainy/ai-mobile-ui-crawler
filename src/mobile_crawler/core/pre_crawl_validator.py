@@ -274,45 +274,20 @@ class PreCrawlValidator:
         return None
 
     def _check_mobsf_reachable(self) -> Optional[ValidationError]:
-        """Check if MobSF server is reachable (when MobSF analysis is enabled).
+        """Check if MobSF automatic authentication/server preflight passes.
 
         Returns:
             ValidationError if MobSF not reachable (warning severity), None otherwise
         """
         try:
-            mobsf_url = self._config_manager.get("mobsf_api_url", "http://localhost:8000")
-            mobsf_api_key = self._config_manager.get("mobsf_api_key")
+            from mobile_crawler.infrastructure.mobsf_manager import MobSFManager
 
-            if not mobsf_url:
+            manager = MobSFManager(config_manager=self._config_manager)
+            success, error = manager.preflight()
+            if not success:
                 return ValidationError(
                     field="mobsf",
-                    message="MobSF server URL not configured. Static analysis will be skipped.",
-                    severity="warning"
-                )
-
-            if not mobsf_api_key:
-                return ValidationError(
-                    field="mobsf",
-                    message="MobSF API key not configured. Static analysis will be skipped.",
-                    severity="warning"
-                )
-
-            # Try to reach MobSF server
-            try:
-                import requests
-                url = f"{mobsf_url.rstrip('/')}/api/v1/about"
-                headers = {"Authorization": mobsf_api_key}
-                response = requests.get(url, headers=headers, timeout=5)
-                if response.status_code != 200:
-                    return ValidationError(
-                        field="mobsf",
-                        message=f"MobSF server at {mobsf_url} is not reachable or API key is invalid. Static analysis will be skipped.",
-                        severity="warning"
-                    )
-            except requests.RequestException:
-                return ValidationError(
-                    field="mobsf",
-                    message=f"Cannot connect to MobSF server at {mobsf_url}. Static analysis will be skipped.",
+                    message=f"{error} Static analysis will be skipped.",
                     severity="warning"
                 )
         except Exception as e:
