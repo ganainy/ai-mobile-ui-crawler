@@ -7,6 +7,10 @@ from typing import List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
+BENIGN_ACTIVITY_DELIVERED_STDERR = (
+    "Activity not started, intent has been delivered to currently running top-most instance"
+)
+
 
 class ADBClient:
     """Async ADB command execution wrapper.
@@ -61,9 +65,11 @@ class ADBClient:
             # Combine stdout and stderr
             combined_output = result.stdout.strip()
             if result.stderr:
-                if not suppress_stderr:
-                    logger.debug(f"ADB stderr: {result.stderr.strip()}")
-                combined_output += "\n" + result.stderr.strip() if combined_output else result.stderr.strip()
+                stderr = result.stderr.strip()
+                benign_activity_delivery = BENIGN_ACTIVITY_DELIVERED_STDERR in stderr
+                if not suppress_stderr and not benign_activity_delivery:
+                    logger.debug(f"ADB stderr: {stderr}")
+                combined_output += "\n" + stderr if combined_output else stderr
 
             return combined_output, result.returncode
 

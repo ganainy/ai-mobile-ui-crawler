@@ -117,6 +117,30 @@ output_data/
         └── {mobsf_hash}_report.pdf
 ```
 
+## PCAPdroid Traffic Capture and TLS Decryption
+
+Mobile Crawler can start PCAPdroid before DroidRun begins crawling, request TLS decryption, stop capture during crawl cleanup, and save the resulting `.pcap` file in the run session.
+
+Phone setup:
+
+1. Install PCAPdroid from Google Play on the Android device.
+2. Open PCAPdroid settings and enable TLS decryption.
+3. When prompted by PCAPdroid, install PCAPdroid-mitm.
+4. Install the generated or custom PCAPdroid CA certificate on the device.
+5. In PCAPdroid, tap the settings icon, scroll to the bottom, tap Control Permissions, and generate an API key.
+6. Paste the API key into the Mobile Crawler app UI under Settings > Integrations.
+7. Enable Traffic Capture in Mobile Crawler before starting a crawl.
+
+CLI users can pass `--enable-traffic-capture`. The PCAPdroid API key can come from persisted config or `CRAWLER_PCAPDROID_API_KEY`; without it, PCAPdroid may require on-device consent.
+
+Capture results are saved under:
+
+```text
+output_data/run_{ID}_{YYYYMMDD_HHMMSS}/pcap/
+```
+
+TLS decryption is best effort. QUIC, certificate pinning, apps that do not trust user CAs, and apps with custom encryption may still produce traffic that does not decrypt cleanly.
+
 ### Install Docker Desktop on Windows
 
 1. Install Docker Desktop for Windows from <https://www.docker.com/products/docker-desktop/>.

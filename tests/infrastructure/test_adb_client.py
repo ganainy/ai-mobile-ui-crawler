@@ -37,6 +37,35 @@ class TestADBClient:
         asyncio.run(_run())
 
     @patch("subprocess.run")
+    def test_benign_activity_delivered_stderr_not_logged(self, mock_run, client, caplog):
+        benign = "Activity not started, intent has been delivered to currently running top-most instance."
+        mock_run.return_value = MagicMock(returncode=0, stdout="Starting: Intent", stderr=benign)
+
+        async def _run():
+            with caplog.at_level("DEBUG"):
+                output, code = await client.execute_async(["shell", "am", "start"])
+            assert code == 0
+            assert benign in output
+            assert "ADB stderr" not in caplog.text
+            assert benign not in caplog.text
+
+        asyncio.run(_run())
+
+    @patch("subprocess.run")
+    def test_non_benign_stderr_still_logged_and_combined(self, mock_run, client, caplog):
+        mock_run.return_value = MagicMock(returncode=0, stdout="stdout", stderr="real warning")
+
+        async def _run():
+            with caplog.at_level("DEBUG"):
+                output, code = await client.execute_async(["devices"])
+            assert code == 0
+            assert "stdout" in output
+            assert "real warning" in output
+            assert "ADB stderr: real warning" in caplog.text
+
+        asyncio.run(_run())
+
+    @patch("subprocess.run")
     def test_execute_async_timeout(self, mock_run, client):
         mock_run.side_effect = subprocess.TimeoutExpired(cmd=["adb"], timeout=30)
 

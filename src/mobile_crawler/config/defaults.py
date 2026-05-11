@@ -33,12 +33,22 @@ DEFAULTS: Dict[str, Any] = {
     # Traffic capture settings (PCAPdroid)
     # Enable network traffic capture using PCAPdroid Android app
     "enable_traffic_capture": False,
-    # PCAPdroid package name (default: official package from F-Droid)
+    # PCAPdroid package name (Google Play package used by the intent API)
     "pcapdroid_package": "com.emanuelef.remote_capture",
-    # PCAPdroid activity (auto-constructed as {package}/.activities.CaptureCtrl if None)
-    "pcapdroid_activity": None,
+    # PCAPdroid activity used by the official app API
+    "pcapdroid_activity": "com.emanuelef.remote_capture/.activities.CaptureCtrl",
     # Optional API key for PCAPdroid (recommended to avoid user consent prompts)
     "pcapdroid_api_key": None,
+    # Request PCAPdroid TLS decryption when capture is enabled
+    "pcapdroid_tls_decryption": False,
+    # Wait for PCAPdroid to initialize after start
+    "pcapdroid_init_wait": 3.0,
+    # Wait for PCAPdroid to finalize the file after stop
+    "pcapdroid_finalize_wait": 2.0,
+    # Best-effort approval of PCAPdroid/API/VPN consent during capture startup
+    "pcapdroid_auto_accept_consent": True,
+    "pcapdroid_consent_timeout_seconds": 15.0,
+    "pcapdroid_consent_poll_interval_seconds": 1.0,
     # Output directory for PCAP files (resolved to session directory at runtime)
     "traffic_capture_output_dir": None,
     # Default PCAPdroid output directory on device

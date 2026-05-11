@@ -320,7 +320,7 @@ class PreCrawlValidator:
             # Check if PCAPdroid package exists on device using ADB
             import subprocess
             pcapdroid_package = self._config_manager.get(
-                "pcapdroid_package", "com.emanuelef.android.apps.pcapdroid"
+                "pcapdroid_package", "com.emanuelef.remote_capture"
             )
             result = subprocess.run(
                 ["adb", "-s", device_id, "shell", "pm", "list", "packages", pcapdroid_package],
@@ -333,7 +333,7 @@ class PreCrawlValidator:
                 return ValidationError(
                     field="pcapdroid",
                     message=f"PCAPdroid ({pcapdroid_package}) not found on device {device_id}. "
-                    "Install PCAPdroid from F-Droid to enable traffic capture.",
+                    "Install PCAPdroid from Google Play to enable traffic capture.",
                     severity="warning"
                 )
         except FileNotFoundError:

@@ -233,6 +233,7 @@ def crawl(device: str, package: str, model: str, steps: Optional[int], duration:
         config_manager.set('app_package', package)  # Set app package for features
         if enable_traffic_capture:
             config_manager.set('enable_traffic_capture', True)
+            config_manager.set('pcapdroid_tls_decryption', True)
         if enable_video_recording:
             config_manager.set('enable_video_recording', True)
         if enable_mobsf_analysis:

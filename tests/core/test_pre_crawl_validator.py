@@ -18,7 +18,7 @@ def _make_config_manager(**overrides):
         "enable_video_recording": False,
         "mobsf_api_url": "http://localhost:8000",
         "mobsf_api_key": "test_key",
-        "pcapdroid_package": "com.emanuelef.android.apps.pcapdroid",
+        "pcapdroid_package": "com.emanuelef.remote_capture",
         "adb_executable_path": "adb",
         "VIDEO_RECORDING_AVAILABLE": True,
     }

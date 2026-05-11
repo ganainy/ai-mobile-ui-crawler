@@ -99,3 +99,37 @@ class TestCrawlCommand:
             mock_config_manager.set.assert_any_call('max_crawl_duration_seconds', 300)
             mock_config_manager.set.assert_any_call('ai_provider', 'openrouter')
             mock_config_manager.set.assert_any_call('ai_model', 'gpt-4')
+
+    @patch('mobile_crawler.cli.commands.crawl.DatabaseManager')
+    @patch('mobile_crawler.cli.commands.crawl.ConfigManager')
+    def test_crawl_command_traffic_capture_enables_tls(self, mock_config_manager_cls, mock_db_manager_cls):
+        """Traffic capture CLI flag should also request PCAPdroid TLS decryption."""
+        mock_config_manager = Mock()
+        mock_config_manager.user_config_store = Mock()
+        mock_config_manager_cls.return_value = mock_config_manager
+
+        mock_db_manager = Mock()
+        mock_db_manager_cls.return_value = mock_db_manager
+
+        with patch('mobile_crawler.cli.commands.crawl.RunRepository') as mock_run_repo_cls, \
+             patch('mobile_crawler.cli.commands.crawl.CrawlerLoop') as mock_crawler_loop_cls, \
+             patch('mobile_crawler.cli.commands.crawl.get_app_data_dir') as mock_get_app_data_dir:
+
+            mock_run_repo = Mock()
+            mock_run_repo.create_run.return_value = 123
+            mock_run_repo_cls.return_value = mock_run_repo
+            mock_crawler_loop_cls.return_value = Mock()
+            mock_get_app_data_dir.return_value = Mock()
+
+            runner = CliRunner()
+            result = runner.invoke(cli, [
+                'crawl',
+                '--device', 'emulator-5554',
+                '--package', 'com.example.app',
+                '--model', 'gemini-pro',
+                '--enable-traffic-capture',
+            ])
+
+            assert result.exit_code == 0
+            mock_config_manager.set.assert_any_call('enable_traffic_capture', True)
+            mock_config_manager.set.assert_any_call('pcapdroid_tls_decryption', True)

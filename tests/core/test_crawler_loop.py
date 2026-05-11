@@ -167,6 +167,233 @@ class TestCrawlerLoopLifecycle:
         mock_run_repository.update_run_stats.assert_called_once()
         assert mock_run_repository.update_run_stats.call_args.kwargs["status"] == "COMPLETED"
 
+    @patch('mobile_crawler.core.crawler_loop.TrafficCaptureManager')
+    @patch('mobile_crawler.core.crawler_loop.DroidRunAgentService')
+    def test_run_starts_traffic_capture_before_exploration_when_enabled(
+        self,
+        mock_droid_service_class,
+        mock_traffic_manager_class,
+        crawler_loop,
+        mock_config_manager,
+        mock_run_repository,
+        mock_session_folder_manager,
+        mock_listener,
+    ):
+        """Traffic capture should start before DroidRun exploration and stop in cleanup."""
+        mock_config_manager.get.side_effect = lambda key, default=None: {
+            "enable_traffic_capture": True,
+            "enable_video_recording": False,
+            "limit_type": "steps",
+            "max_crawl_steps": 1,
+        }.get(key, default)
+
+        mock_run = Mock()
+        mock_run.app_package = "com.example.app"
+        mock_run.device_id = "device123"
+        mock_run_repository.get_run_by_id.return_value = mock_run
+        mock_session_folder_manager.create_session_folder.return_value = "/tmp/session"
+
+        order = []
+        mock_traffic_manager = Mock()
+
+        async def start_capture(*args, **kwargs):
+            order.append("traffic_start")
+            return True, "Traffic capture started"
+
+        async def stop_capture(*args, **kwargs):
+            order.append("traffic_stop")
+            return "/tmp/session/pcap/app.pcap"
+
+        mock_traffic_manager.start_capture_async = AsyncMock(side_effect=start_capture)
+        mock_traffic_manager.stop_capture_and_pull_async = AsyncMock(side_effect=stop_capture)
+        mock_traffic_manager_class.return_value = mock_traffic_manager
+
+        mock_service = Mock()
+        mock_droid_service_class.return_value = mock_service
+
+        async def mock_explore(*args, **kwargs):
+            order.append("explore")
+            mock_result = Mock()
+            mock_result.success = True
+            mock_result.steps_completed = 1
+            mock_result.error_message = None
+            mock_result.final_state = {}
+            return mock_result
+
+        mock_service.execute_exploration_task = mock_explore
+        mock_service.cleanup = AsyncMock()
+
+        crawler_loop.run(1)
+
+        mock_traffic_manager_class.assert_called_once_with(
+            config_manager=mock_config_manager,
+            session_folder_manager=mock_session_folder_manager,
+            device_id="device123",
+        )
+        mock_traffic_manager.start_capture_async.assert_awaited_once_with(
+            run_id=1,
+            step_num=0,
+            session_path="/tmp/session",
+        )
+        mock_traffic_manager.stop_capture_and_pull_async.assert_awaited_once_with(
+            run_id=1,
+            step_num=0,
+        )
+        assert order == ["traffic_start", "explore", "traffic_stop"]
+        assert any(
+            "Traffic capture saved: /tmp/session/pcap/app.pcap" in call.args[2]
+            for call in mock_listener.on_debug_log.call_args_list
+        )
+
+    @patch('mobile_crawler.core.crawler_loop.TrafficCaptureManager')
+    @patch('mobile_crawler.core.crawler_loop.DroidRunAgentService')
+    def test_run_stops_traffic_capture_when_droidrun_raises(
+        self,
+        mock_droid_service_class,
+        mock_traffic_manager_class,
+        crawler_loop,
+        mock_config_manager,
+        mock_run_repository,
+        mock_session_folder_manager,
+    ):
+        """Traffic capture cleanup should run even when DroidRun fails."""
+        mock_config_manager.get.side_effect = lambda key, default=None: {
+            "enable_traffic_capture": True,
+            "enable_video_recording": False,
+            "limit_type": "steps",
+        }.get(key, default)
+
+        mock_run = Mock()
+        mock_run.app_package = "com.example.app"
+        mock_run.device_id = "device123"
+        mock_run_repository.get_run_by_id.return_value = mock_run
+        mock_session_folder_manager.create_session_folder.return_value = "/tmp/session"
+
+        mock_traffic_manager = Mock()
+        mock_traffic_manager.start_capture_async = AsyncMock(return_value=(True, "started"))
+        mock_traffic_manager.stop_capture_and_pull_async = AsyncMock(return_value="/tmp/session/pcap/app.pcap")
+        mock_traffic_manager_class.return_value = mock_traffic_manager
+
+        mock_service = Mock()
+        mock_droid_service_class.return_value = mock_service
+
+        async def mock_explore_raises(*args, **kwargs):
+            raise ValueError("Simulated error")
+
+        mock_service.execute_exploration_task = mock_explore_raises
+        mock_service.cleanup = AsyncMock()
+
+        crawler_loop.run(1)
+
+        mock_traffic_manager.stop_capture_and_pull_async.assert_awaited_once_with(
+            run_id=1,
+            step_num=0,
+        )
+
+    @patch('mobile_crawler.core.crawler_loop.TrafficCaptureManager')
+    @patch('mobile_crawler.core.crawler_loop.DroidRunAgentService')
+    def test_run_logs_nonfatal_traffic_capture_start_failure(
+        self,
+        mock_droid_service_class,
+        mock_traffic_manager_class,
+        crawler_loop,
+        mock_config_manager,
+        mock_run_repository,
+        mock_session_folder_manager,
+        mock_listener,
+    ):
+        """PCAPdroid start failure should be logged and exploration should continue."""
+        mock_config_manager.get.side_effect = lambda key, default=None: {
+            "enable_traffic_capture": True,
+            "enable_video_recording": False,
+            "limit_type": "steps",
+        }.get(key, default)
+
+        mock_run = Mock()
+        mock_run.app_package = "com.example.app"
+        mock_run.device_id = "device123"
+        mock_run_repository.get_run_by_id.return_value = mock_run
+        mock_session_folder_manager.create_session_folder.return_value = "/tmp/session"
+
+        mock_traffic_manager = Mock()
+        mock_traffic_manager.start_capture_async = AsyncMock(return_value=(False, "PCAPdroid unavailable"))
+        mock_traffic_manager.stop_capture_and_pull_async = AsyncMock(return_value=None)
+        mock_traffic_manager_class.return_value = mock_traffic_manager
+
+        mock_service = Mock()
+        mock_droid_service_class.return_value = mock_service
+
+        async def mock_explore(*args, **kwargs):
+            mock_result = Mock()
+            mock_result.success = True
+            mock_result.steps_completed = 1
+            mock_result.error_message = None
+            mock_result.final_state = {}
+            return mock_result
+
+        mock_service.execute_exploration_task = mock_explore
+        mock_service.cleanup = AsyncMock()
+
+        crawler_loop.run(1)
+
+        assert mock_run_repository.update_run_stats.call_args.kwargs["status"] == "COMPLETED"
+        assert any(
+            "Traffic capture not started: PCAPdroid unavailable" in call.args[2]
+            for call in mock_listener.on_debug_log.call_args_list
+        )
+
+    @patch('mobile_crawler.core.crawler_loop.TrafficCaptureManager')
+    @patch('mobile_crawler.core.crawler_loop.DroidRunAgentService')
+    def test_run_continues_when_traffic_capture_start_raises(
+        self,
+        mock_droid_service_class,
+        mock_traffic_manager_class,
+        crawler_loop,
+        mock_config_manager,
+        mock_run_repository,
+        mock_session_folder_manager,
+        mock_listener,
+    ):
+        """Unexpected PCAPdroid start errors should not abort the crawl."""
+        mock_config_manager.get.side_effect = lambda key, default=None: {
+            "enable_traffic_capture": True,
+            "enable_video_recording": False,
+            "limit_type": "steps",
+        }.get(key, default)
+
+        mock_run = Mock()
+        mock_run.app_package = "com.example.app"
+        mock_run.device_id = "device123"
+        mock_run_repository.get_run_by_id.return_value = mock_run
+        mock_session_folder_manager.create_session_folder.return_value = "/tmp/session"
+
+        mock_traffic_manager = Mock()
+        mock_traffic_manager.start_capture_async = AsyncMock(side_effect=RuntimeError("ADB failed"))
+        mock_traffic_manager.stop_capture_and_pull_async = AsyncMock(return_value=None)
+        mock_traffic_manager_class.return_value = mock_traffic_manager
+
+        mock_service = Mock()
+        mock_droid_service_class.return_value = mock_service
+
+        async def mock_explore(*args, **kwargs):
+            mock_result = Mock()
+            mock_result.success = True
+            mock_result.steps_completed = 1
+            mock_result.error_message = None
+            mock_result.final_state = {}
+            return mock_result
+
+        mock_service.execute_exploration_task = mock_explore
+        mock_service.cleanup = AsyncMock()
+
+        crawler_loop.run(1)
+
+        assert mock_run_repository.update_run_stats.call_args.kwargs["status"] == "COMPLETED"
+        assert any(
+            "Traffic capture start failed: ADB failed" in call.args[2]
+            for call in mock_listener.on_debug_log.call_args_list
+        )
+
     @patch('mobile_crawler.core.crawler_loop.DroidRunAgentService')
     def test_run_transitions_through_states(self, mock_droid_service_class, crawler_loop, mock_run_repository, mock_session_folder_manager, mock_listener):
         """Test that run() transitions through states IDLE -> RUNNING -> STOPPED."""

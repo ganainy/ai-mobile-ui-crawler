@@ -20,6 +20,7 @@ from mobile_crawler.domain.errors import (
     CheckpointError,
     ErrorContext,
 )
+from mobile_crawler.domain.traffic_capture_manager import TrafficCaptureManager
 from mobile_crawler.domain.video_recording_manager import VideoRecordingManager
 from mobile_crawler.infrastructure.mobsf_manager import MobSFManager
 from mobile_crawler.infrastructure.run_repository import RunRepository
@@ -57,6 +58,7 @@ class CrawlerLoop:
         self._crawl_thread: Optional[threading.Thread] = None
         self._current_run_id: Optional[int] = None
         self._droidrun_agent_service: Optional[DroidRunAgentService] = None
+        self._traffic_capture_manager: Optional[TrafficCaptureManager] = None
         self._video_recording_manager: Optional[VideoRecordingManager] = None
         self._cancel_requested = False
         self._state = "IDLE"
@@ -195,6 +197,34 @@ class CrawlerLoop:
             # Run both execute and cleanup in the same event loop to ensure proper
             # cleanup of async resources (e.g., google.genai.AsyncClient instances)
             async def run_and_cleanup():
+                if self.config_manager.get("enable_traffic_capture", False) is True:
+                    self._traffic_capture_manager = TrafficCaptureManager(
+                        config_manager=self.config_manager,
+                        session_folder_manager=self.session_folder_manager,
+                        device_id=run.device_id,
+                    )
+                    try:
+                        started, message = await self._traffic_capture_manager.start_capture_async(
+                            run_id=run_id,
+                            step_num=0,
+                            session_path=session_path,
+                        )
+                        status_text = "started" if started else "not started"
+                        self._emit_event(
+                            "on_debug_log",
+                            run_id,
+                            0,
+                            f"Traffic capture {status_text}: {message}",
+                        )
+                    except Exception as e:
+                        logger.warning("Failed to start traffic capture: %s", e)
+                        self._emit_event(
+                            "on_debug_log",
+                            run_id,
+                            0,
+                            f"Traffic capture start failed: {e}",
+                        )
+
                 if self.config_manager.get("enable_video_recording", False) is True:
                     self._video_recording_manager = VideoRecordingManager(
                         config_manager=self.config_manager,
@@ -248,6 +278,37 @@ class CrawlerLoop:
                             )
                         finally:
                             self._video_recording_manager = None
+
+                    if self._traffic_capture_manager:
+                        try:
+                            pcap_path = await self._traffic_capture_manager.stop_capture_and_pull_async(
+                                run_id=run_id,
+                                step_num=0,
+                            )
+                            if pcap_path:
+                                self._emit_event(
+                                    "on_debug_log",
+                                    run_id,
+                                    0,
+                                    f"Traffic capture saved: {pcap_path}",
+                                )
+                            else:
+                                self._emit_event(
+                                    "on_debug_log",
+                                    run_id,
+                                    0,
+                                    "Traffic capture did not produce a saved PCAP.",
+                                )
+                        except Exception as e:
+                            logger.warning("Failed to stop traffic capture: %s", e)
+                            self._emit_event(
+                                "on_debug_log",
+                                run_id,
+                                0,
+                                f"Traffic capture stop failed: {e}",
+                            )
+                        finally:
+                            self._traffic_capture_manager = None
 
                     # Always cleanup, even if execute fails
                     cleanup_result = self._droidrun_agent_service.cleanup()
@@ -339,6 +400,7 @@ class CrawlerLoop:
             self._emit_event("on_error", run_id, None, wrapped)
         finally:
             self._video_recording_manager = None
+            self._traffic_capture_manager = None
             if self._droidrun_agent_service:
                 self._droidrun_agent_service.clear_run_logging()
                 self._droidrun_agent_service = None
