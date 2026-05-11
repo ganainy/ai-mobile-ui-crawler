@@ -35,7 +35,8 @@ class CrawlerLoop:
         config_manager: ConfigManager,
         run_repository: RunRepository,
         session_folder_manager: SessionFolderManager,
-        event_listeners: Optional[List[CrawlerEventListener]] = None
+        event_listeners: Optional[List[CrawlerEventListener]] = None,
+        ai_interaction_repository=None,
     ):
         """Initialize the DroidRun-backed crawler wrapper.
 
@@ -44,11 +45,13 @@ class CrawlerLoop:
             run_repository: Repository for runs
             session_folder_manager: SessionFolderManager for artifact organization
             event_listeners: List of event listeners
+            ai_interaction_repository: Optional repository for AI interaction persistence
         """
         self.config_manager = config_manager
         self.run_repository = run_repository
         self.session_folder_manager = session_folder_manager
         self.event_listeners = event_listeners or []
+        self._ai_interaction_repository = ai_interaction_repository
 
         self._crawl_thread: Optional[threading.Thread] = None
         self._current_run_id: Optional[int] = None
@@ -158,7 +161,7 @@ class CrawlerLoop:
 
             self._droidrun_agent_service = DroidRunAgentService(
                 config_manager=self.config_manager,
-                ai_interaction_repository=None,
+                ai_interaction_repository=self._ai_interaction_repository,
                 device_id=run.device_id
             )
 
@@ -335,6 +338,13 @@ class CrawlerLoop:
                 self._droidrun_agent_service.clear_run_logging()
                 self._droidrun_agent_service = None
             self._transition_state("STOPPED", run_id)
+
+    def get_span_stats(self):
+        """Return current OTel span stats from the active agent service, or None."""
+        svc = self._droidrun_agent_service
+        if svc is not None:
+            return svc._stats_processor.get_stats()
+        return None
 
     def _run_async(self, coroutine):
         """Run a coroutine in a dedicated event loop."""

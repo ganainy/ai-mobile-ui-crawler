@@ -15,10 +15,16 @@ from mobile_crawler.config.config_manager import ConfigManager
 from mobile_crawler.domain.models import ActionResult, AIResponse, AIAction, BoundingBox
 from mobile_crawler.infrastructure.ai_interaction_repository import AIInteraction, AIInteractionRepository
 
-from mobile_crawler.domain.context_guard import DeviceContextCapture, UIDumpValidator, StepSkipReason, AppSwitchRecovery
+from mobile_crawler.domain.stats_collector_span_processor import StatsCollectorSpanProcessor, OTEL_AVAILABLE
 from mobile_crawler.domain.errors import FatalError, ErrorContext
 from mobile_crawler.domain.step_phase import StepPhase, StepPhaseStateMachine
 from mobile_crawler.domain.step_phase_models import StepPhaseTransition
+from mobile_crawler.domain.context_guard import (
+    AppSwitchRecovery,
+    DeviceContextCapture,
+    StepSkipReason,
+    UIDumpValidator,
+)
 from mobile_crawler.infrastructure.step_phase_repository import StepPhaseRepository
 from mobile_crawler.domain.ui_wait_predicate import UIWaitPredicate, AdaptiveWaitConfig
 from mobile_crawler.domain.action_verifier import ActionVerifier
@@ -169,6 +175,10 @@ class DroidRunAgentService:
         if OMNIPARSER_AVAILABLE:
             self._initialize_omni_parser()
 
+        # OTel stats collector — always active regardless of Phoenix/telemetry setting
+        self._stats_processor: StatsCollectorSpanProcessor = StatsCollectorSpanProcessor()
+        self._instrumentation_done: bool = False
+
     def _get_droidrun_config(
         self,
         max_steps: int = 15,
@@ -222,7 +232,7 @@ class DroidRunAgentService:
                 "serial": self.device_id,
                 "auto_setup": False,  # We handle device setup separately
             },
-            "ui_parser_mode": self.config_manager.get("ui_parser_mode", "omniparser"),
+            "ui_parser_mode": self.config_manager.get("ui_parser_mode", "boost"),
             "omniparser_backend": self.config_manager.get("omniparser_backend", "replicate"),
             "omniparser_api_key": resolve_api_key("replicate_api_key", ["REPLICATE_API_KEY"]) or "",
             "target_package": target_package,
@@ -240,7 +250,7 @@ class DroidRunAgentService:
             "app_opener": {"provider": droid_provider, "model": ai_model, "temperature": 0.0, "kwargs": {"max_tokens": 512}},
             "structured_output": {"provider": droid_provider, "model": ai_model, "temperature": 0.0, "kwargs": {"max_tokens": 1024}},
         }
-        config["telemetry"] = {"enabled": self.config_manager.get("droidrun_telemetry_enabled", False)}
+        config["telemetry"] = {"enabled": False}  # PostHog telemetry always off
 
         def set_llm_api_key(api_key: str) -> None:
             for profile in config["llm_profiles"].values():
@@ -310,6 +320,10 @@ class DroidRunAgentService:
                 self._droidrun_config.agent.max_steps = max_steps
                 self._droidrun_config.target_package = target_package
             return
+
+        # Instrument LlamaIndex and register stats collector (idempotent)
+        self._setup_instrumentation()
+        self._stats_processor.reset()
 
         try:
             self._ensure_droidrun_import()
@@ -386,6 +400,38 @@ class DroidRunAgentService:
             f"Unable to open target app '{app_package}' before DroidRun startup after "
             f"{attempts} attempts ({detail})"
         )
+
+    def _setup_instrumentation(self) -> None:
+        """Instrument LlamaIndex with OTel and register the stats collector processor.
+
+        Called once per service lifetime. Safe to call multiple times (idempotent).
+        Does not require Phoenix to be running — the stats processor works standalone.
+        """
+        if self._instrumentation_done or not OTEL_AVAILABLE:
+            return
+        try:
+            from opentelemetry.sdk.trace import TracerProvider
+            from opentelemetry import trace
+            from openinference.instrumentation.llama_index import LlamaIndexInstrumentor
+
+            # Reuse existing provider if one is already set (e.g. by Phoenix/Langfuse)
+            existing = trace.get_tracer_provider()
+            if hasattr(existing, "add_span_processor"):
+                provider = existing
+            else:
+                provider = TracerProvider()
+                trace.set_tracer_provider(provider)
+
+            provider.add_span_processor(self._stats_processor)
+
+            instrumentor = LlamaIndexInstrumentor()
+            if not instrumentor.is_instrumented_by_opentelemetry:
+                instrumentor.instrument(tracer_provider=provider)
+
+            self._instrumentation_done = True
+            logger.debug("OTel LlamaIndex instrumentation active; stats collector registered")
+        except Exception as e:
+            logger.debug(f"OTel instrumentation setup skipped: {e}")
 
     def _initialize_omni_parser(self) -> None:
         """Initialize OmniParser client and UI context manager."""

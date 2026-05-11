@@ -252,10 +252,6 @@ class SettingsPanel(QWidget):
         retry_layout.addStretch()
         droidrun_layout.addLayout(retry_layout)
 
-        self.droidrun_telemetry_checkbox = QCheckBox("Enable DroidRun Telemetry")
-        self.droidrun_telemetry_checkbox.setToolTip("Enable DroidRun's built-in monitoring and tracing")
-        droidrun_layout.addWidget(self.droidrun_telemetry_checkbox)
-
         droidrun_group.setLayout(droidrun_layout)
         layout.addWidget(droidrun_group)
 
@@ -269,13 +265,21 @@ class SettingsPanel(QWidget):
         parser_mode_layout.addWidget(QLabel("Parser Mode:"))
         self.ui_parser_mode_combo = QComboBox()
         self.ui_parser_mode_combo.addItems(["boost", "omniparser", "accessibility"])
-        self.ui_parser_mode_combo.setCurrentText("omniparser")
+        self.ui_parser_mode_combo.setCurrentText("boost")
         self.ui_parser_mode_combo.setToolTip(
-            "UI parser mode: 'omniparser' (vision-based, recommended), 'boost' (auto), or 'accessibility' (legacy)"
+            "UI parser mode: 'boost' (recommended, accessibility tree first with OmniParser fallback), "
+            "'omniparser' (vision-only), or 'accessibility' (a11y-only)."
         )
         parser_mode_layout.addWidget(self.ui_parser_mode_combo)
         parser_mode_layout.addStretch()
         parser_layout.addLayout(parser_mode_layout)
+        parser_approach_hint = QLabel(
+            "DroidRun mainly uses Android Accessibility APIs. In 'boost' mode it uses the a11y tree first, "
+            "and falls back to OmniParser only when accessibility metadata is missing or weak."
+        )
+        parser_approach_hint.setWordWrap(True)
+        parser_approach_hint.setStyleSheet("color: #666; font-size: 11px;")
+        parser_layout.addWidget(parser_approach_hint)
 
         replicate_layout = QHBoxLayout()
         replicate_layout.addWidget(QLabel("Replicate API Key:"))
@@ -314,7 +318,6 @@ class SettingsPanel(QWidget):
             self.droidrun_max_cycles_input.setEnabled(enabled)
             self.droidrun_streaming_checkbox.setEnabled(enabled)
             self.droidrun_retry_count_input.setEnabled(enabled)
-            self.droidrun_telemetry_checkbox.setEnabled(enabled)
 
         self.enable_droidrun_checkbox.toggled.connect(on_droidrun_enabled_changed)
         on_droidrun_enabled_changed(self.enable_droidrun_checkbox.isChecked())
@@ -512,11 +515,8 @@ class SettingsPanel(QWidget):
         droidrun_retry_count = self._config_store.get_setting("droidrun_retry_count", default=2)
         self.droidrun_retry_count_input.setValue(droidrun_retry_count)
 
-        droidrun_telemetry = self._config_store.get_setting("droidrun_telemetry_enabled", default=False)
-        self.droidrun_telemetry_checkbox.setChecked(droidrun_telemetry)
-
         # Load UI parser mode and Replicate API key
-        ui_parser_mode = self._config_store.get_setting("ui_parser_mode", default="omniparser")
+        ui_parser_mode = self._config_store.get_setting("ui_parser_mode", default="boost")
         self.ui_parser_mode_combo.setCurrentText(ui_parser_mode)
 
         replicate_key = self._config_store.get_setting("replicate_api_key", default="")
@@ -662,9 +662,6 @@ class SettingsPanel(QWidget):
 
             droidrun_retry_count = self.droidrun_retry_count_input.value()
             self._config_store.set_setting("droidrun_retry_count", droidrun_retry_count, "int")
-
-            droidrun_telemetry = self.droidrun_telemetry_checkbox.isChecked()
-            self._config_store.set_setting("droidrun_telemetry_enabled", droidrun_telemetry, "bool")
 
             # Save UI parser mode
             ui_parser_mode = self.ui_parser_mode_combo.currentText()
@@ -843,7 +840,7 @@ class SettingsPanel(QWidget):
         self.max_duration_input.setValue(300)
         self.test_username_input.clear()
         self.test_password_input.clear()
-        self.ui_parser_mode_combo.setCurrentText("omniparser")
+        self.ui_parser_mode_combo.setCurrentText("boost")
 
     def _validate_api_key(self, api_key: str, provider_name: str) -> bool:
         """Validate API key format and optionally test connectivity.

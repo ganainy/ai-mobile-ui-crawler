@@ -58,11 +58,17 @@ def test_droidrun_wrapper_happy_path():
     result.success = True
     result.steps_completed = 3
     result.error_message = None
+    result.final_state = {"successful_actions": 3, "failed_actions": 0, "total_actions": 3, "completion_reason": "done"}
 
     with patch("mobile_crawler.core.crawler_loop.DroidRunAgentService") as service_cls:
         service = service_cls.return_value
         service.execute_exploration_task = AsyncMock(return_value=result)
         service.cleanup = AsyncMock()
+        service.begin_step_tracking = Mock()
+        service.configure_run_logging = Mock()
+        service.clear_run_logging = Mock()
+        service._stats_processor = Mock()
+        service._stats_processor.get_stats.return_value = None
         loop.run(1)
 
     assert ("started", 1, "com.example.app") in listener.events

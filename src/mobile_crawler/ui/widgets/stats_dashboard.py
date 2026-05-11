@@ -122,6 +122,32 @@ class StatsDashboard(QWidget):
         grid.addWidget(self.ai_response_time_label, row, 1)
         row += 1
 
+        self.tokens_in_label = QLabel("Tokens In: —")
+        grid.addWidget(self.tokens_in_label, row, 0)
+
+        self.tokens_out_label = QLabel("Tokens Out: —")
+        grid.addWidget(self.tokens_out_label, row, 1)
+        row += 1
+
+        grid.addWidget(_make_separator(), row, 0, 1, 2)
+        row += 1
+
+        # ── Tool Metrics ─────────────────────────────────────────
+        grid.addWidget(_make_section_label("Tool Metrics"), row, 0, 1, 2)
+        row += 1
+
+        self.tool_calls_per_step_label = QLabel("Calls/Step: —")
+        grid.addWidget(self.tool_calls_per_step_label, row, 0)
+
+        self.tool_error_count_label = QLabel("Tool Errors: 0")
+        self.tool_error_count_label.setStyleSheet("color: #f44336;")
+        grid.addWidget(self.tool_error_count_label, row, 1)
+        row += 1
+
+        self.phase_transition_label = QLabel("Phase Transitions: 0")
+        grid.addWidget(self.phase_transition_label, row, 0, 1, 2)
+        row += 1
+
         grid.addWidget(_make_separator(), row, 0, 1, 2)
         row += 1
 
@@ -181,6 +207,11 @@ class StatsDashboard(QWidget):
         last_action: str = "",
         step_progress: str = "",
         success_rate: float = 0.0,
+        total_input_tokens: int = 0,
+        total_output_tokens: int = 0,
+        tool_calls_per_step: float = 0.0,
+        tool_error_count: int = 0,
+        phase_transition_count: int = 0,
     ):
         """Update all statistics labels and progress bar."""
         if total_steps > 0 or duration_seconds > 0:
@@ -226,8 +257,23 @@ class StatsDashboard(QWidget):
         else:
             self.ai_response_time_label.setText("Avg Response: —")
 
+        if total_input_tokens > 0 or total_output_tokens > 0:
+            self.tokens_in_label.setText(f"Tokens In: {total_input_tokens:,}")
+            self.tokens_out_label.setText(f"Tokens Out: {total_output_tokens:,}")
+        else:
+            self.tokens_in_label.setText("Tokens In: —")
+            self.tokens_out_label.setText("Tokens Out: —")
+
         # ── Duration ─────────────────────────────────────────
         self.duration_label.setText(f"Elapsed: {duration_seconds:.0f}s")
+
+        # ── Tool Metrics ─────────────────────────────────────
+        if tool_calls_per_step > 0:
+            self.tool_calls_per_step_label.setText(f"Calls/Step: {tool_calls_per_step:.1f}")
+        else:
+            self.tool_calls_per_step_label.setText("Calls/Step: —")
+        self.tool_error_count_label.setText(f"Tool Errors: {tool_error_count}")
+        self.phase_transition_label.setText(f"Phase Transitions: {phase_transition_count}")
 
         self.stats_updated.emit()
 

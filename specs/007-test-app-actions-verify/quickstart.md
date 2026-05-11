@@ -33,7 +33,7 @@ adb shell am start -W -a android.intent.action.VIEW -d "app://testapp/tap" com.e
 ### Run All Action Tests
 
 ```bash
-.venv\Scripts\python.exe -m pytest tests/integration/test_action_verification.py -v
+venv312\Scripts\python.exe -m pytest tests/integration/test_action_verification.py -v
 ```
 
 ### Run a Single Action Test
@@ -42,13 +42,13 @@ Use pytest's `-k` flag to run specific tests:
 
 ```bash
 # Test only tap action
-.venv\Scripts\python.exe -m pytest tests/integration/test_action_verification.py -k "test_tap" -v
+venv312\Scripts\python.exe -m pytest tests/integration/test_action_verification.py -k "test_tap" -v
 
 # Test only double tap action
-.venv\Scripts\python.exe -m pytest tests/integration/test_action_verification.py -k "test_double_tap" -v
+venv312\Scripts\python.exe -m pytest tests/integration/test_action_verification.py -k "test_double_tap" -v
 
 # Test only swipe action
-.venv\Scripts\python.exe -m pytest tests/integration/test_action_verification.py -k "test_swipe" -v
+venv312\Scripts\python.exe -m pytest tests/integration/test_action_verification.py -k "test_swipe" -v
 
 # Test multiple specific actions
 pytest tests/integration/test_action_verification.py -k "test_tap or test_swipe" -v

@@ -2,6 +2,8 @@
 old-project-for-refrence/
 
 # Virtual environment
+venv312/
+# Legacy (kept so old local folders stay ignored)
 .venv/
 venv/
 env/

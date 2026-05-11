@@ -12,8 +12,8 @@ cd mobile-crawler
 
 git submodule update --init --recursive
 
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
+python -m venv venv312
+.\venv312\Scripts\Activate.ps1
 
 pip install -e .
 # Install DroidRun dependencies from the local submodule, not the published package.
@@ -52,7 +52,7 @@ Optional startup helper:
 
 ## Requirements
 
-- Python 3.11+ for the current DroidRun-backed runtime. The Mobile Crawler package metadata allows Python 3.9+, but the vendored DroidRun submodule declares Python 3.11 to 3.13.
+- Python 3.12 (the project and the vendored DroidRun submodule both target Python 3.12).
 - Android device or emulator reachable through ADB.
 - AI provider credentials for the selected provider. Current config mapping supports Gemini, OpenAI, Anthropic, Ollama, and OpenRouter in `DroidRunAgentService`.
 - `external/droidrun` initialized as a git submodule.
@@ -62,7 +62,7 @@ Optional integrations:
 - PCAPdroid for traffic capture.
 - MobSF server for static APK analysis.
 - Android screen recording support for session video capture.
-- Replicate or local OmniParser configuration when using the default `ui_parser_mode`.
+- Replicate or local OmniParser configuration when using fallback-capable parser modes such as `boost`.
 
 ## Usage
 
@@ -129,14 +129,16 @@ Mobile Crawler wraps DroidRun with:
 - Duration limits, cancellation requests, crash recovery, and LLM client cleanup.
 - Optional MobSF, PCAPdroid, video, and report/artifact infrastructure.
 
-## How OmniParser Works With DroidRun
+## How UI Parsing Works With DroidRun
 
-Mobile Crawler passes OmniParser settings into DroidRun through `DroidRunAgentService` when it builds the DroidRun `DroidConfig`. DroidRun then owns the active screenshot capture, UI parsing, formatted state text, indexed element lookup, and ADB-backed action execution used during the crawl.
+DroidRun mainly uses Android Accessibility APIs, not pure screenshot vision first. Mobile Crawler passes parser settings into DroidRun through `DroidRunAgentService`, and DroidRun owns active screenshot capture, UI parsing, formatted state text, indexed element lookup, and ADB-backed action execution during the crawl.
+
+In the default `boost` mode, DroidRun uses the accessibility tree first and falls back to OmniParser only when accessibility metadata is unavailable or insufficient.
 
 The `ui_parser_mode` setting controls which UI source DroidRun uses:
 
 - `omniparser`: always parse screenshots with OmniParser.
-- `boost`: use accessibility data when it has enough elements, otherwise fall back to OmniParser.
+- `boost` (default): use accessibility data first, otherwise fall back to OmniParser.
 - `accessibility`: use accessibility data only.
 
 When OmniParser is used, DroidRun converts OmniParser bounding boxes into indexed UI elements with tap-ready bounds before presenting them to the agent. Mobile Crawler's local `OmniParserClient` and `UIContextManager` appear to be auxiliary diagnostic/cache code; they are not the active crawl path.
@@ -171,7 +173,7 @@ Default values live in `src/mobile_crawler/config/defaults.py`. Notable defaults
 - `droidrun_reasoning_mode`: `True`
 - `droidrun_streaming`: `False`
 - `droidrun_telemetry_enabled`: `False`
-- `ui_parser_mode`: `omniparser`
+- `ui_parser_mode`: `boost`
 - `omniparser_backend`: `replicate`
 - optional traffic capture, video recording, and MobSF analysis disabled by default
 

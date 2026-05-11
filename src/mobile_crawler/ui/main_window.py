@@ -92,6 +92,16 @@ class CrawlStatistics:
     last_action_type: str = ""  # most recent action type (tap, scroll, input...)
     current_step_of_max: str = ""  # e.g. "7 / 15"
 
+    # OTel-sourced token counts (populated from StatsCollectorSpanProcessor)
+    total_input_tokens: int = 0
+    total_output_tokens: int = 0
+    otel_latencies_ms: List[float] = field(default_factory=list)  # per-call real latencies
+
+    # DroidRun-derived metrics
+    tool_call_count: int = 0  # total tool calls observed
+    tool_error_count: int = 0  # tool calls that returned errors
+    phase_transition_count: int = 0  # step phase transitions observed
+
     def avg_ai_response_time(self) -> float:
         """Calculate average AI response time in milliseconds."""
         if not self.ai_response_times_ms:
@@ -319,6 +329,7 @@ class MainWindow(QMainWindow):
         self.signal_adapter.debug_log.connect(self._on_debug_log)
         self.signal_adapter.ocr_completed.connect(self._on_ocr_completed)
         self.signal_adapter.screenshot_timing.connect(self._on_screenshot_timing)
+        self.signal_adapter.step_phase_transition.connect(self._on_step_phase_transition)
 
         # Bottom panel: Run history
         bottom_panel = self._create_bottom_panel()
@@ -569,11 +580,16 @@ class MainWindow(QMainWindow):
         """
         event_listeners = [self.signal_adapter]
 
+        from mobile_crawler.infrastructure.ai_interaction_repository import AIInteractionRepository
+
+        ai_repo = AIInteractionRepository(self._services["database_manager"])
+
         return CrawlerLoop(
             config_manager=config_manager,
             run_repository=self._services["run_repository"],
             session_folder_manager=self._services["session_folder_manager"],
             event_listeners=event_listeners,
+            ai_interaction_repository=ai_repo,
         )
 
     def _on_crawl_finished(self) -> None:
@@ -628,11 +644,14 @@ class MainWindow(QMainWindow):
         on_screen_processed) — it's a black box. We mine its stdout lines instead.
 
         Patterns tracked:
-        - "Step N/M"              → step counter + progress bar + new screen visit
-        - "Manager response:"     → +1 AI call (manager LLM)
-        - "Executor response:"    → +1 AI call + extract action type + +1 action
-        - "AppOpener response:"   → +1 AI call (app launcher LLM)
-        - '{"action": "..."}' JSON → action type for Last Action label
+        - "Step N/M"                    → step counter + progress bar
+        - "Manager/Executor/AppOpener/FastAgent response:" → +1 AI call
+        - "✅ Execution complete:"       → +1 successful action
+        - "❌ Execution complete:"       → +1 failed action
+        - '{"action": "..."}' JSON      → action type for Last Action label
+        - "<name>tool_name</name>"      → action type for FastAgent path
+        - "<output>...</output>"        → +1 successful action (FastAgent)
+        - "<error>...</error>"          → +1 failed action (FastAgent)
         """
         if not self._current_stats:
             return
@@ -640,7 +659,7 @@ class MainWindow(QMainWindow):
         stats = self._current_stats
         updated = False
 
-        # ── Step N/M: step progress + screen visit ────────────────────────
+        # ── Step N/M: step progress ───────────────────────────────────────
         step_match = re.search(r"Step\s+(\d+)\s*/\s*(\d+)", message)
         if step_match:
             current_step = int(step_match.group(1))
@@ -649,41 +668,64 @@ class MainWindow(QMainWindow):
                 stats.total_steps = current_step
                 stats.last_step_number = current_step
                 stats.current_step_of_max = f"{current_step} / {max_step}"
-                updated = True
-            if updated:
                 self._update_dashboard_stats()
             return  # Step lines don't need further parsing
 
+        # ── Action outcome from executor debug log ────────────────────────
+        # DroidRun executor logs: "✅ Execution complete: <summary>"
+        #                     or  "❌ Execution complete: <summary>"
+        if "Execution complete:" in message:
+            if "\u2705" in message:  # ✅
+                stats.successful_actions += 1
+                stats.tool_call_count += 1
+                updated = True
+            elif "\u274c" in message:  # ❌
+                stats.failed_actions += 1
+                stats.tool_call_count += 1
+                stats.tool_error_count += 1
+                updated = True
+
+        # ── FastAgent function-results: action outcomes from XML blocks ───
+        # FastAgent emits <output>...</output> for success, <error>...</error> for failure
+        if "<output>" in message:
+            stats.successful_actions += 1
+            stats.tool_call_count += 1
+            updated = True
+        elif "<error>" in message and "</error>" in message:
+            stats.failed_actions += 1
+            stats.tool_call_count += 1
+            stats.tool_error_count += 1
+            updated = True
+
         # ── AI call detection from DroidRun role response headers ─────────
-        # DroidRun prints these to stdout for each LLM call it makes:
-        #   "📋  Manager response:"  – manager LLM deciding the plan
-        #   "Executor response:"     – executor LLM choosing the action
-        #   "📱  AppOpener response:" – app-opener LLM identifying the package
         AI_MARKERS = (
             "Manager response:",
             "Executor response:",
             "AppOpener response:",
+            "FastAgent response:",
+            "StructuredOutput response:",
         )
         if any(marker in message for marker in AI_MARKERS):
             stats.ai_call_count += 1
             updated = True
 
-            # Executor response lines also mean: 1 action is about to execute
-            if "Executor response:" in message:
-                # Count as 1 successful action (optimistic; overridden by final
-                # accurate counts from on_crawl_completed_stats at the end)
-                stats.successful_actions += 1
-
-        # ── Last action type from executor JSON payload ────────────────────
-        # Executor responses include inline JSON blocks like:
-        #   {"action": "click", "index": 64}
-        #   {"action": "swipe", "coordinate": [...], ...}
-        action_match = re.search(r'"action"\s*:\s*"([^"]+)"', message)
-        if action_match:
-            action_type = action_match.group(1)
+        # ── Last action type from FastAgent XML: <name>tool_name</name> ───
+        name_match = re.search(r"<name>([^<]+)</name>", message)
+        if name_match:
+            action_type = name_match.group(1)
             if action_type and action_type != stats.last_action_type:
                 stats.last_action_type = action_type
                 updated = True
+
+        # ── Last action type from executor JSON payload ────────────────────
+        # Executor responses include inline JSON: {"action": "click", "index": 64}
+        if not name_match:
+            action_match = re.search(r'"action"\s*:\s*"([^"]+)"', message)
+            if action_match:
+                action_type = action_match.group(1)
+                if action_type and action_type != stats.last_action_type:
+                    stats.last_action_type = action_type
+                    updated = True
 
         if updated:
             self._update_dashboard_stats()
@@ -784,9 +826,7 @@ class MainWindow(QMainWindow):
         if self._current_stats and result.execution_time_ms > 0:
             self._current_stats.action_count += 1
             self._current_stats.action_total_time_ms += result.execution_time_ms
-            # Update stats dashboard
-            if self.stats_dashboard:
-                self.stats_dashboard.update_stats(action_avg_ms=self._current_stats.avg_action_time_ms())
+            self._update_dashboard_stats()
 
     def _on_ocr_completed(self, run_id: int, step_number: int, duration_ms: float, element_count: int) -> None:
         """Handle OCR completed event.
@@ -801,9 +841,7 @@ class MainWindow(QMainWindow):
         if self._current_stats:
             self._current_stats.ocr_operation_count += 1
             self._current_stats.ocr_total_time_ms += duration_ms
-            # Update stats dashboard
-            if self.stats_dashboard:
-                self.stats_dashboard.update_stats(ocr_avg_ms=self._current_stats.avg_ocr_time_ms())
+            self._update_dashboard_stats()
 
     def _on_screenshot_timing(self, run_id: int, step_number: int, duration_ms: float) -> None:
         """Handle screenshot timing event.
@@ -817,9 +855,12 @@ class MainWindow(QMainWindow):
         if self._current_stats:
             self._current_stats.screenshot_count += 1
             self._current_stats.screenshot_total_time_ms += duration_ms
-            # Update stats dashboard
-            if self.stats_dashboard:
-                self.stats_dashboard.update_stats(screenshot_avg_ms=self._current_stats.avg_screenshot_time_ms())
+            self._update_dashboard_stats()
+
+    def _on_step_phase_transition(self, run_id: int, step_number: int, from_phase: str, to_phase: str, duration_ms: float) -> None:
+        """Handle step phase transition event — count transitions for stats."""
+        if self._current_stats and self._current_stats.run_id == run_id:
+            self._current_stats.phase_transition_count += 1
 
     def _on_step_completed(self, run_id: int, step_number: int, actions_count: int, duration_ms: float) -> None:
         """Handle step completed event.
@@ -878,29 +919,14 @@ class MainWindow(QMainWindow):
             self._append_clean_log(LogLevel.INFO, message, "ui")
 
         # Update stats dashboard with screen metrics
-        if self.stats_dashboard and self._current_stats:
+        if self._current_stats:
             # Calculate total visits (accumulate)
             self._current_stats.total_screen_visits += 1
 
             # Update unique screen hashes to keep stats consistent
             self._current_stats.unique_screen_hashes.add(str(screen_id))
 
-            # Calculate screens per minute
-            elapsed_minutes = self._current_stats.elapsed_seconds() / 60.0
-            screens_per_min = total_screens / elapsed_minutes if elapsed_minutes > 0 else 0.0
-
-            # Update the dashboard
-            self.stats_dashboard.update_stats(
-                total_steps=step_number,
-                successful_steps=self._current_stats.successful_actions,
-                failed_steps=self._current_stats.failed_actions,
-                unique_screens=total_screens,
-                total_visits=self._current_stats.total_screen_visits,
-                screens_per_minute=screens_per_min,
-                ai_calls=self._current_stats.ai_call_count,
-                avg_ai_response_time_ms=self._current_stats.avg_ai_response_time(),
-                duration_seconds=self._current_stats.elapsed_seconds(),
-            )
+            self._update_dashboard_stats()
 
     def _create_left_panel(self) -> QWidget:
         """Create the left panel with device/app/AI selectors and settings."""
@@ -1304,11 +1330,11 @@ class MainWindow(QMainWindow):
 
         stats = self._current_stats
 
-        # Compute avg AI response: use per-call data when available (old crawler),
-        # otherwise fall back to elapsed_time / call_count (DroidRun mode).
-        avg_ai_ms = stats.avg_ai_response_time()
-        if avg_ai_ms == 0.0 and stats.ai_call_count > 0:
-            avg_ai_ms = stats.elapsed_seconds() * 1000 / stats.ai_call_count
+        # Prefer OTel real per-call latencies; fall back to recorded response times only
+        if stats.otel_latencies_ms:
+            avg_ai_ms = sum(stats.otel_latencies_ms) / len(stats.otel_latencies_ms)
+        else:
+            avg_ai_ms = stats.avg_ai_response_time()
 
         self.stats_dashboard.update_stats(
             total_steps=stats.total_steps,
@@ -1325,9 +1351,16 @@ class MainWindow(QMainWindow):
             screenshot_avg_ms=stats.avg_screenshot_time_ms(),
             last_action=stats.last_action_type,
             step_progress=stats.current_step_of_max or str(stats.total_steps),
+            total_input_tokens=stats.total_input_tokens,
+            total_output_tokens=stats.total_output_tokens,
             success_rate=(
                 round(stats.successful_actions / max(stats.successful_actions + stats.failed_actions, 1) * 100)
             ),
+            tool_calls_per_step=(
+                round(stats.tool_call_count / max(stats.total_steps, 1), 1)
+            ),
+            tool_error_count=stats.tool_error_count,
+            phase_transition_count=stats.phase_transition_count,
         )
 
     def _update_elapsed_time(self) -> None:
@@ -1340,13 +1373,21 @@ class MainWindow(QMainWindow):
         if not self._current_stats:
             return
 
+        # Pull latest OTel token/latency data from the active crawl
+        if self._crawler_loop:
+            span_stats = self._crawler_loop.get_span_stats()
+            if span_stats is not None:
+                self._current_stats.total_input_tokens = span_stats.total_input_tokens
+                self._current_stats.total_output_tokens = span_stats.total_output_tokens
+                self._current_stats.otel_latencies_ms = span_stats.llm_latencies_ms
+
         self._update_dashboard_stats()
 
     def _on_crawl_completed_stats(self, run_id: int, total_steps: int, total_duration_ms: float, reason: str) -> None:
         """Finalize statistics when crawl completes.
 
         Stops the timer and preserves final statistics on the dashboard.
-        Does NOT clear statistics immediately to prevent UI flicker.
+        Uses reconciliation strategy: prefer best available source.
         """
         self._elapsed_timer.stop()
 
@@ -1358,6 +1399,8 @@ class MainWindow(QMainWindow):
 
         # Parse action stats from reason suffix if present
         # Format: "reason | successful=X failed=Y total=Z"
+        suffix_successful = 0
+        suffix_failed = 0
         if " | " in reason:
             try:
                 stats_part = reason.split(" | ", 1)[1]
@@ -1367,11 +1410,22 @@ class MainWindow(QMainWindow):
                         k, v = item.split("=", 1)
                         parsed[k] = v
                 if "successful" in parsed:
-                    self._current_stats.successful_actions = int(parsed["successful"])
+                    suffix_successful = int(parsed["successful"])
                 if "failed" in parsed:
-                    self._current_stats.failed_actions = int(parsed["failed"])
+                    suffix_failed = int(parsed["failed"])
             except (ValueError, IndexError, AttributeError):
                 pass
+
+        # Reconciliation: prefer live-parsed stats when suffix reports zeros
+        # but live parser already captured non-zero action data
+        live_total = self._current_stats.successful_actions + self._current_stats.failed_actions
+        suffix_total = suffix_successful + suffix_failed
+
+        if suffix_total > 0 and suffix_total >= live_total:
+            # Suffix has real data and is at least as complete — use it
+            self._current_stats.successful_actions = suffix_successful
+            self._current_stats.failed_actions = suffix_failed
+        # else: keep live-parsed stats (they're already non-zero or both are zero)
 
         self._update_dashboard_stats()
         self._current_stats = None

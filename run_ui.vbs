@@ -9,18 +9,13 @@ Set fso = CreateObject("Scripting.FileSystemObject")
 scriptPath = fso.GetParentFolderName(WScript.ScriptFullName)
 WshShell.CurrentDirectory = scriptPath
 
-' Determine Python executable (check virtual environment first)
-pythonExe = ""
+' Determine Python executable (strict venv312 only)
+pythonExe = scriptPath & "\venv312\Scripts\python.exe"
 
-if fso.FolderExists(scriptPath & "\.venv\Scripts") then
-    pythonExe = scriptPath & "\.venv\Scripts\python.exe"
-elseif fso.FolderExists(scriptPath & "\venv\Scripts") then
-    pythonExe = scriptPath & "\venv\Scripts\python.exe"
-elseif fso.FolderExists(scriptPath & "\env\Scripts") then
-    pythonExe = scriptPath & "\env\Scripts\python.exe"
-else
-    pythonExe = "python"
-end if
+If Not fso.FileExists(pythonExe) Then
+    MsgBox "venv312 not found. Create it with: python -m venv venv312", vbCritical, "Mobile Crawler"
+    WScript.Quit 1
+End If
 
 ' Build command to run the UI
 runUiScript = scriptPath & "\run_ui.py"

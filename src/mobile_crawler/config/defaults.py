@@ -77,10 +77,8 @@ DEFAULTS: Dict[str, Any] = {
     "droidrun_streaming": False,
     # DroidRun agent retry count for failed operations
     "droidrun_retry_count": 2,
-    # DroidRun telemetry and monitoring
-    "droidrun_telemetry_enabled": False,
-    # OmniParser settings
-    "ui_parser_mode": "omniparser",
+    # UI parser strategy: accessibility-first with OmniParser fallback
+    "ui_parser_mode": "boost",
     "omniparser_backend": "replicate",
     "omniparser_local_url": "http://localhost:8000",
     "omniparser_box_threshold": 0.05,

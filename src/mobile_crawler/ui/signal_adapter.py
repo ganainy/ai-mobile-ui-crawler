@@ -48,6 +48,9 @@ class QtSignalAdapter(QObject):
     recovery_completed = Signal(int, int, bool, float)  # run_id, step, success, duration_ms
     recovery_exhausted = Signal(int, int, int, str)  # run_id, step, attempts, message
 
+    # Step phase transition signal
+    step_phase_transition = Signal(int, int, str, str, float)  # run_id, step, from_phase, to_phase, duration_ms
+
     # Python logging bridge signal (level_name, formatted_message)
     python_log = Signal(str, str)  # level_name (e.g. "DEBUG"), message
 
@@ -141,3 +144,7 @@ class QtSignalAdapter(QObject):
     def on_recovery_exhausted(self, run_id: int, step_number: int, attempts: int, message: str) -> None:
         """Called when all recovery attempts are exhausted."""
         self.recovery_exhausted.emit(run_id, step_number, attempts, message)
+
+    def on_step_phase_transition(self, run_id: int, step_number: int, from_phase: str, to_phase: str, duration_ms: float) -> None:
+        """Called when a step phase transition occurs."""
+        self.step_phase_transition.emit(run_id, step_number, from_phase, to_phase, duration_ms)

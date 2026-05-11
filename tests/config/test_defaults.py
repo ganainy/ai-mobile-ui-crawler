@@ -46,7 +46,6 @@ class TestDefaultConfigValues:
             "droidrun_max_cycles",
             "droidrun_streaming",
             "droidrun_retry_count",
-            "droidrun_telemetry_enabled",
             "ui_parser_mode",
             "omniparser_backend",
             "omniparser_local_url",
@@ -117,7 +116,6 @@ class TestDefaultConfigValues:
             "use_droidrun_agent",
             "droidrun_reasoning_mode",
             "droidrun_streaming",
-            "droidrun_telemetry_enabled",
         ]
         for key in bool_keys:
             value = DEFAULTS[key]
