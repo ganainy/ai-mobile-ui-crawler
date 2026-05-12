@@ -4,12 +4,24 @@ import logging
 import re
 import subprocess
 import time
+from dataclasses import dataclass
 from typing import Optional, Tuple, List
 
 from mobile_crawler.domain.models import ActionResult
 from mobile_crawler.infrastructure.adb_client import ADBClient
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class DeviceReadinessResult:
+    """Result of the pre-crawl device wake/readiness check."""
+
+    success: bool
+    error_message: Optional[str] = None
+    screen_on: Optional[bool] = None
+    keyguard_locked: Optional[bool] = None
+    keyguard_secure: Optional[bool] = None
 
 
 class ADBActionExecutor:
@@ -105,6 +117,233 @@ class ADBActionExecutor:
         except Exception as e:
             logger.error(f"Failed to get screen size: {e}")
             return 1080, 1920
+
+    def _read_screen_on_state(self) -> Tuple[bool, Optional[bool], str]:
+        """Read whether the display is awake from dumpsys power."""
+        success, output, _ = self._execute_adb_command(['shell', 'dumpsys', 'power'])
+        if not success:
+            return False, None, output
+
+        lowered = output.lower()
+        if re.search(r'mwakefulness\s*=\s*awake', lowered):
+            return True, True, output
+        if re.search(r'mwakefulness\s*=\s*(asleep|dozing)', lowered):
+            return True, False, output
+        if re.search(r'display power:\s*state\s*=\s*on', lowered):
+            return True, True, output
+        if re.search(r'display power:\s*state\s*=\s*off', lowered):
+            return True, False, output
+        if re.search(r'mscreenon\s*=\s*true', lowered):
+            return True, True, output
+        if re.search(r'mscreenon\s*=\s*false', lowered):
+            return True, False, output
+
+        return True, None, output
+
+    def _read_keyguard_state(self) -> Tuple[bool, Optional[bool], Optional[bool], str]:
+        """Read keyguard visibility/security from dumpsys window policy."""
+        success, output, _ = self._execute_adb_command(['shell', 'dumpsys', 'window', 'policy'])
+        if not success:
+            return False, None, None, output
+
+        locked_patterns = (
+            r'mkeyguardshowing\s*=\s*true',
+            r'isstatusbarkeyguard\s*=\s*true',
+            r'mshowinglockscreen\s*=\s*true',
+            r'mdreaminglockscreen\s*=\s*true',
+            r'^\s*showing\s*=\s*true\b',
+            r'^\s*inputrestricted\s*=\s*true\b',
+        )
+        unlocked_patterns = (
+            r'mkeyguardshowing\s*=\s*false',
+            r'isstatusbarkeyguard\s*=\s*false',
+            r'mshowinglockscreen\s*=\s*false',
+            r'^\s*showing\s*=\s*false\b',
+            r'^\s*inputrestricted\s*=\s*false\b',
+        )
+        secure_patterns = (
+            r'mkeyguardsecure\s*=\s*true',
+            r'iskeyguardsecure\s*=\s*true',
+            r'msecure\s*=\s*true',
+            r'^\s*secure\s*=\s*true\b',
+        )
+        insecure_patterns = (
+            r'mkeyguardsecure\s*=\s*false',
+            r'iskeyguardsecure\s*=\s*false',
+            r'msecure\s*=\s*false',
+            r'^\s*secure\s*=\s*false\b',
+        )
+
+        lowered = output.lower()
+        locked = None
+        if any(re.search(pattern, lowered, re.MULTILINE) for pattern in locked_patterns):
+            locked = True
+        elif any(re.search(pattern, lowered, re.MULTILINE) for pattern in unlocked_patterns):
+            locked = False
+
+        secure = None
+        if any(re.search(pattern, lowered, re.MULTILINE) for pattern in secure_patterns):
+            secure = True
+        elif any(re.search(pattern, lowered, re.MULTILINE) for pattern in insecure_patterns):
+            secure = False
+
+        return True, locked, secure, output
+
+    def _read_device_readiness_state(self) -> DeviceReadinessResult:
+        """Read screen and keyguard state, failing closed when state is unclear."""
+        power_success, screen_on, power_output = self._read_screen_on_state()
+        if not power_success:
+            return DeviceReadinessResult(
+                success=False,
+                error_message=f"Unable to read device power state: {power_output}",
+            )
+        if screen_on is None:
+            return DeviceReadinessResult(
+                success=False,
+                error_message="Unable to determine whether the device screen is on.",
+            )
+
+        keyguard_success, locked, secure, keyguard_output = self._read_keyguard_state()
+        if not keyguard_success:
+            return DeviceReadinessResult(
+                success=False,
+                error_message=f"Unable to read device lock state: {keyguard_output}",
+                screen_on=screen_on,
+            )
+        if locked is None:
+            return DeviceReadinessResult(
+                success=False,
+                error_message="Unable to determine whether the device is locked.",
+                screen_on=screen_on,
+                keyguard_secure=secure,
+            )
+
+        return DeviceReadinessResult(
+            success=True,
+            screen_on=screen_on,
+            keyguard_locked=locked,
+            keyguard_secure=secure,
+        )
+
+    def _wake_device(self) -> DeviceReadinessResult:
+        """Send Android's wake key event."""
+        success, output, _ = self._execute_adb_command([
+            'shell', 'input', 'keyevent', 'KEYCODE_WAKEUP'
+        ])
+        if not success:
+            return DeviceReadinessResult(
+                success=False,
+                error_message=f"Unable to wake device: {output}",
+            )
+        return DeviceReadinessResult(success=True)
+
+    def _swipe_up_to_dismiss_keyguard(self) -> DeviceReadinessResult:
+        """Swipe up to dismiss non-secure keyguard or screensaver surfaces."""
+        width, height = self._get_screen_size()
+        center_x = width // 2
+        start_y = height * 4 // 5
+        end_y = height // 5
+        success, output, _ = self._execute_adb_command([
+            'shell', 'input', 'swipe', str(center_x), str(start_y),
+            str(center_x), str(end_y), '300'
+        ])
+        if not success:
+            return DeviceReadinessResult(
+                success=False,
+                error_message=f"Unable to dismiss keyguard with swipe: {output}",
+            )
+        return DeviceReadinessResult(success=True)
+
+    def ensure_device_ready_for_crawl(
+        self,
+        timeout_seconds: float = 5.0,
+        unlock_swipe: bool = True,
+    ) -> DeviceReadinessResult:
+        """Wake the device and verify it is not blocked by the lock screen."""
+        deadline = time.time() + max(timeout_seconds, 0.1)
+        power_success, screen_on, power_output = self._read_screen_on_state()
+        if not power_success:
+            return DeviceReadinessResult(
+                success=False,
+                error_message=f"Unable to read device power state: {power_output}",
+            )
+        if screen_on is None:
+            return DeviceReadinessResult(
+                success=False,
+                error_message="Unable to determine whether the device screen is on.",
+            )
+
+        if screen_on is False:
+            wake_result = self._wake_device()
+            if not wake_result.success:
+                return wake_result
+
+            while time.time() < deadline:
+                time.sleep(0.25)
+                power_success, screen_on, power_output = self._read_screen_on_state()
+                if not power_success:
+                    return DeviceReadinessResult(
+                        success=False,
+                        error_message=f"Unable to read device power state: {power_output}",
+                    )
+                if screen_on:
+                    break
+            else:
+                return DeviceReadinessResult(
+                    success=False,
+                    error_message="Device screen did not turn on after wake command.",
+                    screen_on=False,
+                )
+
+        state = self._read_device_readiness_state()
+        if not state.success:
+            if (
+                unlock_swipe
+                and state.screen_on
+                and state.error_message == "Unable to determine whether the device is locked."
+            ):
+                swipe_result = self._swipe_up_to_dismiss_keyguard()
+                if not swipe_result.success:
+                    return swipe_result
+                time.sleep(0.5)
+                state = self._read_device_readiness_state()
+            if not state.success:
+                return state
+
+        if state.keyguard_locked:
+            if state.keyguard_secure:
+                return DeviceReadinessResult(
+                    success=False,
+                    error_message="Device is locked. Unlock it manually and start the crawl again.",
+                    screen_on=state.screen_on,
+                    keyguard_locked=True,
+                    keyguard_secure=True,
+                )
+
+            if unlock_swipe:
+                swipe_result = self._swipe_up_to_dismiss_keyguard()
+                if not swipe_result.success:
+                    return swipe_result
+                time.sleep(0.5)
+                state = self._read_device_readiness_state()
+                if not state.success:
+                    return state
+
+        if state.keyguard_locked:
+            return DeviceReadinessResult(
+                success=False,
+                error_message="Device is locked. Unlock it manually and start the crawl again.",
+                screen_on=state.screen_on,
+                keyguard_locked=state.keyguard_locked,
+                keyguard_secure=state.keyguard_secure,
+            )
+
+        return DeviceReadinessResult(
+            success=True,
+            screen_on=True,
+            keyguard_locked=False,
+            keyguard_secure=state.keyguard_secure,
+        )
 
     def click(self, bounds: Tuple[int, int, int, int]) -> ActionResult:
         """Execute click action at bounding box center.

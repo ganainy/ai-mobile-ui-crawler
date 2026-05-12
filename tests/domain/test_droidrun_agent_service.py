@@ -23,6 +23,7 @@ from mobile_crawler.domain.droidrun_agent_service import (
 )
 from mobile_crawler.domain.models import AIAction, BoundingBox, ActionResult
 from mobile_crawler.domain.step_phase import StepPhase
+from mobile_crawler.domain.adb_action_executor import DeviceReadinessResult
 
 
 @pytest.fixture
@@ -542,6 +543,57 @@ class TestDroidRunAgentServiceConfig:
 
 class TestDroidRunAgentServiceTargetPreflight:
     """Tests for launching/verifying the target app before DroidRun starts."""
+
+    @pytest.mark.asyncio
+    async def test_execute_runs_wake_preflight_before_target_launch(self, droidrun_service):
+        order = []
+
+        async def wake_preflight():
+            order.append("wake")
+
+        async def target_preflight(app_package):
+            order.append(f"target:{app_package}")
+
+        with patch.object(droidrun_service, "_ensure_device_awake_before_droidrun", side_effect=wake_preflight), \
+             patch.object(droidrun_service, "_ensure_target_app_active_before_droidrun", side_effect=target_preflight), \
+             patch.object(droidrun_service, "_initialize_agent", new=AsyncMock()), \
+             patch.object(droidrun_service, "_log_agent_interaction"), \
+             patch.dict(sys.modules, self._fake_droidrun_modules(success=True)):
+            droidrun_service._droidrun_config = Mock()
+            result = await droidrun_service.execute_exploration_task(
+                run_id=1,
+                app_package="com.example.app",
+                max_steps=3,
+            )
+
+        assert result.success is True
+        assert order == ["wake", "target:com.example.app"]
+
+    @pytest.mark.asyncio
+    async def test_execute_wake_lock_failure_returns_without_launch_or_agent(self, droidrun_service):
+        mock_adb = Mock()
+        mock_adb.ensure_device_ready_for_crawl.return_value = DeviceReadinessResult(
+            success=False,
+            error_message="Device is locked. Unlock it manually and start the crawl again.",
+        )
+        fake_modules = self._fake_droidrun_modules(success=True)
+        fake_agent = fake_modules["droidrun.agent.droid.droid_agent"].DroidAgent
+
+        with patch("mobile_crawler.domain.adb_action_executor.ADBActionExecutor", return_value=mock_adb), \
+             patch.object(droidrun_service, "_ensure_target_app_active_before_droidrun", new=AsyncMock()) as target_preflight, \
+             patch.object(droidrun_service, "_initialize_agent", new=AsyncMock()), \
+             patch.object(droidrun_service, "_log_agent_interaction"), \
+             patch.dict(sys.modules, fake_modules):
+            result = await droidrun_service.execute_exploration_task(
+                run_id=1,
+                app_package="com.example.app",
+                max_steps=3,
+            )
+
+        assert result.success is False
+        assert "Unlock it manually" in result.error_message
+        target_preflight.assert_not_awaited()
+        fake_agent.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_execute_preflight_already_in_target_does_not_launch(self, droidrun_service):

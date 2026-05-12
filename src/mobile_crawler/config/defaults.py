@@ -79,6 +79,10 @@ DEFAULTS: Dict[str, Any] = {
     # DroidRun Agent Integration settings
     # Enable DroidRun's advanced AI agent system for multi-step planning
     "use_droidrun_agent": True,
+    # Wake/unlock preflight before launching the target app or DroidRun
+    "pre_crawl_wake_device": True,
+    "pre_crawl_unlock_swipe": True,
+    "pre_crawl_wake_timeout_seconds": 5.0,
     # Use reasoning mode for complex planning (vs direct execution)
     "droidrun_reasoning_mode": True,
     # Maximum planning/execution cycles for DroidRun agent

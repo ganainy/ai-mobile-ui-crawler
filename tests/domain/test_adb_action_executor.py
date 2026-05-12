@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from mobile_crawler.domain.adb_action_executor import ADBActionExecutor
+from mobile_crawler.domain.adb_action_executor import ADBActionExecutor, DeviceReadinessResult
 from mobile_crawler.domain.models import ActionResult
 
 
@@ -279,6 +279,157 @@ class TestADBActionExecutorPackageDetection:
         activity = executor.get_current_activity()
 
         assert activity == "com.example.app.MainActivity"
+
+
+class TestADBActionExecutorDeviceReadiness:
+    """Tests for pre-crawl wake and lock-screen readiness checks."""
+
+    @patch('mobile_crawler.domain.adb_action_executor.time.sleep')
+    @patch('mobile_crawler.domain.adb_action_executor.subprocess.run')
+    def test_screen_off_device_command_sequence_wakes_and_verifies(
+        self, mock_subprocess, _mock_sleep, executor
+    ):
+        mock_subprocess.side_effect = [
+            Mock(returncode=0, stdout="mWakefulness=Asleep", stderr=""),
+            Mock(returncode=0, stdout="", stderr=""),
+            Mock(returncode=0, stdout="mWakefulness=Awake", stderr=""),
+            Mock(returncode=0, stdout="mWakefulness=Awake", stderr=""),
+            Mock(returncode=0, stdout="mKeyguardShowing=false\nmKeyguardSecure=false", stderr=""),
+        ]
+
+        result = executor.ensure_device_ready_for_crawl(timeout_seconds=1.0)
+
+        assert result.success is True
+        commands = [call[0][0] for call in mock_subprocess.call_args_list]
+        assert commands[0][-2:] == ["dumpsys", "power"]
+        assert "KEYCODE_WAKEUP" in commands[1]
+        assert commands[-2][-2:] == ["dumpsys", "power"]
+
+    def test_screen_off_device_wakes_then_succeeds_when_unlocked(self, executor):
+        executor._read_screen_on_state = Mock(side_effect=[
+            (True, False, "mWakefulness=Asleep"),
+            (True, True, "mWakefulness=Awake"),
+        ])
+        executor._read_device_readiness_state = Mock(
+            return_value=DeviceReadinessResult(success=True, screen_on=True, keyguard_locked=False)
+        )
+        executor._wake_device = Mock(return_value=DeviceReadinessResult(success=True))
+
+        result = executor.ensure_device_ready_for_crawl(timeout_seconds=1.0)
+
+        assert result.success is True
+        executor._wake_device.assert_called_once()
+        executor._read_device_readiness_state.assert_called_once()
+
+    def test_secure_lock_state_returns_failure_without_swipe(self, executor):
+        executor._read_screen_on_state = Mock(return_value=(True, True, "mWakefulness=Awake"))
+        executor._read_device_readiness_state = Mock(
+            return_value=DeviceReadinessResult(
+                success=True,
+                screen_on=True,
+                keyguard_locked=True,
+                keyguard_secure=True,
+            )
+        )
+        executor._swipe_up_to_dismiss_keyguard = Mock()
+
+        result = executor.ensure_device_ready_for_crawl()
+
+        assert result.success is False
+        assert "Unlock it manually" in result.error_message
+        executor._swipe_up_to_dismiss_keyguard.assert_not_called()
+
+    def test_already_awake_unlocked_does_not_send_wake(self, executor):
+        executor._read_screen_on_state = Mock(return_value=(True, True, "mWakefulness=Awake"))
+        executor._read_device_readiness_state = Mock(
+            return_value=DeviceReadinessResult(
+                success=True,
+                screen_on=True,
+                keyguard_locked=False,
+            )
+        )
+        executor._wake_device = Mock()
+
+        result = executor.ensure_device_ready_for_crawl()
+
+        assert result.success is True
+        executor._wake_device.assert_not_called()
+
+    def test_non_secure_keyguard_sends_swipe_and_rechecks(self, executor):
+        executor._read_screen_on_state = Mock(return_value=(True, True, "mWakefulness=Awake"))
+        executor._read_device_readiness_state = Mock(side_effect=[
+            DeviceReadinessResult(
+                success=True,
+                screen_on=True,
+                keyguard_locked=True,
+                keyguard_secure=False,
+            ),
+            DeviceReadinessResult(
+                success=True,
+                screen_on=True,
+                keyguard_locked=False,
+                keyguard_secure=False,
+            ),
+        ])
+        executor._swipe_up_to_dismiss_keyguard = Mock(return_value=DeviceReadinessResult(success=True))
+
+        result = executor.ensure_device_ready_for_crawl(unlock_swipe=True)
+
+        assert result.success is True
+        executor._swipe_up_to_dismiss_keyguard.assert_called_once()
+
+    def test_plain_keyguard_delegate_fields_parse_as_unlocked(self, executor):
+        executor._execute_adb_command = Mock(return_value=(
+            True,
+            """
+            KeyguardServiceDelegate
+              showing=false
+              secure=false
+              inputRestricted=false
+            """,
+            1.0,
+        ))
+
+        success, locked, secure, _ = executor._read_keyguard_state()
+
+        assert success is True
+        assert locked is False
+        assert secure is False
+
+    def test_unknown_lock_state_attempts_swipe_once_before_failing(self, executor):
+        executor._read_screen_on_state = Mock(return_value=(True, True, "mWakefulness=Awake"))
+        executor._read_device_readiness_state = Mock(side_effect=[
+            DeviceReadinessResult(
+                success=False,
+                screen_on=True,
+                error_message="Unable to determine whether the device is locked.",
+            ),
+            DeviceReadinessResult(
+                success=False,
+                screen_on=True,
+                error_message="Unable to determine whether the device is locked.",
+            ),
+        ])
+        executor._swipe_up_to_dismiss_keyguard = Mock(return_value=DeviceReadinessResult(success=True))
+
+        result = executor.ensure_device_ready_for_crawl(unlock_swipe=True)
+
+        assert result.success is False
+        executor._swipe_up_to_dismiss_keyguard.assert_called_once()
+
+    def test_unclear_state_fails_closed(self, executor):
+        executor._read_screen_on_state = Mock(return_value=(True, True, "mWakefulness=Awake"))
+        executor._read_device_readiness_state = Mock(
+            return_value=DeviceReadinessResult(
+                success=False,
+                error_message="Unable to determine whether the device is locked.",
+            )
+        )
+
+        result = executor.ensure_device_ready_for_crawl()
+
+        assert result.success is False
+        assert "Unable to determine" in result.error_message
 
 
 class TestADBActionExecutorLauncherActivity:

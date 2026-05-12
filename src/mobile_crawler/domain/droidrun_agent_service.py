@@ -401,6 +401,27 @@ class DroidRunAgentService:
             f"{attempts} attempts ({detail})"
         )
 
+    async def _ensure_device_awake_before_droidrun(self) -> None:
+        """Wake the selected device and fail fast if it is still locked."""
+        if not self.config_manager.get("pre_crawl_wake_device", True):
+            return
+
+        from mobile_crawler.domain.adb_action_executor import ADBActionExecutor
+
+        logger.info("Waking device before crawl...")
+        adb_executor = ADBActionExecutor(device_id=self.device_id)
+        result = adb_executor.ensure_device_ready_for_crawl(
+            timeout_seconds=float(self.config_manager.get("pre_crawl_wake_timeout_seconds", 5.0) or 5.0),
+            unlock_swipe=bool(self.config_manager.get("pre_crawl_unlock_swipe", True)),
+        )
+
+        if not result.success:
+            message = result.error_message or "Unable to verify device wake/unlock state before crawl."
+            logger.error(message)
+            raise RuntimeError(message)
+
+        logger.info("Device is awake and unlocked.")
+
     def _setup_instrumentation(self) -> None:
         """Instrument LlamaIndex with OTel and register the stats collector processor.
 
@@ -909,6 +930,7 @@ class DroidRunAgentService:
 
         for attempt in range(max_crash_retries + 1):
             try:
+                await self._ensure_device_awake_before_droidrun()
                 await self._ensure_target_app_active_before_droidrun(app_package)
 
                 # Initialize agent if needed
