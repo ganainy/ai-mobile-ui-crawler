@@ -134,6 +134,14 @@ class TestRunHistoryViewInit:
         assert hasattr(view, 'report_generated')
         assert hasattr(view, 'mobsf_completed')
 
+    def test_minimum_height_allows_laptop_layout(
+        self, qt_app, mock_run_repository, mock_report_generator, mock_mobsf_manager
+    ):
+        """Run History should not reserve the old 280px minimum height."""
+        view = _create_run_history_view(mock_run_repository, mock_report_generator, mock_mobsf_manager)
+
+        assert view.minimumHeight() == 170
+
 
 class TestRunHistoryTable:
     """Tests for run history table."""

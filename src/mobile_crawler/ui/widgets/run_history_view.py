@@ -77,8 +77,7 @@ class RunHistoryView(QWidget):
         self._mobsf_manager = mobsf_manager
         self._mobsf_worker = None
         
-        # US6: Ensure the run history table has enough vertical space by default
-        self.setMinimumHeight(280)
+        self.setMinimumHeight(170)
         
         self._setup_ui()
         self._load_runs()

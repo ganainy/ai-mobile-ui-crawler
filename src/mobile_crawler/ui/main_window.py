@@ -289,9 +289,14 @@ class MainWindow(QMainWindow):
         """Configure the central widget."""
         central_widget = QWidget()
         main_layout = QVBoxLayout(central_widget)
+        main_layout.setContentsMargins(4, 4, 4, 4)
+
+        workspace_splitter = QSplitter(Qt.Orientation.Vertical)
+        workspace_splitter.setObjectName("workspaceSplitter")
 
         # Create main horizontal splitter for left/center/right
         main_splitter = QSplitter(Qt.Orientation.Horizontal)
+        main_splitter.setObjectName("mainSplitter")
 
         # Left panel: Device, App, AI selectors, Settings
         left_panel = self._create_left_panel()
@@ -308,7 +313,7 @@ class MainWindow(QMainWindow):
         # Set splitter proportions (approx 20% left, 40% center, 40% right)
         main_splitter.setSizes([280, 500, 500])
 
-        main_layout.addWidget(main_splitter)
+        workspace_splitter.addWidget(main_splitter)
 
         # Connect signals for center panel
         self.control_panel.start_requested.connect(self._start_crawl)
@@ -333,7 +338,12 @@ class MainWindow(QMainWindow):
 
         # Bottom panel: Run history
         bottom_panel = self._create_bottom_panel()
-        main_layout.addWidget(bottom_panel)
+        workspace_splitter.addWidget(bottom_panel)
+        workspace_splitter.setSizes([600, 170])
+        workspace_splitter.setStretchFactor(0, 1)
+        workspace_splitter.setStretchFactor(1, 0)
+
+        main_layout.addWidget(workspace_splitter)
 
         self.setCentralWidget(central_widget)
 
@@ -956,10 +966,10 @@ class MainWindow(QMainWindow):
         if self.app_selector.current_package():
             self._selected_package = self.app_selector.current_package()
 
-        layout.addWidget(self.device_selector)
-        layout.addWidget(self.app_selector)
-        layout.addWidget(self.ai_selector)
-        layout.addWidget(self.settings_panel)
+        layout.addWidget(self.device_selector, 0)
+        layout.addWidget(self.app_selector, 0)
+        layout.addWidget(self.ai_selector, 0)
+        layout.addWidget(self.settings_panel, 1)
 
         return panel
 
@@ -1004,7 +1014,7 @@ class MainWindow(QMainWindow):
             self._services["run_repository"], self._services["report_generator"], self._services["mobsf_manager"]
         )
         self.run_history_view.setObjectName("runHistoryView")
-        self.run_history_view.setMinimumHeight(280)  # US4: Increase visibility
+        self.run_history_view.setMinimumHeight(170)
 
         layout.addWidget(self.run_history_view)
 

@@ -64,7 +64,7 @@ class SettingsPanel(QWidget):
         # 3. Integrations Tab (Traffic, Video, MobSF)
         self.tab_widget.addTab(self._setup_integrations_tab(), "Integrations")
 
-        main_layout.addWidget(self.tab_widget)
+        main_layout.addWidget(self.tab_widget, 1)
 
         # Save button in bottom area (stays visible regardless of tab)
         save_layout = QHBoxLayout()

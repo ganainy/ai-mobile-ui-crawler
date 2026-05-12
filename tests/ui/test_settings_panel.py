@@ -5,7 +5,7 @@ import sqlite3
 import datetime
 import json
 
-from PySide6.QtWidgets import QMessageBox, QLineEdit
+from PySide6.QtWidgets import QMessageBox, QLineEdit, QScrollArea
 
 
 @pytest.fixture
@@ -190,6 +190,24 @@ class TestSettingsPanelInit:
             "AI & Agent",
             "Integrations",
         ]
+
+    def test_settings_tabs_are_scrollable(self, qt_app, mock_config_store):
+        """Each settings tab should stay internally scrollable on short screens."""
+        panel = _create_settings_panel(mock_config_store)
+
+        for index in range(panel.tab_widget.count()):
+            tab_page = panel.tab_widget.widget(index)
+            assert isinstance(tab_page, QScrollArea)
+            assert tab_page.widgetResizable()
+            assert tab_page.widget() is not None
+
+    def test_tab_widget_gets_vertical_stretch_over_save_button(self, qt_app, mock_config_store):
+        """The tab content should receive extra vertical space before the save row."""
+        panel = _create_settings_panel(mock_config_store)
+        layout = panel.layout()
+
+        assert layout.stretch(0) == 1
+        assert layout.stretch(1) == 0
 
 
 class TestAPIKeyInputs:

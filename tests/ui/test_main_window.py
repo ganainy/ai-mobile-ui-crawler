@@ -2,7 +2,68 @@
 
 from unittest.mock import Mock, patch
 
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QSplitter, QWidget
+
 from mobile_crawler.ui.main_window import MainWindow
+
+
+class _Connectable:
+    """Minimal signal stub for layout-only MainWindow tests."""
+
+    def connect(self, _slot):
+        pass
+
+
+class _FakeControlPanel:
+    def __init__(self):
+        self.start_requested = _Connectable()
+        self.pause_requested = _Connectable()
+        self.resume_requested = _Connectable()
+        self.stop_requested = _Connectable()
+        self.step_by_step_toggled = _Connectable()
+        self.next_step_requested = _Connectable()
+
+    def set_step_by_step(self, _enabled):
+        pass
+
+
+class _FakeSignalAdapter:
+    def __init__(self):
+        self.state_changed = _Connectable()
+        self.step_started = _Connectable()
+        self.action_executed = _Connectable()
+        self.step_completed = _Connectable()
+        self.crawl_completed = _Connectable()
+        self.screen_processed = _Connectable()
+        self.step_paused = _Connectable()
+        self.debug_log = _Connectable()
+        self.ocr_completed = _Connectable()
+        self.screenshot_timing = _Connectable()
+        self.step_phase_transition = _Connectable()
+
+
+class _FakeSelector(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.model_selected = _Connectable()
+        self.device_selected = _Connectable()
+        self.app_selected = _Connectable()
+        self.settings_saved = _Connectable()
+
+    def set_api_key_callback(self, _callback):
+        pass
+
+    def current_package(self):
+        return ""
+
+    def _refresh_devices(self):
+        pass
+
+
+class _FakeRunHistory(QWidget):
+    def _load_runs(self):
+        pass
 
 
 class TestMainWindowConfig:
@@ -44,6 +105,108 @@ class TestMainWindowConfig:
 
         config_manager.set.assert_any_call("enable_traffic_capture", True)
         config_manager.set.assert_any_call("pcapdroid_tls_decryption", True)
+
+
+class TestMainWindowLayout:
+    """Tests for responsive MainWindow layout contracts."""
+
+    def test_left_panel_gives_settings_panel_vertical_stretch(self, qt_app):
+        """Selectors should keep natural height while SettingsPanel gets spare space."""
+        window = MainWindow.__new__(MainWindow)
+        window._services = {
+            "device_detection": Mock(),
+            "user_config_store": Mock(),
+            "provider_registry": Mock(),
+            "vision_detector": Mock(),
+        }
+        window._selected_package = None
+        window._get_api_key_for_provider = Mock()
+        window._on_model_selected = Mock()
+        window._on_settings_saved = Mock()
+        window._on_device_selected = Mock()
+        window._on_app_selected = Mock()
+
+        with (
+            patch("mobile_crawler.ui.main_window.DeviceSelector", return_value=_FakeSelector()),
+            patch("mobile_crawler.ui.main_window.AppSelector", return_value=_FakeSelector()),
+            patch("mobile_crawler.ui.main_window.AIModelSelector", return_value=_FakeSelector()),
+            patch("mobile_crawler.ui.main_window.SettingsPanel", return_value=_FakeSelector()),
+        ):
+            panel = MainWindow._create_left_panel(window)
+
+        layout = panel.layout()
+        assert layout.stretch(0) == 0
+        assert layout.stretch(1) == 0
+        assert layout.stretch(2) == 0
+        assert layout.stretch(3) == 1
+
+    def test_bottom_panel_uses_reduced_run_history_minimum(self, qt_app):
+        """MainWindow should not restore the old 280px Run History minimum."""
+        window = MainWindow.__new__(MainWindow)
+        window._services = {
+            "run_repository": Mock(),
+            "report_generator": Mock(),
+            "mobsf_manager": Mock(),
+        }
+
+        with patch("mobile_crawler.ui.main_window.RunHistoryView", side_effect=lambda *_args: _FakeRunHistory()):
+            panel = MainWindow._create_bottom_panel(window)
+
+        assert panel is not None
+        assert window.run_history_view.minimumHeight() == 170
+
+    def test_central_widget_uses_vertical_splitter_for_run_history(self, qt_app, monkeypatch):
+        """Main workspace and Run History should be separated by a resizable splitter."""
+        monkeypatch.setattr(
+            MainWindow,
+            "_create_services",
+            lambda self: {
+                "database_manager": Mock(),
+                "user_config_store": Mock(get_setting=Mock(return_value=False)),
+            },
+        )
+        monkeypatch.setattr(
+            "mobile_crawler.ui.main_window.StaleRunCleaner",
+            lambda _db: Mock(cleanup_stale_runs=Mock()),
+        )
+        monkeypatch.setattr(MainWindow, "_setup_python_logging", lambda self: None)
+        monkeypatch.setattr(MainWindow, "_connect_statistics_signals", lambda self: None)
+        monkeypatch.setattr(MainWindow, "_update_start_button_state", lambda self: None)
+
+        def create_left_panel(self):
+            self.device_selector = _FakeSelector()
+            self.app_selector = _FakeSelector()
+            self.ai_selector = _FakeSelector()
+            self.settings_panel = _FakeSelector()
+            return QWidget()
+
+        def create_center_panel(self):
+            self.control_panel = _FakeControlPanel()
+            self.stats_dashboard = QWidget()
+            return QWidget()
+
+        def create_right_panel(self):
+            self.log_viewer = QWidget()
+            return QWidget()
+
+        def create_bottom_panel(self):
+            self.run_history_view = _FakeRunHistory()
+            self.run_history_view.setMinimumHeight(170)
+            return self.run_history_view
+
+        monkeypatch.setattr(MainWindow, "_create_left_panel", create_left_panel)
+        monkeypatch.setattr(MainWindow, "_create_center_panel", create_center_panel)
+        monkeypatch.setattr(MainWindow, "_create_right_panel", create_right_panel)
+        monkeypatch.setattr(MainWindow, "_create_bottom_panel", create_bottom_panel)
+        monkeypatch.setattr("mobile_crawler.ui.main_window.QtSignalAdapter", _FakeSignalAdapter)
+
+        window = MainWindow()
+        workspace_splitter = window.findChild(QSplitter, "workspaceSplitter")
+
+        assert workspace_splitter is not None
+        assert workspace_splitter.orientation() == Qt.Orientation.Vertical
+        assert workspace_splitter.count() == 2
+        assert window.run_history_view.minimumHeight() == 170
 
 
 class TestRunFunction:

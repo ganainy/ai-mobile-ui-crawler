@@ -12,6 +12,10 @@ cd mobile-crawler
 
 git submodule update --init --recursive
 
+# The DroidRun submodule is pinned from the project fork:
+# https://github.com/ganainy/droidrun
+git config --file .gitmodules --get submodule.external/droidrun.url
+
 python -m venv venv312
 .\venv312\Scripts\Activate.ps1
 
@@ -55,7 +59,7 @@ Startup helper:
 - Python 3.12 (the project and the vendored DroidRun submodule both target Python 3.12).
 - Android device or emulator reachable through ADB.
 - AI provider credentials for the selected provider. Current config mapping supports Gemini, OpenAI, Anthropic, Ollama, and OpenRouter in `DroidRunAgentService`.
-- `external/droidrun` initialized as a git submodule.
+- `external/droidrun` initialized as a git submodule from `https://github.com/ganainy/droidrun`.
 
 Optional integrations:
 
@@ -63,6 +67,58 @@ Optional integrations:
 - MobSF server for static APK analysis.
 - Android screen recording support for session video capture.
 - Replicate or local OmniParser configuration when using fallback-capable parser modes such as `boost`.
+
+## Prepare an Android Device for ADB
+
+Mobile Crawler needs the target device or emulator to be visible through ADB before you start the GUI or CLI crawl.
+
+Install Android SDK Platform Tools first if `adb` is not already available in PowerShell:
+
+```powershell
+adb version
+```
+
+On the Android device:
+
+1. Open Settings > About phone.
+2. Tap Build number seven times to enable Developer options.
+3. Open Settings > System > Developer options. The exact path varies by Android version and device vendor.
+4. Enable Developer options.
+5. Enable USB debugging for a USB connection.
+6. Enable Wireless debugging if you want to connect over Wi-Fi.
+
+For USB debugging:
+
+```powershell
+adb devices
+```
+
+Accept the authorization prompt on the device. The device should appear as `device`, not `unauthorized`.
+
+For wireless debugging on Android 11 or newer, keep the device and PC on the same network, open Wireless debugging on the device, and use the IP address and port shown there:
+
+```powershell
+adb pair 172.20.10.4:<pairing-port>
+adb connect 172.20.10.4:5555
+adb devices
+```
+
+Use the connected device ID in crawl commands. For example:
+
+```powershell
+mobile-crawler-cli crawl --device 172.20.10.4:5555 --package com.example.app --provider gemini --model gemini-1.5-flash --steps 15
+```
+
+For older Android versions or USB-first wireless setup, connect over USB once, then run:
+
+```powershell
+adb tcpip 5555
+adb shell ip addr show wlan0
+adb connect 172.20.10.4:5555
+adb devices
+```
+
+Replace `172.20.10.4` with the device IP address reported by Android or `adb shell ip addr show wlan0`.
 
 ## Usage
 
