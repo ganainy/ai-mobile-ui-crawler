@@ -33,6 +33,28 @@ dependencies = [
     "pytesseract>=0.3.10",
     "easyocr>=1.7.0",
     "replicate>=1.0.0",
+    # AI / Agent engine
+    "llama-index-core>=0.14.4,<0.15.0",
+    "llama-index-workflows==2.8.3",
+    "llama-index-llms-openai>=0.5.6",
+    "llama-index-llms-openai-like>=0.5.1",
+    "llama-index-llms-google-genai>=0.8.5",
+    "llama-index-llms-ollama>=0.7.2",
+    "llama-index-llms-openrouter>=0.4.2",
+    # Device interaction
+    "async_adbutils",
+    # Utility
+    "pydantic>=2.11.10",
+    "aiofiles>=25.1.0",
+    "python-dotenv>=1.2.1",
+    # MCP support
+    "mcp>=1.26.0",
+    # Tracing API
+    "opentelemetry-api>=1.20.0",
+    "opentelemetry-sdk>=1.20.0",
+    # CLI / Terminal UI
+    "rich>=13.0.0",
+    "textual>=0.50.0",
 ]
 
 [project.optional-dependencies]
@@ -44,6 +66,13 @@ dev = [
     "ruff>=0.1.0",
     "black>=23.0.0",
     "pre-commit>=3.0.0",
+]
+anthropic = [
+    "llama-index-llms-anthropic>=0.8.6,<0.9.0",
+]
+arize = [
+    "arize-phoenix>=12.3.0",
+    "llama-index-callbacks-arize-phoenix>=0.1.0",
 ]
 
 [project.scripts]

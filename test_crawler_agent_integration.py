@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Test script for DroidRun integration."""
+"""Test script for crawler_agent integration."""
 
 import sys
 import os
@@ -13,14 +13,14 @@ sys.path.insert(0, str(Path(__file__).parent / "src"))
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def test_droidrun_import():
-    """Test DroidRun import and basic functionality."""
+def test_crawler_agent_import():
+    """Test crawler_agent import and basic functionality."""
     try:
-        import droidrun
-        logger.info(f"✅ DroidRun imported successfully (version: {getattr(droidrun, '__version__', 'unknown')})")
+        import mobile_crawler.domain.crawler_agent as crawler_agent
+        logger.info(f"✅ crawler_agent imported successfully (version: {getattr(crawler_agent, '__version__', 'unknown')})")
         return True
     except ImportError as e:
-        logger.error(f"❌ Failed to import DroidRun: {e}")
+        logger.error(f"❌ Failed to import crawler_agent: {e}")
         return False
 
 def test_mobile_crawler_imports():
@@ -51,7 +51,7 @@ def test_droidrun_config():
         # Create test configuration
         config_manager = ConfigManager()
         config_manager.set('use_droidrun_agent', True)
-        config_manager.set('ai_provider', 'mock')  # Use mock provider for testing
+        config_manager.set('ai_provider', 'openai')  # Use openai provider for testing
 
         # Initialize database components
         db = DatabaseManager()
@@ -102,10 +102,10 @@ def test_ui_imports():
 
 def main():
     """Run all tests."""
-    logger.info("🚀 Starting DroidRun integration tests...")
+    logger.info("🚀 Starting crawler_agent integration tests...")
 
     tests = [
-        ("DroidRun Import", test_droidrun_import),
+        ("crawler_agent Import", test_crawler_agent_import),
         ("Mobile Crawler Imports", test_mobile_crawler_imports),
         ("DroidRun Configuration", test_droidrun_config),
         ("ADB Action Executor", test_adb_executor),
@@ -125,7 +125,7 @@ def main():
     logger.info(f"\n📊 Test Results: {passed}/{total} tests passed")
 
     if passed == total:
-        logger.info("🎉 All tests passed! DroidRun integration is ready.")
+        logger.info("🎉 All tests passed! crawler_agent integration is ready.")
         return 0
     else:
         logger.error("❌ Some tests failed. Please check the installation.")

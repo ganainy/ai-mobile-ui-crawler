@@ -61,7 +61,7 @@ _cancelled_filter = CancelledErrorFilter()
 _root_logger.addFilter(_cancelled_filter)
 
 # Also add to common library loggers that might log CancelledError
-for lib_logger in ["llama_index", "llama_index_instrumentation", "droidrun"]:
+for lib_logger in ["llama_index", "llama_index_instrumentation", "crawler_agent"]:
     logging.getLogger(lib_logger).addFilter(_cancelled_filter)
 
 # Optional import for OmniParser integration
@@ -291,12 +291,12 @@ class DroidRunAgentService:
         handler = DroidRunLogHandler(run_id, log_path, emit_debug, True)
         handler.setLevel(logging.DEBUG)
 
-        # Patch the droidrun logger and known children for debug visibility.
-        for name in ["droidrun", "droidrun.agent", "droidrun.tools", "droidrun.config_manager"]:
+        # Patch the crawler_agent logger and known children for debug visibility.
+        for name in ["crawler_agent", "crawler_agent.agent", "crawler_agent.tools", "crawler_agent.config_manager"]:
             lg = logging.getLogger(name)
             lg.setLevel(logging.DEBUG)
 
-        droid_logger = logging.getLogger("droidrun")
+        droid_logger = logging.getLogger("crawler_agent")
         droid_logger.addHandler(handler)
         droid_logger.propagate = False
         self._log_handler = handler
@@ -304,7 +304,7 @@ class DroidRunAgentService:
     def clear_run_logging(self) -> None:
         """Detach DroidRun log handler if attached."""
         if self._log_handler:
-            droid_logger = logging.getLogger("droidrun")
+            droid_logger = logging.getLogger("crawler_agent")
             droid_logger.removeHandler(self._log_handler)
             droid_logger.propagate = True
             self._log_handler = None
@@ -326,9 +326,8 @@ class DroidRunAgentService:
         self._stats_processor.reset()
 
         try:
-            self._ensure_droidrun_import()
-            # Import DroidRun components
-            from droidrun.config_manager.config_manager import DroidConfig
+            # Import internalized DroidRun components
+            from mobile_crawler.domain.crawler_agent.config_manager.config_manager import DroidConfig
 
             # Create DroidRun configuration
             config_dict = self._get_droidrun_config(max_steps, target_package=target_package)
@@ -945,7 +944,7 @@ class DroidRunAgentService:
                 # Execute the goal using DroidRun agent
                 logger.info(f"Executing DroidRun agent goal: {goal.description[:100]}...")
 
-                from droidrun.agent.droid.droid_agent import DroidAgent
+                from mobile_crawler.domain.crawler_agent.agent.droid.droid_agent import DroidAgent
 
                 self._droid_agent = DroidAgent(goal=goal.description, config=self._droidrun_config)
 
@@ -970,7 +969,7 @@ class DroidRunAgentService:
                         async def _consume_step_events():
                             """Background task: consume DroidRun events and drive step phase machine."""
                             try:
-                                from droidrun.agent.common.events import ToolExecutionEvent
+                                from mobile_crawler.domain.crawler_agent.agent.common.events import ToolExecutionEvent
 
                                 async for event in result.stream_events():
                                     if isinstance(event, ToolExecutionEvent):
@@ -1287,13 +1286,6 @@ class DroidRunAgentService:
                 "raw_result_type": type(result).__name__,
             },
         }
-
-    def _ensure_droidrun_import(self) -> None:
-        """Ensure the DroidRun submodule is importable without pip install."""
-        repo_root = Path(__file__).resolve().parents[3]
-        droidrun_root = repo_root / "external" / "droidrun"
-        if droidrun_root.exists() and str(droidrun_root) not in sys.path:
-            sys.path.insert(0, str(droidrun_root))
 
     def convert_droidrun_actions_to_crawler_format(self, droidrun_actions: List[Dict[str, Any]]) -> List[AIAction]:
         """Convert DroidRun actions to crawler AIAction format.

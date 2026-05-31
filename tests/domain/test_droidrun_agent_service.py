@@ -712,6 +712,10 @@ class TestDroidRunAgentServiceTargetPreflight:
             "droidrun.agent": types.ModuleType("droidrun.agent"),
             "droidrun.agent.droid": types.ModuleType("droidrun.agent.droid"),
             "droidrun.agent.droid.droid_agent": droid_agent_module,
+            "mobile_crawler.domain.crawler_agent": types.ModuleType("mobile_crawler.domain.crawler_agent"),
+            "mobile_crawler.domain.crawler_agent.agent": types.ModuleType("mobile_crawler.domain.crawler_agent.agent"),
+            "mobile_crawler.domain.crawler_agent.agent.droid": types.ModuleType("mobile_crawler.domain.crawler_agent.agent.droid"),
+            "mobile_crawler.domain.crawler_agent.agent.droid.droid_agent": droid_agent_module,
         }
 
 
@@ -722,7 +726,7 @@ class TestDroidRunAgentServiceLogging:
         """Test configure_run_logging attaches handler."""
         log_dir = str(tmp_path)
         emit_debug = Mock()
-        droid_logger = logging.getLogger("droidrun")
+        droid_logger = logging.getLogger("crawler_agent")
         original_propagate = droid_logger.propagate
 
         try:
@@ -734,13 +738,14 @@ class TestDroidRunAgentServiceLogging:
                 assert droid_logger.propagate is False
                 mock_handler_class.assert_called_once()
         finally:
+            droidrun_service.clear_run_logging()
             droid_logger.propagate = original_propagate
 
     def test_clear_run_logging(self, droidrun_service, tmp_path):
         """Test clear_run_logging removes handler."""
         log_dir = str(tmp_path)
         emit_debug = Mock()
-        droid_logger = logging.getLogger("droidrun")
+        droid_logger = logging.getLogger("crawler_agent")
         original_propagate = droid_logger.propagate
 
         try:

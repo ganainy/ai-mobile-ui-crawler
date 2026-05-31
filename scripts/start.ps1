@@ -247,8 +247,25 @@ function Start-MainUI {
         $env:PYTHONPATH = $repoSrc
     }
 
+    # Detect venv and use its Python executable directly
+    $venvPossiblePaths = @(
+        (Join-Path (Get-Location) "venv312"),
+        (Join-Path (Get-Location) ".venv"),
+        (Join-Path (Get-Location) "venv")
+    )
+    
+    $pythonExe = "python"  # fallback to system python
+    foreach ($venvDir in $venvPossiblePaths) {
+        $venvPython = Join-Path $venvDir "Scripts\python.exe"
+        if (Test-Path $venvPython) {
+            $pythonExe = $venvPython
+            Write-Status "Using Python from venv: $venvDir" -Status INFO
+            break
+        }
+    }
+
     # Run in current window (foreground) so user can see output
-    $process = Start-Process -FilePath "python" -ArgumentList @(
+    $process = Start-Process -FilePath $pythonExe -ArgumentList @(
         "-m",
         "mobile_crawler.ui.main_window"
     ) -PassThru -NoNewWindow

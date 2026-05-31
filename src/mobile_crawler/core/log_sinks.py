@@ -154,7 +154,7 @@ class QLogHandler(logging.Handler):
         "urllib3.",
         "google_genai.",
         "llama_index_instrumentation.",
-        "droidrun-telemetry",
+        "crawler_agent-telemetry",
     )
 
     def __init__(self, callback):

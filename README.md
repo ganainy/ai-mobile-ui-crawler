@@ -1,8 +1,8 @@
 # Mobile Crawler
 
-Mobile Crawler is a developer tool for running AI-assisted exploration of Android apps. The application owns the UI, CLI, run/session persistence, settings, logs, and reporting infrastructure; the active exploration runtime is delegated to the DroidRun submodule in `external/droidrun`.
+Mobile Crawler is a developer tool for running AI-assisted exploration of Android apps. The application owns the UI, CLI, run/session persistence, settings, logs, and reporting infrastructure; the active exploration runtime is driven by the internalized `crawler_agent` package under `src/mobile_crawler/domain/crawler_agent`.
 
-Mobile Crawler runs through the editable DroidRun runtime in `external/droidrun`.
+Mobile Crawler runs directly through the internalized agent runtime.
 
 ## Quick Start
 
@@ -10,18 +10,11 @@ Mobile Crawler runs through the editable DroidRun runtime in `external/droidrun`
 git clone <repository-url>
 cd mobile-crawler
 
-git submodule update --init --recursive
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
 
-# The DroidRun submodule is pinned from the project fork:
-# https://github.com/ganainy/droidrun
-git config --file .gitmodules --get submodule.external/droidrun.url
-
-python -m venv venv312
-.\venv312\Scripts\Activate.ps1
-
+# Install Mobile Crawler and all its internalized crawler_agent dependencies
 pip install -e .
-# Install DroidRun dependencies from the local submodule, not the published package.
-pip install -e external/droidrun
 ```
 
 For development tools:
@@ -56,10 +49,9 @@ Startup helper:
 
 ## Requirements
 
-- Python 3.12 (the project and the vendored DroidRun submodule both target Python 3.12).
+- Python 3.12 to 3.14 (the project targets Python 3.12 but also fully supports Python 3.14).
 - Android device or emulator reachable through ADB.
 - AI provider credentials for the selected provider. Current config mapping supports Gemini, OpenAI, Anthropic, Ollama, and OpenRouter in `DroidRunAgentService`.
-- `external/droidrun` initialized as a git submodule from `https://github.com/ganainy/droidrun`.
 
 Optional integrations:
 
@@ -286,37 +278,38 @@ The current crawl flow is:
 
 `CrawlerLoop` is intentionally thin. It manages Mobile Crawler run state, session folders, event forwarding, cancellation, logging, cleanup, and final stats; it does not own the exploration loop.
 
-## How DroidRun Is Used
+## How the Agent Runtime is Used
 
-DroidRun is currently loaded from `external/droidrun`. `DroidRunAgentService._ensure_droidrun_import()` inserts that submodule path into `sys.path` before importing DroidRun classes such as `DroidConfig`, `DroidAgent`, and `ToolExecutionEvent`.
+The agent runtime is fully internalized within the `mobile_crawler` package at `src/mobile_crawler/domain/crawler_agent/`. 
+Imports from the agent runtime resolve directly under the `mobile_crawler.domain.crawler_agent` namespace (e.g., `from mobile_crawler.domain.crawler_agent import DroidConfig, DroidAgent, ToolExecutionEvent`). The dynamic runtime injection that inserted the external path into `sys.path` has been completely removed.
 
-Mobile Crawler does not own DroidRun's core exploration loop. DroidRun owns screenshot and UI-state capture, LLM planning and execution, agent workflows, and ADB-backed device actions.
+Mobile Crawler does not own the agent runtime's core exploration loop. The internalized `crawler_agent` package owns screenshot and UI-state capture, LLM planning and execution, agent workflows, and ADB-backed device actions.
 
-Mobile Crawler wraps DroidRun with:
+Mobile Crawler wraps the internalized `crawler_agent` with:
 
 - Run and session persistence.
 - GUI/CLI event listeners.
 - SQLite repositories and configuration storage.
 - Session folders for screenshots, reports, PCAP files, videos, logs, data, and APKs.
-- DroidRun log forwarding to JSONL and UI logs.
+- Logging forwarding to JSONL and UI logs.
 - Target-app preflight and app-switch/context guards.
 - Step phase tracking and action verification hooks.
 - Duration limits, cancellation requests, crash recovery, and LLM client cleanup.
 - Optional MobSF, PCAPdroid, video, and report/artifact infrastructure.
 
-## How UI Parsing Works With DroidRun
+## How UI Parsing Works With crawler_agent
 
-DroidRun mainly uses Android Accessibility APIs, not pure screenshot vision first. Mobile Crawler passes parser settings into DroidRun through `DroidRunAgentService`, and DroidRun owns active screenshot capture, UI parsing, formatted state text, indexed element lookup, and ADB-backed action execution during the crawl.
+`crawler_agent` mainly uses Android Accessibility APIs, not pure screenshot vision first. Mobile Crawler passes parser settings into the agent through `DroidRunAgentService`, and the agent runtime owns active screenshot capture, UI parsing, formatted state text, indexed element lookup, and ADB-backed action execution during the crawl.
 
-In the default `boost` mode, DroidRun uses the accessibility tree first and falls back to OmniParser only when accessibility metadata is unavailable or insufficient.
+In the default `boost` mode, the agent uses the accessibility tree first and falls back to OmniParser only when accessibility metadata is unavailable or insufficient.
 
-The `ui_parser_mode` setting controls which UI source DroidRun uses:
+The `ui_parser_mode` setting controls which UI source the agent uses:
 
 - `omniparser`: always parse screenshots with OmniParser.
 - `boost` (default): use accessibility data first, otherwise fall back to OmniParser.
 - `accessibility`: use accessibility data only.
 
-When OmniParser is used, DroidRun converts OmniParser bounding boxes into indexed UI elements with tap-ready bounds before presenting them to the agent. Mobile Crawler's local `OmniParserClient` and `UIContextManager` appear to be auxiliary diagnostic/cache code; they are not the active crawl path.
+When OmniParser is used, the agent converts OmniParser bounding boxes into indexed UI elements with tap-ready bounds before presenting them to the LLM agent. Mobile Crawler's local `OmniParserClient` and `UIContextManager` appear to be auxiliary diagnostic/cache code; they are not the active crawl path.
 
 ## Project Boundaries
 
@@ -328,9 +321,9 @@ Mobile Crawler owns:
 - SQLite storage for runs, screens, step logs, transitions, stats, AI interactions, and step phases.
 - Session folder creation and artifact layout.
 - Reporting, run history, MobSF integration, PCAPdroid integration, and video capture hooks.
-- DroidRun orchestration, log forwarding, lifecycle events, and run-level status.
+- Agent orchestration, log forwarding, lifecycle events, and run-level status.
 
-DroidRun owns:
+The internalized `crawler_agent` owns:
 
 - `DroidAgent` and active UI-agent execution.
 - Manager, executor, fast-agent, app-opener, and structured-output workflows.
@@ -374,10 +367,8 @@ The session path is stored on the run record so the UI can resolve artifacts lat
 
 ## Current Limitations
 
-- Pause, resume, step-by-step mode, and manual next-step advancement are not supported in DroidRun mode. The current `CrawlerLoop` methods emit debug messages for those controls and do not pause the DroidRun workflow.
-- Current crawl execution is DroidRun-first through the editable runtime in `external/droidrun`.
-- The `use_droidrun_agent` setting remains in the UI/config, but the current `CrawlerLoop` implementation delegates traversal to DroidRun.
-- Removing `external/droidrun` requires vendoring or rewriting the active UI-agent runtime, including agent workflows, prompts, state capture, LLM adapters, and Android action tools.
+- Pause, resume, step-by-step mode, and manual next-step advancement are not supported. The current `CrawlerLoop` methods emit debug messages for those controls and do not pause the agent workflow.
+- The `use_droidrun_agent` setting remains in the UI/config, but the current `CrawlerLoop` implementation delegates traversal to the internalized `crawler_agent`.
 
 ## Development
 

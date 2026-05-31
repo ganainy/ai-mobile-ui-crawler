@@ -13,7 +13,7 @@ from mobile_crawler.domain.models import ActionResult as CrawlerActionResult
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DROIDRUN_ROOT = REPO_ROOT / "external" / "droidrun"
+DROIDRUN_ROOT = REPO_ROOT / "src" / "mobile_crawler" / "domain" / "crawler_agent"
 if str(DROIDRUN_ROOT) not in sys.path:
     sys.path.insert(0, str(DROIDRUN_ROOT))
 
@@ -27,13 +27,13 @@ class _TestUIState:
 
 def _install_droidrun_package_stubs():
     droidrun_pkg = types.ModuleType("droidrun")
-    droidrun_pkg.__path__ = [str(DROIDRUN_ROOT / "droidrun")]
+    droidrun_pkg.__path__ = [str(DROIDRUN_ROOT)]
     tools_pkg = types.ModuleType("droidrun.tools")
-    tools_pkg.__path__ = [str(DROIDRUN_ROOT / "droidrun" / "tools")]
+    tools_pkg.__path__ = [str(DROIDRUN_ROOT / "tools")]
     ui_pkg = types.ModuleType("droidrun.tools.ui")
-    ui_pkg.__path__ = [str(DROIDRUN_ROOT / "droidrun" / "tools" / "ui")]
+    ui_pkg.__path__ = [str(DROIDRUN_ROOT / "tools" / "ui")]
     driver_pkg = types.ModuleType("droidrun.tools.driver")
-    driver_pkg.__path__ = [str(DROIDRUN_ROOT / "droidrun" / "tools" / "driver")]
+    driver_pkg.__path__ = [str(DROIDRUN_ROOT / "tools" / "driver")]
 
     base_module = types.ModuleType("droidrun.tools.driver.base")
     base_module.DeviceDisconnectedError = type("DeviceDisconnectedError", (Exception,), {})
@@ -53,6 +53,13 @@ def _install_droidrun_package_stubs():
             "droidrun.tools.driver.base": base_module,
             "droidrun.tools.ui.state": state_module,
             "droidrun.tools.ui.stealth_state": stealth_module,
+            "mobile_crawler.domain.crawler_agent": droidrun_pkg,
+            "mobile_crawler.domain.crawler_agent.tools": tools_pkg,
+            "mobile_crawler.domain.crawler_agent.tools.ui": ui_pkg,
+            "mobile_crawler.domain.crawler_agent.tools.driver": driver_pkg,
+            "mobile_crawler.domain.crawler_agent.tools.driver.base": base_module,
+            "mobile_crawler.domain.crawler_agent.tools.ui.state": state_module,
+            "mobile_crawler.domain.crawler_agent.tools.ui.stealth_state": stealth_module,
         }
     )
 
@@ -69,7 +76,7 @@ def _load_module(module_name: str, relative_path: str):
 def _load_provider_module():
     return _load_module(
         "droidrun.tools.ui.provider",
-        "droidrun/tools/ui/provider.py",
+        "tools/ui/provider.py",
     )
 
 
@@ -77,9 +84,9 @@ def _load_actions_module():
     _install_droidrun_package_stubs()
 
     agent_pkg = types.ModuleType("droidrun.agent")
-    agent_pkg.__path__ = [str(DROIDRUN_ROOT / "droidrun" / "agent")]
+    agent_pkg.__path__ = [str(DROIDRUN_ROOT / "agent")]
     oneflows_pkg = types.ModuleType("droidrun.agent.oneflows")
-    oneflows_pkg.__path__ = [str(DROIDRUN_ROOT / "droidrun" / "agent" / "oneflows")]
+    oneflows_pkg.__path__ = [str(DROIDRUN_ROOT / "agent" / "oneflows")]
 
     action_result_module = types.ModuleType("droidrun.agent.action_result")
 
@@ -99,12 +106,16 @@ def _load_actions_module():
             "droidrun.agent.oneflows": oneflows_pkg,
             "droidrun.agent.action_result": action_result_module,
             "droidrun.agent.oneflows.app_starter_workflow": app_starter_module,
+            "mobile_crawler.domain.crawler_agent.agent": agent_pkg,
+            "mobile_crawler.domain.crawler_agent.agent.oneflows": oneflows_pkg,
+            "mobile_crawler.domain.crawler_agent.agent.action_result": action_result_module,
+            "mobile_crawler.domain.crawler_agent.agent.oneflows.app_starter_workflow": app_starter_module,
         }
     )
 
     return _load_module(
         "droidrun.agent.utils.actions",
-        "droidrun/agent/utils/actions.py",
+        "agent/utils/actions.py",
     )
 
 
