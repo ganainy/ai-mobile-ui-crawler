@@ -550,6 +550,29 @@ class MainWindow(QMainWindow):
                 0, 0, f"UI: Using custom exploration objective ({len(exploration_objective)} chars)"
             )
 
+        # Set Tracing / Observability settings from settings panel
+        enable_tracing = self.settings_panel.get_enable_tracing()
+        config_manager.set("enable_tracing", enable_tracing)
+
+        tracing_provider = self.settings_panel.get_tracing_provider()
+        config_manager.set("tracing_provider", tracing_provider)
+
+        phoenix_url = self.settings_panel.get_phoenix_url()
+        config_manager.set("phoenix_url", phoenix_url)
+
+        langfuse_host = self.settings_panel.get_langfuse_host()
+        config_manager.set("langfuse_host", langfuse_host)
+
+        langfuse_pub = self.settings_panel.get_langfuse_public_key()
+        config_manager.set("langfuse_public_key", langfuse_pub)
+
+        langfuse_sec = self.settings_panel.get_langfuse_secret_key()
+        config_manager.set("langfuse_secret_key", langfuse_sec)
+
+        self.signal_adapter.on_debug_log(
+            0, 0, f"UI: Tracing settings - enabled={enable_tracing}, provider={tracing_provider}"
+        )
+
         return config_manager
 
     def _create_run_record(self):

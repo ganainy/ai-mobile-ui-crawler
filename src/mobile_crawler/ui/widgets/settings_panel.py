@@ -375,6 +375,71 @@ class SettingsPanel(QWidget):
         mobsf_group.setLayout(mobsf_layout)
         layout.addWidget(mobsf_group)
 
+        # Observability & Tracing
+        tracing_group = QGroupBox("Observability & Tracing")
+        tracing_layout = QVBoxLayout()
+
+        self.enable_tracing_checkbox = QCheckBox("Enable Tracing (OpenTelemetry)")
+        self.enable_tracing_checkbox.setToolTip("Enable telemetry tracing for agent steps, tool calls, and token usage metrics.")
+        tracing_layout.addWidget(self.enable_tracing_checkbox)
+
+        provider_layout = QHBoxLayout()
+        provider_layout.addWidget(QLabel("Provider:"))
+        self.tracing_provider_combo = QComboBox()
+        self.tracing_provider_combo.addItems(["phoenix", "langfuse"])
+        self.tracing_provider_combo.setToolTip("Tracing provider: 'phoenix' (local dashboard) or 'langfuse' (cloud monitoring)")
+        provider_layout.addWidget(self.tracing_provider_combo)
+        provider_layout.addStretch()
+        tracing_layout.addLayout(provider_layout)
+
+        # Phoenix configuration widget
+        self.phoenix_widget = QWidget()
+        phoenix_layout = QHBoxLayout(self.phoenix_widget)
+        phoenix_layout.setContentsMargins(0, 0, 0, 0)
+        phoenix_layout.addWidget(QLabel("Phoenix URL:"))
+        self.phoenix_url_input = QLineEdit()
+        self.phoenix_url_input.setPlaceholderText("http://localhost:6006")
+        self.phoenix_url_input.setToolTip("Arize Phoenix local server URL")
+        phoenix_layout.addWidget(self.phoenix_url_input)
+        tracing_layout.addWidget(self.phoenix_widget)
+
+        # Langfuse configuration widget
+        self.langfuse_widget = QWidget()
+        langfuse_layout = QVBoxLayout(self.langfuse_widget)
+        langfuse_layout.setContentsMargins(0, 0, 0, 0)
+
+        host_layout = QHBoxLayout()
+        host_layout.addWidget(QLabel("Host URL:"))
+        self.langfuse_host_input = QLineEdit()
+        self.langfuse_host_input.setPlaceholderText("https://us.cloud.langfuse.com")
+        host_layout.addWidget(self.langfuse_host_input)
+        langfuse_layout.addLayout(host_layout)
+
+        pub_key_layout = QHBoxLayout()
+        pub_key_layout.addWidget(QLabel("Public Key:"))
+        self.langfuse_pub_key_input = QLineEdit()
+        self.langfuse_pub_key_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.langfuse_pub_key_input.setPlaceholderText("pk-lf-...")
+        pub_key_layout.addWidget(self.langfuse_pub_key_input)
+        langfuse_layout.addLayout(pub_key_layout)
+
+        secret_key_layout = QHBoxLayout()
+        secret_key_layout.addWidget(QLabel("Secret Key:"))
+        self.langfuse_secret_key_input = QLineEdit()
+        self.langfuse_secret_key_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.langfuse_secret_key_input.setPlaceholderText("sk-lf-...")
+        secret_key_layout.addWidget(self.langfuse_secret_key_input)
+        langfuse_layout.addLayout(secret_key_layout)
+
+        tracing_layout.addWidget(self.langfuse_widget)
+
+        # Connect signals
+        self.enable_tracing_checkbox.toggled.connect(self._on_tracing_toggled)
+        self.tracing_provider_combo.currentTextChanged.connect(self._on_tracing_provider_changed)
+
+        tracing_group.setLayout(tracing_layout)
+        layout.addWidget(tracing_group)
+
         layout.addStretch()
         return self._wrap_in_scroll_area(tab)
 
@@ -416,6 +481,33 @@ class SettingsPanel(QWidget):
             checked: Whether MobSF analysis is enabled
         """
         self.mobsf_api_url_input.setEnabled(checked)
+
+    def _on_tracing_toggled(self, checked: bool):
+        """Handle tracing enabled checkbox toggle."""
+        self.tracing_provider_combo.setEnabled(checked)
+        if checked:
+            self._on_tracing_provider_changed(self.tracing_provider_combo.currentText())
+        else:
+            self.phoenix_widget.setEnabled(False)
+            self.langfuse_widget.setEnabled(False)
+
+    def _on_tracing_provider_changed(self, provider: str):
+        """Handle tracing provider combobox change."""
+        if not self.enable_tracing_checkbox.isChecked():
+            self.phoenix_widget.setEnabled(False)
+            self.langfuse_widget.setEnabled(False)
+            return
+
+        if provider == "phoenix":
+            self.phoenix_widget.setVisible(True)
+            self.phoenix_widget.setEnabled(True)
+            self.langfuse_widget.setVisible(False)
+            self.langfuse_widget.setEnabled(False)
+        else:
+            self.phoenix_widget.setVisible(False)
+            self.phoenix_widget.setEnabled(False)
+            self.langfuse_widget.setVisible(True)
+            self.langfuse_widget.setEnabled(True)
 
     def _load_settings(self):
         """Load settings from user_config.db."""
@@ -513,6 +605,30 @@ class SettingsPanel(QWidget):
                 "interact with UI elements, and discover the app's functionality. "
                 "Focus on user flows like registration, login, main features, and settings."
             )
+
+        # Load Tracing / Observability settings
+        enable_tracing = self._config_store.get_setting("enable_tracing", default=False)
+        self.enable_tracing_checkbox.setChecked(enable_tracing)
+
+        tracing_provider = self._config_store.get_setting("tracing_provider", default="phoenix")
+        self.tracing_provider_combo.setCurrentText(tracing_provider)
+
+        phoenix_url = self._config_store.get_setting("phoenix_url", default="http://localhost:6006")
+        self.phoenix_url_input.setText(phoenix_url)
+
+        langfuse_host = self._config_store.get_setting("langfuse_host", default="https://us.cloud.langfuse.com")
+        self.langfuse_host_input.setText(langfuse_host)
+
+        langfuse_pub = self._config_store.get_secret_plaintext("langfuse_public_key")
+        if langfuse_pub:
+            self.langfuse_pub_key_input.setText(langfuse_pub)
+
+        langfuse_sec = self._config_store.get_secret_plaintext("langfuse_secret_key")
+        if langfuse_sec:
+            self.langfuse_secret_key_input.setText(langfuse_sec)
+
+        # Update visibility and enable states
+        self._on_tracing_toggled(enable_tracing)
 
     def _on_save_clicked(self):
         """Handle save button click."""
@@ -627,6 +743,31 @@ class SettingsPanel(QWidget):
                 self._config_store.set_setting("exploration_objective", exploration_objective, "string")
             else:
                 self._config_store.delete_setting("exploration_objective")
+
+            # Save Tracing / Observability settings
+            enable_tracing = self.enable_tracing_checkbox.isChecked()
+            self._config_store.set_setting("enable_tracing", enable_tracing, "bool")
+
+            tracing_provider = self.tracing_provider_combo.currentText()
+            self._config_store.set_setting("tracing_provider", tracing_provider, "string")
+
+            phoenix_url = self.phoenix_url_input.text().strip()
+            self._config_store.set_setting("phoenix_url", phoenix_url, "string")
+
+            langfuse_host = self.langfuse_host_input.text().strip()
+            self._config_store.set_setting("langfuse_host", langfuse_host, "string")
+
+            langfuse_pub = self.langfuse_pub_key_input.text().strip()
+            if langfuse_pub:
+                self._config_store.set_secret_plaintext("langfuse_public_key", langfuse_pub)
+            else:
+                self._config_store.delete_secret("langfuse_public_key")
+
+            langfuse_sec = self.langfuse_secret_key_input.text().strip()
+            if langfuse_sec:
+                self._config_store.set_secret_plaintext("langfuse_secret_key", langfuse_sec)
+            else:
+                self._config_store.delete_secret("langfuse_secret_key")
 
             # Emit signal
             self.settings_saved.emit()
@@ -770,6 +911,30 @@ class SettingsPanel(QWidget):
         """
         return self.mobsf_api_url_input.text().strip()
 
+    def get_enable_tracing(self) -> bool:
+        """Get the current tracing enabled state."""
+        return self.enable_tracing_checkbox.isChecked()
+
+    def get_tracing_provider(self) -> str:
+        """Get the current tracing provider."""
+        return self.tracing_provider_combo.currentText()
+
+    def get_phoenix_url(self) -> str:
+        """Get the current Arize Phoenix URL."""
+        return self.phoenix_url_input.text().strip()
+
+    def get_langfuse_host(self) -> str:
+        """Get the current Langfuse host URL."""
+        return self.langfuse_host_input.text().strip()
+
+    def get_langfuse_public_key(self) -> str:
+        """Get the current Langfuse public key."""
+        return self.langfuse_pub_key_input.text().strip()
+
+    def get_langfuse_secret_key(self) -> str:
+        """Get the current Langfuse secret key."""
+        return self.langfuse_secret_key_input.text().strip()
+
     def reset(self):
         """Reset all settings to default values."""
         self.gemini_api_key_input.clear()
@@ -780,6 +945,12 @@ class SettingsPanel(QWidget):
         self.test_username_input.clear()
         self.test_password_input.clear()
         self.ui_parser_mode_combo.setCurrentText("boost")
+        self.enable_tracing_checkbox.setChecked(False)
+        self.tracing_provider_combo.setCurrentText("phoenix")
+        self.phoenix_url_input.setText("http://localhost:6006")
+        self.langfuse_host_input.setText("https://us.cloud.langfuse.com")
+        self.langfuse_pub_key_input.clear()
+        self.langfuse_secret_key_input.clear()
 
     def _validate_api_key(self, api_key: str, provider_name: str) -> bool:
         """Validate API key format and optionally test connectivity.

@@ -252,6 +252,37 @@ class DroidRunAgentService:
         }
         config["telemetry"] = {"enabled": False}  # PostHog telemetry always off
 
+        # Configure Tracing (Arize Phoenix / Langfuse)
+        enable_tracing = self.config_manager.get("enable_tracing", False)
+        tracing_provider = self.config_manager.get("tracing_provider", "phoenix")
+        phoenix_url = self.config_manager.get("phoenix_url", "http://localhost:6006")
+        langfuse_host = self.config_manager.get("langfuse_host", "https://us.cloud.langfuse.com")
+        langfuse_pub = self.config_manager.get("langfuse_public_key", "")
+        langfuse_sec = self.config_manager.get("langfuse_secret_key", "")
+
+        config["tracing"] = {
+            "enabled": enable_tracing,
+            "provider": tracing_provider,
+            "langfuse_screenshots": False,
+            "langfuse_secret_key": langfuse_sec,
+            "langfuse_public_key": langfuse_pub,
+            "langfuse_host": langfuse_host,
+        }
+
+        # Inject environment variables for OpenTelemetry tracing tools
+        if enable_tracing:
+            if tracing_provider == "phoenix":
+                os.environ["PHOENIX_URL"] = phoenix_url
+                logger.info(f"Observability: Phoenix tracing enabled targeting endpoint {phoenix_url}")
+            elif tracing_provider == "langfuse":
+                if langfuse_pub:
+                    os.environ["LANGFUSE_PUBLIC_KEY"] = langfuse_pub
+                if langfuse_sec:
+                    os.environ["LANGFUSE_SECRET_KEY"] = langfuse_sec
+                if langfuse_host:
+                    os.environ["LANGFUSE_HOST"] = langfuse_host
+                logger.info(f"Observability: Langfuse cloud tracing enabled targeting host {langfuse_host}")
+
         def set_llm_api_key(api_key: str) -> None:
             for profile in config["llm_profiles"].values():
                 profile["kwargs"]["api_key"] = api_key
