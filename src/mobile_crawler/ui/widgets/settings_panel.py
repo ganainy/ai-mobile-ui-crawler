@@ -648,9 +648,17 @@ class SettingsPanel(QWidget):
             self.exploration_objective_input.setPlainText(exploration_objective)
         else:
             self.exploration_objective_input.setPlainText(
-                "Explore the app systematically. Navigate through different screens, "
-                "interact with UI elements, and discover the app's functionality. "
-                "Focus on user flows like registration, login, main features, and settings."
+                "Explore as much of the application as possible. Your primary goal is to maximize coverage "
+                "by discovering and navigating to as many different screens, tabs, and distinct sections "
+                "of the app as possible.\n\n"
+                "Ensure you:\n"
+                "1. Systematically click on menus, navigation bars, buttons, and links to uncover new pages.\n"
+                "2. Avoid getting stuck in loops; if you find yourself on a screen you have already visited, "
+                "backtrack or explore unexplored interactive elements.\n"
+                "3. Actively fill in forms with placeholder data or interact with dialogues if they block access "
+                "to deeper parts of the application.\n"
+                "4. Keep mapping and discovering new layouts, settings panels, user profiles, and features "
+                "to achieve maximum exploration depth and breadth."
             )
 
         # Load Tracing / Observability settings
