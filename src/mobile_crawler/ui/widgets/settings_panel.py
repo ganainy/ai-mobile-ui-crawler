@@ -208,7 +208,6 @@ class SettingsPanel(QWidget):
 
         # 3. Mobile Number field with a hint
         l, self.test_phone_input = create_credential_field("Test Mobile Number:", "e.g. +49 170 1234567")
-        self.test_phone_input.setText("+49 170 1234567")
         self.test_phone_input.setToolTip("Enter a real mobile number if you need to receive SMS verification/MFA codes")
         phone_hint = QLabel("💡 Tip: Provide a real mobile number if the target app requires SMS MFA/verification.")
         phone_hint.setStyleSheet("color: #aa6600; font-size: 10px; font-style: italic;")
@@ -675,7 +674,7 @@ class SettingsPanel(QWidget):
         test_email = self._config_store.get_setting("test_email", default="testuser@example.com")
         self.test_email_input.setText(test_email)
 
-        test_phone = self._config_store.get_setting("test_phone", default="+49 170 1234567")
+        test_phone = self._config_store.get_setting("test_phone", default="")
         self.test_phone_input.setText(test_phone)
 
         # Load traffic capture settings
@@ -1137,7 +1136,7 @@ class SettingsPanel(QWidget):
         self.test_password_input.setText("Password123")
         self.test_address_input.setText("Kaiserstraße 12, 60311 Frankfurt am Main, Germany")
         self.test_email_input.setText("testuser@example.com")
-        self.test_phone_input.setText("+49 170 1234567")
+        self.test_phone_input.clear()
         self.exploration_objective_input.setPlainText(DEFAULT_EXPLORATION_OBJECTIVE)
         self.ui_parser_mode_combo.setCurrentText("boost")
         self.enable_tracing_checkbox.setChecked(False)

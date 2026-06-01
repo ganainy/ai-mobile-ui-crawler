@@ -353,7 +353,7 @@ class TestReset:
         assert panel.test_password_input.text() == "Password123"
         assert panel.test_address_input.text() == "Kaiserstraße 12, 60311 Frankfurt am Main, Germany"
         assert panel.test_email_input.text() == "testuser@example.com"
-        assert panel.test_phone_input.text() == "+49 170 1234567"
+        assert panel.test_phone_input.text() == ""
 
     def test_reset_exploration_objective_via_button(self, qt_app, mock_config_store):
         """Test that clicking the Reset to Default button resets the objective prompt."""
