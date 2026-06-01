@@ -343,16 +343,16 @@ class TestReset:
     def test_reset_clears_credentials(self, qt_app, mock_config_store):
         """Test that reset clears credential inputs."""
         panel = _create_settings_panel(mock_config_store)
-        panel.test_username_input.setText("testuser")
-        panel.test_password_input.setText("testpass")
+        panel.test_username_input.setText("testuser_custom")
+        panel.test_password_input.setText("testpass_custom")
         panel.test_address_input.setText("Some Other Address")
         panel.test_email_input.setText("other_email@example.com")
         panel.test_phone_input.setText("+123456789")
         panel.reset()
-        assert panel.test_username_input.text() == ""
-        assert panel.test_password_input.text() == ""
+        assert panel.test_username_input.text() == "testuser"
+        assert panel.test_password_input.text() == "Password123"
         assert panel.test_address_input.text() == "Kaiserstraße 12, 60311 Frankfurt am Main, Germany"
-        assert panel.test_email_input.text() == ""
+        assert panel.test_email_input.text() == "testuser@example.com"
         assert panel.test_phone_input.text() == "+49 170 1234567"
 
     def test_reset_exploration_objective_via_button(self, qt_app, mock_config_store):
@@ -434,8 +434,8 @@ class TestSettingsPersistence:
         assert panel.openrouter_api_key_input.text() == ""
         assert panel.max_steps_input.value() == 100
         assert panel.max_duration_input.value() == 300
-        assert panel.test_username_input.text() == ""
-        assert panel.test_password_input.text() == ""
+        assert panel.test_username_input.text() == "testuser"
+        assert panel.test_password_input.text() == "Password123"
 
     def test_gemini_api_key_persists(self, qt_app, mock_config_store, monkeypatch):
         """Test that Gemini API key persists across sessions."""

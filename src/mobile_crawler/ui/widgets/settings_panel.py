@@ -183,9 +183,11 @@ class SettingsPanel(QWidget):
             return field_layout, edit
 
         l, self.test_username_input = create_credential_field("Test Username:", "Enter test username")
+        self.test_username_input.setText("testuser")
         credentials_layout.addLayout(l)
 
         l, self.test_password_input = create_credential_field("Test Password:", "Enter test password", True)
+        self.test_password_input.setText("Password123")
         credentials_layout.addLayout(l)
 
         # 1. Address field with German default mock value
@@ -196,9 +198,10 @@ class SettingsPanel(QWidget):
 
         # 2. Email address field with a hint
         l, self.test_email_input = create_credential_field("Test Email Address:", "Enter test email address")
+        self.test_email_input.setText("testuser@example.com")
         self.test_email_input.setToolTip("Enter a real email address if you need to receive verification codes or OTPs")
         email_hint = QLabel("💡 Tip: Provide a real email address if the target app requires email verification/OTP.")
-        email_hint.setStyleSheet("color: #666; font-size: 10px; font-style: italic;")
+        email_hint.setStyleSheet("color: #aa6600; font-size: 10px; font-style: italic;")
         email_hint.setWordWrap(True)
         l.addWidget(email_hint)
         credentials_layout.addLayout(l)
@@ -207,7 +210,7 @@ class SettingsPanel(QWidget):
         l, self.test_phone_input = create_credential_field("Test Mobile Number:", "e.g. +49 170 1234567")
         self.test_phone_input.setText("+49 170 1234567")
         self.test_phone_input.setToolTip("Enter a real mobile number if you need to receive SMS verification/MFA codes")
-        phone_hint = QLabel("⚠️ Note: Provide a real mobile number if the target app requires SMS MFA/verification.")
+        phone_hint = QLabel("💡 Tip: Provide a real mobile number if the target app requires SMS MFA/verification.")
         phone_hint.setStyleSheet("color: #aa6600; font-size: 10px; font-style: italic;")
         phone_hint.setWordWrap(True)
         l.addWidget(phone_hint)
@@ -657,17 +660,19 @@ class SettingsPanel(QWidget):
             self.steps_radio.setChecked(True)
 
         # Load test credentials
-        test_username = self._config_store.get_setting("test_username", default="")
+        test_username = self._config_store.get_setting("test_username", default="testuser")
         self.test_username_input.setText(test_username)
 
         test_password = self._config_store.get_secret_plaintext("test_password")
         if test_password:
             self.test_password_input.setText(test_password)
+        else:
+            self.test_password_input.setText("Password123")
 
         test_address = self._config_store.get_setting("test_address", default="Kaiserstraße 12, 60311 Frankfurt am Main, Germany")
         self.test_address_input.setText(test_address)
 
-        test_email = self._config_store.get_setting("test_email", default="")
+        test_email = self._config_store.get_setting("test_email", default="testuser@example.com")
         self.test_email_input.setText(test_email)
 
         test_phone = self._config_store.get_setting("test_phone", default="+49 170 1234567")
@@ -1128,10 +1133,10 @@ class SettingsPanel(QWidget):
         self.replicate_api_key_input.clear()
         self.max_steps_input.setValue(100)
         self.max_duration_input.setValue(300)
-        self.test_username_input.clear()
-        self.test_password_input.clear()
+        self.test_username_input.setText("testuser")
+        self.test_password_input.setText("Password123")
         self.test_address_input.setText("Kaiserstraße 12, 60311 Frankfurt am Main, Germany")
-        self.test_email_input.clear()
+        self.test_email_input.setText("testuser@example.com")
         self.test_phone_input.setText("+49 170 1234567")
         self.exploration_objective_input.setPlainText(DEFAULT_EXPLORATION_OBJECTIVE)
         self.ui_parser_mode_combo.setCurrentText("boost")
