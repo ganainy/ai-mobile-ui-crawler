@@ -281,14 +281,51 @@ class SettingsPanel(QWidget):
         parser_approach_hint.setStyleSheet("color: #666; font-size: 11px;")
         parser_layout.addWidget(parser_approach_hint)
 
+        # Backend selection (Replicate API vs Local Server)
+        backend_layout = QHBoxLayout()
+        backend_layout.addWidget(QLabel("OmniParser Backend:"))
+        self.omniparser_backend_combo = QComboBox()
+        self.omniparser_backend_combo.addItems(["replicate", "local"])
+        self.omniparser_backend_combo.setCurrentText("replicate")
+        self.omniparser_backend_combo.setToolTip("Select where OmniParser runs: 'replicate' (Cloud API) or 'local' (Local FastAPI server)")
+        backend_layout.addWidget(self.omniparser_backend_combo)
+        backend_layout.addStretch()
+        parser_layout.addLayout(backend_layout)
+
+        # Local URL (only visible/enabled when local backend is selected)
+        self.local_url_container = QWidget()
+        local_url_layout = QHBoxLayout()
+        local_url_layout.setContentsMargins(0, 0, 0, 0)
+        local_url_layout.addWidget(QLabel("Local OmniParser URL:"))
+        self.omniparser_local_url_input = QLineEdit()
+        self.omniparser_local_url_input.setText("http://localhost:8000")
+        self.omniparser_local_url_input.setPlaceholderText("e.g. http://localhost:8000")
+        self.omniparser_local_url_input.setToolTip("Local server URL for OmniParser (must include port)")
+        local_url_layout.addWidget(self.omniparser_local_url_input)
+        self.local_url_container.setLayout(local_url_layout)
+        parser_layout.addWidget(self.local_url_container)
+
+        # Replicate API Key (only visible/enabled when replicate backend is selected)
+        self.replicate_container = QWidget()
         replicate_layout = QHBoxLayout()
+        replicate_layout.setContentsMargins(0, 0, 0, 0)
         replicate_layout.addWidget(QLabel("Replicate API Key:"))
         self.replicate_api_key_input = QLineEdit()
         self.replicate_api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
         self.replicate_api_key_input.setPlaceholderText("Enter Replicate API key for OmniParser")
         self.replicate_api_key_input.setToolTip("API key for Replicate (used by OmniParser vision model)")
         replicate_layout.addWidget(self.replicate_api_key_input)
-        parser_layout.addLayout(replicate_layout)
+        self.replicate_container.setLayout(replicate_layout)
+        parser_layout.addWidget(self.replicate_container)
+
+        # Toggle visibility based on selected backend
+        def toggle_omniparser_backend(backend):
+            self.local_url_container.setVisible(backend == "local")
+            self.replicate_container.setVisible(backend == "replicate")
+
+        self.omniparser_backend_combo.currentTextChanged.connect(toggle_omniparser_backend)
+        # Initialize default state
+        toggle_omniparser_backend(self.omniparser_backend_combo.currentText())
 
         parser_group.setLayout(parser_layout)
         layout.addWidget(parser_group)
@@ -591,6 +628,16 @@ class SettingsPanel(QWidget):
         ui_parser_mode = self._config_store.get_setting("ui_parser_mode", default="boost")
         self.ui_parser_mode_combo.setCurrentText(ui_parser_mode)
 
+        omniparser_backend = self._config_store.get_setting("omniparser_backend", default="replicate")
+        self.omniparser_backend_combo.setCurrentText(omniparser_backend)
+
+        omniparser_local_url = self._config_store.get_setting("omniparser_local_url", default="http://localhost:8000")
+        self.omniparser_local_url_input.setText(omniparser_local_url)
+
+        # Trigger visibility update on load
+        self.local_url_container.setVisible(omniparser_backend == "local")
+        self.replicate_container.setVisible(omniparser_backend == "replicate")
+
         replicate_key = self._config_store.get_setting("replicate_api_key", default="")
         if replicate_key:
             self.replicate_api_key_input.setText(replicate_key)
@@ -729,6 +776,13 @@ class SettingsPanel(QWidget):
             # Save UI parser mode
             ui_parser_mode = self.ui_parser_mode_combo.currentText()
             self._config_store.set_setting("ui_parser_mode", ui_parser_mode, "string")
+
+            # Save OmniParser backend and local URL settings
+            omniparser_backend = self.omniparser_backend_combo.currentText()
+            self._config_store.set_setting("omniparser_backend", omniparser_backend, "string")
+
+            omniparser_local_url = self.omniparser_local_url_input.text().strip()
+            self._config_store.set_setting("omniparser_local_url", omniparser_local_url, "string")
 
             # Save Replicate API key (as regular setting, not secret - for easier debugging)
             replicate_key = self.replicate_api_key_input.text().strip()
@@ -894,6 +948,22 @@ class SettingsPanel(QWidget):
             Replicate API key
         """
         return self.replicate_api_key_input.text().strip()
+
+    def get_omniparser_backend(self) -> str:
+        """Get the current OmniParser backend.
+
+        Returns:
+            Backend mode: "replicate" or "local"
+        """
+        return self.omniparser_backend_combo.currentText()
+
+    def get_omniparser_local_url(self) -> str:
+        """Get the current OmniParser Local URL.
+
+        Returns:
+            Local server URL
+        """
+        return self.omniparser_local_url_input.text().strip()
 
     def get_pcapdroid_api_key(self) -> str:
         """Get the current PCAPdroid API key.

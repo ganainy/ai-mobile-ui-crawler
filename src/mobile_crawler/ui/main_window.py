@@ -537,6 +537,14 @@ class MainWindow(QMainWindow):
         config_manager.set("ui_parser_mode", ui_parser_mode)
         self.signal_adapter.on_debug_log(0, 0, f"UI: ui_parser_mode = {ui_parser_mode}")
 
+        omniparser_backend = self.settings_panel.get_omniparser_backend()
+        config_manager.set("omniparser_backend", omniparser_backend)
+        self.signal_adapter.on_debug_log(0, 0, f"UI: omniparser_backend = {omniparser_backend}")
+
+        omniparser_local_url = self.settings_panel.get_omniparser_local_url()
+        config_manager.set("omniparser_local_url", omniparser_local_url)
+        self.signal_adapter.on_debug_log(0, 0, f"UI: omniparser_local_url = {omniparser_local_url}")
+
         replicate_api_key = self.settings_panel.get_replicate_api_key()
         if replicate_api_key:
             config_manager.set("replicate_api_key", replicate_api_key)
