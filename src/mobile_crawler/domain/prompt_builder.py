@@ -176,12 +176,21 @@ class PromptBuilder:
         # Try to get test credentials from config
         test_username = self.config_manager.get('test_username', '')
         test_password = self.config_manager.get('test_password', '')
+        test_address = self.config_manager.get('test_address', '')
+        test_email = self.config_manager.get('test_email', '')
+        test_phone = self.config_manager.get('test_phone', '')
 
         credentials = []
         if test_username:
             credentials.append(f"Username: {test_username}")
         if test_password:
             credentials.append(f"Password: {test_password}")
+        if test_address:
+            credentials.append(f"Address: {test_address}")
+        if test_email:
+            credentials.append(f"Email: {test_email}")
+        if test_phone:
+            credentials.append(f"Phone Number: {test_phone}")
 
         if credentials:
             return "\n".join(credentials)

@@ -173,6 +173,31 @@ class SettingsPanel(QWidget):
         l, self.test_password_input = create_credential_field("Test Password:", "Enter test password", True)
         credentials_layout.addLayout(l)
 
+        # 1. Address field with German default mock value
+        l, self.test_address_input = create_credential_field("Test Address:", "e.g. Kaiserstraße 12, 60311 Frankfurt am Main, Germany")
+        self.test_address_input.setText("Kaiserstraße 12, 60311 Frankfurt am Main, Germany")
+        self.test_address_input.setToolTip("Default test address used for forms")
+        credentials_layout.addLayout(l)
+
+        # 2. Email address field with a hint
+        l, self.test_email_input = create_credential_field("Test Email Address:", "Enter test email address")
+        self.test_email_input.setToolTip("Enter a real email address if you need to receive verification codes or OTPs")
+        email_hint = QLabel("💡 Tip: Provide a real email address if the target app requires email verification/OTP.")
+        email_hint.setStyleSheet("color: #666; font-size: 10px; font-style: italic;")
+        email_hint.setWordWrap(True)
+        l.addWidget(email_hint)
+        credentials_layout.addLayout(l)
+
+        # 3. Mobile Number field with a hint
+        l, self.test_phone_input = create_credential_field("Test Mobile Number:", "e.g. +49 170 1234567")
+        self.test_phone_input.setText("+49 170 1234567")
+        self.test_phone_input.setToolTip("Enter a real mobile number if you need to receive SMS verification/MFA codes")
+        phone_hint = QLabel("⚠️ Note: Provide a real mobile number if the target app requires SMS MFA/verification.")
+        phone_hint.setStyleSheet("color: #aa6600; font-size: 10px; font-style: italic;")
+        phone_hint.setWordWrap(True)
+        l.addWidget(phone_hint)
+        credentials_layout.addLayout(l)
+
         credentials_group.setLayout(credentials_layout)
         layout.addWidget(credentials_group)
 
@@ -597,6 +622,15 @@ class SettingsPanel(QWidget):
         if test_password:
             self.test_password_input.setText(test_password)
 
+        test_address = self._config_store.get_setting("test_address", default="Kaiserstraße 12, 60311 Frankfurt am Main, Germany")
+        self.test_address_input.setText(test_address)
+
+        test_email = self._config_store.get_setting("test_email", default="")
+        self.test_email_input.setText(test_email)
+
+        test_phone = self._config_store.get_setting("test_phone", default="+49 170 1234567")
+        self.test_phone_input.setText(test_phone)
+
         # Load traffic capture settings
         enable_traffic_capture = self._config_store.get_setting("enable_traffic_capture", default=False)
         self.enable_traffic_capture_checkbox.setChecked(enable_traffic_capture)
@@ -747,6 +781,24 @@ class SettingsPanel(QWidget):
                 self._config_store.set_secret_plaintext("test_password", test_password)
             else:
                 self._config_store.delete_secret("test_password")
+
+            test_address = self.test_address_input.text().strip()
+            if test_address:
+                self._config_store.set_setting("test_address", test_address, "string")
+            else:
+                self._config_store.delete_setting("test_address")
+
+            test_email = self.test_email_input.text().strip()
+            if test_email:
+                self._config_store.set_setting("test_email", test_email, "string")
+            else:
+                self._config_store.delete_setting("test_email")
+
+            test_phone = self.test_phone_input.text().strip()
+            if test_phone:
+                self._config_store.set_setting("test_phone", test_phone, "string")
+            else:
+                self._config_store.delete_setting("test_phone")
 
             # Cleanup old config keys
             self._config_store.delete_setting("test_gmail_account")
@@ -910,6 +962,18 @@ class SettingsPanel(QWidget):
     def get_test_password(self) -> str:
         """Get the current test password value."""
         return self.test_password_input.text()
+
+    def get_test_address(self) -> str:
+        """Get the current test address value."""
+        return self.test_address_input.text().strip()
+
+    def get_test_email(self) -> str:
+        """Get the current test email value."""
+        return self.test_email_input.text().strip()
+
+    def get_test_phone(self) -> str:
+        """Get the current test phone value."""
+        return self.test_phone_input.text().strip()
 
     def get_enable_traffic_capture(self) -> bool:
         """Get the current traffic capture enabled state.

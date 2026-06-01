@@ -484,6 +484,9 @@ class MainWindow(QMainWindow):
         # Set test credentials from settings panel
         config_manager.set("test_username", self.settings_panel.get_test_username())
         config_manager.set("test_password", self.settings_panel.get_test_password())
+        config_manager.set("test_address", self.settings_panel.get_test_address())
+        config_manager.set("test_email", self.settings_panel.get_test_email())
+        config_manager.set("test_phone", self.settings_panel.get_test_phone())
 
         # Set screen configuration
         top_height = self.settings_panel.get_top_bar_height()
