@@ -184,10 +184,11 @@ class TestSettingsPanelInit:
     def test_settings_tabs_are_grouped_by_workflow(self, qt_app, mock_config_store):
         """Test settings tabs use the consolidated workflow grouping."""
         panel = _create_settings_panel(mock_config_store)
-        assert panel.tab_widget.count() == 3
+        assert panel.tab_widget.count() == 4
         assert [panel.tab_widget.tabText(i) for i in range(panel.tab_widget.count())] == [
             "General",
-            "AI & Agent",
+            "AI Crawler",
+            "API Keys & Parsing",
             "Integrations",
         ]
 
@@ -344,9 +345,24 @@ class TestReset:
         panel = _create_settings_panel(mock_config_store)
         panel.test_username_input.setText("testuser")
         panel.test_password_input.setText("testpass")
+        panel.test_address_input.setText("Some Other Address")
+        panel.test_email_input.setText("other_email@example.com")
+        panel.test_phone_input.setText("+123456789")
         panel.reset()
         assert panel.test_username_input.text() == ""
         assert panel.test_password_input.text() == ""
+        assert panel.test_address_input.text() == "Kaiserstraße 12, 60311 Frankfurt am Main, Germany"
+        assert panel.test_email_input.text() == ""
+        assert panel.test_phone_input.text() == "+49 170 1234567"
+
+    def test_reset_exploration_objective_via_button(self, qt_app, mock_config_store):
+        """Test that clicking the Reset to Default button resets the objective prompt."""
+        from mobile_crawler.ui.widgets.settings_panel import DEFAULT_EXPLORATION_OBJECTIVE
+        panel = _create_settings_panel(mock_config_store)
+        panel.exploration_objective_input.setPlainText("Custom Objective")
+        assert panel.exploration_objective_input.toPlainText() == "Custom Objective"
+        panel.reset_objective_button.click()
+        assert panel.exploration_objective_input.toPlainText() == DEFAULT_EXPLORATION_OBJECTIVE
 
 
 class TestSettingsSavedSignal:

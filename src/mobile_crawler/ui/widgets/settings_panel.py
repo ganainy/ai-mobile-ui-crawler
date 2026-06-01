@@ -26,6 +26,21 @@ if TYPE_CHECKING:
     from mobile_crawler.infrastructure.user_config_store import UserConfigStore
 
 
+DEFAULT_EXPLORATION_OBJECTIVE = (
+    "Explore as much of the application as possible. Your primary goal is to maximize coverage "
+    "by discovering and navigating to as many different screens, tabs, and distinct sections "
+    "of the app as possible.\n\n"
+    "Ensure you:\n"
+    "1. Systematically click on menus, navigation bars, buttons, and links to uncover new pages.\n"
+    "2. Avoid getting stuck in loops; if you find yourself on a screen you have already visited, "
+    "backtrack or explore unexplored interactive elements.\n"
+    "3. Actively fill in forms with placeholder data or interact with dialogues if they block access "
+    "to deeper parts of the application.\n"
+    "4. Keep mapping and discovering new layouts, settings panels, user profiles, and features "
+    "to achieve maximum exploration depth and breadth."
+)
+
+
 class SettingsPanel(QWidget):
     """Widget for configuring crawler settings.
 
@@ -272,6 +287,33 @@ class SettingsPanel(QWidget):
         self.exploration_objective_input = QTextEdit()
         self.exploration_objective_input.setMaximumHeight(120)
         objective_layout.addWidget(self.exploration_objective_input)
+
+        # Reset button layout
+        reset_layout = QHBoxLayout()
+        reset_layout.addStretch()
+        self.reset_objective_button = QPushButton("Reset to Default")
+        self.reset_objective_button.setToolTip("Reset the exploration objective prompt to the default coverage maximization prompt")
+        self.reset_objective_button.setStyleSheet("""
+            QPushButton {
+                background-color: transparent;
+                border: 1px solid #555;
+                color: #ccc;
+                padding: 4px 12px;
+                border-radius: 4px;
+                font-size: 11px;
+            }
+            QPushButton:hover {
+                background-color: #333;
+                border-color: #777;
+                color: #fff;
+            }
+            QPushButton:pressed {
+                background-color: #222;
+            }
+        """)
+        self.reset_objective_button.clicked.connect(self._reset_exploration_objective)
+        reset_layout.addWidget(self.reset_objective_button)
+        objective_layout.addLayout(reset_layout)
 
         objective_group.setLayout(objective_layout)
         layout.addWidget(objective_group)
@@ -691,19 +733,7 @@ class SettingsPanel(QWidget):
         if exploration_objective:
             self.exploration_objective_input.setPlainText(exploration_objective)
         else:
-            self.exploration_objective_input.setPlainText(
-                "Explore as much of the application as possible. Your primary goal is to maximize coverage "
-                "by discovering and navigating to as many different screens, tabs, and distinct sections "
-                "of the app as possible.\n\n"
-                "Ensure you:\n"
-                "1. Systematically click on menus, navigation bars, buttons, and links to uncover new pages.\n"
-                "2. Avoid getting stuck in loops; if you find yourself on a screen you have already visited, "
-                "backtrack or explore unexplored interactive elements.\n"
-                "3. Actively fill in forms with placeholder data or interact with dialogues if they block access "
-                "to deeper parts of the application.\n"
-                "4. Keep mapping and discovering new layouts, settings panels, user profiles, and features "
-                "to achieve maximum exploration depth and breadth."
-            )
+            self.exploration_objective_input.setPlainText(DEFAULT_EXPLORATION_OBJECTIVE)
 
         # Load Tracing / Observability settings
         enable_tracing = self._config_store.get_setting("enable_tracing", default=False)
@@ -1015,6 +1045,10 @@ class SettingsPanel(QWidget):
         """
         return self.exploration_objective_input.toPlainText().strip()
 
+    def _reset_exploration_objective(self):
+        """Reset the exploration objective text edit to the default value."""
+        self.exploration_objective_input.setPlainText(DEFAULT_EXPLORATION_OBJECTIVE)
+
     def get_ui_parser_mode(self) -> str:
         """Get the current UI parser mode.
 
@@ -1096,6 +1130,10 @@ class SettingsPanel(QWidget):
         self.max_duration_input.setValue(300)
         self.test_username_input.clear()
         self.test_password_input.clear()
+        self.test_address_input.setText("Kaiserstraße 12, 60311 Frankfurt am Main, Germany")
+        self.test_email_input.clear()
+        self.test_phone_input.setText("+49 170 1234567")
+        self.exploration_objective_input.setPlainText(DEFAULT_EXPLORATION_OBJECTIVE)
         self.ui_parser_mode_combo.setCurrentText("boost")
         self.enable_tracing_checkbox.setChecked(False)
         self.tracing_provider_combo.setCurrentText("phoenix")
