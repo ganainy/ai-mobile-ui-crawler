@@ -55,13 +55,16 @@ class SettingsPanel(QWidget):
         # Main Tab Widget
         self.tab_widget = QTabWidget()
 
-        # 1. General Tab (Limits, Screen Config)
+        # 1. General Tab (Limits, Screen Config, Credentials)
         self.tab_widget.addTab(self._setup_general_tab(), "General")
 
-        # 2. AI & Agent Tab (Provider keys, DroidRun, parser, prompts, test credentials)
-        self.tab_widget.addTab(self._setup_ai_tab(), "AI & Agent")
+        # 2. AI Crawler Tab (Agent Setup, Exploration Objective)
+        self.tab_widget.addTab(self._setup_ai_crawler_tab(), "AI Crawler")
 
-        # 3. Integrations Tab (Traffic, Video, MobSF)
+        # 3. API Keys & Parsing Tab (AI Provider Keys, UI Parser)
+        self.tab_widget.addTab(self._setup_api_keys_tab(), "API Keys & Parsing")
+
+        # 4. Integrations Tab (Traffic, Video, MobSF, Tracing)
         self.tab_widget.addTab(self._setup_integrations_tab(), "Integrations")
 
         main_layout.addWidget(self.tab_widget, 1)
@@ -144,11 +147,124 @@ class SettingsPanel(QWidget):
         screen_group.setLayout(screen_layout)
         layout.addWidget(screen_group)
 
+        # Test Credentials group
+        credentials_group = QGroupBox("App Test Credentials")
+        credentials_layout = QVBoxLayout()
+        credentials_layout.setSpacing(12)
+        credentials_layout.setContentsMargins(15, 20, 15, 20)
+
+        def create_credential_field(label_text, placeholder, is_password=False):
+            field_layout = QVBoxLayout()
+            field_layout.setSpacing(4)
+            label = QLabel(label_text)
+            label.setStyleSheet("font-weight: bold;")
+            field_layout.addWidget(label)
+            edit = QLineEdit()
+            edit.setPlaceholderText(placeholder)
+            edit.setMinimumHeight(30)
+            if is_password:
+                edit.setEchoMode(QLineEdit.EchoMode.Password)
+            field_layout.addWidget(edit)
+            return field_layout, edit
+
+        l, self.test_username_input = create_credential_field("Test Username:", "Enter test username")
+        credentials_layout.addLayout(l)
+
+        l, self.test_password_input = create_credential_field("Test Password:", "Enter test password", True)
+        credentials_layout.addLayout(l)
+
+        credentials_group.setLayout(credentials_layout)
+        layout.addWidget(credentials_group)
+
         layout.addStretch()
         return self._wrap_in_scroll_area(tab)
 
-    def _setup_ai_tab(self) -> QWidget:
-        """Create the AI and agent settings tab."""
+    def _setup_ai_crawler_tab(self) -> QWidget:
+        """Create the AI Crawler settings tab."""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setSpacing(15)
+
+        # AI Crawler Agent group
+        droidrun_group = QGroupBox("AI Crawler Agent")
+        droidrun_layout = QVBoxLayout()
+        droidrun_layout.setSpacing(12)
+        droidrun_layout.setContentsMargins(15, 20, 15, 20)
+
+        self.enable_droidrun_checkbox = QCheckBox("Enable AI Crawler Agent")
+        self.enable_droidrun_checkbox.setToolTip(
+            "Use the advanced multi-step planning agent instead of single-shot AI responses"
+        )
+        droidrun_layout.addWidget(self.enable_droidrun_checkbox)
+
+        self.droidrun_reasoning_checkbox = QCheckBox("Use Reasoning Mode")
+        self.droidrun_reasoning_checkbox.setToolTip(
+            "Enable complex planning with ManagerAgent -> ExecutorAgent cycles (vs direct execution)"
+        )
+        self.droidrun_reasoning_checkbox.setChecked(True)
+        droidrun_layout.addWidget(self.droidrun_reasoning_checkbox)
+
+        max_cycles_layout = QHBoxLayout()
+        max_cycles_layout.addWidget(QLabel("Max Planning Cycles:"))
+        self.droidrun_max_cycles_input = QSpinBox()
+        self.droidrun_max_cycles_input.setRange(1, 20)
+        self.droidrun_max_cycles_input.setValue(5)
+        self.droidrun_max_cycles_input.setToolTip("Maximum planning/execution cycles for the AI crawler agent")
+        max_cycles_layout.addWidget(self.droidrun_max_cycles_input)
+        max_cycles_layout.addStretch()
+        droidrun_layout.addLayout(max_cycles_layout)
+
+        self.droidrun_streaming_checkbox = QCheckBox("Enable Streaming Output")
+        self.droidrun_streaming_checkbox.setToolTip("Show real-time agent planning and execution updates")
+        droidrun_layout.addWidget(self.droidrun_streaming_checkbox)
+
+        retry_layout = QHBoxLayout()
+        retry_layout.addWidget(QLabel("Agent Retry Count:"))
+        self.droidrun_retry_count_input = QSpinBox()
+        self.droidrun_retry_count_input.setRange(0, 10)
+        self.droidrun_retry_count_input.setValue(2)
+        self.droidrun_retry_count_input.setToolTip("Number of retries for failed agent operations")
+        retry_layout.addWidget(self.droidrun_retry_count_input)
+        retry_layout.addStretch()
+        droidrun_layout.addLayout(retry_layout)
+
+        droidrun_group.setLayout(droidrun_layout)
+        layout.addWidget(droidrun_group)
+
+        # Exploration Objective group
+        objective_group = QGroupBox("Exploration Objective")
+        objective_layout = QVBoxLayout()
+        objective_layout.setSpacing(8)
+        objective_layout.setContentsMargins(15, 20, 15, 20)
+
+        objective_hint = QLabel(
+            "This prompt is sent to the agent as the exploration goal. Edit to customize exploration behavior."
+        )
+        objective_hint.setWordWrap(True)
+        objective_hint.setStyleSheet("color: #666; font-size: 11px;")
+        objective_layout.addWidget(objective_hint)
+
+        self.exploration_objective_input = QTextEdit()
+        self.exploration_objective_input.setMaximumHeight(120)
+        objective_layout.addWidget(self.exploration_objective_input)
+
+        objective_group.setLayout(objective_layout)
+        layout.addWidget(objective_group)
+
+        def on_droidrun_enabled_changed(enabled):
+            self.droidrun_reasoning_checkbox.setEnabled(enabled)
+            self.droidrun_max_cycles_input.setEnabled(enabled)
+            self.droidrun_streaming_checkbox.setEnabled(enabled)
+            self.droidrun_retry_count_input.setEnabled(enabled)
+
+        self.enable_droidrun_checkbox.toggled.connect(on_droidrun_enabled_changed)
+        on_droidrun_enabled_changed(self.enable_droidrun_checkbox.isChecked())
+
+        layout.addStretch()
+        return self._wrap_in_scroll_area(tab)
+
+    def _setup_api_keys_tab(self) -> QWidget:
+        """Create the API Keys & Parsing settings tab."""
         tab = QWidget()
         layout = QVBoxLayout(tab)
         layout.setSpacing(15)
@@ -180,86 +296,9 @@ class SettingsPanel(QWidget):
         api_keys_group.setLayout(api_keys_layout)
         layout.addWidget(api_keys_group)
 
-        # Test Credentials group
-        credentials_group = QGroupBox("App Test Credentials")
-        credentials_layout = QVBoxLayout()
-        credentials_layout.setSpacing(12)
-        credentials_layout.setContentsMargins(15, 20, 15, 20)
-
-        def create_credential_field(label_text, placeholder, is_password=False):
-            field_layout = QVBoxLayout()
-            field_layout.setSpacing(4)
-            label = QLabel(label_text)
-            label.setStyleSheet("font-weight: bold;")
-            field_layout.addWidget(label)
-            edit = QLineEdit()
-            edit.setPlaceholderText(placeholder)
-            edit.setMinimumHeight(30)
-            if is_password:
-                edit.setEchoMode(QLineEdit.EchoMode.Password)
-            field_layout.addWidget(edit)
-            return field_layout, edit
-
-        l, self.test_username_input = create_credential_field("Test Username:", "Enter test username")
-        credentials_layout.addLayout(l)
-
-        l, self.test_password_input = create_credential_field("Test Password:", "Enter test password", True)
-        credentials_layout.addLayout(l)
-
-        credentials_group.setLayout(credentials_layout)
-        layout.addWidget(credentials_group)
-
-        # AI Crawler Agent group
-        droidrun_group = QGroupBox("AI Crawler Agent")
-        droidrun_layout = QVBoxLayout()
-        droidrun_layout.setSpacing(12)
-        droidrun_layout.setContentsMargins(15, 20, 15, 20)
-
-        self.enable_droidrun_checkbox = QCheckBox("Enable AI Crawler Agent")
-        self.enable_droidrun_checkbox.setToolTip(
-            "Use the advanced multi-step planning agent instead of single-shot AI responses"
-        )
-        droidrun_layout.addWidget(self.enable_droidrun_checkbox)
-
-        self.droidrun_reasoning_checkbox = QCheckBox("Use Reasoning Mode")
-        self.droidrun_reasoning_checkbox.setToolTip(
-            "Enable complex planning with ManagerAgent -> ExecutorAgent cycles (vs direct execution)"
-        )
-        self.droidrun_reasoning_checkbox.setChecked(True)
-        droidrun_layout.addWidget(self.droidrun_reasoning_checkbox)
-
-        max_cycles_layout = QHBoxLayout()
-        max_cycles_layout.addWidget(QLabel("Max Planning Cycles:"))
-        self.droidrun_max_cycles_input = QSpinBox()
-        self.droidrun_max_cycles_input.setRange(1, 20)
-        self.droidrun_max_cycles_input.setValue(5)
-        self.droidrun_max_cycles_input.setToolTip("Maximum planning/execution cycles for DroidRun agent")
-        max_cycles_layout.addWidget(self.droidrun_max_cycles_input)
-        max_cycles_layout.addStretch()
-        droidrun_layout.addLayout(max_cycles_layout)
-
-        self.droidrun_streaming_checkbox = QCheckBox("Enable Streaming Output")
-        self.droidrun_streaming_checkbox.setToolTip("Show real-time agent planning and execution updates")
-        droidrun_layout.addWidget(self.droidrun_streaming_checkbox)
-
-        retry_layout = QHBoxLayout()
-        retry_layout.addWidget(QLabel("Agent Retry Count:"))
-        self.droidrun_retry_count_input = QSpinBox()
-        self.droidrun_retry_count_input.setRange(0, 10)
-        self.droidrun_retry_count_input.setValue(2)
-        self.droidrun_retry_count_input.setToolTip("Number of retries for failed agent operations")
-        retry_layout.addWidget(self.droidrun_retry_count_input)
-        retry_layout.addStretch()
-        droidrun_layout.addLayout(retry_layout)
-
-        droidrun_group.setLayout(droidrun_layout)
-        layout.addWidget(droidrun_group)
-
         # UI Parser group
         parser_group = QGroupBox("UI Parser")
         parser_layout = QVBoxLayout()
-        parser_layout.setSpacing(12)
-        parser_layout.setContentsMargins(15, 20, 15, 20)
 
         parser_mode_layout = QHBoxLayout()
         parser_mode_layout.addWidget(QLabel("Parser Mode:"))
@@ -274,7 +313,7 @@ class SettingsPanel(QWidget):
         parser_mode_layout.addStretch()
         parser_layout.addLayout(parser_mode_layout)
         parser_approach_hint = QLabel(
-            "DroidRun mainly uses Android Accessibility APIs. In 'boost' mode it uses the a11y tree first, "
+            "The agent mainly uses Android Accessibility APIs. In 'boost' mode it uses the a11y tree first, "
             "and falls back to OmniParser only when accessibility metadata is missing or weak."
         )
         parser_approach_hint.setWordWrap(True)
@@ -329,35 +368,6 @@ class SettingsPanel(QWidget):
 
         parser_group.setLayout(parser_layout)
         layout.addWidget(parser_group)
-
-        # Exploration Objective group
-        objective_group = QGroupBox("Exploration Objective")
-        objective_layout = QVBoxLayout()
-        objective_layout.setSpacing(8)
-        objective_layout.setContentsMargins(15, 20, 15, 20)
-
-        objective_hint = QLabel(
-            "This prompt is sent to DroidRun as the exploration goal. Edit to customize the exploration behavior."
-        )
-        objective_hint.setWordWrap(True)
-        objective_hint.setStyleSheet("color: #666; font-size: 11px;")
-        objective_layout.addWidget(objective_hint)
-
-        self.exploration_objective_input = QTextEdit()
-        self.exploration_objective_input.setMaximumHeight(120)
-        objective_layout.addWidget(self.exploration_objective_input)
-
-        objective_group.setLayout(objective_layout)
-        layout.addWidget(objective_group)
-
-        def on_droidrun_enabled_changed(enabled):
-            self.droidrun_reasoning_checkbox.setEnabled(enabled)
-            self.droidrun_max_cycles_input.setEnabled(enabled)
-            self.droidrun_streaming_checkbox.setEnabled(enabled)
-            self.droidrun_retry_count_input.setEnabled(enabled)
-
-        self.enable_droidrun_checkbox.toggled.connect(on_droidrun_enabled_changed)
-        on_droidrun_enabled_changed(self.enable_droidrun_checkbox.isChecked())
 
         layout.addStretch()
         return self._wrap_in_scroll_area(tab)
