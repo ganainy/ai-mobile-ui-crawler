@@ -209,15 +209,15 @@ class SettingsPanel(QWidget):
         credentials_group.setLayout(credentials_layout)
         layout.addWidget(credentials_group)
 
-        # DroidRun Agent group
-        droidrun_group = QGroupBox("DroidRun Agent")
+        # AI Crawler Agent group
+        droidrun_group = QGroupBox("AI Crawler Agent")
         droidrun_layout = QVBoxLayout()
         droidrun_layout.setSpacing(12)
         droidrun_layout.setContentsMargins(15, 20, 15, 20)
 
-        self.enable_droidrun_checkbox = QCheckBox("Enable DroidRun AI Agent")
+        self.enable_droidrun_checkbox = QCheckBox("Enable AI Crawler Agent")
         self.enable_droidrun_checkbox.setToolTip(
-            "Use DroidRun's advanced multi-step planning agent instead of single-shot AI responses"
+            "Use the advanced multi-step planning agent instead of single-shot AI responses"
         )
         droidrun_layout.addWidget(self.enable_droidrun_checkbox)
 
