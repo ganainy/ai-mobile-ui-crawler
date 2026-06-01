@@ -133,7 +133,7 @@ class SettingsPanel(QWidget):
         top_bar_layout.addWidget(top_bar_label)
         self.top_bar_height_input = QSpinBox()
         self.top_bar_height_input.setRange(0, 500)
-        self.top_bar_height_input.setValue(0)
+        self.top_bar_height_input.setValue(80)
         self.top_bar_height_input.setToolTip(
             "Exclude the Android status bar from OCR and AI analysis. Typically 80-120px."
         )
@@ -569,7 +569,7 @@ class SettingsPanel(QWidget):
         self.max_duration_input.setValue(max_duration)
 
         # Load screen configuration
-        top_bar_height = self._config_store.get_setting("top_bar_height", default=0)
+        top_bar_height = self._config_store.get_setting("top_bar_height", default=80)
         self.top_bar_height_input.setValue(top_bar_height)
 
         # Load limit type preference (default to steps)
