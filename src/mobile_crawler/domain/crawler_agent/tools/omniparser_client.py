@@ -258,19 +258,43 @@ class OmniParserClient:
         b64_image = base64.b64encode(image_bytes).decode("utf-8")
 
         try:
-            response = requests.post(
-                f"{self.local_url}/parse",
-                json={
-                    "base64_image": b64_image,
-                    "box_threshold": self.box_threshold,
-                },
-                timeout=30,
-            )
+            # Try /parse/ first (Microsoft format), fallback to /parse
+            parse_url = f"{self.local_url}/parse/"
+            try:
+                response = requests.post(
+                    parse_url,
+                    json={
+                        "base64_image": b64_image,
+                        "box_threshold": self.box_threshold,
+                    },
+                    timeout=30,
+                )
+                if response.status_code == 404:
+                    parse_url = f"{self.local_url}/parse"
+                    response = requests.post(
+                        parse_url,
+                        json={
+                            "base64_image": b64_image,
+                            "box_threshold": self.box_threshold,
+                        },
+                        timeout=30,
+                    )
+            except Exception:
+                parse_url = f"{self.local_url}/parse"
+                response = requests.post(
+                    parse_url,
+                    json={
+                        "base64_image": b64_image,
+                        "box_threshold": self.box_threshold,
+                    },
+                    timeout=30,
+                )
 
             if response.status_code != 200:
                 raise RuntimeError(f"Local OmniParser error: {response.status_code}")
 
-            return response.json().get("elements", [])
+            result = response.json()
+            return result.get("parsed_content_list", result.get("elements", []))
 
         except requests.exceptions.RequestException as e:
             logger.error(f"Local OmniParser connection error: {e}")
@@ -294,6 +318,9 @@ class OmniParserClient:
         import requests
 
         try:
+            response = requests.get(f"{self.local_url}/probe/", timeout=2)
+            if response.status_code == 200:
+                return True
             response = requests.get(f"{self.local_url}/health", timeout=2)
             return response.status_code == 200
         except Exception:
