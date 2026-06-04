@@ -73,7 +73,6 @@ screenshots/
 
 # AI Agent directory
 .agent/
-.planning/
 
 # Ignore all speckit files and directories
 .specify/

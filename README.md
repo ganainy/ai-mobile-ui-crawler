@@ -47,9 +47,17 @@ Startup helper:
 .\scripts\start.ps1 -UiOnly  # start only the UI
 ```
 
+## Current Project State
+
+- The active agent runtime is internalized in `src/mobile_crawler/domain/crawler_agent`; the old external DroidRun path is not the active runtime source.
+- The canonical architecture document is `docs/ARCHITECTURE.md`.
+- Completed planning files have been removed. Keep future durable state in this README, `docs/ARCHITECTURE.md`, active `specs/*` documents, and `.codex/project-memory/CHANGELOG.md`.
+- Recent UI settings work added AI Crawler tabs, local/Replicate OmniParser backend settings, app test credential fields for address/email/phone, a reset button for the exploration objective, and tighter spin-box steps for crawl limits.
+- `AGENTS.md` is currently absent from the workspace. If project-wide agent instructions are recreated, keep them concise and aligned with `.codex/project-memory/CHANGELOG.md`.
+
 ## Requirements
 
-- Python 3.12 to 3.14 (the project targets Python 3.12 but also fully supports Python 3.14).
+- Python 3.12. `pyproject.toml` currently requires `>=3.12,<3.13`.
 - Android device or emulator reachable through ADB.
 - AI provider credentials for the selected provider. Current config mapping supports Gemini, OpenAI, Anthropic, Ollama, and OpenRouter in `DroidRunAgentService`.
 
@@ -58,7 +66,7 @@ Optional integrations:
 - PCAPdroid for traffic capture.
 - MobSF server for static APK analysis.
 - Android screen recording support for session video capture.
-- Replicate or local OmniParser configuration when using fallback-capable parser modes such as `boost`.
+- Replicate or local OmniParser configuration when using fallback-capable parser modes such as `boost`. See `docs/readmes/local-omniparser-setup.md` for local setup notes.
 
 ## Prepare an Android Device for ADB
 
@@ -380,6 +388,12 @@ pytest --cov=mobile_crawler --cov-report=html
 ```
 
 Documentation-only README edits do not require code tests. For runtime changes, prefer targeted tests around the modified module and a smoke run through the CLI or GUI path.
+
+## Documentation Memory
+
+Use `.codex/project-memory/CHANGELOG.md` as the compact project-state memory for future Codex sessions. Completed planning docs should not be recreated just for history; preserve implemented decisions in `docs/ARCHITECTURE.md`, active specs, this README, and the changelog.
+
+Other README-style documents are grouped under `docs/readmes/` so the root stays focused as the main project entry point.
 
 ## License
 

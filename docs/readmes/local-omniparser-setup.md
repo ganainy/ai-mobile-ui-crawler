@@ -2,6 +2,12 @@
 
 This guide describes how to set up a local, high-performance **Microsoft OmniParser v2.0** server on your machine to work seamlessly with `mobile-crawler` (DroidRun). Running OmniParser locally eliminates external API dependencies (such as Replicate), reduces cost, and improves performance.
 
+## Current mobile-crawler Integration Status
+
+`mobile-crawler` stores OmniParser settings in the GUI Settings panel and passes them into the internalized `crawler_agent` runtime. The default parser mode is `boost`, which uses Android accessibility data first and falls back to OmniParser when accessibility metadata is sparse or unavailable.
+
+Use the local backend when you have a local OmniParser server running at the configured URL. Use the Replicate backend when you prefer the cloud API and have a Replicate API key configured.
+
 ---
 
 ## 🛠️ Step-by-Step Installation
