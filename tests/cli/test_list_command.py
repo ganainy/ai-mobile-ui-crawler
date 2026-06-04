@@ -2,13 +2,10 @@
 
 from datetime import datetime
 from unittest.mock import Mock, patch
+
 from click.testing import CliRunner
 
-import pytest
-
 from mobile_crawler.cli.main import cli
-from mobile_crawler.infrastructure.run_repository import Run
-from mobile_crawler.infrastructure.device_detection import AndroidDevice
 
 
 class TestListCommand:
@@ -30,7 +27,7 @@ class TestListCommand:
         """Test listing runs in table format."""
         mock_db_manager = Mock()
         mock_db_manager_cls.return_value = mock_db_manager
-        
+
         mock_run_repo = Mock()
         mock_run1 = Mock()
         mock_run1.id = 1
@@ -40,7 +37,7 @@ class TestListCommand:
         mock_run1.status = 'COMPLETED'
         mock_run1.total_steps = 50
         mock_run1.unique_screens = 15
-        
+
         mock_run2 = Mock()
         mock_run2.id = 2
         mock_run2.device_id = 'emulator-5554'
@@ -49,7 +46,7 @@ class TestListCommand:
         mock_run2.status = 'STOPPED'
         mock_run2.total_steps = 25
         mock_run2.unique_screens = 8
-        
+
         mock_run_repo.get_recent_runs.return_value = [mock_run1, mock_run2]
         mock_run_repo_cls.return_value = mock_run_repo
 
@@ -70,7 +67,7 @@ class TestListCommand:
         """Test listing runs in JSON format."""
         mock_db_manager = Mock()
         mock_db_manager_cls.return_value = mock_db_manager
-        
+
         mock_run_repo = Mock()
         mock_run = Mock()
         mock_run.id = 1
@@ -80,7 +77,7 @@ class TestListCommand:
         mock_run.status = 'COMPLETED'
         mock_run.total_steps = 50
         mock_run.unique_screens = 15
-        
+
         mock_run_repo.get_recent_runs.return_value = [mock_run]
         mock_run_repo_cls.return_value = mock_run_repo
 
@@ -99,7 +96,7 @@ class TestListCommand:
         """Test listing runs when no runs exist."""
         mock_db_manager = Mock()
         mock_db_manager_cls.return_value = mock_db_manager
-        
+
         mock_run_repo = Mock()
         mock_run_repo.get_recent_runs.return_value = []
         mock_run_repo_cls.return_value = mock_run_repo
@@ -116,7 +113,7 @@ class TestListCommand:
         """Test listing runs with custom limit."""
         mock_db_manager = Mock()
         mock_db_manager_cls.return_value = mock_db_manager
-        
+
         mock_run_repo = Mock()
         mock_run = Mock()
         mock_run.id = 1
@@ -126,7 +123,7 @@ class TestListCommand:
         mock_run.status = 'COMPLETED'
         mock_run.total_steps = 50
         mock_run.unique_screens = 15
-        
+
         mock_run_repo.get_recent_runs.return_value = [mock_run]
         mock_run_repo_cls.return_value = mock_run_repo
 
@@ -145,13 +142,13 @@ class TestListCommand:
         mock_device1.model = 'Pixel 4 API 30'
         mock_device1.android_version = '11.0'
         mock_device1.status = 'device'
-        
+
         mock_device2 = Mock()
         mock_device2.device_id = 'emulator-5556'
         mock_device2.model = 'Pixel 5 API 31'
         mock_device2.android_version = '12.0'
         mock_device2.status = 'device'
-        
+
         mock_device_detection.get_connected_devices.return_value = [mock_device1, mock_device2]
         mock_device_detection_cls.return_value = mock_device_detection
 
@@ -174,7 +171,7 @@ class TestListCommand:
         mock_device.model = 'Pixel 4 API 30'
         mock_device.android_version = '11.0'
         mock_device.status = 'device'
-        
+
         mock_device_detection.get_connected_devices.return_value = [mock_device]
         mock_device_detection_cls.return_value = mock_device_detection
 
@@ -209,13 +206,13 @@ class TestListCommand:
         mock_device1.model = 'Pixel 4 API 30'
         mock_device1.android_version = '11.0'
         mock_device1.status = 'device'
-        
+
         mock_device2 = Mock()
         mock_device2.device_id = 'emulator-5556'
         mock_device2.model = 'Pixel 5 API 31'
         mock_device2.android_version = '12.0'
         mock_device2.status = 'device'
-        
+
         mock_device_detection.get_connected_devices.return_value = [mock_device1, mock_device2]
         mock_device_detection_cls.return_value = mock_device_detection
 
@@ -233,7 +230,7 @@ class TestListCommand:
         """Test that list runs errors are handled."""
         mock_db_manager = Mock()
         mock_db_manager_cls.return_value = mock_db_manager
-        
+
         mock_run_repo = Mock()
         mock_run_repo.get_recent_runs.side_effect = Exception('Database connection failed')
         mock_run_repo_cls.return_value = mock_run_repo

@@ -1,13 +1,11 @@
 """Tests for ReportGenerator."""
 
-import pytest
-import tempfile
-import os
 from datetime import datetime
 from unittest.mock import Mock, patch
 
+import pytest
+
 from mobile_crawler.domain.report_generator import ReportGenerator
-from mobile_crawler.infrastructure.database import DatabaseManager
 from mobile_crawler.infrastructure.run_repository import Run
 from mobile_crawler.infrastructure.step_log_repository import StepLog
 

@@ -1,9 +1,9 @@
 """Tests for delete CLI command."""
 
 from datetime import datetime
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
+
 from click.testing import CliRunner
-import pytest
 
 from mobile_crawler.cli.main import cli
 from mobile_crawler.infrastructure.run_repository import Run
@@ -31,7 +31,7 @@ class TestDeleteCommand:
         mock_confirm.return_value = True
         mock_db_manager = Mock()
         mock_db_manager_cls.return_value = mock_db_manager
-        
+
         mock_run = Run(
             id=1,
             device_id='emulator-5554',
@@ -45,12 +45,12 @@ class TestDeleteCommand:
             total_steps=50,
             unique_screens=15
         )
-        
+
         mock_run_repo = Mock()
         mock_run_repo.get_run_by_id.return_value = mock_run
         mock_run_repo.delete_run.return_value = True
         mock_run_repo_cls.return_value = mock_run_repo
-        
+
         mock_session_folder_manager = Mock()
         mock_session_folder_manager_cls.return_value = mock_session_folder_manager
 
@@ -76,7 +76,7 @@ class TestDeleteCommand:
         """Test deleting a run with --yes flag (no confirmation)."""
         mock_db_manager = Mock()
         mock_db_manager_cls.return_value = mock_db_manager
-        
+
         mock_run = Run(
             id=1,
             device_id='emulator-5554',
@@ -90,12 +90,12 @@ class TestDeleteCommand:
             total_steps=50,
             unique_screens=15
         )
-        
+
         mock_run_repo = Mock()
         mock_run_repo.get_run_by_id.return_value = mock_run
         mock_run_repo.delete_run.return_value = True
         mock_run_repo_cls.return_value = mock_run_repo
-        
+
         mock_session_folder_manager = Mock()
         mock_session_folder_manager_cls.return_value = mock_session_folder_manager
 
@@ -116,7 +116,7 @@ class TestDeleteCommand:
         mock_confirm.return_value = False
         mock_db_manager = Mock()
         mock_db_manager_cls.return_value = mock_db_manager
-        
+
         mock_run = Run(
             id=1,
             device_id='emulator-5554',
@@ -130,11 +130,11 @@ class TestDeleteCommand:
             total_steps=50,
             unique_screens=15
         )
-        
+
         mock_run_repo = Mock()
         mock_run_repo.get_run_by_id.return_value = mock_run
         mock_run_repo_cls.return_value = mock_run_repo
-        
+
         mock_session_folder_manager = Mock()
         mock_session_folder_manager_cls.return_value = mock_session_folder_manager
 
@@ -153,11 +153,11 @@ class TestDeleteCommand:
         """Test deleting a non-existent run."""
         mock_db_manager = Mock()
         mock_db_manager_cls.return_value = mock_db_manager
-        
+
         mock_run_repo = Mock()
         mock_run_repo.get_run_by_id.return_value = None
         mock_run_repo_cls.return_value = mock_run_repo
-        
+
         mock_session_folder_manager = Mock()
         mock_session_folder_manager_cls.return_value = mock_session_folder_manager
 
@@ -184,7 +184,7 @@ class TestDeleteCommand:
         mock_confirm.return_value = True
         mock_db_manager = Mock()
         mock_db_manager_cls.return_value = mock_db_manager
-        
+
         mock_run = Run(
             id=1,
             device_id='emulator-5554',
@@ -198,12 +198,12 @@ class TestDeleteCommand:
             total_steps=50,
             unique_screens=15
         )
-        
+
         mock_run_repo = Mock()
         mock_run_repo.get_run_by_id.return_value = mock_run
         mock_run_repo.delete_run.side_effect = Exception('Database connection failed')
         mock_run_repo_cls.return_value = mock_run_repo
-        
+
         mock_session_folder_manager = Mock()
         mock_session_folder_manager_cls.return_value = mock_session_folder_manager
 

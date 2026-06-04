@@ -7,7 +7,8 @@ for cloud-hosted devices via the MobileRun API.
 from __future__ import annotations
 
 import logging
-from typing import Any, Awaitable, Dict, List, Optional, TypeVar
+from collections.abc import Awaitable
+from typing import Any, TypeVar
 
 try:
     from mobilerun import AsyncMobilerun
@@ -196,7 +197,7 @@ class CloudDriver(DeviceDriver):
 
     # -- app management ------------------------------------------------------
 
-    async def start_app(self, package: str, activity: Optional[str] = None) -> str:
+    async def start_app(self, package: str, activity: str | None = None) -> str:
         await self._call(
             self._client.devices.apps.start(
                 package,
@@ -207,7 +208,7 @@ class CloudDriver(DeviceDriver):
         )
         return f"App started: {package}"
 
-    async def get_apps(self, include_system: bool = True) -> List[Dict[str, Any]]:
+    async def get_apps(self, include_system: bool = True) -> list[dict[str, Any]]:
         apps = await self._call(
             self._client.devices.apps.list(
                 device_id=self.device_id,
@@ -217,7 +218,7 @@ class CloudDriver(DeviceDriver):
         )
         return [app.model_dump() for app in apps]
 
-    async def list_packages(self, include_system: bool = False) -> List[str]:
+    async def list_packages(self, include_system: bool = False) -> list[str]:
         packages = await self._call(
             self._client.devices.packages.list(
                 device_id=self.device_id,
@@ -237,7 +238,7 @@ class CloudDriver(DeviceDriver):
         )
         return await self._call(response.read())
 
-    async def get_ui_tree(self) -> Dict[str, Any]:
+    async def get_ui_tree(self) -> dict[str, Any]:
         response = await self._call(
             self._client.devices.state.ui(self.device_id, **self._display_kw)
         )

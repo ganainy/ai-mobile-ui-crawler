@@ -1,12 +1,13 @@
 """Tests for AIModelSelector widget."""
 
+from unittest.mock import Mock
+
 import pytest
-from unittest.mock import Mock, patch
 from PySide6.QtWidgets import QApplication, QWidget
 
-from mobile_crawler.ui.widgets.ai_model_selector import AIModelSelector
 from mobile_crawler.domain.providers.registry import ProviderRegistry
 from mobile_crawler.domain.providers.vision_detector import VisionDetector
+from mobile_crawler.ui.widgets.ai_model_selector import AIModelSelector
 
 
 @pytest.fixture
@@ -66,7 +67,7 @@ class TestProviderSelection:
         """Test that changing provider updates model list."""
         # Set API key callback for providers that require it
         ai_model_selector.set_api_key_callback(lambda p: "fake_key")
-        
+
         # Mock vision detector to return models
         ai_model_selector.vision_detector.get_vision_models = Mock(return_value=[
             {"id": "gemini-pro-vision"},

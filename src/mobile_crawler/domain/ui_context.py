@@ -4,7 +4,7 @@ import hashlib
 import json
 import logging
 from datetime import datetime, timedelta
-from typing import List, Dict, Any, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -15,9 +15,9 @@ class UIContextManager:
     def __init__(self, db_connection, omni_client):
         self.db = db_connection
         self.omni_client = omni_client
-        self._prev_a11y: Optional[List[Dict]] = None
+        self._prev_a11y: list[dict] | None = None
 
-    async def get_context(self, droidrun_tools, phone_state: Dict[str, Any]) -> Dict[str, Any]:
+    async def get_context(self, droidrun_tools, phone_state: dict[str, Any]) -> dict[str, Any]:
         """Get UI context for current screen."""
         state = await droidrun_tools.get_state()
         a11y_elements = state.get("a11y_tree", [])
@@ -60,12 +60,12 @@ class UIContextManager:
             "uncovered_regions": uncovered,
         }
 
-    def _get_screen_key(self, phone_state: Dict[str, Any]) -> str:
+    def _get_screen_key(self, phone_state: dict[str, Any]) -> str:
         package = phone_state.get("current_app", {}).get("package", "unknown")
         activity = phone_state.get("current_app", {}).get("activity", "unknown")
         return hashlib.md5(f"{package}:{activity}".encode()).hexdigest()
 
-    def _quick_a11y_check(self, a11y: List[Dict], prev_a11y: Optional[List[Dict]]) -> List[str]:
+    def _quick_a11y_check(self, a11y: list[dict], prev_a11y: list[dict] | None) -> list[str]:
         """Run cheap validation checks on a11y tree."""
         issues = []
         if len(a11y) < 5:
@@ -76,12 +76,12 @@ class UIContextManager:
             issues.append("a11y_stale")
         return issues
 
-    def _find_unmatched_interactables(self, omni: List[Dict], a11y: List[Dict], iou_threshold: float = 0.3) -> List[Dict]:
+    def _find_unmatched_interactables(self, omni: list[dict], a11y: list[dict], iou_threshold: float = 0.3) -> list[dict]:
         """Find OmniParser interactable elements with no a11y match."""
-        def get_bbox(el: Dict) -> Optional[List[float]]:
+        def get_bbox(el: dict) -> list[float] | None:
             return el.get("bbox")
 
-        def bbox_iou(box1: List[float], box2: List[float]) -> float:
+        def bbox_iou(box1: list[float], box2: list[float]) -> float:
             if not box1 or not box2:
                 return 0.0
             x1 = max(box1[0], box2[0])
@@ -106,14 +106,14 @@ class UIContextManager:
                 unmatched.append(omni_el)
         return unmatched
 
-    def _find_uncovered_regions(self, omni: List[Dict], a11y: List[Dict], grid: int = 4) -> List[List[float]]:
+    def _find_uncovered_regions(self, omni: list[dict], a11y: list[dict], grid: int = 4) -> list[list[float]]:
         """Find screen regions where OmniParser sees things but a11y is blind."""
         uncovered = []
         for row in range(grid):
             for col in range(grid):
                 cell = [col / grid, row / grid, (col + 1) / grid, (row + 1) / grid]
 
-                def in_cell(bbox: List[float]) -> bool:
+                def in_cell(bbox: list[float], cell=cell) -> bool:
                     if not bbox:
                         return False
                     cx = (bbox[0] + bbox[2]) / 2
@@ -126,7 +126,7 @@ class UIContextManager:
                     uncovered.append(cell)
         return uncovered
 
-    def _get_cache_status(self, screen_key: str) -> Optional[str]:
+    def _get_cache_status(self, screen_key: str) -> str | None:
         try:
             row = self.db.execute(
                 "SELECT status FROM omni_parser_cache WHERE screen_key = ? ORDER BY last_accessed_at DESC LIMIT 1",
@@ -139,7 +139,7 @@ class UIContextManager:
     def _set_cache_status(self, screen_key: str, status: str) -> None:
         try:
             self.db.execute(
-                """INSERT OR REPLACE INTO omni_parser_cache 
+                """INSERT OR REPLACE INTO omni_parser_cache
                    (screen_key, backend, elements_json, created_at, last_accessed_at, access_count)
                    VALUES (?, ?, ?, ?, ?, ?)""",
                 (screen_key, self.omni_client.backend.value, "[]",
@@ -149,7 +149,7 @@ class UIContextManager:
         except Exception as e:
             logger.warning(f"Failed to set cache status: {e}")
 
-    def _get_cached_omni(self, screen_key: str) -> Optional[List[Dict]]:
+    def _get_cached_omni(self, screen_key: str) -> list[dict] | None:
         try:
             row = self.db.execute(
                 "SELECT elements_json FROM omni_parser_cache WHERE screen_key = ? ORDER BY last_accessed_at DESC LIMIT 1",
@@ -166,10 +166,10 @@ class UIContextManager:
             pass
         return None
 
-    def _cache_omni_result(self, screen_key: str, elements: List[Dict]) -> None:
+    def _cache_omni_result(self, screen_key: str, elements: list[dict]) -> None:
         try:
             self.db.execute(
-                """INSERT OR REPLACE INTO omni_parser_cache 
+                """INSERT OR REPLACE INTO omni_parser_cache
                    (screen_key, backend, elements_json, created_at, last_accessed_at, access_count)
                    VALUES (?, ?, ?, ?, ?, ?)""",
                 (screen_key, self.omni_client.backend.value,

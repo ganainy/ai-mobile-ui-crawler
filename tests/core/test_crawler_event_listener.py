@@ -1,7 +1,7 @@
 """Tests for CrawlerEventListener ABC contract and default implementations."""
 
+
 import pytest
-from unittest.mock import Mock
 
 from mobile_crawler.core.crawler_event_listener import CrawlerEventListener
 from mobile_crawler.domain.models import ActionResult

@@ -3,7 +3,7 @@
 import json
 import time
 from datetime import datetime
-from typing import Optional, Protocol
+from typing import Protocol
 
 from mobile_crawler.config.config_manager import ConfigManager
 from mobile_crawler.domain.model_adapters import ModelAdapter
@@ -14,11 +14,11 @@ from mobile_crawler.infrastructure.ai_interaction_repository import AIInteractio
 
 class AIEventListener(Protocol):
     """Protocol for AI event listeners."""
-    
+
     def on_ai_request_sent(self, run_id: int, step_number: int, request_data: dict) -> None:
         """Called when AI request is sent."""
         ...
-    
+
     def on_ai_response_received(self, run_id: int, step_number: int, response_data: dict) -> None:
         """Called when AI response is received."""
         ...
@@ -33,7 +33,7 @@ class AIInteractionService:
         prompt_builder: PromptBuilder,
         ai_interaction_repository: AIInteractionRepository,
         config_manager: ConfigManager,
-        event_listener: Optional[AIEventListener] = None
+        event_listener: AIEventListener | None = None
     ):
         """Initialize AI interaction service.
 
@@ -51,13 +51,13 @@ class AIInteractionService:
         self.event_listener = event_listener
 
     @classmethod
-    def from_config(cls, config_manager: ConfigManager, event_listener: Optional[AIEventListener] = None) -> 'AIInteractionService':
+    def from_config(cls, config_manager: ConfigManager, event_listener: AIEventListener | None = None) -> 'AIInteractionService':
         """Create AI interaction service from configuration.
-        
+
         Args:
             config_manager: Configuration manager
             event_listener: Optional event listener for AI events
-            
+
         Returns:
             Configured AI interaction service
         """
@@ -66,30 +66,30 @@ class AIInteractionService:
         from mobile_crawler.infrastructure.ai_interaction_repository import AIInteractionRepository
         from mobile_crawler.infrastructure.database import DatabaseManager
         from mobile_crawler.infrastructure.step_log_repository import StepLogRepository
-        
+
         # Create model adapter based on provider
         provider = config_manager.get('ai_provider', 'gemini')
         model_name = config_manager.get('ai_model', 'gemini-1.5-flash')
-        
+
         model_adapter = cls._create_model_adapter(provider, model_name, config_manager)
-        
+
         # Create other dependencies
         db = DatabaseManager()
         step_log_repo = StepLogRepository(db)
         prompt_builder = PromptBuilder(config_manager, step_log_repo)
         ai_repo = AIInteractionRepository(db)
-        
+
         return cls(model_adapter, prompt_builder, ai_repo, config_manager, event_listener)
-    
+
     @staticmethod
     def _create_model_adapter(provider: str, model_name: str, config_manager: ConfigManager) -> ModelAdapter:
         """Create model adapter based on provider.
-        
+
         Args:
             provider: AI provider name
             model_name: Model name
             config_manager: Configuration manager
-            
+
         Returns:
             Configured model adapter
         """
@@ -126,14 +126,14 @@ class AIInteractionService:
         run_id: int,
         step_number: int,
         screenshot_b64: str,
-        screenshot_path: Optional[str],
+        screenshot_path: str | None,
         is_stuck: bool = False,
-        stuck_reason: Optional[str] = None,
-        current_screen_id: Optional[int] = None,
-        current_screen_is_new: Optional[bool] = None,
-        total_unique_screens: Optional[int] = None,
-        screen_dimensions: Optional[dict] = None,
-        ocr_grounding: Optional[list[dict]] = None
+        stuck_reason: str | None = None,
+        current_screen_id: int | None = None,
+        current_screen_is_new: bool | None = None,
+        total_unique_screens: int | None = None,
+        screen_dimensions: dict | None = None,
+        ocr_grounding: list[dict] | None = None
     ) -> AIResponse:
         """Get next actions from AI model.
 
@@ -157,7 +157,7 @@ class AIInteractionService:
             Exception: If all retry attempts fail
         """
         max_retries = self.config_manager.get('ai_retry_count', 2)
-        
+
         # Build the user prompt with screen context
         user_prompt = self.prompt_builder.build_user_prompt(
             screenshot_b64=screenshot_b64,
@@ -170,22 +170,22 @@ class AIInteractionService:
             screen_dimensions=screen_dimensions,
             ocr_grounding=ocr_grounding
         )
-        
+
         # Get system prompt
         system_prompt = self.prompt_builder.build_system_prompt()
-        
+
         request_data = {
             "system_prompt": system_prompt,
             "user_prompt": user_prompt
         }
         request_json = json.dumps(request_data)
-        
+
         # Emit request sent event
         if self.event_listener:
             self.event_listener.on_ai_request_sent(run_id, step_number, request_data)
-        
+
         last_exception = None
-        
+
         for retry_count in range(max_retries + 1):
             try:
                 # Call the AI model
@@ -194,13 +194,13 @@ class AIInteractionService:
                     system_prompt, user_prompt
                 )
                 latency_ms = (time.time() - start_time) * 1000
-                
+
                 # Parse and validate response
                 ai_response = self._parse_ai_response(response_text)
-                
+
                 # Set latency on the response
                 ai_response.latency_ms = latency_ms
-                
+
                 # Log successful interaction
                 interaction = AIInteraction(
                     id=None,
@@ -233,9 +233,9 @@ class AIInteractionService:
                     error_message=None,
                     retry_count=retry_count
                 )
-                
+
                 self.ai_interaction_repository.create_ai_interaction(interaction)
-                
+
                 # Emit response received event
                 if self.event_listener:
                     response_data = {
@@ -262,12 +262,12 @@ class AIInteractionService:
                         "latency_ms": latency_ms
                     }
                     self.event_listener.on_ai_response_received(run_id, step_number, response_data)
-                
+
                 return ai_response
-                
+
             except Exception as e:
                 last_exception = e
-                
+
                 # Log failed interaction
                 interaction = AIInteraction(
                     id=None,
@@ -285,9 +285,9 @@ class AIInteractionService:
                     error_message=str(e),
                     retry_count=retry_count
                 )
-                
+
                 self.ai_interaction_repository.create_ai_interaction(interaction)
-                
+
                 # Emit error response event
                 if self.event_listener and retry_count == max_retries:
                     error_response_data = {
@@ -296,10 +296,10 @@ class AIInteractionService:
                         "retry_count": retry_count
                     }
                     self.event_listener.on_ai_response_received(run_id, step_number, error_response_data)
-                
+
                 if retry_count < max_retries:
                     continue
-        
+
         # All retries failed
         raise last_exception or Exception("AI interaction failed after all retries")
 
@@ -317,7 +317,7 @@ class AIInteractionService:
         """
         if not response_text:
             raise ValueError("Empty response from AI model")
-        
+
         # Strip markdown code fences if present
         cleaned_text = response_text.strip()
         if cleaned_text.startswith("```"):
@@ -329,28 +329,28 @@ class AIInteractionService:
             if lines and lines[-1].strip() == "```":
                 lines = lines[:-1]
             cleaned_text = '\n'.join(lines).strip()
-        
+
         if not cleaned_text:
             raise ValueError("Empty response after stripping code fences")
-        
+
         try:
             data = json.loads(cleaned_text)
         except json.JSONDecodeError as e:
             # Log first 200 chars of response for debugging
             preview = cleaned_text[:200] if len(cleaned_text) > 200 else cleaned_text
-            raise ValueError(f"Invalid JSON response: {e}. Response preview: {preview!r}")
-        
+            raise ValueError(f"Invalid JSON response: {e}. Response preview: {preview!r}") from e
+
         # Validate required fields
         if "actions" not in data:
             raise ValueError("Response missing 'actions' field")
         if "signup_completed" not in data:
             raise ValueError("Response missing 'signup_completed' field")
-        
+
         if not isinstance(data["actions"], list):
             raise ValueError("'actions' must be a list")
         if not isinstance(data["signup_completed"], bool):
             raise ValueError("'signup_completed' must be a boolean")
-        
+
         # Parse actions
         actions = []
         for i, action_data in enumerate(data["actions"]):
@@ -358,12 +358,12 @@ class AIInteractionService:
                 action = self._parse_action(action_data)
                 actions.append(action)
             except Exception as e:
-                raise ValueError(f"Invalid action at index {i}: {e}")
-        
+                raise ValueError(f"Invalid action at index {i}: {e}") from e
+
         # Validate action count
         if not (1 <= len(actions) <= 12):
             raise ValueError(f"Action count {len(actions)} not in range 1-12")
-        
+
         return AIResponse(
             actions=actions,
             signup_completed=data["signup_completed"],
@@ -386,40 +386,40 @@ class AIInteractionService:
         for field in required_fields:
             if field not in action_data:
                 raise ValueError(f"Action missing required field: {field}")
-        
+
         # Must have either target_bounding_box or label_id
         if "target_bounding_box" not in action_data and "label_id" not in action_data:
-            # Back and scroll actions might not need targets in terms of elements, 
+            # Back and scroll actions might not need targets in terms of elements,
             # but usually we want at least a box for clicks/inputs.
-            # back, scroll_up, scroll_down, etc. are currently treated as coordinate-independent or center-based. 
+            # back, scroll_up, scroll_down, etc. are currently treated as coordinate-independent or center-based.
             pass
 
         # Validate action type
         valid_actions = [
-            "click", "input", "long_press", "scroll_up", "scroll_down", 
+            "click", "input", "long_press", "scroll_up", "scroll_down",
             "scroll_left", "scroll_right", "back"
         ]
         if action_data["action"] not in valid_actions:
             raise ValueError(f"Invalid action type: {action_data['action']}")
-        
+
         # Parse bounding box if present
         bounding_box = None
         if "target_bounding_box" in action_data and action_data["target_bounding_box"]:
             bbox_data = action_data["target_bounding_box"]
             if "top_left" not in bbox_data or "bottom_right" not in bbox_data:
                 raise ValueError("Bounding box missing top_left or bottom_right")
-            
+
             top_left = tuple(bbox_data["top_left"])
             bottom_right = tuple(bbox_data["bottom_right"])
-            
+
             if len(top_left) != 2 or len(bottom_right) != 2:
                 raise ValueError("Bounding box coordinates must be [x, y] pairs")
-            
+
             bounding_box = BoundingBox(
                 top_left=top_left,
                 bottom_right=bottom_right
             )
-        
+
         # Parse label_id if present
         label_id = action_data.get("label_id")
         if label_id is not None:
@@ -436,7 +436,7 @@ class AIInteractionService:
             raise ValueError("Input action requires input_text")
         if action_data["action"] != "input" and input_text is not None:
             raise ValueError(f"Action '{action_data['action']}' cannot have input_text")
-        
+
         return AIAction(
             action=action_data["action"],
             action_desc=action_data["action_desc"],

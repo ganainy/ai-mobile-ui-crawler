@@ -2,10 +2,9 @@
 
 import logging
 import sqlite3
+from contextlib import closing
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional
-from contextlib import closing
 
 from mobile_crawler.domain.errors import ErrorContext, RecorderError
 from mobile_crawler.infrastructure.database import DatabaseManager
@@ -16,18 +15,18 @@ logger = logging.getLogger(__name__)
 @dataclass
 class Run:
     """Data class representing a crawl run."""
-    id: Optional[int]
+    id: int | None
     device_id: str
     app_package: str
-    start_activity: Optional[str]
+    start_activity: str | None
     start_time: datetime
-    end_time: Optional[datetime]
+    end_time: datetime | None
     status: str  # RUNNING, STOPPED, ERROR
-    ai_provider: Optional[str]  # gemini, openrouter, ollama
-    ai_model: Optional[str]  # model name used
+    ai_provider: str | None  # gemini, openrouter, ollama
+    ai_model: str | None  # model name used
     total_steps: int = 0
     unique_screens: int = 0
-    session_path: Optional[str] = None
+    session_path: str | None = None
 
 
 class RunRepository:
@@ -84,7 +83,7 @@ class RunRepository:
                 cause=e,
             ) from e
 
-    def get_run_by_id(self, run_id: int) -> Optional[Run]:
+    def get_run_by_id(self, run_id: int) -> Run | None:
         """Get a run by ID.
 
         Args:

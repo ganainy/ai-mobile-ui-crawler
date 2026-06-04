@@ -5,8 +5,6 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
 from mobile_crawler.config.config_manager import ConfigManager
 from mobile_crawler.infrastructure.user_config_store import UserConfigStore
 

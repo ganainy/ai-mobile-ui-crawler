@@ -7,7 +7,7 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Protocol
+from typing import Any, Protocol
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +36,7 @@ class WaitProfile:
 
 
 # Action-type to wait profile mapping
-DEFAULT_WAIT_PROFILES: Dict[str, WaitProfile] = {
+DEFAULT_WAIT_PROFILES: dict[str, WaitProfile] = {
     "default": WaitProfile(timeout_ms=3000, poll_interval_ms=200),
     "tap": WaitProfile(timeout_ms=2000, poll_interval_ms=150),
     "click": WaitProfile(timeout_ms=3000, poll_interval_ms=200),
@@ -63,7 +63,7 @@ class AdaptiveWaitConfig:
                             If None, uses DEFAULT_WAIT_PROFILES.
         """
         self.config_manager = config_manager
-        self._profiles: Dict[str, WaitProfile] = {}
+        self._profiles: dict[str, WaitProfile] = {}
 
     def get_profile(self, action_type: str) -> WaitProfile:
         """Get wait profile for an action type.
@@ -120,7 +120,7 @@ class UIWaitPredicate:
     def __init__(
         self,
         state_provider: StateProvider,
-        config: Optional[AdaptiveWaitConfig] = None,
+        config: AdaptiveWaitConfig | None = None,
     ):
         """
         Args:
@@ -134,7 +134,7 @@ class UIWaitPredicate:
     async def wait_for_ui_settled(
         self,
         action_type: str,
-        timeout_ms: Optional[float] = None,
+        timeout_ms: float | None = None,
     ) -> bool:
         """Wait until UI state is stable after an action.
 
@@ -155,7 +155,7 @@ class UIWaitPredicate:
         poll_interval = profile.poll_interval_s
 
         deadline = time.monotonic() + timeout
-        prev_text: Optional[str] = None
+        prev_text: str | None = None
         poll_count = 0
 
         while time.monotonic() < deadline:

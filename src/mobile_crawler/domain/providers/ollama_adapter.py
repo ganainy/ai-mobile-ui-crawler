@@ -1,6 +1,6 @@
 """Ollama AI model adapter."""
 
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
 import ollama
 
@@ -12,9 +12,9 @@ class OllamaAdapter(ModelAdapter):
 
     def __init__(self):
         """Initialize Ollama adapter."""
-        self._model_config: Dict[str, Any] = {}
+        self._model_config: dict[str, Any] = {}
 
-    def initialize(self, model_config: Dict[str, Any], safety_settings: Optional[Dict[str, Any]] = None) -> None:
+    def initialize(self, model_config: dict[str, Any], safety_settings: dict[str, Any] | None = None) -> None:
         """Initialize the Ollama client.
 
         Args:
@@ -23,10 +23,10 @@ class OllamaAdapter(ModelAdapter):
         """
         if 'base_url' in model_config:
             ollama.base_url = model_config['base_url']
-        
+
         self._model_config = model_config
 
-    def generate_response(self, system_prompt: str, user_prompt: str) -> Tuple[str, Dict[str, Any]]:
+    def generate_response(self, system_prompt: str, user_prompt: str) -> tuple[str, dict[str, Any]]:
         """Generate response from Ollama model.
 
         Args:
@@ -59,7 +59,7 @@ class OllamaAdapter(ModelAdapter):
         return text, metadata
 
     @property
-    def model_info(self) -> Dict[str, Any]:
+    def model_info(self) -> dict[str, Any]:
         """Get model information.
 
         Returns:

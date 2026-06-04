@@ -6,7 +6,6 @@ Loads app cards from local filesystem using app_cards.json mapping.
 
 import json
 import logging
-from typing import Dict
 
 from mobile_crawler.domain.crawler_agent.app_cards.app_card_provider import AppCardProvider
 from mobile_crawler.domain.crawler_agent.config_manager.path_resolver import PathResolver
@@ -31,7 +30,7 @@ class LocalAppCardProvider(AppCardProvider):
         # Load mapping immediately
         try:
             if mapping_path.exists():
-                with open(mapping_path, "r", encoding="utf-8") as f:
+                with open(mapping_path, encoding="utf-8") as f:
                     self.mapping = json.load(f)
                 logger.debug(f"Loaded app_cards.json with {len(self.mapping)} entries")
             else:
@@ -42,7 +41,7 @@ class LocalAppCardProvider(AppCardProvider):
             self.mapping = {}
 
         # Content cache: (package_name, instruction) -> content
-        self._content_cache: Dict[tuple[str, str], str] = {}
+        self._content_cache: dict[tuple[str, str], str] = {}
 
     async def load_app_card(self, package_name: str, instruction: str = "") -> str:
         """
@@ -101,7 +100,7 @@ class LocalAppCardProvider(AppCardProvider):
         self._content_cache.clear()
         logger.debug("Local app card cache cleared")
 
-    def get_cache_stats(self) -> Dict[str, int]:
+    def get_cache_stats(self) -> dict[str, int]:
         """
         Get cache statistics.
 

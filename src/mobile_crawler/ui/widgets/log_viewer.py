@@ -1,22 +1,12 @@
 """Log viewer widget for mobile-crawler GUI."""
 
+import re
 from datetime import datetime
 from html import escape
-import re
-from typing import List, Tuple
 
-from PySide6.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
-    QHBoxLayout,
-    QTextEdit,
-    QComboBox,
-    QPushButton,
-    QLabel,
-    QGroupBox
-)
 from PySide6.QtCore import Signal
-from PySide6.QtGui import QTextCursor, QColor, QFont
+from PySide6.QtGui import QColor, QFont, QTextCursor
+from PySide6.QtWidgets import QComboBox, QGroupBox, QHBoxLayout, QLabel, QPushButton, QTextEdit, QVBoxLayout, QWidget
 
 from mobile_crawler.core.logging_service import LogLevel
 
@@ -53,7 +43,7 @@ class LogViewer(QWidget):
             LogLevel.ACTION: 1,  # Same as INFO
         }
         # Stored log entries: list of (LogLevel, timestamp_str, message)
-        self._entries: List[Tuple[LogLevel, str, str]] = []
+        self._entries: list[tuple[LogLevel, str, str]] = []
         self._theme = {
             "bg": "#0b0f14",
             "border": "#263241",

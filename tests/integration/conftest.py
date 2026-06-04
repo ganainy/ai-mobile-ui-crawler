@@ -1,15 +1,13 @@
 """Integration test configuration and fixtures."""
 
-import os
 import subprocess
-import time
-import pytest
-import requests
+from collections.abc import Generator
 from pathlib import Path
-from typing import Generator, Optional
 
-from mobile_crawler.infrastructure.device_detection import DeviceDetection
+import pytest
+
 from mobile_crawler.config.config_manager import ConfigManager
+from mobile_crawler.infrastructure.device_detection import DeviceDetection
 
 
 @pytest.fixture(scope="session")

@@ -1,6 +1,6 @@
 """Migration v4: Remove deprecated agent configs and rename prompt paths."""
 
-from typing import Any, Dict
+from typing import Any
 
 VERSION = 4
 
@@ -10,7 +10,7 @@ _NEW_SYSTEM_PROMPT = "config/prompts/fast_agent/system.jinja2"
 _NEW_USER_PROMPT = "config/prompts/fast_agent/user.jinja2"
 
 
-def migrate(config: Dict[str, Any]) -> Dict[str, Any]:
+def migrate(config: dict[str, Any]) -> dict[str, Any]:
     """Strip removed agent configs and update prompt paths."""
     agent = config.get("agent", {})
 

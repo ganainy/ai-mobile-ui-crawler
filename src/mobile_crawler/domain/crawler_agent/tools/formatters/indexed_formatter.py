@@ -1,9 +1,10 @@
 """Indexed formatter - Standard Droidrun format."""
 
 import logging
-from typing import Dict, Any, List, Optional, Tuple
-from .base import TreeFormatter
+from typing import Any
+
 from ..helpers.coordinate import bounds_to_normalized
+from .base import TreeFormatter
 
 logger = logging.getLogger("crawler_agent")
 
@@ -12,16 +13,16 @@ class IndexedFormatter(TreeFormatter):
     """Format tree in the standard Droidrun format."""
 
     def __init__(self):
-        self.screen_width: Optional[int] = None
-        self.screen_height: Optional[int] = None
+        self.screen_width: int | None = None
+        self.screen_height: int | None = None
         self.use_normalized: bool = False
 
     def format(
         self,
-        filtered_tree: Optional[Dict[str, Any]],
-        phone_state: Dict[str, Any],
-        omni_tree: Optional[List[Dict[str, Any]]] = None,
-    ) -> Tuple[str, str, List[Dict[str, Any]], Dict[str, Any]]:
+        filtered_tree: dict[str, Any] | None,
+        phone_state: dict[str, Any],
+        omni_tree: list[dict[str, Any]] | None = None,
+    ) -> tuple[str, str, list[dict[str, Any]], dict[str, Any]]:
         """Format device state with indices and hierarchy.
 
         Args:
@@ -59,7 +60,7 @@ class IndexedFormatter(TreeFormatter):
 
         return (formatted_text, focused_text, a11y_tree, phone_state)
 
-    def _convert_omni_to_indexed(self, omni_tree: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def _convert_omni_to_indexed(self, omni_tree: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Convert OmniParser elements to indexed format matching a11y tree.
 
         Args:
@@ -116,7 +117,7 @@ class IndexedFormatter(TreeFormatter):
         return indexed
 
     @staticmethod
-    def _get_focused_text(phone_state: Dict[str, Any]) -> str:
+    def _get_focused_text(phone_state: dict[str, Any]) -> str:
         """Extract focused element text."""
         focused_element = phone_state.get("focusedElement")
         if focused_element:
@@ -124,7 +125,7 @@ class IndexedFormatter(TreeFormatter):
         return ""
 
     @staticmethod
-    def _format_phone_state(phone_state: Dict[str, Any]) -> str:
+    def _format_phone_state(phone_state: dict[str, Any]) -> str:
         """Format phone state."""
         if isinstance(phone_state, dict) and "error" not in phone_state:
             current_app = phone_state.get("currentApp", "")
@@ -164,7 +165,7 @@ class IndexedFormatter(TreeFormatter):
 
         return phone_state_text
 
-    def _format_ui_elements_text(self, a11y_tree: List[Dict[str, Any]]) -> str:
+    def _format_ui_elements_text(self, a11y_tree: list[dict[str, Any]]) -> str:
         """Format UI elements text."""
         coord_note = " (normalized [0-1000])" if self.use_normalized else ""
         schema = "'index. className: resourceId; checkedState, text - bounds(x1,y1,x2,y2)'"
@@ -180,7 +181,7 @@ class IndexedFormatter(TreeFormatter):
         return ui_elements_text
 
     @staticmethod
-    def _format_ui_elements(ui_data: List[Dict[str, Any]], level: int = 0) -> str:
+    def _format_ui_elements(ui_data: list[dict[str, Any]], level: int = 0) -> str:
         """Format UI elements."""
         if not ui_data:
             return ""
@@ -233,7 +234,7 @@ class IndexedFormatter(TreeFormatter):
 
         return "\n".join(formatted_lines)
 
-    def _flatten_with_index(self, node: Dict[str, Any], counter: List[int]) -> List[Dict[str, Any]]:
+    def _flatten_with_index(self, node: dict[str, Any], counter: list[int]) -> list[dict[str, Any]]:
         """Recursively flatten tree with index assignment."""
         results = []
 
@@ -246,7 +247,7 @@ class IndexedFormatter(TreeFormatter):
 
         return results
 
-    def _format_node(self, node: Dict[str, Any], index: int) -> Dict[str, Any]:
+    def _format_node(self, node: dict[str, Any], index: int) -> dict[str, Any]:
         """Format single node to Droidrun format."""
         bounds = node.get("boundsInScreen", {})
         bounds_str = f"{bounds.get('left', 0)},{bounds.get('top', 0)},{bounds.get('right', 0)},{bounds.get('bottom', 0)}"

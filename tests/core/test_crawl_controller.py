@@ -1,7 +1,5 @@
 """Tests for CrawlController."""
 
-from unittest.mock import Mock, patch
-import pytest
 
 from mobile_crawler.core.crawl_controller import (
     CrawlController,
@@ -279,7 +277,6 @@ class TestCrawlController:
     def test_thread_safety(self):
         """Test thread safety with concurrent operations."""
         import threading
-        import time
 
         controller = CrawlController()
         states_received = []

@@ -4,7 +4,7 @@ import sqlite3
 from collections import defaultdict
 from contextlib import closing
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from mobile_crawler.domain.errors import ErrorContext, RecorderError
 from mobile_crawler.domain.step_phase_models import StepPhaseTransition
@@ -67,7 +67,7 @@ class StepPhaseRepository:
                 cause=e,
             ) from e
 
-    def get_current_phase(self, run_id: int, step_number: int) -> Optional[str]:
+    def get_current_phase(self, run_id: int, step_number: int) -> str | None:
         """Get the current phase for a step (the to_phase of the latest transition).
 
         Args:
@@ -93,7 +93,7 @@ class StepPhaseRepository:
 
     def get_transitions_for_step(
         self, run_id: int, step_number: int
-    ) -> List[StepPhaseTransition]:
+    ) -> list[StepPhaseTransition]:
         """Get all phase transitions for a specific step, ordered chronologically.
 
         Args:
@@ -118,7 +118,7 @@ class StepPhaseRepository:
         )
         return [self._row_to_transition(row) for row in cursor.fetchall()]
 
-    def get_transitions_for_run(self, run_id: int) -> List[StepPhaseTransition]:
+    def get_transitions_for_run(self, run_id: int) -> list[StepPhaseTransition]:
         """Get all phase transitions for a run, ordered by step then time.
 
         Args:
@@ -144,7 +144,7 @@ class StepPhaseRepository:
 
     def get_step_phase_summary(
         self, run_id: int, step_number: int
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """Get a summary of phase data for a step.
 
         Args:
@@ -208,7 +208,7 @@ class StepPhaseRepository:
                 cause=e,
             ) from e
 
-    def get_run_phase_stats(self, run_id: int) -> Dict[str, Any]:
+    def get_run_phase_stats(self, run_id: int) -> dict[str, Any]:
         """Get aggregated phase statistics for an entire run.
 
         Returns dict with:
@@ -226,19 +226,19 @@ class StepPhaseRepository:
                 "avg_step_duration_ms": None,
             }
 
-        step_numbers = set(t.step_number for t in transitions)
+        step_numbers = {t.step_number for t in transitions}
         phases_completed = sum(
             1 for t in transitions
             if t.from_phase == "checkpoint" and t.to_phase == "capture"
         )
 
         # Compute per-step durations (span from first to last transition per step)
-        step_times: Dict[int, List[datetime]] = defaultdict(list)
+        step_times: dict[int, list[datetime]] = defaultdict(list)
         for t in transitions:
             step_times[t.step_number].append(t.timestamp)
 
         durations = []
-        for step_num, times_list in step_times.items():
+        for _step_num, times_list in step_times.items():
             if len(times_list) >= 2:
                 delta = (max(times_list) - min(times_list)).total_seconds() * 1000
                 durations.append(delta)
@@ -250,7 +250,7 @@ class StepPhaseRepository:
             "avg_step_duration_ms": sum(durations) / len(durations) if durations else None,
         }
 
-    def get_phase_durations_for_step(self, run_id: int, step_number: int) -> Dict[str, float]:
+    def get_phase_durations_for_step(self, run_id: int, step_number: int) -> dict[str, float]:
         """Get average duration (ms) spent in each phase for a step.
 
         Args:
@@ -261,7 +261,7 @@ class StepPhaseRepository:
             Dict mapping from_phase to accumulated duration_ms from transitions.
         """
         transitions = self.get_transitions_for_step(run_id, step_number)
-        durations: Dict[str, float] = {}
+        durations: dict[str, float] = {}
         for t in transitions:
             if t.duration_ms is not None:
                 durations[t.from_phase] = durations.get(t.from_phase, 0) + t.duration_ms

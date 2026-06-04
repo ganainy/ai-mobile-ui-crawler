@@ -6,11 +6,10 @@ This module provides automatic TCP/Content Provider fallback for Portal communic
 
 import asyncio
 import base64
-import io
 import json
 import logging
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import httpx
 from async_adbutils import AdbDevice
@@ -57,7 +56,7 @@ class PortalClient:
         self.tcp_available = False
         self.tcp_base_url = None
         self.local_tcp_port = None
-        self._auth_token: Optional[str] = None
+        self._auth_token: str | None = None
         self._connected = False
 
     async def connect(self) -> None:
@@ -77,7 +76,7 @@ class PortalClient:
         if not self._connected:
             await self.connect()
 
-    async def _fetch_auth_token(self) -> Optional[str]:
+    async def _fetch_auth_token(self) -> str | None:
         """Fetch the auth token from the Portal via the content provider.
 
         The Portal HTTP server requires a Bearer token for all requests.
@@ -122,9 +121,9 @@ class PortalClient:
             return None
 
     @property
-    def _tcp_headers(self) -> Dict[str, str]:
+    def _tcp_headers(self) -> dict[str, str]:
         """HTTP headers for all TCP requests, including auth when available."""
-        headers: Dict[str, str] = {}
+        headers: dict[str, str] = {}
         if self._auth_token:
             headers["Authorization"] = f"Bearer {self._auth_token}"
         return headers
@@ -200,7 +199,7 @@ class PortalClient:
             logger.warning(f"TCP unavailable ({e}), using content provider fallback")
             self.tcp_available = False
 
-    async def _find_existing_forward(self) -> Optional[int]:
+    async def _find_existing_forward(self) -> int | None:
         """
         Check if a forward already exists for the Portal remote port.
 
@@ -235,7 +234,7 @@ class PortalClient:
         client: httpx.AsyncClient,
         method: str,
         url: str,
-        extra_headers: Optional[Dict[str, str]] = None,
+        extra_headers: dict[str, str] | None = None,
         **kwargs,
     ) -> httpx.Response:
         """Make an authenticated TCP request, re-fetching the token once on 401/403.
@@ -282,7 +281,7 @@ class PortalClient:
 
     def _parse_content_provider_output(
         self, raw_output: str
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """
         Parse the raw ADB content provider output and extract JSON data.
 
@@ -337,7 +336,7 @@ class PortalClient:
         except json.JSONDecodeError:
             return None
 
-    async def get_state(self) -> Dict[str, Any]:
+    async def get_state(self) -> dict[str, Any]:
         """
         Get device state (accessibility tree + phone state).
         Auto-selects TCP or content provider.
@@ -350,7 +349,7 @@ class PortalClient:
             return await self._get_state_tcp()
         return await self._get_state_content_provider()
 
-    async def _get_state_tcp(self) -> Dict[str, Any]:
+    async def _get_state_tcp(self) -> dict[str, Any]:
         """Get state via TCP."""
         try:
             async with httpx.AsyncClient() as client:
@@ -387,7 +386,7 @@ class PortalClient:
             logger.debug(f"TCP get_state error: {e}, using fallback")
             return await self._get_state_content_provider()
 
-    async def _get_state_content_provider(self) -> Dict[str, Any]:
+    async def _get_state_content_provider(self) -> dict[str, Any]:
         """Get state via content provider (fallback)."""
         try:
             output = await self.device.shell(
@@ -563,7 +562,7 @@ class PortalClient:
 
         raise RuntimeError("Screenshot capture failed after retries") from last_error
 
-    async def get_apps(self, include_system: bool = True) -> List[Dict[str, str]]:
+    async def get_apps(self, include_system: bool = True) -> list[dict[str, str]]:
         """
         Get installed apps with package name and label.
 
@@ -683,7 +682,7 @@ class PortalClient:
 
         return "unknown"
 
-    async def ping(self) -> Dict[str, Any]:
+    async def ping(self) -> dict[str, Any]:
         """
         Test Portal connection and verify state availability.
 

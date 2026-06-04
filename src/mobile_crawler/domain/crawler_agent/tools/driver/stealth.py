@@ -12,7 +12,7 @@ from __future__ import annotations
 import asyncio
 import math
 import random
-from typing import Any, List, Tuple
+from typing import Any
 
 from mobile_crawler.domain.crawler_agent.tools.driver.base import DeviceDriver
 
@@ -47,7 +47,7 @@ def generate_curved_path(
     end_x: int,
     end_y: int,
     num_points: int = 15,
-) -> List[Tuple[int, int]]:
+) -> list[tuple[int, int]]:
     """Generate a curved path using a quadratic Bezier curve.
 
     Includes velocity profiling (ease-in/ease-out), micro-jitter via
@@ -80,7 +80,7 @@ def generate_curved_path(
     noise_seed = random.randint(0, 10000)
     jitter_intensity = min(2.0, distance * 0.01)
 
-    points: List[Tuple[int, int]] = []
+    points: list[tuple[int, int]] = []
     for i in range(num_points):
         linear_t = i / (num_points - 1)
         eased_t = _ease_in_out_cubic(linear_t)

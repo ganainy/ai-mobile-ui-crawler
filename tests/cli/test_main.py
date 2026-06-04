@@ -1,6 +1,7 @@
 """Tests for CLI main module."""
 
 from click.testing import CliRunner
+
 from mobile_crawler.cli.main import cli
 
 

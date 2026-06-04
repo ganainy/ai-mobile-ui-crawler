@@ -1,16 +1,17 @@
 import os
 import shutil
 import tempfile
-from pathlib import Path
-from unittest.mock import MagicMock
-import pytest
 from datetime import datetime
+from pathlib import Path
 
-from mobile_crawler.infrastructure.database import DatabaseManager
-from mobile_crawler.infrastructure.run_repository import RunRepository, Run
-from mobile_crawler.infrastructure.session_folder_manager import SessionFolderManager
+import pytest
+
 from mobile_crawler.domain.report_generator import ReportGenerator
+from mobile_crawler.infrastructure.database import DatabaseManager
 from mobile_crawler.infrastructure.run_exporter import RunExporter
+from mobile_crawler.infrastructure.run_repository import Run, RunRepository
+from mobile_crawler.infrastructure.session_folder_manager import SessionFolderManager
+
 
 class TestArtifactGrouping:
     @pytest.fixture

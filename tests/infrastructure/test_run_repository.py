@@ -1,7 +1,7 @@
 """Tests for run_repository.py."""
 
 import tempfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -50,7 +50,7 @@ def sample_run():
         device_id="emulator-5554",
         app_package="com.example.testapp",
         start_activity="com.example.testapp.MainActivity",
-        start_time=datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
+        start_time=datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC),
         end_time=None,
         status="RUNNING",
         ai_provider="gemini",
@@ -68,8 +68,8 @@ def completed_run():
         device_id="emulator-5554",
         app_package="com.example.testapp",
         start_activity="com.example.testapp.MainActivity",
-        start_time=datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
-        end_time=datetime(2024, 1, 1, 12, 30, 0, tzinfo=timezone.utc),
+        start_time=datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC),
+        end_time=datetime(2024, 1, 1, 12, 30, 0, tzinfo=UTC),
         status="STOPPED",
         ai_provider="openrouter",
         ai_model="gpt-4",
@@ -128,7 +128,7 @@ class TestRunRepository:
             device_id="emulator-5554",
             app_package="com.different.app",
             start_activity="com.different.app.Main",
-            start_time=datetime(2024, 1, 1, 13, 0, 0, tzinfo=timezone.utc),
+            start_time=datetime(2024, 1, 1, 13, 0, 0, tzinfo=UTC),
             end_time=None,
             status="RUNNING",
             ai_provider="ollama",
@@ -184,7 +184,7 @@ class TestRunRepository:
         assert run is not None
 
         run.status = "STOPPED"
-        run.end_time = datetime(2024, 1, 1, 12, 45, 0, tzinfo=timezone.utc)
+        run.end_time = datetime(2024, 1, 1, 12, 45, 0, tzinfo=UTC)
         run.total_steps = 100
         run.unique_screens = 15
 
@@ -268,7 +268,7 @@ class TestRunRepository:
                 device_id=f"device-{i}",
                 app_package="com.example.testapp",
                 start_activity="com.example.testapp.MainActivity",
-                start_time=datetime(2024, 1, 1, 12 + i, 0, 0, tzinfo=timezone.utc),
+                start_time=datetime(2024, 1, 1, 12 + i, 0, 0, tzinfo=UTC),
                 end_time=None,
                 status="RUNNING",
                 ai_provider="gemini",
@@ -290,8 +290,8 @@ class TestRunRepository:
 
     def test_datetime_serialization(self, run_repository):
         """Test that datetime objects are properly serialized/deserialized."""
-        start_time = datetime(2024, 1, 1, 12, 30, 45, 123456, tzinfo=timezone.utc)
-        end_time = datetime(2024, 1, 1, 13, 15, 30, 654321, tzinfo=timezone.utc)
+        start_time = datetime(2024, 1, 1, 12, 30, 45, 123456, tzinfo=UTC)
+        end_time = datetime(2024, 1, 1, 13, 15, 30, 654321, tzinfo=UTC)
 
         run = Run(
             id=None,
@@ -322,7 +322,7 @@ class TestRunRepository:
             device_id="test-device",
             app_package="com.test.app",
             start_activity=None,  # None value
-            start_time=datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
+            start_time=datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC),
             end_time=None,  # None value
             status="RUNNING",
             ai_provider=None,  # None value

@@ -2,7 +2,6 @@
 
 import logging
 from dataclasses import dataclass
-from typing import Optional, Tuple
 
 import imagehash
 from PIL import Image
@@ -25,14 +24,14 @@ class ScreenState:
 
 class ScreenTracker:
     """Tracks screen states using perceptual hashing for deduplication.
-    
+
     Uses imagehash library to generate perceptual hashes that are robust
     to minor visual differences (animations, time changes, etc.).
-    
+
     The Hamming distance threshold is configurable and allows for
     ~12% visual difference (default threshold of 12 for 64-bit dHash)
     before screens are considered different.
-    
+
     Note on Hash Algorithm Migration:
     - Previous implementation used pHash (256-bit, size=16)
     - New implementation uses dHash (64-bit, size=8)
@@ -49,7 +48,7 @@ class ScreenTracker:
         use_perceptual_hashing: bool = True
     ):
         """Initialize screen tracker.
-        
+
         Args:
             db_manager: Database manager for persistence
             screen_similarity_threshold: Maximum Hamming distance for screens to be considered the same (default: 12)
@@ -57,26 +56,26 @@ class ScreenTracker:
         """
         self.db_manager = db_manager
         self.screen_repository = ScreenRepository(db_manager)
-        
+
         # Configuration
         self.screen_similarity_threshold = screen_similarity_threshold
         self.use_perceptual_hashing = use_perceptual_hashing
-        
+
         # Track visit counts per screen ID for the current run
         self._visit_counts: dict[int, int] = {}
-        
+
         # Track screens discovered in the current run
         self._run_screens: set[int] = set()
-        
+
         # Current run ID
-        self._current_run_id: Optional[int] = None
-        
+        self._current_run_id: int | None = None
+
         # Previous screen ID for transition tracking
-        self._previous_screen_id: Optional[int] = None
+        self._previous_screen_id: int | None = None
 
     def start_run(self, run_id: int) -> None:
         """Start tracking for a new run.
-        
+
         Args:
             run_id: The run ID to track
         """
@@ -101,41 +100,41 @@ class ScreenTracker:
         self,
         image: Image.Image,
         step_number: int,
-        screenshot_path: Optional[str] = None,
-        activity_name: Optional[str] = None
+        screenshot_path: str | None = None,
+        activity_name: str | None = None
     ) -> ScreenState:
         """Process a screen capture and track its state.
-        
+
         Args:
             image: PIL Image of the screenshot
             step_number: Current step number
             screenshot_path: Optional path to the saved screenshot
             activity_name: Optional Android activity name
-            
+
         Returns:
             ScreenState with screen ID, novelty info, and visit count
         """
         if self._current_run_id is None:
             raise RuntimeError("Screen tracker not started. Call start_run() first.")
-        
+
         # Generate perceptual hash
         composite_hash = self._generate_hash(image)
         logger.debug(f"Generated hash for step {step_number}: {composite_hash}")
-        
+
         # Check for existing similar screen
         existing_screen = self._find_similar_screen(composite_hash)
-        
+
         if existing_screen:
             # Existing screen - update visit count
             screen_id = existing_screen.id
             is_new = screen_id not in self._run_screens
-            
+
             # Track this screen in the current run
             self._run_screens.add(screen_id)
-            
+
             # Update visit count
             self._visit_counts[screen_id] = self._visit_counts.get(screen_id, 0) + 1
-            
+
             logger.debug(
                 f"Matched existing screen {screen_id} "
                 f"(new to run: {is_new}, visits: {self._visit_counts[screen_id]})"
@@ -153,20 +152,20 @@ class ScreenTracker:
             )
             screen_id = self.screen_repository.create_screen(screen)
             is_new = True
-            
+
             # Track this screen
             self._run_screens.add(screen_id)
             self._visit_counts[screen_id] = 1
-            
+
             logger.info(f"Discovered new screen {screen_id} at step {step_number}")
-        
+
         # Track transition if we have a previous screen
         if self._previous_screen_id is not None and self._previous_screen_id != screen_id:
             self._record_transition(self._previous_screen_id, screen_id)
-        
+
         # Update previous screen
         self._previous_screen_id = screen_id
-        
+
         return ScreenState(
             screen_id=screen_id,
             composite_hash=composite_hash,
@@ -177,45 +176,45 @@ class ScreenTracker:
 
     def _generate_hash(self, image: Image.Image) -> str:
         """Generate a perceptual hash for the image.
-        
+
         Uses dHash (Difference Hash) with size=8 (64-bit hash) which is robust to:
         - Scaling and aspect ratio changes
         - Minor color adjustments
         - Brightness changes
         - Content replacement (e.g., carousel rotations)
-        
+
         The status bar (top 100px) is excluded from hashing to prevent
         false positives from time/battery/notifications changes.
-        
+
         Args:
             image: PIL Image to hash
-            
+
         Returns:
             Hex string representation of the 64-bit perceptual hash
         """
         # Convert to RGB if necessary (imagehash works best with RGB)
         if image.mode != 'RGB':
             image = image.convert('RGB')
-        
+
         # Exclude status bar (top 100px) from hashing
         # This prevents false positives from time/battery/notifications
         width, height = image.size
         if height > 100:
             image = image.crop((0, 100, width, height))
-        
+
         # Generate difference hash (dHash) with size=8
         # dHash tracks gradients and structure better than frequency (pHash)
         # making it more robust to "content replacement" like carousels
         dhash = imagehash.dhash(image, hash_size=8)
-        
+
         return str(dhash)
 
-    def _find_similar_screen(self, composite_hash: str) -> Optional[Screen]:
+    def _find_similar_screen(self, composite_hash: str) -> Screen | None:
         """Find an existing screen with similar hash.
-        
+
         Args:
             composite_hash: Hash to search for
-            
+
         Returns:
             Matching Screen if found, None otherwise
         """
@@ -224,13 +223,13 @@ class ScreenTracker:
         if exact_match:
             logger.debug(f"Found exact match for hash {composite_hash}")
             return exact_match
-        
+
         # Then try fuzzy match with Hamming distance
         similar_screens = self.screen_repository.find_similar_screens(
             composite_hash,
             max_distance=self.screen_similarity_threshold
         )
-        
+
         if similar_screens:
             # Return the closest match
             closest_screen, distance = similar_screens[0]
@@ -240,22 +239,22 @@ class ScreenTracker:
                 f"distance: {distance}/{self.screen_similarity_threshold})"
             )
             return closest_screen
-        
+
         return None
 
     def _record_transition(self, from_screen_id: int, to_screen_id: int) -> None:
         """Record a screen transition.
-        
+
         Args:
             from_screen_id: Source screen ID
             to_screen_id: Destination screen ID
         """
         if self._current_run_id is None:
             return
-        
+
         conn = self.db_manager.get_connection()
         cursor = conn.cursor()
-        
+
         # Try to update existing transition count, or insert new one
         cursor.execute("""
             INSERT INTO transitions (run_id, from_screen_id, to_screen_id, action_type, count)
@@ -263,13 +262,13 @@ class ScreenTracker:
             ON CONFLICT (run_id, from_screen_id, to_screen_id, action_type)
             DO UPDATE SET count = count + 1
         """, (self._current_run_id, from_screen_id, to_screen_id))
-        
+
         conn.commit()
         logger.debug(f"Recorded transition: {from_screen_id} -> {to_screen_id}")
 
     def get_run_stats(self) -> dict:
         """Get current run statistics.
-        
+
         Returns:
             Dictionary with screen tracking stats
         """
@@ -278,15 +277,15 @@ class ScreenTracker:
             "unique_screens": len(self._run_screens),
             "total_visits": sum(self._visit_counts.values()),
             "most_visited_screen": max(
-                self._visit_counts.items(), 
+                self._visit_counts.items(),
                 key=lambda x: x[1],
                 default=(None, 0)
             ),
         }
 
-    def get_current_screen_id(self) -> Optional[int]:
+    def get_current_screen_id(self) -> int | None:
         """Get the current screen ID.
-        
+
         Returns:
             Current screen ID or None if not set
         """
@@ -294,30 +293,30 @@ class ScreenTracker:
 
     def get_visit_count(self, screen_id: int) -> int:
         """Get visit count for a specific screen in current run.
-        
+
         Args:
             screen_id: Screen ID to check
-            
+
         Returns:
             Number of visits to this screen
         """
         return self._visit_counts.get(screen_id, 0)
 
-    def is_stuck(self, threshold: int = 3) -> Tuple[bool, Optional[str]]:
+    def is_stuck(self, threshold: int = 3) -> tuple[bool, str | None]:
         """Detect if the crawler is stuck on the same screen.
-        
+
         Args:
             threshold: Number of consecutive visits to consider stuck
-            
+
         Returns:
             Tuple of (is_stuck, reason)
         """
         if self._previous_screen_id is None:
             return False, None
-        
+
         visit_count = self._visit_counts.get(self._previous_screen_id, 0)
-        
+
         if visit_count >= threshold:
             return True, f"Same screen visited {visit_count} times consecutively"
-        
+
         return False, None

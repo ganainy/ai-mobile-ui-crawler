@@ -4,7 +4,6 @@ import ast
 import re
 import time
 from collections import deque
-from typing import Optional
 
 # ANSI escape sequence pattern (colors, cursor movements, etc.)
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*[mGKHFABCDsuJh]")
@@ -66,7 +65,7 @@ class LogCleaner:
     def __init__(self):
         self._recent: deque[tuple[float, str]] = deque(maxlen=self.DEDUP_CACHE_SIZE)
 
-    def clean(self, logger_name: str, message: str) -> Optional[str]:
+    def clean(self, logger_name: str, message: str) -> str | None:
         """Clean and deduplicate a raw log message."""
         cleaned = _ANSI_RE.sub("", message)
 
@@ -138,7 +137,7 @@ class LogCleaner:
 
         return "\n".join(formatted_lines)
 
-    def _format_omniparser_payload(self, payload: str) -> Optional[str]:
+    def _format_omniparser_payload(self, payload: str) -> str | None:
         try:
             parsed = ast.literal_eval(payload)
         except (SyntaxError, ValueError):

@@ -1,13 +1,13 @@
 """Tests for UI wait predicates."""
-import asyncio
-import pytest
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
+
 from mobile_crawler.domain.ui_wait_predicate import (
+    DEFAULT_WAIT_PROFILES,
     AdaptiveWaitConfig,
     UIWaitPredicate,
     WaitProfile,
-    DEFAULT_WAIT_PROFILES,
 )
 
 
@@ -103,7 +103,7 @@ class TestUIWaitPredicate:
         """Tap actions use the tap-specific timeout."""
         config = AdaptiveWaitConfig(config_manager=None)
         # Spy on the profile selection
-        predicate = UIWaitPredicate(
+        UIWaitPredicate(
             state_provider=mock_state_provider,
             config=config,
         )
@@ -126,7 +126,7 @@ class TestUIWaitPredicate:
         import time
         start = time.monotonic()
         result = await predicate.wait_for_ui_settled("click", timeout_ms=500)
-        elapsed = time.monotonic() - start
+        time.monotonic() - start
         assert result is True
         # Should have polled at least twice (initial + settled check)
         assert mock_state_provider.get_state.call_count >= 2

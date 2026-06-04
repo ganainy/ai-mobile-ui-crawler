@@ -2,9 +2,9 @@
 
 import json
 import logging
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Dict, List, Optional, Any
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -25,23 +25,23 @@ class RuntimeStats:
     total_screen_visits: int = 0
     screens_per_minute: float = 0.0
     deepest_navigation_depth: int = 0
-    most_visited_screen_id: Optional[int] = None
+    most_visited_screen_id: int | None = None
     most_visited_screen_count: int = 0
     unique_activities_visited: int = 0
 
     # Action Statistics
-    actions_by_type: Dict[str, int] = field(default_factory=dict)
-    successful_actions_by_type: Dict[str, int] = field(default_factory=dict)
-    failed_actions_by_type: Dict[str, int] = field(default_factory=dict)
+    actions_by_type: dict[str, int] = field(default_factory=dict)
+    successful_actions_by_type: dict[str, int] = field(default_factory=dict)
+    failed_actions_by_type: dict[str, int] = field(default_factory=dict)
     avg_action_duration_ms: float = 0.0
-    min_action_duration_ms: Optional[float] = None
-    max_action_duration_ms: Optional[float] = None
+    min_action_duration_ms: float | None = None
+    max_action_duration_ms: float | None = None
 
     # AI Performance
     total_ai_calls: int = 0
     avg_ai_response_time_ms: float = 0.0
-    min_ai_response_time_ms: Optional[float] = None
-    max_ai_response_time_ms: Optional[float] = None
+    min_ai_response_time_ms: float | None = None
+    max_ai_response_time_ms: float | None = None
     ai_timeout_count: int = 0
     ai_error_count: int = 0
     ai_retry_count: int = 0
@@ -68,25 +68,25 @@ class RuntimeStats:
     total_recovery_time_ms: float = 0.0  # Helper for average
 
     # Device & Session
-    device_id: Optional[str] = None
-    device_model: Optional[str] = None
-    android_version: Optional[str] = None
-    screen_width: Optional[int] = None
-    screen_height: Optional[int] = None
-    app_package: Optional[str] = None
-    app_version: Optional[str] = None
-    session_start_time: Optional[datetime] = None
-    session_end_time: Optional[datetime] = None
+    device_id: str | None = None
+    device_model: str | None = None
+    android_version: str | None = None
+    screen_width: int | None = None
+    screen_height: int | None = None
+    app_package: str | None = None
+    app_version: str | None = None
+    session_start_time: datetime | None = None
+    session_end_time: datetime | None = None
 
     # Network & Security
-    pcap_file_size_bytes: Optional[int] = None
-    pcap_packet_count: Optional[int] = None
-    mobsf_security_score: Optional[float] = None
+    pcap_file_size_bytes: int | None = None
+    pcap_packet_count: int | None = None
+    mobsf_security_score: float | None = None
     mobsf_high_issues: int = 0
     mobsf_medium_issues: int = 0
     mobsf_low_issues: int = 0
-    video_file_size_bytes: Optional[int] = None
-    video_duration_seconds: Optional[float] = None
+    video_file_size_bytes: int | None = None
+    video_duration_seconds: float | None = None
 
     # Coverage
     screens_with_unexplored_elements: int = 0
@@ -94,7 +94,7 @@ class RuntimeStats:
     unique_transitions: int = 0
     navigation_graph_edges: int = 0
 
-    def to_db_dict(self) -> Dict[str, Any]:
+    def to_db_dict(self) -> dict[str, Any]:
         """Convert stats to dictionary for database insertion.
 
         Returns:
@@ -188,9 +188,9 @@ class RuntimeStatsCollector:
         self._run_id = run_id
         self._run_stats_repository = run_stats_repository
         self._stats = RuntimeStats()
-        self._screen_visit_counts: Dict[int, int] = {}
+        self._screen_visit_counts: dict[int, int] = {}
         self._transition_set: set = set()
-        self._batch_results: List[bool] = []  # Track batch success/failure
+        self._batch_results: list[bool] = []  # Track batch success/failure
 
     @property
     def stats(self) -> RuntimeStats:
@@ -406,7 +406,7 @@ class RuntimeStatsCollector:
         self._stats.screen_width = screen_width
         self._stats.screen_height = screen_height
 
-    def set_app_info(self, app_package: str, app_version: Optional[str] = None) -> None:
+    def set_app_info(self, app_package: str, app_version: str | None = None) -> None:
         """Set application information.
 
         Args:
@@ -433,7 +433,7 @@ class RuntimeStatsCollector:
             if duration > 0:
                 self._stats.screens_per_minute = (self._stats.total_screen_visits / duration) * 60
 
-    def record_pcap_stats(self, file_size_bytes: int, packet_count: Optional[int] = None) -> None:
+    def record_pcap_stats(self, file_size_bytes: int, packet_count: int | None = None) -> None:
         """Record PCAP capture statistics.
 
         Args:
@@ -534,7 +534,7 @@ class RuntimeStatsCollector:
             logger.error(f"Failed to save runtime stats for run {self._run_id}: {e}")
             return False
 
-    def get_summary(self) -> Dict[str, Any]:
+    def get_summary(self) -> dict[str, Any]:
         """Get a summary of key statistics.
 
         Returns:

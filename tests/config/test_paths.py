@@ -1,10 +1,7 @@
 """Tests for path resolution."""
 
-import platform
 from pathlib import Path
 from unittest.mock import patch
-
-import pytest
 
 from mobile_crawler.config.paths import get_app_data_dir
 

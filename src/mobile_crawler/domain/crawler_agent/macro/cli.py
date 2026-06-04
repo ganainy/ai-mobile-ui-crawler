@@ -4,7 +4,6 @@ Command-line interface for Droidrun macro replay.
 
 import asyncio
 import logging
-from typing import Optional
 
 import click
 from async_adbutils import adb
@@ -64,10 +63,10 @@ def macro_cli():
 )
 def replay(
     path: str,
-    device: Optional[str],
+    device: str | None,
     delay: float,
     start_from: int,
-    max_steps: Optional[int],
+    max_steps: int | None,
     debug: bool,
     dry_run: bool,
 ):
@@ -104,7 +103,7 @@ async def _replay_with_device(
     device: str,
     delay: float,
     start_from: int,
-    max_steps: Optional[int],
+    max_steps: int | None,
     dry_run: bool,
     logger: logging.Logger,
     get_device,
@@ -118,7 +117,7 @@ async def _replay_async(
     device: str,
     delay: float,
     start_from: int,
-    max_steps: Optional[int],
+    max_steps: int | None,
     dry_run: bool,
     logger: logging.Logger,
 ):
@@ -183,7 +182,7 @@ async def _replay_async(
 
 
 async def _show_dry_run(
-    macro_data: dict, start_from: int, max_steps: Optional[int], logger: logging.Logger
+    macro_data: dict, start_from: int, max_steps: int | None, logger: logging.Logger
 ):
     """Show what actions would be executed in dry run mode."""
     actions = macro_data.get("actions", [])

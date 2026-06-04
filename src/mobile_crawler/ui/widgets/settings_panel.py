@@ -2,25 +2,25 @@
 
 from typing import TYPE_CHECKING
 
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
+    QButtonGroup,
+    QCheckBox,
+    QComboBox,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QTextEdit,
-    QSpinBox,
-    QGroupBox,
-    QPushButton,
     QMessageBox,
+    QPushButton,
     QRadioButton,
-    QButtonGroup,
-    QCheckBox,
-    QTabWidget,
     QScrollArea,
-    QComboBox,
+    QSpinBox,
+    QTabWidget,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
 )
-from PySide6.QtCore import Qt, Signal
 
 if TYPE_CHECKING:
     from mobile_crawler.infrastructure.user_config_store import UserConfigStore
@@ -182,38 +182,38 @@ class SettingsPanel(QWidget):
             field_layout.addWidget(edit)
             return field_layout, edit
 
-        l, self.test_username_input = create_credential_field("Test Username:", "Enter test username")
+        field_layout, self.test_username_input = create_credential_field("Test Username:", "Enter test username")
         self.test_username_input.setText("testuser")
-        credentials_layout.addLayout(l)
+        credentials_layout.addLayout(field_layout)
 
-        l, self.test_password_input = create_credential_field("Test Password:", "Enter test password", True)
+        field_layout, self.test_password_input = create_credential_field("Test Password:", "Enter test password", True)
         self.test_password_input.setText("Password123")
-        credentials_layout.addLayout(l)
+        credentials_layout.addLayout(field_layout)
 
         # 1. Address field with German default mock value
-        l, self.test_address_input = create_credential_field("Test Address:", "e.g. Kaiserstraße 12, 60311 Frankfurt am Main, Germany")
+        field_layout, self.test_address_input = create_credential_field("Test Address:", "e.g. Kaiserstraße 12, 60311 Frankfurt am Main, Germany")
         self.test_address_input.setText("Kaiserstraße 12, 60311 Frankfurt am Main, Germany")
         self.test_address_input.setToolTip("Default test address used for forms")
-        credentials_layout.addLayout(l)
+        credentials_layout.addLayout(field_layout)
 
         # 2. Email address field with a hint
-        l, self.test_email_input = create_credential_field("Test Email Address:", "Enter test email address")
+        field_layout, self.test_email_input = create_credential_field("Test Email Address:", "Enter test email address")
         self.test_email_input.setText("testuser@example.com")
         self.test_email_input.setToolTip("Enter a real email address if you need to receive verification codes or OTPs")
         email_hint = QLabel("💡 Tip: Provide a real email address if the target app requires email verification/OTP.")
         email_hint.setStyleSheet("color: #aa6600; font-size: 10px; font-style: italic;")
         email_hint.setWordWrap(True)
-        l.addWidget(email_hint)
-        credentials_layout.addLayout(l)
+        field_layout.addWidget(email_hint)
+        credentials_layout.addLayout(field_layout)
 
         # 3. Mobile Number field with a hint
-        l, self.test_phone_input = create_credential_field("Test Mobile Number:", "e.g. +49 170 1234567")
+        field_layout, self.test_phone_input = create_credential_field("Test Mobile Number:", "e.g. +49 170 1234567")
         self.test_phone_input.setToolTip("Enter a real mobile number if you need to receive SMS verification/MFA codes")
         phone_hint = QLabel("💡 Tip: Provide a real mobile number if the target app requires SMS MFA/verification.")
         phone_hint.setStyleSheet("color: #aa6600; font-size: 10px; font-style: italic;")
         phone_hint.setWordWrap(True)
-        l.addWidget(phone_hint)
-        credentials_layout.addLayout(l)
+        field_layout.addWidget(phone_hint)
+        credentials_layout.addLayout(field_layout)
 
         credentials_group.setLayout(credentials_layout)
         layout.addWidget(credentials_group)
@@ -1202,7 +1202,7 @@ class SettingsPanel(QWidget):
             QMessageBox.warning(
                 self,
                 "Invalid MobSF API URL",
-                f"MobSF API URL must start with http:// or https://\n\nExample: http://localhost:8000",
+                "MobSF API URL must start with http:// or https://\n\nExample: http://localhost:8000",
             )
             return False
 
@@ -1215,14 +1215,14 @@ class SettingsPanel(QWidget):
                 QMessageBox.warning(
                     self,
                     "Invalid MobSF API URL",
-                    f"MobSF API URL appears to be malformed.\n\nExample: http://localhost:8000",
+                    "MobSF API URL appears to be malformed.\n\nExample: http://localhost:8000",
                 )
                 return False
         except Exception:
             QMessageBox.warning(
                 self,
                 "Invalid MobSF API URL",
-                f"MobSF API URL appears to be malformed.\n\nExample: http://localhost:8000",
+                "MobSF API URL appears to be malformed.\n\nExample: http://localhost:8000",
             )
             return False
 

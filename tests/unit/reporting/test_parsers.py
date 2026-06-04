@@ -1,9 +1,8 @@
-import pytest
-import os
 import json
-from datetime import datetime
-from mobile_crawler.reporting.parsers.pcap_parser import DpktPcapParser
+
 from mobile_crawler.reporting.parsers.mobsf_parser import JsonMobSFParser
+from mobile_crawler.reporting.parsers.pcap_parser import DpktPcapParser
+
 
 def test_mobsf_parser_basic(tmp_path):
     report_file = tmp_path / "mobsf.json"
@@ -20,10 +19,10 @@ def test_mobsf_parser_basic(tmp_path):
         "files": {"file1.py": {}, "file2.py": {}}
     }
     report_file.write_text(json.dumps(dummy_data))
-    
+
     parser = JsonMobSFParser()
     analysis = parser.parse(str(report_file))
-    
+
     assert analysis.score == 85
     assert analysis.grade == "B"
     assert len(analysis.high_issues) == 1
@@ -36,5 +35,5 @@ def test_pcap_parser_empty(tmp_path):
     requests = parser.parse("non_existent.pcap")
     assert requests == []
 
-# Note: Integration test with real PCAP would be better, 
+# Note: Integration test with real PCAP would be better,
 # but for unit test we focus on basic logic/interface compliance.

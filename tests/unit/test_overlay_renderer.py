@@ -2,19 +2,21 @@
 
 import pytest
 from PIL import Image
+
 from mobile_crawler.domain.overlay_renderer import OverlayRenderer
+
 
 class TestOverlayRenderer:
     """Tests for OverlayRenderer class."""
-    
+
     @pytest.fixture
     def renderer(self):
         return OverlayRenderer()
-    
+
     @pytest.fixture
     def sample_image(self):
         return Image.new('RGB', (800, 600), color='white')
-    
+
     def test_init(self, renderer):
         assert renderer is not None
         assert len(renderer.COLORS) == 5
@@ -43,7 +45,7 @@ class TestOverlayRenderer:
                 }
             }
         ]
-        
+
         result = renderer.render_overlays(sample_image, actions)
         assert result is not None
         assert result.size == sample_image.size
@@ -79,9 +81,9 @@ class TestOverlayRenderer:
         ]
         original_path = str(tmp_path / "step_001.png")
         sample_image.save(original_path)
-        
+
         annotated_path = renderer.save_annotated(sample_image, actions, original_path)
-        
+
         assert annotated_path != ""
         assert "step_001_annotated.png" in annotated_path
         from pathlib import Path

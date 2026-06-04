@@ -4,9 +4,8 @@ import base64
 import platform
 import sqlite3
 import threading
-import uuid
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
@@ -16,7 +15,7 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 class UserConfigStore:
     """Manages SQLite database for user configuration and preferences."""
 
-    def __init__(self, db_path: Optional[Path] = None):
+    def __init__(self, db_path: Path | None = None):
         """Initialize user config store.
 
         Args:
@@ -102,7 +101,7 @@ class UserConfigStore:
         value_str, value_type = row["value"], row["value_type"]
         return self._convert_from_string(value_str, value_type)
 
-    def set_setting(self, key: str, value: Any, value_type: Optional[str] = None):
+    def set_setting(self, key: str, value: Any, value_type: str | None = None):
         """Set a setting value.
 
         Args:
@@ -121,7 +120,7 @@ class UserConfigStore:
 
         import datetime
 
-        updated_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        updated_at = datetime.datetime.now(datetime.UTC).isoformat()
 
         cursor.execute(
             """
@@ -222,7 +221,7 @@ class UserConfigStore:
             try:
                 for path in ["/etc/machine-id", "/var/lib/dbus/machine-id"]:
                     try:
-                        with open(path, "r") as f:
+                        with open(path) as f:
                             machine_id = f.read().strip()
                             if machine_id:
                                 return machine_id
@@ -312,7 +311,7 @@ class UserConfigStore:
         encrypted = self.encrypt_secret(plaintext)
         self.set_secret(key, encrypted)
 
-    def get_secret_plaintext(self, key: str) -> Optional[str]:
+    def get_secret_plaintext(self, key: str) -> str | None:
         """Get a secret by decrypting stored value.
 
         Args:
@@ -341,7 +340,7 @@ class UserConfigStore:
             )
             return None
 
-    def get_secret(self, key: str) -> Optional[bytes]:
+    def get_secret(self, key: str) -> bytes | None:
         """Get an encrypted secret value.
 
         Args:
@@ -370,7 +369,7 @@ class UserConfigStore:
 
         import datetime
 
-        updated_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        updated_at = datetime.datetime.now(datetime.UTC).isoformat()
 
         cursor.execute(
             """

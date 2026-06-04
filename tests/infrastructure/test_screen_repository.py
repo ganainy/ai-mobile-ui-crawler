@@ -1,5 +1,6 @@
 """Tests for screen_repository_with_run.py."""
 
+import sqlite3
 import tempfile
 from pathlib import Path
 
@@ -40,7 +41,7 @@ def db_manager_with_run(temp_db_path):
     """Create a database manager with a test run already created."""
     manager = DatabaseManager(temp_db_path)
     manager.create_schema()
-    
+
     # Create a test run that screens can reference
     conn = manager.get_connection()
     cursor = conn.cursor()
@@ -50,7 +51,7 @@ def db_manager_with_run(temp_db_path):
         ) VALUES (?, ?, ?, ?, ?)
     """, ("test-device", "com.test.app", "com.test.app.Main", "2024-01-01T12:00:00", "RUNNING"))
     conn.commit()
-    
+
     yield manager
     manager.close()
     # Cleanup with retry for Windows file locking
@@ -200,7 +201,7 @@ class TestScreenRepository:
         """Test finding similar screens within Hamming distance."""
         # Create both screens
         id1 = screen_repository_with_run.create_screen(sample_screen)
-        id2 = screen_repository_with_run.create_screen(similar_screen)
+        screen_repository_with_run.create_screen(similar_screen)
 
         # Find screens similar to the first one
         similar = screen_repository_with_run.find_similar_screens(sample_screen.composite_hash, max_distance=5)
@@ -400,7 +401,7 @@ class TestScreenRepository:
     def test_composite_hash_uniqueness(self, screen_repository_with_run, sample_screen):
         """Test that composite_hash is unique in the database."""
         # Create first screen
-        id1 = screen_repository_with_run.create_screen(sample_screen)
+        screen_repository_with_run.create_screen(sample_screen)
 
         # Try to create another screen with same hash - should work (database allows it)
         # Actually, the schema has UNIQUE constraint on composite_hash, so this should fail
@@ -415,7 +416,7 @@ class TestScreenRepository:
         )
 
         # This should raise an exception due to UNIQUE constraint
-        with pytest.raises(Exception):  # Could be sqlite3.IntegrityError
+        with pytest.raises(sqlite3.IntegrityError):
             screen_repository_with_run.create_screen(duplicate_screen)
 
 

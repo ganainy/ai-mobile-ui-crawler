@@ -5,7 +5,6 @@ Tries server first, falls back to local if server fails or returns empty.
 """
 
 import logging
-from typing import Dict
 
 from mobile_crawler.domain.crawler_agent.app_cards.app_card_provider import AppCardProvider
 from mobile_crawler.domain.crawler_agent.app_cards.providers.local_provider import LocalAppCardProvider
@@ -88,7 +87,7 @@ class CompositeAppCardProvider(AppCardProvider):
         self.local_provider.clear_cache()
         logger.debug("Composite app card cache cleared")
 
-    def get_cache_stats(self) -> Dict[str, any]:
+    def get_cache_stats(self) -> dict[str, any]:
         """
         Get cache statistics from both providers.
 

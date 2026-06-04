@@ -1,24 +1,25 @@
 import json
-from typing import List
-from ..contracts import MobSFParser, MobSFAnalysis, Vulnerability
+
+from ..contracts import MobSFAnalysis, MobSFParser, Vulnerability
+
 
 class JsonMobSFParser(MobSFParser):
     def parse(self, json_report_path: str) -> MobSFAnalysis:
         try:
-            with open(json_report_path, 'r', encoding='utf-8') as f:
+            with open(json_report_path, encoding='utf-8') as f:
                 data = json.load(f)
-            
+
             # Extract basic info
             score = data.get('security_score', 0.0)
             grade = data.get('grade', 'N/A')
-            
+
             # Map findings
             high_issues = self._extract_findings(data, 'high')
             medium_issues = self._extract_findings(data, 'warning') # MobSF often uses 'warning' for medium
-            
+
             # File analysis
             file_analysis = list(data.get('files', {}).keys())
-            
+
             return MobSFAnalysis(
                 score=score,
                 grade=grade,
@@ -29,7 +30,7 @@ class JsonMobSFParser(MobSFParser):
         except (FileNotFoundError, json.JSONDecodeError):
             return MobSFAnalysis(0.0, 'ERROR', [], [], [])
 
-    def _extract_findings(self, data: dict, severity_key: str) -> List[Vulnerability]:
+    def _extract_findings(self, data: dict, severity_key: str) -> list[Vulnerability]:
         findings = []
         # MobSF JSON structure varies, checking common sections
         # Example: data['findings'] or data['code_analysis']

@@ -1,11 +1,11 @@
 """Tests for action verifier."""
-import pytest
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
+
 from mobile_crawler.domain.action_verifier import (
-    ActionVerifier,
     NAVIGATION_ACTIONS,
-    VerificationResult,
+    ActionVerifier,
 )
 
 

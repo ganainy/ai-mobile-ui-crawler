@@ -8,7 +8,7 @@ interacts with the device via ``ctx.driver``, resolves UI elements via
 import asyncio
 import logging
 import re
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from mobile_crawler.domain.crawler_agent.agent.action_context import ActionContext
@@ -138,8 +138,8 @@ async def system_button(button: str, *, ctx: "ActionContext") -> ActionResult:
 
 
 async def swipe(
-    coordinate: List[int],
-    coordinate2: List[int],
+    coordinate: list[int],
+    coordinate2: list[int],
     duration: float = 1.0,
     *,
     ctx: "ActionContext",

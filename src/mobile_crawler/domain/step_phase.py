@@ -1,8 +1,8 @@
 """Step phase state machine for managing individual crawl step lifecycle."""
 
 import time
+from collections.abc import Callable
 from enum import Enum
-from typing import Callable, Dict, List, Optional
 
 
 class StepPhase(Enum):
@@ -43,8 +43,8 @@ class StepPhaseStateMachine:
             initial_phase: The starting phase. Defaults to CAPTURE.
         """
         self.current_phase = initial_phase
-        self._listeners: List[Callable[[StepPhase, StepPhase], None]] = []
-        self._transition_times: Dict[StepPhase, float] = {
+        self._listeners: list[Callable[[StepPhase, StepPhase], None]] = []
+        self._transition_times: dict[StepPhase, float] = {
             initial_phase: time.monotonic()
         }
 
@@ -114,7 +114,7 @@ class StepPhaseStateMachine:
                 # Don't let listener exceptions break the state machine
                 pass
 
-    def get_phase_duration(self, phase: StepPhase) -> Optional[float]:
+    def get_phase_duration(self, phase: StepPhase) -> float | None:
         """Return seconds spent in a phase based on transition timestamps.
 
         Duration is computed as the entry time of the *next* phase minus the

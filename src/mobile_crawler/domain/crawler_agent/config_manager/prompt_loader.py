@@ -11,7 +11,7 @@ Features:
 """
 
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 import aiofiles
 from jinja2 import Environment
@@ -35,7 +35,7 @@ class PromptLoader:
         return cls._env
 
     @staticmethod
-    async def load_prompt(file_path: str, variables: Dict[str, Any] = None) -> str:
+    async def load_prompt(file_path: str, variables: dict[str, Any] = None) -> str:
         """
         Load and render Jinja2 template from absolute file path.
 
@@ -61,14 +61,14 @@ class PromptLoader:
             raise FileNotFoundError(f"Prompt file not found: {file_path}")
 
         # Read template content
-        async with aiofiles.open(path, mode="r", encoding="utf-8") as f:
+        async with aiofiles.open(path, encoding="utf-8") as f:
             template_content = await f.read()
 
         # Use render_template for actual rendering
         return PromptLoader.render_template(template_content, variables)
 
     @staticmethod
-    def render_template(template_string: str, variables: Dict[str, Any] = None) -> str:
+    def render_template(template_string: str, variables: dict[str, Any] = None) -> str:
         """
         Render Jinja2 template from string (NOT file path).
 

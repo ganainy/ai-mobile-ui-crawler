@@ -1,7 +1,8 @@
 """OpenRouter AI model adapter."""
 
+from typing import Any
+
 import requests
-from typing import Any, Dict, Optional, Tuple
 
 from mobile_crawler.domain.model_adapters import ModelAdapter
 
@@ -11,10 +12,10 @@ class OpenRouterAdapter(ModelAdapter):
 
     def __init__(self):
         """Initialize OpenRouter adapter."""
-        self._session: Optional[requests.Session] = None
-        self._model_config: Dict[str, Any] = {}
+        self._session: requests.Session | None = None
+        self._model_config: dict[str, Any] = {}
 
-    def initialize(self, model_config: Dict[str, Any], safety_settings: Optional[Dict[str, Any]] = None) -> None:
+    def initialize(self, model_config: dict[str, Any], safety_settings: dict[str, Any] | None = None) -> None:
         """Initialize the OpenRouter client.
 
         Args:
@@ -30,7 +31,7 @@ class OpenRouterAdapter(ModelAdapter):
         })
         self._model_config = model_config
 
-    def generate_response(self, system_prompt: str, user_prompt: str) -> Tuple[str, Dict[str, Any]]:
+    def generate_response(self, system_prompt: str, user_prompt: str) -> tuple[str, dict[str, Any]]:
         """Generate response from OpenRouter model.
 
         Args:
@@ -66,7 +67,7 @@ class OpenRouterAdapter(ModelAdapter):
         return text, metadata
 
     @property
-    def model_info(self) -> Dict[str, Any]:
+    def model_info(self) -> dict[str, Any]:
         """Get model information.
 
         Returns:

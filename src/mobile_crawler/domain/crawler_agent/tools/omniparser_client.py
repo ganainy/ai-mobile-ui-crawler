@@ -1,11 +1,10 @@
 """OmniParser client for vision-based UI parsing in DroidRun."""
 
 import base64
-import io
 import logging
 import os
 from enum import Enum
-from typing import Dict, Any, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +33,7 @@ class OmniParserClient:
     def __init__(
         self,
         backend: str = "replicate",
-        api_key: Optional[str] = None,
+        api_key: str | None = None,
         local_url: str = "http://localhost:8000",
         box_threshold: float = 0.05,
     ):
@@ -54,7 +53,7 @@ class OmniParserClient:
             f"OmniParser initialized: backend={backend}, has_api_key={bool(self._api_key)}"
         )
 
-    def parse(self, image_bytes: bytes) -> List[Dict[str, Any]]:
+    def parse(self, image_bytes: bytes) -> list[dict[str, Any]]:
         """Parse screenshot using OmniParser.
 
         Args:
@@ -68,7 +67,7 @@ class OmniParserClient:
         else:
             return self._parse_replicate(image_bytes)
 
-    def _parse_replicate(self, image_bytes: bytes) -> List[Dict[str, Any]]:
+    def _parse_replicate(self, image_bytes: bytes) -> list[dict[str, Any]]:
         """Parse using Replicate API.
 
         Args:
@@ -77,14 +76,14 @@ class OmniParserClient:
         Returns:
             List of UI elements
         """
-        import tempfile
         import os
+        import tempfile
 
         try:
             import replicate
-        except ImportError:
+        except ImportError as e:
             logger.error("replicate package not installed: pip install replicate")
-            raise ImportError("replicate package required: pip install replicate")
+            raise ImportError("replicate package required: pip install replicate") from e
 
         if not self._api_key:
             raise ValueError("Replicate API key not configured. Set REPLICATE_API_KEY env var.")
@@ -98,8 +97,9 @@ class OmniParserClient:
         try:
             # Validate image with Pillow first
             try:
-                from PIL import Image
                 import io
+
+                from PIL import Image
 
                 img = Image.open(io.BytesIO(image_bytes))
                 logger.debug(
@@ -242,9 +242,9 @@ class OmniParserClient:
 
         except Exception as e:
             logger.error(f"Replicate API error: {e}")
-            raise RuntimeError(f"OmniParser Replicate error: {e}")
+            raise RuntimeError(f"OmniParser Replicate error: {e}") from e
 
-    def _parse_local(self, image_bytes: bytes) -> List[Dict[str, Any]]:
+    def _parse_local(self, image_bytes: bytes) -> list[dict[str, Any]]:
         """Parse using local OmniParser server.
 
         Args:
@@ -329,10 +329,10 @@ class OmniParserClient:
 
 def create_omni_parser_client(
     backend: str = "replicate",
-    api_key: Optional[str] = None,
+    api_key: str | None = None,
     local_url: str = "http://localhost:8000",
     box_threshold: float = 0.05,
-) -> Optional[OmniParserClient]:
+) -> OmniParserClient | None:
     """Factory function to create OmniParser client with error handling.
 
     Args:

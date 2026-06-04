@@ -1,15 +1,14 @@
 """Config migration system."""
 
-from typing import Dict, Any, List
 import importlib
 import pkgutil
 from pathlib import Path
-
+from typing import Any
 
 CURRENT_VERSION = 5
 
 
-def get_migrations() -> List:
+def get_migrations() -> list:
     """Discover and load all migration modules."""
     migrations = []
     migrations_dir = Path(__file__).parent
@@ -23,7 +22,7 @@ def get_migrations() -> List:
     return sorted(migrations, key=lambda m: m.VERSION)
 
 
-def migrate(config: Dict[str, Any]) -> Dict[str, Any]:
+def migrate(config: dict[str, Any]) -> dict[str, Any]:
     """Run all pending migrations on config."""
     version = config.get("_version", 0)
 

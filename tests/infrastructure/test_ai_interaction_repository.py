@@ -7,11 +7,11 @@ from datetime import datetime
 
 import pytest
 
-from mobile_crawler.infrastructure.database import DatabaseManager
 from mobile_crawler.infrastructure.ai_interaction_repository import (
     AIInteraction,
     AIInteractionRepository,
 )
+from mobile_crawler.infrastructure.database import DatabaseManager
 from mobile_crawler.infrastructure.run_repository import Run, RunRepository
 
 
@@ -198,14 +198,13 @@ class TestAIInteractionRepositoryRetrieve:
             ai_repo.create_ai_interaction(interaction)
 
         # Count all interactions
-        all_interactions = []
         # Need to know the actual run IDs - let's just verify we can retrieve
         # by querying all runs
         conn = ai_repo.db_manager.get_connection()
         cursor = conn.cursor()
         cursor.execute("SELECT DISTINCT run_id FROM ai_interactions")
         run_ids = [row[0] for row in cursor.fetchall()]
-        
+
         assert len(run_ids) == 2
         for run_id in run_ids:
             interactions = ai_repo.get_ai_interactions_by_run(run_id)

@@ -37,6 +37,42 @@ Open cleanup notes:
 - Decide whether to restore, replace, or intentionally remove `CLAUDE.md`.
 - Recreate `AGENTS.md` only if persistent project-wide agent instructions are needed.
 
+## 2026-06-04 - Repo-Wide Ruff Cleanup
+
+Files touched:
+- Project-wide Python sources and tests under `src/`, `tests/`, root scripts, and spec contract Python files.
+- `docs/ARCHITECTURE.md`
+- `.codex/project-memory/CHANGELOG.md`
+
+What changed:
+- Ran `python -m ruff check . --fix` and `python -m ruff check . --fix --unsafe-fixes` across the whole repository.
+- Manually resolved the remaining Ruff findings after auto-fix.
+- Removed unreachable duplicate UI-state parsing code after `_capture_screenshot_with_retry()` in `AndroidStateProvider`.
+- Removed the duplicate `ScreenRepository.get_screens_by_run` method; the remaining method keeps the broader behavior that includes first-seen screens and screens referenced by step logs.
+- Updated the root integration script to import `CrawlerAgentService` instead of the removed `DroidRunAgentService`.
+
+Architecture impact:
+- `ScreenRepository.get_screens_by_run` now has one canonical implementation.
+- The duplicate repository method anti-pattern was removed from `docs/ARCHITECTURE.md`.
+
+Decisions:
+- Kept Ruff configuration and made the repository pass `ruff check .`.
+- Used specific exception types in tests where Ruff rejected broad `Exception` assertions.
+
+Validation:
+- `python -m ruff check .` passed.
+- `pytest tests/domain/test_crawler_agent_service.py tests/core/test_crawler_loop.py tests/core/test_droidrun_crawler_loop.py` passed: 82 tests, 1 existing collection warning.
+- Full `pytest` was attempted twice and timed out after 2 minutes and 5 minutes without completing.
+- `python -m compileall` was attempted but failed because existing `__pycache__` paths denied writes in this environment.
+
+Docs updated:
+- `docs/ARCHITECTURE.md`
+- `.codex/project-memory/CHANGELOG.md`
+
+Follow-ups:
+- Investigate why full `pytest` does not finish within 5 minutes in the current environment.
+- Decide whether to restore, replace, or intentionally remove the unrelated `CLAUDE.md` deletion.
+
 ## 2026-06-04 - Ran Ruff On Renamed Agent Files
 
 Files touched:

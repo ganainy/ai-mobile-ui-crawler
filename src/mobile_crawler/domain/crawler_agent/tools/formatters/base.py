@@ -1,7 +1,7 @@
 """Base interface for tree formatters."""
 
 from abc import ABC, abstractmethod
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Any
 
 
 class TreeFormatter(ABC):
@@ -9,8 +9,8 @@ class TreeFormatter(ABC):
 
     @abstractmethod
     def format(
-        self, filtered_tree: Optional[Dict[str, Any]], phone_state: Dict[str, Any]
-    ) -> Tuple[str, str, List[Dict[str, Any]], Dict[str, Any]]:
+        self, filtered_tree: dict[str, Any] | None, phone_state: dict[str, Any]
+    ) -> tuple[str, str, list[dict[str, Any]], dict[str, Any]]:
         """Format filtered tree to standard output format.
 
         Args:

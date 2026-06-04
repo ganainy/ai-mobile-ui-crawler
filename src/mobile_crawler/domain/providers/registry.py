@@ -1,9 +1,8 @@
 """Provider registry for fetching and managing AI models."""
 
-import json
 import logging
-from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import requests
 
@@ -24,14 +23,14 @@ class ProviderRegistry:
             config_store: Optional UserConfigStore for persistent caching.
                          If provided, models will be cached to disk with expiration.
         """
-        self._cache: Dict[str, List[Dict[str, Any]]] = {}
+        self._cache: dict[str, list[dict[str, Any]]] = {}
         self._config_store = config_store
 
         # Load cached models from persistent storage if available
         if self._config_store:
             self._load_persistent_cache()
 
-    def fetch_gemini_models(self, api_key: str) -> List[Dict[str, Any]]:
+    def fetch_gemini_models(self, api_key: str) -> list[dict[str, Any]]:
         """Fetch available Gemini models.
 
         Args:
@@ -100,7 +99,7 @@ class ProviderRegistry:
             logger.error(f"Failed to fetch Gemini models: {e}")
             raise RuntimeError(f"Failed to fetch Gemini models from API. Please check your API key and internet connection: {e}") from e
 
-    def fetch_openrouter_models(self, api_key: str) -> List[Dict[str, Any]]:
+    def fetch_openrouter_models(self, api_key: str) -> list[dict[str, Any]]:
         """Fetch available OpenRouter models.
 
         Args:
@@ -170,7 +169,7 @@ class ProviderRegistry:
                 {'id': 'google/gemini-pro-1.5', 'name': 'Gemini Pro 1.5', 'provider': 'openrouter', 'supports_vision': True, 'input_modalities': ['text', 'image'], 'pricing': {'prompt_per_1M': '1.2500', 'completion_per_1M': '5.0000', 'image_per_1M': '1.2500'}},
             ]
 
-    def fetch_ollama_models(self, base_url: str = 'http://localhost:11434') -> List[Dict[str, Any]]:
+    def fetch_ollama_models(self, base_url: str = 'http://localhost:11434') -> list[dict[str, Any]]:
         """Fetch available Ollama models.
 
         Args:
@@ -295,7 +294,7 @@ class ProviderRegistry:
         ]
         return any(pattern in model_lower for pattern in vision_patterns)
 
-    def _is_openrouter_vision_model(self, model: Dict[str, Any]) -> bool:
+    def _is_openrouter_vision_model(self, model: dict[str, Any]) -> bool:
         """Check if an OpenRouter model supports image input.
 
         Args:
@@ -335,7 +334,7 @@ class ProviderRegistry:
 
         return False
 
-    def _is_ollama_vision_model(self, model: Dict[str, Any]) -> bool:
+    def _is_ollama_vision_model(self, model: dict[str, Any]) -> bool:
         """Check if an Ollama model supports vision.
 
         Args:
@@ -367,7 +366,7 @@ class ProviderRegistry:
 
         return False
 
-    def clear_cache(self, provider: Optional[str] = None) -> None:
+    def clear_cache(self, provider: str | None = None) -> None:
         """Clear the model cache.
 
         Args:
@@ -408,7 +407,7 @@ class ProviderRegistry:
                 return
 
             # Check if cache is expired
-            cache_age = datetime.now(timezone.utc) - cached_at
+            cache_age = datetime.now(UTC) - cached_at
             if cache_age > timedelta(days=CACHE_EXPIRATION_DAYS):
                 logger.info(f"Model cache expired ({cache_age.days} days old), ignoring")
                 return
@@ -430,7 +429,7 @@ class ProviderRegistry:
 
         try:
             cache_data = {
-                "cached_at": datetime.now(timezone.utc).isoformat(),
+                "cached_at": datetime.now(UTC).isoformat(),
                 "models": self._cache
             }
             self._config_store.set_setting("model_cache", cache_data, "json")

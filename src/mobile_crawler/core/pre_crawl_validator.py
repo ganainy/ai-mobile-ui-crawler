@@ -2,7 +2,6 @@
 
 import logging
 from dataclasses import dataclass
-from typing import List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -44,8 +43,8 @@ class PreCrawlValidator:
         self._config_manager = config_manager
         self._credential_store = credential_store
 
-    def validate(self, device_id: Optional[str], app_package: Optional[str],
-                ai_provider: Optional[str], ai_model: Optional[str]) -> List[ValidationError]:
+    def validate(self, device_id: str | None, app_package: str | None,
+                ai_provider: str | None, ai_model: str | None) -> list[ValidationError]:
         """Validate all pre-crawl requirements.
 
         Args:
@@ -57,10 +56,10 @@ class PreCrawlValidator:
         Returns:
             List of validation errors (empty if all valid)
         """
-        errors: List[ValidationError] = []
+        errors: list[ValidationError] = []
 
         # Track if any required parameter is provided
-        has_any_param = bool(device_id or app_package or ai_provider or ai_model)
+        bool(device_id or app_package or ai_provider or ai_model)
 
         # 1. Check device connected (required when device_id is provided)
         if device_id:
@@ -106,7 +105,7 @@ class PreCrawlValidator:
 
         return errors
 
-    def _check_device_connected(self, device_id: Optional[str]) -> Optional[ValidationError]:
+    def _check_device_connected(self, device_id: str | None) -> ValidationError | None:
         """Check if a device is connected.
 
         Args:
@@ -144,7 +143,7 @@ class PreCrawlValidator:
 
         return None
 
-    def _check_app_selected(self, app_package: Optional[str]) -> Optional[ValidationError]:
+    def _check_app_selected(self, app_package: str | None) -> ValidationError | None:
         """Check if an app is selected.
 
         Args:
@@ -170,8 +169,8 @@ class PreCrawlValidator:
 
         return None
 
-    def _check_model_selected(self, ai_provider: Optional[str],
-                           ai_model: Optional[str]) -> Optional[ValidationError]:
+    def _check_model_selected(self, ai_provider: str | None,
+                           ai_model: str | None) -> ValidationError | None:
         """Check if a vision-capable model is selected.
 
         Args:
@@ -222,7 +221,7 @@ class PreCrawlValidator:
 
         return None
 
-    def _check_api_key(self, ai_provider: Optional[str]) -> Optional[ValidationError]:
+    def _check_api_key(self, ai_provider: str | None) -> ValidationError | None:
         """Check if API key is present for cloud providers.
 
         Args:
@@ -273,7 +272,7 @@ class PreCrawlValidator:
 
         return None
 
-    def _check_mobsf_reachable(self) -> Optional[ValidationError]:
+    def _check_mobsf_reachable(self) -> ValidationError | None:
         """Check if MobSF automatic authentication/server preflight passes.
 
         Returns:
@@ -300,7 +299,7 @@ class PreCrawlValidator:
 
         return None
 
-    def _check_pcapdroid_installed(self, device_id: Optional[str]) -> Optional[ValidationError]:
+    def _check_pcapdroid_installed(self, device_id: str | None) -> ValidationError | None:
         """Check if PCAPdroid is installed on device (when traffic capture is enabled).
 
         Args:
@@ -352,7 +351,7 @@ class PreCrawlValidator:
 
         return None
 
-    def _check_video_available(self) -> Optional[ValidationError]:
+    def _check_video_available(self) -> ValidationError | None:
         """Check if video recording is available (optional, warn only).
 
         Returns:
@@ -378,7 +377,7 @@ class PreCrawlValidator:
 
         return None
 
-    def has_errors(self, errors: List[ValidationError]) -> bool:
+    def has_errors(self, errors: list[ValidationError]) -> bool:
         """Check if there are any error-severity validation errors.
 
         Args:
@@ -389,7 +388,7 @@ class PreCrawlValidator:
         """
         return any(e.severity == "error" for e in errors)
 
-    def has_warnings_only(self, errors: List[ValidationError]) -> bool:
+    def has_warnings_only(self, errors: list[ValidationError]) -> bool:
         """Check if there are only warnings (no errors).
 
         Args:

@@ -1,7 +1,8 @@
 """Tests for VisionDetector and ProviderRegistry."""
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import Mock, patch, MagicMock
 
 from mobile_crawler.domain.providers.registry import ProviderRegistry
 from mobile_crawler.domain.providers.vision_detector import VisionDetector

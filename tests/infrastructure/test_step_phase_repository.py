@@ -1,6 +1,5 @@
 """Tests for StepPhaseRepository."""
 
-import sqlite3
 from datetime import datetime, timedelta
 
 import pytest
@@ -8,8 +7,8 @@ import pytest
 from mobile_crawler.domain.errors import RecorderError
 from mobile_crawler.domain.step_phase_models import StepPhaseTransition
 from mobile_crawler.infrastructure.database import DatabaseManager
-from mobile_crawler.infrastructure.run_repository import RunRepository, Run
-from mobile_crawler.infrastructure.step_log_repository import StepLogRepository, StepLog
+from mobile_crawler.infrastructure.run_repository import Run, RunRepository
+from mobile_crawler.infrastructure.step_log_repository import StepLog, StepLogRepository
 from mobile_crawler.infrastructure.step_phase_repository import StepPhaseRepository
 
 

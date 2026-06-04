@@ -6,9 +6,9 @@ import logging
 import os
 import re
 import time
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from mobile_crawler.config.config_manager import ConfigManager
@@ -23,11 +23,11 @@ class VideoSegment:
 
     part: int
     device_path: str
-    local_path: Optional[str]
+    local_path: str | None
     started_at: str
-    stopped_at: Optional[str] = None
+    stopped_at: str | None = None
     size_bytes: int = 0
-    error: Optional[str] = None
+    error: str | None = None
 
 
 class VideoRecordingManager:
@@ -37,7 +37,7 @@ class VideoRecordingManager:
         self,
         config_manager: "ConfigManager",
         adb_client: Optional["ADBClient"] = None,
-        device_id: Optional[str] = None,
+        device_id: str | None = None,
     ) -> None:
         self.config_manager = config_manager
         self.adb_client = adb_client
@@ -59,17 +59,17 @@ class VideoRecordingManager:
             )
         ).rstrip("/")
 
-        self.run_id: Optional[int] = None
+        self.run_id: int | None = None
         self.app_package: str = ""
-        self.session_path: Optional[str] = None
-        self.video_dir: Optional[Path] = None
-        self.manifest_path: Optional[Path] = None
+        self.session_path: str | None = None
+        self.video_dir: Path | None = None
+        self.manifest_path: Path | None = None
 
-        self._process: Optional[asyncio.subprocess.Process] = None
-        self._segment_task: Optional[asyncio.Task] = None
+        self._process: asyncio.subprocess.Process | None = None
+        self._segment_task: asyncio.Task | None = None
         self._stop_requested = asyncio.Event()
         self._part = 0
-        self._current_segment: Optional[VideoSegment] = None
+        self._current_segment: VideoSegment | None = None
         self._segments: list[VideoSegment] = []
         self._recording = False
 
@@ -120,7 +120,7 @@ class VideoRecordingManager:
         await self._write_manifest_async()
         return True, "Video recording started"
 
-    async def stop_recording_and_save_async(self) -> Optional[str]:
+    async def stop_recording_and_save_async(self) -> str | None:
         """Stop recording, pull the active segment, and write the manifest."""
         if not self._recording and not self._process:
             await self._write_manifest_async()
@@ -132,7 +132,7 @@ class VideoRecordingManager:
         if self._segment_task:
             try:
                 await asyncio.wait_for(self._segment_task, timeout=30.0)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 logger.warning("Timed out waiting for video segment task to stop")
             finally:
                 self._segment_task = None
@@ -149,7 +149,7 @@ class VideoRecordingManager:
             return saved_segments[-1]
         return None
 
-    async def save_partial_on_crash_async(self) -> Optional[str]:
+    async def save_partial_on_crash_async(self) -> str | None:
         """Best-effort stop/pull for exception paths."""
         return await self.stop_recording_and_save_async()
 
@@ -214,12 +214,12 @@ class VideoRecordingManager:
         )
         try:
             await asyncio.wait_for(process.wait(), timeout=10.0)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning("screenrecord did not stop after SIGINT; terminating adb process")
             process.terminate()
             try:
                 await asyncio.wait_for(process.wait(), timeout=5.0)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 process.kill()
                 await process.wait()
 
@@ -303,7 +303,7 @@ class VideoRecordingManager:
         self,
         command_list: list[str],
         suppress_stderr: bool = False,
-        timeout: Optional[float] = None,
+        timeout: float | None = None,
     ) -> tuple[str, int]:
         if self.adb_client:
             try:

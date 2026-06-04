@@ -10,9 +10,10 @@ Provides:
 import enum
 import logging
 import xml.etree.ElementTree as ET
-from dataclasses import dataclass, field
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Awaitable, Callable, List, Optional, Tuple
+from typing import Any
 
 from mobile_crawler.domain.adb_action_executor import ADBActionExecutor
 
@@ -118,7 +119,7 @@ class UIDumpValidationResult:
     is_valid: bool
     is_parseable: bool
     element_count: int
-    error: Optional[str] = None
+    error: str | None = None
 
 
 class UIDumpValidator:
@@ -345,7 +346,7 @@ class AppSwitchRecovery:
         self._consecutive_failures = 0
         self._total_recoveries = 0
 
-    async def detect_and_recover(self) -> Tuple[bool, List[RecoveryAttempt]]:
+    async def detect_and_recover(self) -> tuple[bool, list[RecoveryAttempt]]:
         """Detect app switch and attempt recovery. Returns (recovered, attempts).
 
         If recovered=True, the app is back on target.
@@ -354,7 +355,7 @@ class AppSwitchRecovery:
         Returns:
             Tuple of (recovered: bool, attempts: list of RecoveryAttempt).
         """
-        attempts: List[RecoveryAttempt] = []
+        attempts: list[RecoveryAttempt] = []
 
         for attempt_num in range(1, self.MAX_CONSECUTIVE_FAILURES + 1):
             # Try recovery via am start

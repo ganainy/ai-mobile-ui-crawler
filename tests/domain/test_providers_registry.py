@@ -3,12 +3,12 @@
 Mocks AI provider APIs to avoid making real API calls.
 """
 
-from datetime import datetime, timedelta, timezone
-from unittest.mock import Mock, patch, MagicMock
+from datetime import UTC, datetime, timedelta
+from unittest.mock import Mock, patch
 
 import pytest
 
-from mobile_crawler.domain.providers.registry import ProviderRegistry, CACHE_EXPIRATION_DAYS
+from mobile_crawler.domain.providers.registry import CACHE_EXPIRATION_DAYS, ProviderRegistry
 
 
 @pytest.fixture
@@ -51,7 +51,7 @@ class TestProviderRegistryInitialization:
     def test_init_loads_persistent_cache(self, mock_config_store):
         """Test initialization attempts to load persistent cache."""
         mock_config_store.get_setting.return_value = {
-            "cached_at": datetime.now(timezone.utc).isoformat(),
+            "cached_at": datetime.now(UTC).isoformat(),
             "models": {"gemini": [{"id": "model1"}]}
         }
         reg = ProviderRegistry(config_store=mock_config_store)
@@ -89,8 +89,8 @@ class TestProviderRegistryGemini:
     def test_fetch_gemini_models_caches_result(self, mock_client_class, registry):
         """Test fetch_gemini_models caches results."""
         mock_client = self._setup_mock_genai_client(mock_client_class)
-        models1 = registry.fetch_gemini_models(api_key="test_key")
-        models2 = registry.fetch_gemini_models(api_key="test_key")
+        registry.fetch_gemini_models(api_key="test_key")
+        registry.fetch_gemini_models(api_key="test_key")
 
         # Should only call API once
         mock_client.models.list.assert_called_once()
@@ -292,7 +292,7 @@ class TestProviderRegistryCache:
 
     def test_load_persistent_cache_expired(self, registry, mock_config_store):
         """Test _load_persistent_cache ignores expired cache."""
-        old_date = (datetime.now(timezone.utc) - timedelta(days=CACHE_EXPIRATION_DAYS + 1)).isoformat()
+        old_date = (datetime.now(UTC) - timedelta(days=CACHE_EXPIRATION_DAYS + 1)).isoformat()
         mock_config_store.get_setting.return_value = {
             "cached_at": old_date,
             "models": {"gemini": [{"id": "model1"}]}
@@ -302,7 +302,7 @@ class TestProviderRegistryCache:
 
     def test_load_persistent_cache_valid(self, registry, mock_config_store):
         """Test _load_persistent_cache loads valid cache."""
-        recent_date = datetime.now(timezone.utc).isoformat()
+        recent_date = datetime.now(UTC).isoformat()
         mock_config_store.get_setting.return_value = {
             "cached_at": recent_date,
             "models": {"gemini": [{"id": "model1"}]}

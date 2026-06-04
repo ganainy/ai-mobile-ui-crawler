@@ -1,21 +1,13 @@
 """AI model selection widget for mobile-crawler GUI."""
 
-from typing import Callable, Optional, TYPE_CHECKING
+from collections.abc import Callable
+from typing import TYPE_CHECKING
 
-from PySide6.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
-    QHBoxLayout,
-    QLabel,
-    QComboBox,
-    QPushButton,
-    QMessageBox
-)
-from PySide6.QtCore import Signal, QObject, QTimer
+from PySide6.QtCore import QTimer, Signal
+from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QMessageBox, QPushButton, QVBoxLayout, QWidget
 
 from mobile_crawler.domain.providers.registry import ProviderRegistry
 from mobile_crawler.domain.providers.vision_detector import VisionDetector
-from mobile_crawler.domain.model_adapters import ModelAdapter
 from mobile_crawler.ui.async_utils import AsyncOperation
 
 if TYPE_CHECKING:
@@ -55,29 +47,29 @@ class AIModelSelector(QWidget):
         self._current_provider: str = None
         self._current_model: str = None
         self._provider_models: dict[str, list[str]] = {}
-        self._api_key_callback: Optional[Callable[[str], str]] = None
+        self._api_key_callback: Callable[[str], str] | None = None
         self._setup_ui()
         self._populate_providers()
         self._load_selection()
 
     def set_api_key_callback(self, callback: Callable[[str], str]):
         """Set callback for getting API keys by provider name.
-        
+
         Args:
             callback: Function that takes provider name and returns API key
         """
         self._api_key_callback = callback
-        
+
         # Defer restoration to allow Qt event loop to process pending events
         # This ensures SettingsPanel has fully loaded API keys before we try to use them
         if hasattr(self, '_saved_provider') and self._saved_provider:
             QTimer.singleShot(0, self._restore_saved_selection)
-    
+
     def _restore_saved_selection(self):
         """Restore saved provider/model selection after event loop processes."""
         if not hasattr(self, '_saved_provider') or not self._saved_provider:
             return
-            
+
         self._restoring_selection = True
         try:
             for i in range(self.provider_combo.count()):
@@ -140,14 +132,14 @@ class AIModelSelector(QWidget):
         """Populate the provider dropdown with available AI providers."""
         self.provider_combo.clear()
         self.provider_combo.addItem("Select a provider...", None)
-        
+
         # Add supported providers
         providers = [
             ("Gemini", "gemini"),
             ("OpenRouter", "openrouter"),
             ("Ollama (Local)", "ollama"),
         ]
-        
+
         for display_name, provider_id in providers:
             self.provider_combo.addItem(display_name, provider_id)
 
@@ -159,7 +151,7 @@ class AIModelSelector(QWidget):
         """
         # Get the actual provider ID from the item data
         provider_id = self.provider_combo.currentData()
-        
+
         if not provider_id:
             self.status_label.setText("Select a provider")
             self.status_label.setStyleSheet("color: gray; font-style: italic;")
@@ -222,7 +214,7 @@ class AIModelSelector(QWidget):
         if provider in ['gemini', 'openrouter']:
             if self._api_key_callback:
                 api_key = self._api_key_callback(provider)
-            
+
             if not api_key:
                 # Only show error dialog if not restoring saved selection
                 if not getattr(self, '_restoring_selection', False):
@@ -268,7 +260,7 @@ class AIModelSelector(QWidget):
 
             self.status_label.setText(f"Found {len(sorted_models)} vision models")
             self.status_label.setStyleSheet("color: green; font-style: italic;")
-            
+
             # Restore saved model selection if it matches this provider
             if hasattr(self, '_saved_model') and self._saved_model:
                 for i in range(self.model_combo.count()):

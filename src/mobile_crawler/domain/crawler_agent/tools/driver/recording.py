@@ -7,7 +7,7 @@ through automatically via ``__getattr__``.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from mobile_crawler.domain.crawler_agent.tools.driver.base import DeviceDriver
 
@@ -21,7 +21,7 @@ class RecordingDriver:
 
     def __init__(self, inner: DeviceDriver) -> None:
         self.inner = inner
-        self.log: List[Dict[str, Any]] = []
+        self.log: list[dict[str, Any]] = []
 
     @property
     def platform(self) -> str:
@@ -74,7 +74,7 @@ class RecordingDriver:
         await self.inner.press_button(button)
         self.log.append({"action_type": "button_press", "button": button})
 
-    async def start_app(self, package: str, activity: Optional[str] = None) -> str:
+    async def start_app(self, package: str, activity: str | None = None) -> str:
         result = await self.inner.start_app(package, activity)
         self.log.append(
             {

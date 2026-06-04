@@ -1,7 +1,7 @@
 """Abstract base class for AI model adapters."""
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
 
 class ModelAdapter(ABC):
@@ -11,7 +11,7 @@ class ModelAdapter(ABC):
     """
 
     @abstractmethod
-    def initialize(self, model_config: Dict[str, Any], safety_settings: Optional[Dict[str, Any]] = None) -> None:
+    def initialize(self, model_config: dict[str, Any], safety_settings: dict[str, Any] | None = None) -> None:
         """Initialize the model adapter with configuration.
 
         Args:
@@ -21,7 +21,7 @@ class ModelAdapter(ABC):
         pass
 
     @abstractmethod
-    def generate_response(self, system_prompt: str, user_prompt: str) -> Tuple[str, Dict[str, Any]]:
+    def generate_response(self, system_prompt: str, user_prompt: str) -> tuple[str, dict[str, Any]]:
         """Generate a response from the AI model.
 
         Args:
@@ -35,7 +35,7 @@ class ModelAdapter(ABC):
 
     @property
     @abstractmethod
-    def model_info(self) -> Dict[str, Any]:
+    def model_info(self) -> dict[str, Any]:
         """Get information about the model.
 
         Returns:

@@ -10,7 +10,7 @@ import logging
 import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 logger = logging.getLogger("crawler_agent")
 
@@ -28,8 +28,8 @@ class ToolCall:
     """A parsed tool invocation from the LLM response."""
 
     name: str
-    parameters: Dict[str, Any] = field(default_factory=dict)
-    error: Optional[str] = None
+    parameters: dict[str, Any] = field(default_factory=dict)
+    error: str | None = None
 
 
 @dataclass
@@ -42,8 +42,8 @@ class ToolResult:
 
 
 def parse_tool_calls(
-    text: str, param_types: Optional[Dict[str, str]] = None
-) -> Tuple[str, List[ToolCall]]:
+    text: str, param_types: dict[str, str] | None = None
+) -> tuple[str, list[ToolCall]]:
     """Parse tool calls from LLM response text.
 
     Args:
@@ -61,7 +61,7 @@ def parse_tool_calls(
     parts = text.split(OPEN_TAG)
     text_before = parts[0].strip()
 
-    calls: List[ToolCall] = []
+    calls: list[ToolCall] = []
     for part in parts[1:]:
         close_idx = part.find(CLOSE_TAG)
         if close_idx == -1:
@@ -84,8 +84,8 @@ def parse_tool_calls(
             if not name:
                 continue
 
-            params: Dict[str, Any] = {}
-            error: Optional[str] = None
+            params: dict[str, Any] = {}
+            error: str | None = None
             for param in invoke.findall("parameter"):
                 param_name = param.get("name", "")
                 param_value = param.text or ""
@@ -103,7 +103,7 @@ def parse_tool_calls(
     return text_before, calls
 
 
-def format_tool_results(results: List[ToolResult]) -> str:
+def format_tool_results(results: list[ToolResult]) -> str:
     """Format tool results as XML for injection into conversation.
 
     Args:
@@ -147,7 +147,7 @@ def _sanitize_param_content(block: str) -> str:
 
 
 def _coerce_param(
-    name: str, value: str, param_types: Optional[Dict[str, str]] = None
+    name: str, value: str, param_types: dict[str, str] | None = None
 ) -> Any:
     """Coerce string parameter value to expected type.
 
@@ -171,8 +171,8 @@ def _coerce_param(
         except ValueError:
             try:
                 return float(value)
-            except ValueError:
-                raise ValueError(f"parameter '{name}' expected number, got '{value}'")
+            except ValueError as e:
+                raise ValueError(f"parameter '{name}' expected number, got '{value}'") from e
 
     if expected == "list":
         value = value.strip()
@@ -181,7 +181,7 @@ def _coerce_param(
             if isinstance(parsed, list):
                 return parsed
             return [parsed]  # Single element — wrap in list
-        except (json.JSONDecodeError, ValueError):
-            raise ValueError(f"parameter '{name}' expected list, got '{value}'")
+        except (json.JSONDecodeError, ValueError) as e:
+            raise ValueError(f"parameter '{name}' expected list, got '{value}'") from e
 
     return value

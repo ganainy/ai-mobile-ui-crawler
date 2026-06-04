@@ -13,7 +13,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any
 from urllib.parse import urlparse
 
 import httpx
@@ -80,7 +80,7 @@ async def discover_ios_portal(
         ConnectionError: If no portal is found in the scan range.
     """
 
-    async def _probe(client: httpx.AsyncClient, port: int) -> Optional[str]:
+    async def _probe(client: httpx.AsyncClient, port: int) -> str | None:
         url = f"http://{host}:{port}"
         try:
             resp = await client.get(f"{url}/device/date")
@@ -148,11 +148,11 @@ class IOSDriver(DeviceDriver):
     def __init__(
         self,
         url: str,
-        bundle_identifiers: Optional[List[str]] = None,
+        bundle_identifiers: list[str] | None = None,
     ) -> None:
         self.url = validate_ios_portal_url(url)
         self.bundle_identifiers = bundle_identifiers or []
-        self._client: Optional[httpx.AsyncClient] = None
+        self._client: httpx.AsyncClient | None = None
         self._connected = False
 
     # -- lifecycle -----------------------------------------------------------
@@ -223,7 +223,7 @@ class IOSDriver(DeviceDriver):
 
     # -- app management ------------------------------------------------------
 
-    async def start_app(self, package: str, activity: Optional[str] = None) -> str:
+    async def start_app(self, package: str, activity: str | None = None) -> str:
         resp = await self._client.post(
             "/inputs/launch", json={"bundleIdentifier": package}
         )
@@ -231,7 +231,7 @@ class IOSDriver(DeviceDriver):
             return f"Launched {package}"
         return f"Failed to launch {package}: HTTP {resp.status_code}"
 
-    async def get_apps(self, include_system: bool = True) -> List[Dict[str, str]]:
+    async def get_apps(self, include_system: bool = True) -> list[dict[str, str]]:
         all_ids: set[str] = set(self.bundle_identifiers)
         if include_system:
             all_ids.update(SYSTEM_APP_LABELS)
@@ -240,7 +240,7 @@ class IOSDriver(DeviceDriver):
             for bid in sorted(all_ids)
         ]
 
-    async def list_packages(self, include_system: bool = False) -> List[str]:
+    async def list_packages(self, include_system: bool = False) -> list[str]:
         apps = await self.get_apps(include_system)
         return [a["package"] for a in apps]
 
@@ -251,7 +251,7 @@ class IOSDriver(DeviceDriver):
         resp.raise_for_status()
         return resp.content
 
-    async def get_ui_tree(self) -> Dict[str, Any]:
+    async def get_ui_tree(self) -> dict[str, Any]:
         """Return unified state from the iOS portal.
 
         Returns a dict with ``a11y_tree``, ``phone_state``, and

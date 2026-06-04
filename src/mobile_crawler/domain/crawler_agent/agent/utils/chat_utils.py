@@ -1,7 +1,6 @@
 import logging
 from io import BytesIO
 from pathlib import Path
-from typing import Union
 
 from llama_index.core.base.llms.types import ChatMessage, ImageBlock, TextBlock
 from PIL import Image
@@ -14,7 +13,7 @@ logger = logging.getLogger("crawler_agent")
 # ============================================================================
 
 
-def _ensure_image_bytes(image_source: Union[str, Path, Image.Image, bytes]) -> bytes:
+def _ensure_image_bytes(image_source: str | Path | Image.Image | bytes) -> bytes:
     """Convert image to bytes."""
     if isinstance(image_source, bytes):
         return image_source

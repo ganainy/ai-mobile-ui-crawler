@@ -1,10 +1,9 @@
 """Qt signal adapter for bridging core events to GUI."""
 
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Any
 
 from PySide6.QtCore import QObject, Signal
 
-from mobile_crawler.core.crawler_event_listener import CrawlerEventListener
 from mobile_crawler.domain.models import ActionResult
 
 if TYPE_CHECKING:
@@ -13,11 +12,11 @@ if TYPE_CHECKING:
 
 class QtSignalAdapter(QObject):
     """Adapter that implements CrawlerEventListener protocol and emits Qt signals.
-    
+
     This adapter bridges core crawler events to the GUI without requiring
     Qt imports in core modules. All events are emitted as Qt signals
     that can be connected to GUI slots.
-    
+
     Note: This class implements the CrawlerEventListener protocol but uses
     composition instead of inheritance to avoid metaclass conflicts between
     QObject and ABC. The class can be used as a listener by
@@ -38,11 +37,11 @@ class QtSignalAdapter(QObject):
     state_changed = Signal(int, str, str)  # run_id, old_state, new_state
     screen_processed = Signal(int, int, int, bool, int, int)  # run_id, step, screen_id, is_new, visit_count, total
     debug_log = Signal(int, int, str)  # run_id, step_number, message
-    
+
     # Timing signals
     ocr_completed = Signal(int, int, float, int)  # run_id, step, duration_ms, element_count
     screenshot_timing = Signal(int, int, float)   # run_id, step, duration_ms
-    
+
     # Recovery signals (US Story 3)
     recovery_started = Signal(int, int, int)  # run_id, step, attempt
     recovery_completed = Signal(int, int, bool, float)  # run_id, step, success, duration_ms
@@ -66,11 +65,11 @@ class QtSignalAdapter(QObject):
         """Called when a screenshot is captured."""
         self.screenshot_captured.emit(run_id, step_number, screenshot_path)
 
-    def on_ai_request_sent(self, run_id: int, step_number: int, request_data: Dict[str, Any]) -> None:
+    def on_ai_request_sent(self, run_id: int, step_number: int, request_data: dict[str, Any]) -> None:
         """Called when an AI request is sent."""
         self.ai_request_sent.emit(run_id, step_number, request_data)
 
-    def on_ai_response_received(self, run_id: int, step_number: int, response_data: Dict[str, Any]) -> None:
+    def on_ai_response_received(self, run_id: int, step_number: int, response_data: dict[str, Any]) -> None:
         """Called when an AI response is received."""
         self.ai_response_received.emit(run_id, step_number, response_data)
 
@@ -97,7 +96,7 @@ class QtSignalAdapter(QObject):
         """Called when a crawl completes."""
         self.crawl_completed.emit(run_id, total_steps, total_duration_ms, reason, ocr_avg_ms)
 
-    def on_error(self, run_id: int, step_number: Optional[int], error: Exception) -> None:
+    def on_error(self, run_id: int, step_number: int | None, error: Exception) -> None:
         """Called when an error occurs."""
         # Use -1 for step_number if None
         step = step_number if step_number is not None else -1

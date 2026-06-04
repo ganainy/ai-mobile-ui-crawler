@@ -10,8 +10,9 @@ import functools
 import inspect
 import os
 import uuid
+from collections.abc import Callable
 from contextvars import Token, copy_context
-from typing import Any, Callable
+from typing import Any
 
 from llama_index.core.callbacks.base_handler import BaseCallbackHandler
 from llama_index_instrumentation import get_dispatcher

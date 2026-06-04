@@ -3,21 +3,18 @@
 import json
 import logging
 import sys
-from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
-
-import pytest
+from unittest.mock import MagicMock, Mock, patch
 
 from mobile_crawler.core.log_sinks import (
+    ConsoleSink,
+    DatabaseSink,
+    FileSink,
+    JSONEventSink,
     LogLevel,
     LogSink,
-    ConsoleSink,
-    JSONEventSink,
-    FileSink,
-    DatabaseSink,
     QLogHandler,
-    capture_stdout_to_ui,
     _LineCapturingStream,
+    capture_stdout_to_ui,
 )
 
 
@@ -150,7 +147,7 @@ class TestDatabaseSink:
         """Test DatabaseSink persists log to database."""
         mock_db = Mock()
         mock_conn = Mock()
-        mock_cursor = Mock()
+        Mock()
         mock_conn.execute = Mock()
         mock_conn.commit = Mock()
         mock_db.get_connection.return_value = mock_conn

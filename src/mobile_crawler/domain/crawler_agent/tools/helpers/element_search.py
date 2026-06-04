@@ -5,16 +5,17 @@ Provides composable filters to search elements by text, ID, spatial relationship
 Works with raw a11y tree data from Portal before index assignment.
 """
 
-from typing import List, Dict, Any, Callable, Tuple
 import re
+from collections.abc import Callable
+from typing import Any
 
-ElementFilter = Callable[[List[Dict[str, Any]]], List[Dict[str, Any]]]
+ElementFilter = Callable[[list[dict[str, Any]]], list[dict[str, Any]]]
 
 
 # ========== HELPER FUNCTIONS ==========
 
 
-def flatten_tree(root: Dict[str, Any]) -> List[Dict[str, Any]]:
+def flatten_tree(root: dict[str, Any]) -> list[dict[str, Any]]:
     """Recursively flatten tree to list of all nodes."""
     results = [root]
     for child in root.get("children", []):
@@ -22,7 +23,7 @@ def flatten_tree(root: Dict[str, Any]) -> List[Dict[str, Any]]:
     return results
 
 
-def get_element_center(node: Dict[str, Any]) -> Tuple[int, int]:
+def get_element_center(node: dict[str, Any]) -> tuple[int, int]:
     """Get center coordinates from boundsInScreen."""
     bounds = node.get("boundsInScreen", {})
     left = bounds.get("left", 0)
@@ -36,10 +37,10 @@ def get_element_center(node: Dict[str, Any]) -> Tuple[int, int]:
     return (center_x, center_y)
 
 
-def sort_by_position(nodes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def sort_by_position(nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Sort elements top-to-bottom, left-to-right."""
 
-    def get_sort_key(node: Dict) -> Tuple[int, int]:
+    def get_sort_key(node: dict) -> tuple[int, int]:
         bounds = node.get("boundsInScreen", {})
         top = bounds.get("top", 0)
         left = bounds.get("left", 0)
@@ -69,7 +70,7 @@ class Filters:
             regex = pattern
             pattern_str = pattern.pattern
 
-        def filter_fn(nodes: List[Dict]) -> List[Dict]:
+        def filter_fn(nodes: list[dict]) -> list[dict]:
             all_nodes = []
             for node in nodes:
                 all_nodes.extend(flatten_tree(node))
@@ -115,7 +116,7 @@ class Filters:
             regex = pattern
             pattern_str = pattern.pattern
 
-        def filter_fn(nodes: List[Dict]) -> List[Dict]:
+        def filter_fn(nodes: list[dict]) -> list[dict]:
             all_nodes = []
             for node in nodes:
                 all_nodes.extend(flatten_tree(node))
@@ -151,7 +152,7 @@ class Filters:
     def below(anchor_filter: ElementFilter) -> ElementFilter:
         """Find elements positioned below the anchor element."""
 
-        def filter_fn(nodes: List[Dict]) -> List[Dict]:
+        def filter_fn(nodes: list[dict]) -> list[dict]:
             anchor_results = anchor_filter(nodes)
 
             if not anchor_results:
@@ -191,7 +192,7 @@ class Filters:
     def above(anchor_filter: ElementFilter) -> ElementFilter:
         """Find elements positioned above the anchor element."""
 
-        def filter_fn(nodes: List[Dict]) -> List[Dict]:
+        def filter_fn(nodes: list[dict]) -> list[dict]:
             anchor_results = anchor_filter(nodes)
 
             if not anchor_results:
@@ -231,7 +232,7 @@ class Filters:
     def left_of(anchor_filter: ElementFilter) -> ElementFilter:
         """Find elements positioned left of the anchor element."""
 
-        def filter_fn(nodes: List[Dict]) -> List[Dict]:
+        def filter_fn(nodes: list[dict]) -> list[dict]:
             anchor_results = anchor_filter(nodes)
 
             if not anchor_results:
@@ -271,7 +272,7 @@ class Filters:
     def right_of(anchor_filter: ElementFilter) -> ElementFilter:
         """Find elements positioned right of the anchor element."""
 
-        def filter_fn(nodes: List[Dict]) -> List[Dict]:
+        def filter_fn(nodes: list[dict]) -> list[dict]:
             anchor_results = anchor_filter(nodes)
 
             if not anchor_results:
@@ -313,7 +314,7 @@ class Filters:
     def clickable() -> ElementFilter:
         """Match clickable elements."""
 
-        def filter_fn(nodes: List[Dict]) -> List[Dict]:
+        def filter_fn(nodes: list[dict]) -> list[dict]:
             all_nodes = []
             for node in nodes:
                 all_nodes.extend(flatten_tree(node))
@@ -326,7 +327,7 @@ class Filters:
     def non_clickable() -> ElementFilter:
         """Match non-clickable elements."""
 
-        def filter_fn(nodes: List[Dict]) -> List[Dict]:
+        def filter_fn(nodes: list[dict]) -> list[dict]:
             all_nodes = []
             for node in nodes:
                 all_nodes.extend(flatten_tree(node))
@@ -339,7 +340,7 @@ class Filters:
     def enabled(expected: bool = True) -> ElementFilter:
         """Match elements by enabled state."""
 
-        def filter_fn(nodes: List[Dict]) -> List[Dict]:
+        def filter_fn(nodes: list[dict]) -> list[dict]:
             all_nodes = []
             for node in nodes:
                 all_nodes.extend(flatten_tree(node))
@@ -354,7 +355,7 @@ class Filters:
     def selected(expected: bool = True) -> ElementFilter:
         """Match elements by selected state."""
 
-        def filter_fn(nodes: List[Dict]) -> List[Dict]:
+        def filter_fn(nodes: list[dict]) -> list[dict]:
             all_nodes = []
             for node in nodes:
                 all_nodes.extend(flatten_tree(node))
@@ -369,7 +370,7 @@ class Filters:
     def checked(expected: bool = True) -> ElementFilter:
         """Match elements by checked state."""
 
-        def filter_fn(nodes: List[Dict]) -> List[Dict]:
+        def filter_fn(nodes: list[dict]) -> list[dict]:
             all_nodes = []
             for node in nodes:
                 all_nodes.extend(flatten_tree(node))
@@ -384,7 +385,7 @@ class Filters:
     def focused(expected: bool = True) -> ElementFilter:
         """Match elements by focused state."""
 
-        def filter_fn(nodes: List[Dict]) -> List[Dict]:
+        def filter_fn(nodes: list[dict]) -> list[dict]:
             all_nodes = []
             for node in nodes:
                 all_nodes.extend(flatten_tree(node))
@@ -403,7 +404,7 @@ class Filters:
     ) -> ElementFilter:
         """Match elements by size (width and/or height with tolerance)."""
 
-        def filter_fn(nodes: List[Dict]) -> List[Dict]:
+        def filter_fn(nodes: list[dict]) -> list[dict]:
             all_nodes = []
             for node in nodes:
                 all_nodes.extend(flatten_tree(node))
@@ -435,7 +436,7 @@ class Filters:
     def contains_child(child_filter: ElementFilter) -> ElementFilter:
         """Match elements that contain at least one direct child matching the filter."""
 
-        def filter_fn(nodes: List[Dict]) -> List[Dict]:
+        def filter_fn(nodes: list[dict]) -> list[dict]:
             all_nodes = []
             for node in nodes:
                 all_nodes.extend(flatten_tree(node))
@@ -458,10 +459,10 @@ class Filters:
         return filter_fn
 
     @staticmethod
-    def contains_descendants(filters: List[ElementFilter]) -> ElementFilter:
+    def contains_descendants(filters: list[ElementFilter]) -> ElementFilter:
         """Match elements that contain ALL specified descendants at any depth."""
 
-        def filter_fn(nodes: List[Dict]) -> List[Dict]:
+        def filter_fn(nodes: list[dict]) -> list[dict]:
             all_nodes = []
             for node in nodes:
                 all_nodes.extend(flatten_tree(node))
@@ -491,7 +492,7 @@ class Filters:
     def child_of(parent_filter: ElementFilter) -> ElementFilter:
         """Match elements that are direct children of elements matching the parent filter."""
 
-        def filter_fn(nodes: List[Dict]) -> List[Dict]:
+        def filter_fn(nodes: list[dict]) -> list[dict]:
             parents = parent_filter(nodes)
 
             if not parents:
@@ -511,7 +512,7 @@ class Filters:
     def has_text() -> ElementFilter:
         """Match elements that have non-empty text content."""
 
-        def filter_fn(nodes: List[Dict]) -> List[Dict]:
+        def filter_fn(nodes: list[dict]) -> list[dict]:
             all_nodes = []
             for node in nodes:
                 all_nodes.extend(flatten_tree(node))
@@ -532,7 +533,7 @@ class Filters:
     def clickable_first() -> ElementFilter:
         """Sort elements to put clickable ones first."""
 
-        def filter_fn(nodes: List[Dict]) -> List[Dict]:
+        def filter_fn(nodes: list[dict]) -> list[dict]:
             all_nodes = []
             for node in nodes:
                 all_nodes.extend(flatten_tree(node))
@@ -547,7 +548,7 @@ class Filters:
     def index(idx: int) -> ElementFilter:
         """Select element at index position (supports negative indices)."""
 
-        def filter_fn(nodes: List[Dict]) -> List[Dict]:
+        def filter_fn(nodes: list[dict]) -> list[dict]:
             all_nodes = []
             for node in nodes:
                 all_nodes.extend(flatten_tree(node))
@@ -564,10 +565,10 @@ class Filters:
     # ========== COMPOSITION ==========
 
     @staticmethod
-    def compose(filters: List[ElementFilter]) -> ElementFilter:
+    def compose(filters: list[ElementFilter]) -> ElementFilter:
         """Apply filters sequentially (pipeline)."""
 
-        def filter_fn(nodes: List[Dict]) -> List[Dict]:
+        def filter_fn(nodes: list[dict]) -> list[dict]:
             result = nodes
 
             for f in filters:
@@ -581,17 +582,17 @@ class Filters:
         return filter_fn
 
     @staticmethod
-    def intersect(filters: List[ElementFilter]) -> ElementFilter:
+    def intersect(filters: list[ElementFilter]) -> ElementFilter:
         """Return elements matching ALL filters (AND logic)."""
 
-        def filter_fn(nodes: List[Dict]) -> List[Dict]:
+        def filter_fn(nodes: list[dict]) -> list[dict]:
             if not filters:
                 return nodes
 
-            result_sets = [set(id(n) for n in filters[0](nodes))]
+            result_sets = [{id(n) for n in filters[0](nodes)}]
 
             for f in filters[1:]:
-                result_ids = set(id(n) for n in f(nodes))
+                result_ids = {id(n) for n in f(nodes)}
                 result_sets.append(result_ids)
 
             common_ids = result_sets[0].intersection(*result_sets[1:])
@@ -610,7 +611,7 @@ class Filters:
     def deepest_matching(base_filter: ElementFilter) -> ElementFilter:
         """Find the deepest (most specific) matching elements in the tree."""
 
-        def find_deepest_in_node(node: Dict) -> List[Dict]:
+        def find_deepest_in_node(node: dict) -> list[dict]:
             child_matches = []
             for child in node.get("children", []):
                 child_matches.extend(find_deepest_in_node(child))
@@ -624,7 +625,7 @@ class Filters:
 
             return []
 
-        def filter_fn(nodes: List[Dict]) -> List[Dict]:
+        def filter_fn(nodes: list[dict]) -> list[dict]:
             results = []
 
             for node in nodes:

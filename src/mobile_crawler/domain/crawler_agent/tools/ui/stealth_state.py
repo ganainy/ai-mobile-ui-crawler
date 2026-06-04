@@ -8,7 +8,6 @@ predictable dead-center taps that betray automation.
 from __future__ import annotations
 
 import random
-from typing import Tuple
 
 from mobile_crawler.domain.crawler_agent.tools.ui.state import UIState
 
@@ -16,7 +15,7 @@ from mobile_crawler.domain.crawler_agent.tools.ui.state import UIState
 class StealthUIState(UIState):
     """UIState variant that randomizes tap coordinates within element bounds."""
 
-    def get_element_coords(self, index: int) -> Tuple[int, int]:
+    def get_element_coords(self, index: int) -> tuple[int, int]:
         """Return a randomized point within the safe zone of element *index*.
 
         The safe zone is the inner 40% of the element (20% inset from each
@@ -74,7 +73,7 @@ class StealthUIState(UIState):
 
         return x, y
 
-    def get_clear_point(self, index: int) -> Tuple[int, int]:
+    def get_clear_point(self, index: int) -> tuple[int, int]:
         """Find a clear tap point for *index*, then randomize around it.
 
         Uses the parent overlap-avoidance logic, then adds jitter within

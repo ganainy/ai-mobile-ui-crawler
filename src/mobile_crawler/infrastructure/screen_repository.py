@@ -1,7 +1,6 @@
 """Repository for managing discovered screens in crawler.db."""
 
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
 
 from mobile_crawler.infrastructure.database import DatabaseManager
 
@@ -9,11 +8,11 @@ from mobile_crawler.infrastructure.database import DatabaseManager
 @dataclass
 class Screen:
     """Data class representing a discovered screen state."""
-    id: Optional[int]
+    id: int | None
     composite_hash: str  # Perceptual hash for similarity comparison
     visual_hash: str     # Alternative hash (e.g., for exact matching)
-    screenshot_path: Optional[str]
-    activity_name: Optional[str]
+    screenshot_path: str | None
+    activity_name: str | None
     first_seen_run_id: int
     first_seen_step: int
 
@@ -59,7 +58,7 @@ class ScreenRepository:
         conn.commit()
         return screen_id
 
-    def get_screen(self, screen_id: int) -> Optional[Screen]:
+    def get_screen(self, screen_id: int) -> Screen | None:
         """Get a screen by ID.
 
         Args:
@@ -79,7 +78,7 @@ class ScreenRepository:
 
         return self._row_to_screen(row)
 
-    def get_screen_by_hash(self, composite_hash: str) -> Optional[Screen]:
+    def get_screen_by_hash(self, composite_hash: str) -> Screen | None:
         """Get a screen by its composite hash.
 
         Args:
@@ -99,7 +98,7 @@ class ScreenRepository:
 
         return self._row_to_screen(row)
 
-    def get_screens_by_run(self, run_id: int) -> List[Screen]:
+    def get_screens_by_run(self, run_id: int) -> list[Screen]:
         """Get all screens discovered in a specific run.
 
         Args:
@@ -180,7 +179,7 @@ class ScreenRepository:
         conn.commit()
         return deleted
 
-    def find_similar_screens(self, composite_hash: str, max_distance: int = 12) -> List[Tuple[Screen, int]]:
+    def find_similar_screens(self, composite_hash: str, max_distance: int = 12) -> list[tuple[Screen, int]]:
         """Find screens similar to the given hash using Hamming distance.
 
         Args:
@@ -212,27 +211,7 @@ class ScreenRepository:
         similar_screens.sort(key=lambda x: x[1])
         return similar_screens
 
-    def get_screens_by_run(self, run_id: int) -> List[Screen]:
-        """Get all screens first discovered in a specific run.
-
-        Args:
-            run_id: The run ID to filter by
-
-        Returns:
-            List of screens first seen in the specified run
-        """
-        conn = self.db_manager.get_connection()
-        cursor = conn.cursor()
-
-        cursor.execute(
-            "SELECT * FROM screens WHERE first_seen_run_id = ? ORDER BY first_seen_step",
-            (run_id,)
-        )
-        rows = cursor.fetchall()
-
-        return [self._row_to_screen(row) for row in rows]
-
-    def get_screens_by_activity(self, activity_name: str) -> List[Screen]:
+    def get_screens_by_activity(self, activity_name: str) -> list[Screen]:
         """Get all screens with a specific activity name.
 
         Args:
@@ -264,7 +243,7 @@ class ScreenRepository:
         cursor.execute("SELECT COUNT(*) FROM screens")
         return cursor.fetchone()[0]
 
-    def get_unique_activities(self) -> List[str]:
+    def get_unique_activities(self) -> list[str]:
         """Get list of unique activity names.
 
         Returns:
@@ -300,14 +279,14 @@ class ScreenRepository:
         except ValueError:
             # If conversion fails, fall back to string comparison
             # This handles cases where hashes might not be pure hex
-            return sum(c1 != c2 for c1, c2 in zip(hash1, hash2))
+            return sum(c1 != c2 for c1, c2 in zip(hash1, hash2, strict=False))
 
         # Ensure both binary strings are the same length
         max_len = max(len(bin1), len(bin2))
         bin1 = bin1.zfill(max_len)
         bin2 = bin2.zfill(max_len)
 
-        return sum(b1 != b2 for b1, b2 in zip(bin1, bin2))
+        return sum(b1 != b2 for b1, b2 in zip(bin1, bin2, strict=False))
 
     def _row_to_screen(self, row) -> Screen:
         """Convert a database row to a Screen object.
@@ -332,30 +311,30 @@ class ScreenRepository:
         """Count unique screens discovered in a specific run."""
         conn = self.db_manager.get_connection()
         cursor = conn.cursor()
-        
+
         cursor.execute("""
-            SELECT COUNT(DISTINCT id) 
-            FROM screens 
+            SELECT COUNT(DISTINCT id)
+            FROM screens
             WHERE first_seen_run_id = ?
         """, (run_id,))
-        
+
         row = cursor.fetchone()
         return row[0] if row else 0
 
-    def get_latest_screen_for_run(self, run_id: int) -> Optional[Screen]:
+    def get_latest_screen_for_run(self, run_id: int) -> Screen | None:
         """Get the most recently discovered screen for a run."""
         conn = self.db_manager.get_connection()
         cursor = conn.cursor()
-        
+
         cursor.execute("""
-            SELECT * FROM screens 
-            WHERE first_seen_run_id = ? 
-            ORDER BY first_seen_step DESC 
+            SELECT * FROM screens
+            WHERE first_seen_run_id = ?
+            ORDER BY first_seen_step DESC
             LIMIT 1
         """, (run_id,))
-        
+
         row = cursor.fetchone()
         if not row:
             return None
-        
+
         return self._row_to_screen(row)

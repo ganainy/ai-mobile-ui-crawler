@@ -1,12 +1,11 @@
 """Stale run cleanup for recovering crashed crawl sessions."""
 
 import logging
-from typing import List, Optional
 from datetime import datetime
 
-from mobile_crawler.infrastructure.database import DatabaseManager
-from mobile_crawler.infrastructure.run_repository import RunRepository, Run
 from mobile_crawler.domain.traffic_capture_manager import TrafficCaptureManager
+from mobile_crawler.infrastructure.database import DatabaseManager
+from mobile_crawler.infrastructure.run_repository import Run, RunRepository
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +21,7 @@ class StaleRunCleaner:
     def __init__(
         self,
         db_manager: DatabaseManager,
-        traffic_capture_manager: Optional[TrafficCaptureManager] = None,
+        traffic_capture_manager: TrafficCaptureManager | None = None,
     ):
         """Initialize stale run cleaner.
 
@@ -57,10 +56,10 @@ class StaleRunCleaner:
             logger.info(f"Stale run cleanup completed: {cleaned_count} runs marked as INTERRUPTED")
         else:
             logger.info("No stale runs found")
-            
+
         return cleaned_count
 
-    def _find_stale_runs(self) -> List[Run]:
+    def _find_stale_runs(self) -> list[Run]:
         """Find runs that appear to be stale.
 
         Returns:

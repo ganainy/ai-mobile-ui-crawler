@@ -1,28 +1,25 @@
 """Run history view widget for mobile-crawler GUI."""
 
 from typing import TYPE_CHECKING
-from datetime import datetime
 
+from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
+    QMessageBox,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
-    QHeaderView,
-    QMessageBox,
-    QCheckBox,
-    QDialog,
+    QVBoxLayout,
+    QWidget,
 )
-from PySide6.QtCore import Qt, Signal, QThread
-from PySide6.QtGui import QColor
 
 if TYPE_CHECKING:
-    from mobile_crawler.infrastructure.run_repository import RunRepository
     from mobile_crawler.domain.report_generator import ReportGenerator
     from mobile_crawler.infrastructure.mobsf_manager import MobSFManager
+    from mobile_crawler.infrastructure.run_repository import RunRepository
 
 
 class MobSFAnalysisWorker(QThread):
@@ -46,7 +43,7 @@ class MobSFAnalysisWorker(QThread):
 
 class RunHistoryView(QWidget):
     """Widget for viewing and managing past crawl runs.
-    
+
     Displays a table of runs with metadata and provides actions
     for deleting runs, generating reports, and running MobSF analysis.
     """
@@ -64,7 +61,7 @@ class RunHistoryView(QWidget):
         parent=None
     ):
         """Initialize run history view widget.
-        
+
         Args:
             run_repository: RunRepository instance for fetching runs
             report_generator: ReportGenerator instance for generating reports
@@ -76,9 +73,9 @@ class RunHistoryView(QWidget):
         self._report_generator = report_generator
         self._mobsf_manager = mobsf_manager
         self._mobsf_worker = None
-        
+
         self.setMinimumHeight(170)
-        
+
         self._setup_ui()
         self._load_runs()
 
@@ -106,17 +103,17 @@ class RunHistoryView(QWidget):
             "Model",
             "Actions"
         ])
-        
+
         # Configure table
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         self.table.setAlternatingRowColors(True)
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
-        
+
         # Make table read-only
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        
+
         layout.addWidget(self.table)
 
         # Buttons row
@@ -158,35 +155,35 @@ class RunHistoryView(QWidget):
         """Load all runs from repository into table."""
         # Save current selection if any
         selected_id = self.get_selected_run_id()
-        
+
         runs = self._run_repository.get_all_runs()
-        
+
         self.table.setRowCount(len(runs))
-        
+
         # Need session manager to resolve paths
         # We'll create it on fly since it's lightweight, or we could inject it
         from mobile_crawler.infrastructure.session_folder_manager import SessionFolderManager
         session_manager = SessionFolderManager()
-        
+
         for row, run in enumerate(runs):
             # ID
             id_item = QTableWidgetItem(str(run.id))
             id_item.setData(Qt.ItemDataRole.UserRole, run.id)
             self.table.setItem(row, 0, id_item)
-            
+
             # Device
             device_item = QTableWidgetItem(run.device_id)
             self.table.setItem(row, 1, device_item)
-            
+
             # Package
             package_item = QTableWidgetItem(run.app_package)
             self.table.setItem(row, 2, package_item)
-            
+
             # Start Time
             start_time = run.start_time.strftime("%Y-%m-%d %H:%M:%S")
             start_time_item = QTableWidgetItem(start_time)
             self.table.setItem(row, 3, start_time_item)
-            
+
             # End Time
             if run.end_time:
                 end_time = run.end_time.strftime("%Y-%m-%d %H:%M:%S")
@@ -194,7 +191,7 @@ class RunHistoryView(QWidget):
                 end_time = "N/A"
             end_time_item = QTableWidgetItem(end_time)
             self.table.setItem(row, 4, end_time_item)
-            
+
             # Status
             status_item = QTableWidgetItem(run.status)
             # Color code status
@@ -209,26 +206,26 @@ class RunHistoryView(QWidget):
             elif run.status == "INTERRUPTED":
                 status_item.setForeground(QColor("#DAA520"))  # Goldenrod/Orange
             self.table.setItem(row, 5, status_item)
-            
+
             # Steps
             steps_item = QTableWidgetItem(str(run.total_steps))
             self.table.setItem(row, 6, steps_item)
-            
+
             # Screens
             screens_item = QTableWidgetItem(str(run.unique_screens))
             self.table.setItem(row, 7, screens_item)
-            
+
             # Model
             model_text = ""
             if run.ai_provider and run.ai_model:
                 model_text = f"{run.ai_provider}/{run.ai_model}"
             model_item = QTableWidgetItem(model_text)
             self.table.setItem(row, 8, model_item)
-            
+
             # Action Button (Open Folder)
             # Only enable if folder exists
             session_path = session_manager.get_session_path(run)
-            
+
             open_btn = QPushButton("📂 Open")
             open_btn.setToolTip("Open Run Folder")
             if session_path:
@@ -236,9 +233,9 @@ class RunHistoryView(QWidget):
             else:
                 open_btn.setEnabled(False)
                 open_btn.setToolTip("Folder not found")
-                
+
             self.table.setCellWidget(row, 9, open_btn)
-            
+
         # Restore selection
         if selected_id is not None:
              for row in range(self.table.rowCount()):
@@ -249,9 +246,9 @@ class RunHistoryView(QWidget):
 
     def _open_folder(self, path: str):
         """Open folder in system file explorer."""
-        from PySide6.QtGui import QDesktopServices
         from PySide6.QtCore import QUrl
-        
+        from PySide6.QtGui import QDesktopServices
+
         try:
             QDesktopServices.openUrl(QUrl.fromLocalFile(path))
         except Exception as e:
@@ -261,7 +258,7 @@ class RunHistoryView(QWidget):
         """Handle table selection change."""
         selected_items = self.table.selectedItems()
         has_selection = len(selected_items) > 0
-        
+
         self.delete_button.setEnabled(has_selection)
         self.report_button.setEnabled(has_selection)
         self.mobsf_button.setEnabled(has_selection)
@@ -271,14 +268,14 @@ class RunHistoryView(QWidget):
         selected_rows = self.table.selectionModel().selectedRows()
         if not selected_rows:
             return
-        
+
         row = selected_rows[0].row()
         run_id_item = self.table.item(row, 0)
         if run_id_item is None:
             return
-        
+
         run_id = run_id_item.data(Qt.ItemDataRole.UserRole)
-        
+
         # Show confirmation dialog
         reply = QMessageBox.question(
             self,
@@ -288,7 +285,7 @@ class RunHistoryView(QWidget):
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No
         )
-        
+
         if reply == QMessageBox.StandardButton.Yes:
             try:
                 deleted = self._run_repository.delete_run(run_id)
@@ -319,14 +316,14 @@ class RunHistoryView(QWidget):
         selected_rows = self.table.selectionModel().selectedRows()
         if not selected_rows:
             return
-        
+
         row = selected_rows[0].row()
         run_id_item = self.table.item(row, 0)
         if run_id_item is None:
             return
-        
+
         run_id = run_id_item.data(Qt.ItemDataRole.UserRole)
-        
+
         # Show confirmation dialog
         reply = QMessageBox.question(
             self,
@@ -335,7 +332,7 @@ class RunHistoryView(QWidget):
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.Yes
         )
-        
+
         if reply == QMessageBox.StandardButton.Yes:
             try:
                 report_path = self._report_generator.generate(run_id)
@@ -357,19 +354,19 @@ class RunHistoryView(QWidget):
         selected_rows = self.table.selectionModel().selectedRows()
         if not selected_rows:
             return
-        
+
         row = selected_rows[0].row()
         run_id_item = self.table.item(row, 0)
         if run_id_item is None:
             return
-        
+
         run_id = run_id_item.data(Qt.ItemDataRole.UserRole)
         package_item = self.table.item(row, 2)
         if package_item is None:
             return
-        
+
         package = package_item.text()
-        
+
         # Show confirmation dialog
         reply = QMessageBox.question(
             self,
@@ -378,7 +375,7 @@ class RunHistoryView(QWidget):
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.Yes
         )
-        
+
         if reply == QMessageBox.StandardButton.Yes:
             try:
                 run = self._get_run_by_id(run_id)
@@ -463,17 +460,17 @@ class RunHistoryView(QWidget):
 
     def get_selected_run_id(self) -> int | None:
         """Get the ID of the currently selected run.
-        
+
         Returns:
             Run ID if a run is selected, None otherwise
         """
         selected_rows = self.table.selectionModel().selectedRows()
         if not selected_rows:
             return None
-        
+
         row = selected_rows[0].row()
         run_id_item = self.table.item(row, 0)
         if run_id_item is None:
             return None
-        
+
         return run_id_item.data(Qt.ItemDataRole.UserRole)

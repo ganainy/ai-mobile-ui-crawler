@@ -1,11 +1,12 @@
 """Tests for StepLogRepository."""
 
-import pytest
 from datetime import datetime, timedelta
 
+import pytest
+
 from mobile_crawler.infrastructure.database import DatabaseManager
-from mobile_crawler.infrastructure.step_log_repository import StepLogRepository, StepLog
-from mobile_crawler.infrastructure.run_repository import RunRepository, Run
+from mobile_crawler.infrastructure.run_repository import Run, RunRepository
+from mobile_crawler.infrastructure.step_log_repository import StepLog, StepLogRepository
 
 
 @pytest.fixture
@@ -246,7 +247,7 @@ class TestStepLogRepository:
         assert retrieved.action_description == "Entered username"
         assert retrieved.target_bbox_json == '{"top_left": [50, 100], "bottom_right": [250, 150]}'
         assert retrieved.input_text == "testuser@example.com"
-        assert retrieved.execution_success == False
+        assert not retrieved.execution_success
         assert retrieved.error_message == "Element not found"
         assert retrieved.action_duration_ms == 300.5
         assert retrieved.ai_response_time_ms == 450.0

@@ -13,8 +13,8 @@ from mobile_crawler.domain.crawler_agent.agent.manager.events import (
     ManagerResponseEvent,
 )
 from mobile_crawler.domain.crawler_agent.agent.manager.manager_agent import ManagerAgent
-from mobile_crawler.domain.crawler_agent.agent.manager.stateless_manager_agent import StatelessManagerAgent
 from mobile_crawler.domain.crawler_agent.agent.manager.prompts import parse_manager_response
+from mobile_crawler.domain.crawler_agent.agent.manager.stateless_manager_agent import StatelessManagerAgent
 
 __all__ = [
     "ManagerAgent",

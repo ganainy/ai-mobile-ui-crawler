@@ -1,7 +1,8 @@
 """Tests for AppSelector widget."""
 
-import pytest
 from unittest.mock import Mock, patch
+
+import pytest
 from PySide6.QtWidgets import QApplication, QWidget
 
 from mobile_crawler.ui.widgets.app_selector import AppSelector

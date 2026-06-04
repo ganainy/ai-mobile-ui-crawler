@@ -1,8 +1,8 @@
 """Tests for DroidRun target-package guards before state capture and app open."""
 
+import importlib.util
 import sys
 import types
-import importlib.util
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
@@ -10,7 +10,6 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 
 from mobile_crawler.domain.models import ActionResult as CrawlerActionResult
-
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DROIDRUN_ROOT = REPO_ROOT / "src" / "mobile_crawler" / "domain" / "crawler_agent"

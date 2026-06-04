@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from typing import Optional, Type, TypeVar
+from typing import TypeVar
 
 from llama_index.core.base.llms.types import (
     ChatMessage,
@@ -37,7 +37,7 @@ async def acall_with_retries(
     Returns:
         The LLM ChatResponse object
     """
-    last_exception: Optional[Exception] = None
+    last_exception: Exception | None = None
 
     for attempt in range(1, retries + 1):
         try:
@@ -62,7 +62,7 @@ async def acall_with_retries(
                 logger.warning(f"Attempt {attempt} returned empty content")
                 last_exception = ValueError("Empty response content")
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning(f"Attempt {attempt} timed out after {timeout} seconds")
             last_exception = TimeoutError("Timed out")
 
@@ -91,7 +91,7 @@ async def _stream_response(llm, messages: list, timeout: float) -> ChatResponse:
         ChatResponse with accumulated content
     """
     content = ""
-    last_chunk: Optional[ChatResponse] = None
+    last_chunk: ChatResponse | None = None
 
     async def stream_chunks():
         nonlocal content, last_chunk
@@ -143,7 +143,7 @@ async def acomplete_with_retries(
     Returns:
         The LLM CompletionResponse object
     """
-    last_exception: Optional[Exception] = None
+    last_exception: Exception | None = None
 
     for attempt in range(1, retries + 1):
         try:
@@ -164,7 +164,7 @@ async def acomplete_with_retries(
                 logger.warning(f"Attempt {attempt} returned empty content")
                 last_exception = ValueError("Empty response content")
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning(f"Attempt {attempt} timed out after {timeout} seconds")
             last_exception = TimeoutError("Timed out")
 
@@ -195,7 +195,7 @@ async def _stream_complete_response(
         CompletionResponse with accumulated content
     """
     content = ""
-    last_chunk: Optional[CompletionResponse] = None
+    last_chunk: CompletionResponse | None = None
 
     async def stream_chunks():
         nonlocal content, last_chunk
@@ -219,9 +219,9 @@ async def _stream_complete_response(
     return response
 
 
-async def astructured_predict_with_retries(
+async def astructured_predict_with_retries[T: BaseModel](
     llm,
-    output_cls: Type[T],
+    output_cls: type[T],
     prompt: PromptTemplate,
     retries: int = 3,
     timeout: float = 500,
@@ -243,7 +243,7 @@ async def astructured_predict_with_retries(
     Returns:
         Instance of the output_cls Pydantic model
     """
-    last_exception: Optional[Exception] = None
+    last_exception: Exception | None = None
 
     for attempt in range(1, retries + 1):
         try:
@@ -260,7 +260,7 @@ async def astructured_predict_with_retries(
                 logger.warning(f"Attempt {attempt} returned None")
                 last_exception = ValueError("Empty response")
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning(f"Attempt {attempt} timed out after {timeout} seconds")
             last_exception = TimeoutError("Timed out")
 

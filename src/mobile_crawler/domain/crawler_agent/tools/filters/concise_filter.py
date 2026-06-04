@@ -1,6 +1,7 @@
 """Concise filtering - all logic self-contained."""
 
-from typing import Dict, Any, Optional
+from typing import Any
+
 from .base import TreeFilter
 
 
@@ -8,8 +9,8 @@ class ConciseFilter(TreeFilter):
     """Concise tree filtering (formerly Droidrun)."""
 
     def filter(
-        self, a11y_tree: Dict[str, Any], device_context: Dict[str, Any]
-    ) -> Optional[Dict[str, Any]]:
+        self, a11y_tree: dict[str, Any], device_context: dict[str, Any]
+    ) -> dict[str, Any] | None:
         """Filter using concise logic."""
         screen_bounds = device_context.get("screen_bounds", {})
         filtering_params = device_context.get("filtering_params", {})
@@ -18,10 +19,10 @@ class ConciseFilter(TreeFilter):
 
     def _filter_node(
         self,
-        node: Dict[str, Any],
-        screen_bounds: Dict[str, int],
-        filtering_params: Dict[str, Any],
-    ) -> Optional[Dict[str, Any]]:
+        node: dict[str, Any],
+        screen_bounds: dict[str, int],
+        filtering_params: dict[str, Any],
+    ) -> dict[str, Any] | None:
         """Recursively filter node."""
         min_size = filtering_params.get("min_element_size", 5)
         screen_width = screen_bounds.get("width", 1080)
@@ -42,7 +43,7 @@ class ConciseFilter(TreeFilter):
 
     @staticmethod
     def _intersects_screen(
-        node: Dict[str, Any], screen_width: int, screen_height: int
+        node: dict[str, Any], screen_width: int, screen_height: int
     ) -> bool:
         """Check if element intersects screen bounds."""
         bounds = node.get("boundsInScreen", {})
@@ -55,7 +56,7 @@ class ConciseFilter(TreeFilter):
         )
 
     @staticmethod
-    def _min_size(node: Dict[str, Any], min_size: int) -> bool:
+    def _min_size(node: dict[str, Any], min_size: int) -> bool:
         """Check if element meets minimum size."""
         bounds = node.get("boundsInScreen", {})
         w = bounds.get("right", 0) - bounds.get("left", 0)

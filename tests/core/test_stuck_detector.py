@@ -1,6 +1,5 @@
 """Tests for StuckDetector."""
 
-import pytest
 
 from mobile_crawler.core.stuck_detector import StuckDetector
 

@@ -6,7 +6,6 @@ with consistent priority: working directory first, then package directory.
 """
 
 from pathlib import Path
-from typing import Union
 
 
 class PathResolver:
@@ -31,7 +30,7 @@ class PathResolver:
 
     @staticmethod
     def resolve(
-        path: Union[str, Path],
+        path: str | Path,
         create_if_missing: bool = False,
         must_exist: bool = False,
     ) -> Path:

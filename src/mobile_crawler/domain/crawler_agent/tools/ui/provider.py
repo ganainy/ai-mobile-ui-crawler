@@ -9,7 +9,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, List, Optional
+from collections.abc import Awaitable, Callable
+from typing import TYPE_CHECKING, Any
 
 from mobile_crawler.domain.crawler_agent.tools.driver.base import DeviceDisconnectedError
 from mobile_crawler.domain.crawler_agent.tools.ui.state import UIState
@@ -33,12 +34,12 @@ _RECOVERY_AFTER_ATTEMPT = 5
 
 
 async def fetch_state_with_retry(
-    fetch: Callable[[], Awaitable[Dict[str, Any]]],
-    recovery: Optional[Callable[[], Awaitable[None]]] = None,
+    fetch: Callable[[], Awaitable[dict[str, Any]]],
+    recovery: Callable[[], Awaitable[None]] | None = None,
     max_retries: int = _MAX_RETRIES,
-    retry_delays: Optional[List[float]] = None,
+    retry_delays: list[float] | None = None,
     recovery_after: int = _RECOVERY_AFTER_ATTEMPT,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Fetch raw device state with retries, backoff, and mid-retry recovery.
 
     Args:
@@ -59,7 +60,7 @@ async def fetch_state_with_retry(
         Exception: After all retries are exhausted.
     """
     delays = retry_delays or _RETRY_DELAYS
-    last_error: Optional[Exception] = None
+    last_error: Exception | None = None
     recovery_attempted = False
 
     is_debug = logger.isEnabledFor(logging.DEBUG)
@@ -125,7 +126,7 @@ class StateProvider:
 
     supported: set[str] = set()
 
-    def __init__(self, driver: "DeviceDriver") -> None:
+    def __init__(self, driver: DeviceDriver) -> None:
         self.driver = driver
 
     async def get_state(self) -> UIState:
@@ -144,19 +145,19 @@ class AndroidStateProvider(StateProvider):
 
     def __init__(
         self,
-        driver: "DeviceDriver",
-        tree_filter: "TreeFilter",
-        tree_formatter: "TreeFormatter",
+        driver: DeviceDriver,
+        tree_filter: TreeFilter,
+        tree_formatter: TreeFormatter,
         use_normalized: bool = False,
         stealth: bool = False,
-        ui_cls: "type[UIState] | None" = None,
+        ui_cls: type[UIState] | None = None,
         ui_parser_mode: str = "boost",  # "boost", "omniparser", or "accessibility"
         omniparser_backend: str = "replicate",
-        omniparser_api_key: Optional[str] = None,
+        omniparser_api_key: str | None = None,
         omniparser_local_url: str = "http://localhost:8000",
         omniparser_box_threshold: float = 0.05,
         omniparser_a11y_threshold: int = 5,
-        target_package: Optional[str] = None,
+        target_package: str | None = None,
         target_recovery_attempts: int = 3,
     ) -> None:
         super().__init__(driver)
@@ -335,74 +336,9 @@ class AndroidStateProvider(StateProvider):
 
         raise RuntimeError("Failed to capture UI screenshot after retries") from last_error
 
-        device_context = combined_data["device_context"]
-        screen_bounds = device_context.get("screen_bounds", {})
-        screen_width = screen_bounds.get("width")
-        screen_height = screen_bounds.get("height")
-
-        a11y_tree = combined_data["a11y_tree"]
-        phone_state = combined_data["phone_state"]
-
-        # Determine UI parser mode and get elements
-        omni_tree = None
-        omni_source = "a11y"
-
-        if self.ui_parser_mode == "accessibility":
-            # Mode 3: Always use accessibility tree only
-            filtered = self.tree_filter.filter(a11y_tree, device_context) if a11y_tree else None
-            logger.debug(f"Using accessibility tree ({len(a11y_tree)} elements)")
-
-        elif self.ui_parser_mode == "omniparser":
-            # Mode 2: Always use OmniParser (ignore a11y, no fallback)
-            omni_tree = await self._get_omni_parser_elements()
-            if omni_tree:
-                omni_source = "omni"
-                logger.info(f"Using OmniParser only ({len(omni_tree)} elements)")
-            filtered = None  # Will use omni_tree in formatter
-            # No fallback - if OmniParser fails, let it propagate
-
-        else:  # "boost" (default)
-            # Mode 1: Use a11y with OmniParser fallback when sparse
-            if a11y_tree and len(a11y_tree) < self.omniparser_a11y_threshold:
-                # A11y tree is sparse - try OmniParser
-                try:
-                    omni_tree = await self._get_omni_parser_elements()
-                    if omni_tree:
-                        omni_source = "omni"
-                        logger.info(f"Using OmniParser boost ({len(omni_tree)} elements)")
-                except Exception as e:
-                    logger.warning(f"OmniParser boost failed: {e}")
-                    omni_tree = None
-
-            # Use a11y if we have enough elements, or if omni failed
-            if omni_tree is None:
-                filtered = self.tree_filter.filter(a11y_tree, device_context) if a11y_tree else None
-            else:
-                filtered = None  # Will use omni_tree in formatter
-
-        self.tree_formatter.screen_width = screen_width
-        self.tree_formatter.screen_height = screen_height
-        self.tree_formatter.use_normalized = self.use_normalized
-
-        formatted_text, focused_text, elements, phone_state = self.tree_formatter.format(
-            filtered, phone_state, omni_tree=omni_tree
-        )
-
-        return self._ui_cls(
-            elements=elements,
-            formatted_text=formatted_text,
-            focused_text=focused_text,
-            phone_state=phone_state,
-            screen_width=screen_width,
-            screen_height=screen_height,
-            use_normalized=self.use_normalized,
-            omni_tree=omni_tree,
-            omni_source=omni_source,
-        )
-
     async def _get_omni_parser_elements(
         self, screenshot_bytes: bytes = None
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Get UI elements using OmniParser vision model."""
         if not self._omni_initialized:
             self._init_omni_parser()

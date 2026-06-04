@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, Optional
+from typing import Any
 
 import yaml
 
@@ -24,7 +24,7 @@ class FileCredentialManager(CredentialManager):
         Args:
             credentials: Either dict or string (file path) or CredentialsConfig
         """
-        self.path: Optional[str] = None
+        self.path: str | None = None
         self.secrets = self._load(credentials)
 
         if self.path:
@@ -32,7 +32,7 @@ class FileCredentialManager(CredentialManager):
         else:
             logger.debug(f"✅ Loaded {len(self.secrets)} secrets from in-memory dict")
 
-    def _load(self, credentials: Any) -> Dict[str, str]:
+    def _load(self, credentials: Any) -> dict[str, str]:
         """Load credentials from dict or file."""
         from mobile_crawler.domain.crawler_agent.config_manager.config_manager import CredentialsConfig
 
@@ -56,7 +56,7 @@ class FileCredentialManager(CredentialManager):
         logger.warning(f"Unknown credentials type: {type(credentials)}")
         return {}
 
-    def _load_from_dict(self, credentials_dict: dict) -> Dict[str, str]:
+    def _load_from_dict(self, credentials_dict: dict) -> dict[str, str]:
         """Load credentials from in-memory dict."""
         secrets = {}
         for secret_id, secret_value in credentials_dict.items():
@@ -68,7 +68,7 @@ class FileCredentialManager(CredentialManager):
                 )
         return secrets
 
-    def _load_from_file(self, file_path: str) -> Dict[str, str]:
+    def _load_from_file(self, file_path: str) -> dict[str, str]:
         """
         Load credentials from YAML file.
 
@@ -83,7 +83,7 @@ class FileCredentialManager(CredentialManager):
             Dict of enabled secrets {secret_id: secret_value}
         """
         path = PathResolver.resolve(file_path, must_exist=True)
-        with open(path, "r") as f:
+        with open(path) as f:
             data = yaml.safe_load(f)
 
         if not data or "secrets" not in data:

@@ -10,7 +10,7 @@ import asyncio
 import logging
 import os
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from async_adbutils import adb
 
@@ -133,7 +133,7 @@ class AndroidDriver(DeviceDriver):
 
     # -- app management ------------------------------------------------------
 
-    async def start_app(self, package: str, activity: Optional[str] = None) -> str:
+    async def start_app(self, package: str, activity: str | None = None) -> str:
         await self.ensure_connected()
         try:
             logger.debug(f"Starting app {package} with activity {activity}")
@@ -172,7 +172,7 @@ class AndroidDriver(DeviceDriver):
         logger.debug(f"Installed app: {path} with result: {result}")
         return result
 
-    async def get_apps(self, include_system: bool = True) -> List[Dict[str, str]]:
+    async def get_apps(self, include_system: bool = True) -> list[dict[str, str]]:
         """Get list of installed apps using pm command."""
         await self.ensure_connected()
 
@@ -196,7 +196,7 @@ class AndroidDriver(DeviceDriver):
 
         return packages
 
-    async def _get_app_label(self, package: str) -> Optional[str]:
+    async def _get_app_label(self, package: str) -> str | None:
         """Get app display label from package."""
         try:
             # Use dumpsys to get app info
@@ -209,7 +209,7 @@ class AndroidDriver(DeviceDriver):
             pass
         return None
 
-    async def list_packages(self, include_system: bool = False) -> List[str]:
+    async def list_packages(self, include_system: bool = False) -> list[str]:
         await self.ensure_connected()
         filter_list = [] if include_system else ["-3"]
         return await self.device.list_packages(filter_list)
@@ -236,6 +236,7 @@ class AndroidDriver(DeviceDriver):
                 if result[:8] == b"\x89PNG\r\n\x1a\n":
                     # It's PNG, validate and convert to JPEG using Pillow
                     import io
+
                     from PIL import Image
 
                     with Image.open(io.BytesIO(result)) as img:
@@ -274,7 +275,7 @@ class AndroidDriver(DeviceDriver):
 
         raise RuntimeError("Screenshot capture failed after retries")
 
-    async def get_ui_tree(self) -> Dict[str, Any]:
+    async def get_ui_tree(self) -> dict[str, Any]:
         """Get UI state - returns structure expected by provider.
 
         With OmniParser mode, this returns an empty a11y tree since we're
@@ -301,7 +302,7 @@ class AndroidDriver(DeviceDriver):
             pass
         return ""
 
-    async def _get_device_context(self) -> Dict[str, Any]:
+    async def _get_device_context(self) -> dict[str, Any]:
         """Get device context (screen size, etc)."""
         try:
             output = await self.device.shell("wm size")

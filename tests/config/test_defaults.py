@@ -1,6 +1,5 @@
 """Tests for default config values."""
 
-import pytest
 
 from mobile_crawler.config.defaults import DEFAULTS
 

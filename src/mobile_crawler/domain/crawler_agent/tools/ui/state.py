@@ -6,7 +6,7 @@ and the scattered ``find_element_by_index`` local functions from ``adb.py``.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from mobile_crawler.domain.crawler_agent.tools.helpers.coordinate import to_absolute
 from mobile_crawler.domain.crawler_agent.tools.helpers.geometry import find_clear_point, rects_overlap
@@ -17,15 +17,15 @@ class UIState:
 
     def __init__(
         self,
-        elements: List[Dict[str, Any]],
+        elements: list[dict[str, Any]],
         formatted_text: str,
         focused_text: str,
-        phone_state: Dict[str, Any],
+        phone_state: dict[str, Any],
         screen_width: int,
         screen_height: int,
         use_normalized: bool = False,
-        omni_tree: Optional[List[Dict[str, Any]]] = None,
-        omni_source: Optional[str] = None,
+        omni_tree: list[dict[str, Any]] | None = None,
+        omni_source: str | None = None,
     ) -> None:
         self.elements = elements
         self.formatted_text = formatted_text
@@ -41,11 +41,11 @@ class UIState:
 
     # -- element lookup ------------------------------------------------------
 
-    def get_element(self, index: int) -> Optional[Dict[str, Any]]:
+    def get_element(self, index: int) -> dict[str, Any] | None:
         """Recursively find an element by its index."""
         return self._find_by_index(self.elements, index)
 
-    def get_element_coords(self, index: int) -> Tuple[int, int]:
+    def get_element_coords(self, index: int) -> tuple[int, int]:
         """Return the centre (x, y) of element *index*.
 
         Raises ``ValueError`` when the element is missing or has no bounds.
@@ -80,13 +80,13 @@ class UIState:
 
         return (left + right) // 2, (top + bottom) // 2
 
-    def get_element_info(self, index: int) -> Dict[str, Any]:
+    def get_element_info(self, index: int) -> dict[str, Any]:
         """Return a dict with common element fields for display."""
         element = self.get_element(index)
         if element is None:
             return {}
 
-        info: Dict[str, Any] = {
+        info: dict[str, Any] = {
             "text": element.get("text", "No text"),
             "className": element.get("className", "Unknown class"),
             "type": element.get("type", "unknown"),
@@ -100,7 +100,7 @@ class UIState:
 
         return info
 
-    def get_clear_point(self, index: int) -> Tuple[int, int]:
+    def get_clear_point(self, index: int) -> tuple[int, int]:
         """Find a tap point for *index* that avoids overlapping elements.
 
         Falls back to the centre if no clear point exists.
@@ -130,7 +130,7 @@ class UIState:
             raise ValueError(f"Element {index} is fully obscured by overlapping elements")
         return point
 
-    def convert_point(self, x: int, y: int) -> Tuple[int, int]:
+    def convert_point(self, x: int, y: int) -> tuple[int, int]:
         """Convert point to absolute pixels if normalized mode is active."""
         if self.use_normalized:
             return to_absolute(x, y, self.screen_width, self.screen_height)
@@ -139,7 +139,7 @@ class UIState:
     # -- internal helpers ----------------------------------------------------
 
     @staticmethod
-    def _find_by_index(elements: List[Dict[str, Any]], target: int) -> Optional[Dict[str, Any]]:
+    def _find_by_index(elements: list[dict[str, Any]], target: int) -> dict[str, Any] | None:
         for item in elements:
             if item.get("index") == target:
                 return item
@@ -149,8 +149,8 @@ class UIState:
         return None
 
     @staticmethod
-    def _collect_indices(elements: List[Dict[str, Any]]) -> List[int]:
-        indices: List[int] = []
+    def _collect_indices(elements: list[dict[str, Any]]) -> list[int]:
+        indices: list[int] = []
         for item in elements:
             if item.get("index") is not None:
                 indices.append(item["index"])
@@ -159,9 +159,9 @@ class UIState:
 
     @staticmethod
     def _collect_all(
-        elements: List[Dict[str, Any]],
-    ) -> List[Dict[str, Any]]:
-        result: List[Dict[str, Any]] = []
+        elements: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        result: list[dict[str, Any]] = []
         for item in elements:
             result.append(item)
             result.extend(UIState._collect_all(item.get("children", [])))

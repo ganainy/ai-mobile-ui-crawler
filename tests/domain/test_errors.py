@@ -1,6 +1,7 @@
 """Tests for the typed exception taxonomy."""
 
 import pytest
+
 from mobile_crawler.domain.errors import (
     AIServiceError,
     CheckpointError,

@@ -1,19 +1,18 @@
 """Log sinks for multi-sink logging architecture."""
 
-import io
 import json
 import logging
 import logging.handlers
 import sys
 import threading
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from contextlib import contextmanager
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional
+from typing import Any
 
-from mobile_crawler.config import get_app_data_dir
 from mobile_crawler.infrastructure.database import DatabaseManager
 
 
@@ -30,7 +29,7 @@ class LogSink(ABC):
     """Abstract base class for log sinks."""
 
     @abstractmethod
-    def log(self, level: LogLevel, message: str, extra_data: Optional[Dict[str, Any]] = None) -> None:
+    def log(self, level: LogLevel, message: str, extra_data: dict[str, Any] | None = None) -> None:
         """Log a message with the given level and optional extra data."""
         pass
 
@@ -48,7 +47,7 @@ class ConsoleSink(LogSink):
             LogLevel.ACTION: 1,  # Same as INFO
         }
 
-    def log(self, level: LogLevel, message: str, extra_data: Optional[Dict[str, Any]] = None) -> None:
+    def log(self, level: LogLevel, message: str, extra_data: dict[str, Any] | None = None) -> None:
         if self._level_order[level] < self._level_order[self.min_level]:
             return
 
@@ -61,7 +60,7 @@ class ConsoleSink(LogSink):
 class JSONEventSink(LogSink):
     """Sink that writes structured JSON events to stdout for CLI piping."""
 
-    def log(self, level: LogLevel, message: str, extra_data: Optional[Dict[str, Any]] = None) -> None:
+    def log(self, level: LogLevel, message: str, extra_data: dict[str, Any] | None = None) -> None:
         event = {
             "timestamp": datetime.now().isoformat(),
             "level": level.value,
@@ -96,7 +95,7 @@ class FileSink(LogSink):
         self._logger.addHandler(self._handler)
         self._logger.setLevel(logging.DEBUG)
 
-    def log(self, level: LogLevel, message: str, extra_data: Optional[Dict[str, Any]] = None) -> None:
+    def log(self, level: LogLevel, message: str, extra_data: dict[str, Any] | None = None) -> None:
         log_level_map = {
             LogLevel.DEBUG: logging.DEBUG,
             LogLevel.INFO: logging.INFO,
@@ -112,12 +111,12 @@ class FileSink(LogSink):
 class DatabaseSink(LogSink):
     """Sink that persists logs to the logs table in crawler.db."""
 
-    def __init__(self, db_manager: Optional[DatabaseManager] = None):
+    def __init__(self, db_manager: DatabaseManager | None = None):
         if db_manager is None:
             db_manager = DatabaseManager()
         self.db_manager = db_manager
 
-    def log(self, level: LogLevel, message: str, extra_data: Optional[Dict[str, Any]] = None) -> None:
+    def log(self, level: LogLevel, message: str, extra_data: dict[str, Any] | None = None) -> None:
         conn = self.db_manager.get_connection()
         extra_json = json.dumps(extra_data) if extra_data else None
 

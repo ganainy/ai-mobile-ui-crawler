@@ -27,8 +27,9 @@ from __future__ import annotations
 import asyncio
 import importlib
 import logging
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, TypedDict
+from typing import Any, TypedDict
 
 logger = logging.getLogger("crawler_agent")
 
@@ -39,10 +40,10 @@ class ExternalAgentModule(TypedDict):
     """Type for a loaded external agent module."""
 
     run: Callable
-    config: Dict[str, Any]
+    config: dict[str, Any]
 
 
-def list_agents() -> List[str]:
+def list_agents() -> list[str]:
     """Discover available external agents by scanning the external/ directory.
 
     Returns:
@@ -59,7 +60,7 @@ def list_agents() -> List[str]:
     return sorted(agents)
 
 
-def load_agent(name: str) -> Optional[ExternalAgentModule]:
+def load_agent(name: str) -> ExternalAgentModule | None:
     """Dynamically load an external agent by name.
 
     Args:

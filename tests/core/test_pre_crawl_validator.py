@@ -2,8 +2,6 @@
 
 from unittest.mock import Mock, patch
 
-import pytest
-
 from mobile_crawler.core.pre_crawl_validator import (
     PreCrawlValidator,
     ValidationError,

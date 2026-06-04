@@ -1,10 +1,10 @@
 """Configuration manager with precedence: SQLite → environment variables → module defaults."""
 
 import os
-from typing import Any, Optional
+from typing import Any
 
-from .defaults import DEFAULTS
 from ..infrastructure.user_config_store import UserConfigStore
+from .defaults import DEFAULTS
 
 
 class ConfigManager:
@@ -16,7 +16,7 @@ class ConfigManager:
     3. Module defaults
     """
 
-    def __init__(self, user_config_store: Optional[UserConfigStore] = None):
+    def __init__(self, user_config_store: UserConfigStore | None = None):
         """Initialize configuration manager.
 
         Args:

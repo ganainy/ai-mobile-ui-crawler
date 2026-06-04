@@ -3,9 +3,7 @@
 from datetime import datetime
 from unittest.mock import Mock
 
-import pytest
-
-from mobile_crawler.domain.exploration_journal import ExplorationJournal, JournalEntry
+from mobile_crawler.domain.exploration_journal import ExplorationJournal
 from mobile_crawler.infrastructure.step_log_repository import StepLog
 
 

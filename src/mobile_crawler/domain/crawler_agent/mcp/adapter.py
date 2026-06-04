@@ -35,7 +35,7 @@ def schema_to_parameters(input_schema: dict) -> dict[str, dict[str, Any]]:
     return parameters
 
 
-def mcp_to_droidrun_tools(mcp_manager: "MCPClientManager") -> dict[str, dict[str, Any]]:
+def mcp_to_droidrun_tools(mcp_manager: MCPClientManager) -> dict[str, dict[str, Any]]:
     """Convert discovered MCP tools to Droidrun custom tool format."""
     custom_tools: dict[str, dict[str, Any]] = {}
 
@@ -50,7 +50,7 @@ def mcp_to_droidrun_tools(mcp_manager: "MCPClientManager") -> dict[str, dict[str
     return custom_tools
 
 
-def _create_tool_wrapper(tool_name: str, manager: "MCPClientManager"):
+def _create_tool_wrapper(tool_name: str, manager: MCPClientManager):
     """Create async wrapper function for an MCP tool."""
 
     async def mcp_tool_wrapper(*, ctx=None, **kwargs) -> str:

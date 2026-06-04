@@ -158,12 +158,6 @@
 **Why it's wrong:** It creates runtime failure risk and indicates stale coupling across layers.  
 **Do this instead:** Use currently implemented APIs in `src/mobile_crawler/infrastructure/session_folder_manager.py` (`create_session_folder`, `get_session_path`) and `src/mobile_crawler/infrastructure/run_repository.py` (`get_all_runs`/explicit query methods) consistently across CLI/UI files.
 
-### Duplicate Repository Method Definitions
-
-**What happens:** `ScreenRepository` defines `get_screens_by_run` twice in the same class.  
-**Why it's wrong:** Later definition silently overrides earlier behavior, making data semantics unclear.  
-**Do this instead:** Keep a single canonical query method and split alternate behavior into explicitly named methods in `src/mobile_crawler/infrastructure/screen_repository.py`.
-
 ## Error Handling
 
 **Strategy:** Catch-and-emit around orchestration boundaries; keep crawl loop alive where possible.

@@ -1,11 +1,11 @@
 """Tests for SettingsPanel widget."""
 
-import pytest
-import sqlite3
 import datetime
 import json
+import sqlite3
 
-from PySide6.QtWidgets import QMessageBox, QLineEdit, QScrollArea
+import pytest
+from PySide6.QtWidgets import QLineEdit, QMessageBox, QScrollArea
 
 
 @pytest.fixture
@@ -42,7 +42,7 @@ class MockConfigStore:
     def set_secret_plaintext(self, key: str, plaintext: str):
         # For testing, just store value as-is (not encrypted)
         cursor = self._connection.cursor()
-        updated_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        updated_at = datetime.datetime.now(datetime.UTC).isoformat()
         cursor.execute(
             """
             INSERT OR REPLACE INTO secrets (key, encrypted_value, updated_at)
@@ -71,7 +71,7 @@ class MockConfigStore:
             value_type = self._detect_type(value)
         value_str = self._convert_to_string(value, value_type)
         cursor = self._connection.cursor()
-        updated_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        updated_at = datetime.datetime.now(datetime.UTC).isoformat()
         cursor.execute(
             """
             INSERT OR REPLACE INTO user_config (key, value, value_type, updated_at)

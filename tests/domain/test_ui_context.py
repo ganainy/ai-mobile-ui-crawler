@@ -1,7 +1,7 @@
 """Tests for UIContext model."""
 
 import hashlib
-from unittest.mock import Mock, MagicMock
+from unittest.mock import MagicMock, Mock
 
 import pytest
 
@@ -50,14 +50,14 @@ class TestUIContextManager:
             }
         }
         key = ui_context_manager._get_screen_key(phone_state)
-        expected = hashlib.md5("com.example.app:.MainActivity".encode()).hexdigest()
+        expected = hashlib.md5(b"com.example.app:.MainActivity").hexdigest()
         assert key == expected
 
     def test_get_screen_key_with_missing_data(self, ui_context_manager):
         """Test _get_screen_key handles missing data gracefully."""
         phone_state = {}
         key = ui_context_manager._get_screen_key(phone_state)
-        expected = hashlib.md5("unknown:unknown".encode()).hexdigest()
+        expected = hashlib.md5(b"unknown:unknown").hexdigest()
         assert key == expected
 
     def test_quick_a11y_check_too_sparse(self, ui_context_manager):
@@ -150,7 +150,7 @@ class TestUIContextManager:
         a11y = [
             {"bbox": [0, 0, 100, 100]},
         ]
-        unmatched = ui_context_manager._find_unmatched_interactables(omni, a11y)
+        ui_context_manager._find_unmatched_interactables(omni, a11y)
         # The second omni element overlaps but still has IOU > 0.3
         # Let's use a case where they clearly don't match
         omni2 = [

@@ -1,14 +1,15 @@
 """Tests for device detection functionality."""
 
-import pytest
-from unittest.mock import Mock, patch, MagicMock
 from subprocess import CompletedProcess
+from unittest.mock import patch
+
+import pytest
 
 from mobile_crawler.infrastructure.device_detection import (
-    DeviceDetection,
+    ADBNotFoundError,
     AndroidDevice,
+    DeviceDetection,
     DeviceDetectionError,
-    ADBNotFoundError
 )
 
 
@@ -110,12 +111,12 @@ emulator-5556	device
             stdout='\n',
             stderr=''
         )
-        
+
         mock_run.side_effect = [
             version_output,  # version check in __init__
             devices_output,  # devices command
             empty_output,    # manufacturer
-            empty_output,    # model  
+            empty_output,    # model
             empty_output,    # android version
             empty_output,    # api level
         ]
@@ -355,7 +356,7 @@ emulator-5554	device
     def test_adb_command_timeout(self, mock_run):
         """Test ADB command timeout."""
         from subprocess import TimeoutExpired
-        
+
         # Mock the version check in __init__
         mock_run.side_effect = [
             CompletedProcess(args=['adb', 'version'], returncode=0, stdout='', stderr=''),  # version check

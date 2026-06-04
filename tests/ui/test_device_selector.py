@@ -1,15 +1,12 @@
 """Tests for DeviceSelector widget."""
 
+from unittest.mock import Mock
+
 import pytest
-from unittest.mock import Mock, patch
 from PySide6.QtWidgets import QApplication, QWidget
 
+from mobile_crawler.infrastructure.device_detection import AndroidDevice, DeviceDetection, DeviceDetectionError
 from mobile_crawler.ui.widgets.device_selector import DeviceSelector
-from mobile_crawler.infrastructure.device_detection import (
-    DeviceDetection,
-    AndroidDevice,
-    DeviceDetectionError
-)
 
 
 @pytest.fixture

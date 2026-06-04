@@ -159,7 +159,7 @@ async def flush():
             return
 
         await asyncio.wait_for(asyncio.to_thread(posthog.flush), timeout=10)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         logger.warning("PostHog flush timed out after 10 seconds")
     except Exception as e:
         logger.error(f"Error flushing data: {e}")

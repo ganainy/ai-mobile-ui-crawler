@@ -6,11 +6,11 @@ DroidRun log formats change or the stats pipeline is refactored.
 """
 
 from datetime import datetime
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
+
 import pytest
 
 from mobile_crawler.ui.main_window import CrawlStatistics
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -37,7 +37,7 @@ def _make_parser(qt_app=None):
     _update_dashboard_stats.
     """
     import types
-    import re as _re
+
     from mobile_crawler.ui.main_window import MainWindow
 
     class _Stub:
@@ -352,6 +352,7 @@ class TestFinalStatReconciliation:
 
     def _make_window_with_stats(self):
         import types
+
         from mobile_crawler.ui.main_window import MainWindow
 
         class _Stub:
@@ -403,6 +404,7 @@ class TestCrawlCompletedStatsParsing:
 
     def _make_window_with_stats(self):
         import types
+
         from mobile_crawler.ui.main_window import MainWindow
 
         class _Stub:

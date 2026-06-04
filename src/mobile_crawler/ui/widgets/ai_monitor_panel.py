@@ -1,29 +1,29 @@
 """AI Monitor Panel widget for displaying AI interactions in real-time."""
 
-from PySide6.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
-    QHBoxLayout,
-    QListWidget,
-    QListWidgetItem,
-    QGroupBox,
-    QLabel,
-    QTextEdit,
-    QPushButton,
-    QComboBox,
-    QLineEdit,
-    QScrollArea,
-    QTabWidget,
-    QRadioButton,
-    QButtonGroup
-)
-from PySide6.QtCore import Qt, Signal, Slot, QTimer
-from PySide6.QtGui import QColor, QPixmap, QPainter, QPen, QFont
-from typing import Dict, Any, Optional, List
-import json
 import base64
+import json
 import os
 from datetime import datetime
+
+from PySide6.QtCore import Qt, QTimer, Signal, Slot
+from PySide6.QtGui import QPixmap
+from PySide6.QtWidgets import (
+    QButtonGroup,
+    QComboBox,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QListWidget,
+    QListWidgetItem,
+    QPushButton,
+    QRadioButton,
+    QScrollArea,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
+)
+
 from .json_tree_widget import JsonTreeWidget
 
 
@@ -33,11 +33,11 @@ class AIInteractionItem(QWidget):
     show_details_requested = Signal(int)  # Emits step_number
 
     def __init__(self, step_number: int, timestamp: datetime, success: bool,
-                 latency_ms: Optional[float], tokens_in: Optional[int],
-                 tokens_out: Optional[int], error_message: Optional[str],
+                 latency_ms: float | None, tokens_in: int | None,
+                 tokens_out: int | None, error_message: str | None,
                  prompt_preview: str, response_preview: str,
                  full_prompt: str, full_response: str,
-                 parsed_actions: List[dict], pending: bool = False, parent=None):
+                 parsed_actions: list[dict], pending: bool = False, parent=None):
         """Initialize AI interaction item.
 
         Args:
@@ -152,8 +152,8 @@ class StepDetailWidget(QWidget):
     """Widget for displaying detailed step information in a tab."""
 
     def __init__(self, step_number: int, timestamp: datetime, success: bool,
-                 full_prompt: str, full_response: str, parsed_actions: List[dict],
-                 error_message: Optional[str] = None, screenshot_path: Optional[str] = None, parent=None):
+                 full_prompt: str, full_response: str, parsed_actions: list[dict],
+                 error_message: str | None = None, screenshot_path: str | None = None, parent=None):
         """Initialize step detail widget.
 
         Args:
@@ -217,7 +217,7 @@ class StepDetailWidget(QWidget):
                         actual_prompt_data = json.loads(prompt_data['user_prompt'])
                     except (json.JSONDecodeError, TypeError):
                         actual_prompt_data = prompt_data
-                
+
                 # Extract screenshot if present
                 screenshot_b64 = actual_prompt_data.get('screenshot', '')
                 if screenshot_b64 and len(screenshot_b64) > 100:
@@ -230,7 +230,7 @@ class StepDetailWidget(QWidget):
                             screenshot_pixmap = pixmap
                     except Exception:
                         pass
-                
+
                 # Create a version of data without the huge base64 screenshot for the tree view
                 prompt_json_data = actual_prompt_data.copy() if isinstance(actual_prompt_data, dict) else actual_prompt_data
                 if isinstance(prompt_json_data, dict) and 'screenshot' in prompt_json_data:
@@ -242,22 +242,22 @@ class StepDetailWidget(QWidget):
 
         # TOP ROW: Screenshot (1/3) + Prompt Data (2/3)
         top_row_layout = QHBoxLayout()
-        
+
         # Screenshot section (1/3 width)
         screenshot_group = QGroupBox("Screenshot")
         self.screenshot_layout = QVBoxLayout(screenshot_group)
-        
+
         # Add toggle buttons
         toggle_layout = QHBoxLayout()
         self.annotated_radio = QRadioButton("Annotated")
         self.ocr_radio = QRadioButton("OCR")
         self.annotated_radio.setChecked(True)
-        
+
         self.toggle_group = QButtonGroup(self)
         self.toggle_group.addButton(self.annotated_radio)
         self.toggle_group.addButton(self.ocr_radio)
         self.toggle_group.buttonClicked.connect(self._on_toggle_changed)
-        
+
         toggle_layout.addWidget(self.annotated_radio)
         toggle_layout.addWidget(self.ocr_radio)
         toggle_layout.addStretch()
@@ -276,19 +276,19 @@ class StepDetailWidget(QWidget):
 
         if screenshot_pixmap:
             self.orig_pixmap = screenshot_pixmap
-            
+
             # Load images from disk if available to avoid re-implementing drawing logic
             # Annotated view (Actions)
             if self.screenshot_path:
                 base, ext = os.path.splitext(self.screenshot_path)
-                
+
                 # 1. Annotated Actions
                 annotated_path = f"{base}_annotated{ext}"
                 if os.path.exists(annotated_path):
                     pixmap = QPixmap(annotated_path)
                     if not pixmap.isNull():
                         self.annotated_pixmap = pixmap
-                
+
                 # 2. Grounded OCR
                 grounded_path = f"{base}_grounded{ext}"
                 if os.path.exists(grounded_path):
@@ -301,7 +301,7 @@ class StepDetailWidget(QWidget):
                 self.annotated_pixmap = screenshot_pixmap
             if not self.ocr_pixmap:
                 self.ocr_pixmap = screenshot_pixmap
-            
+
             self.screenshot_label = QLabel()
             # Initial display: Annotated
             scaled_pixmap = self.annotated_pixmap.scaledToWidth(200, Qt.TransformationMode.SmoothTransformation)
@@ -315,7 +315,7 @@ class StepDetailWidget(QWidget):
             self.screenshot_layout.addWidget(no_screenshot_label)
             self.annotated_radio.setEnabled(False)
             self.ocr_radio.setEnabled(False)
-            
+
         self.screenshot_layout.addStretch()
         top_row_layout.addWidget(screenshot_group, 1)  # 1/3 stretch factor
 
@@ -347,11 +347,11 @@ class StepDetailWidget(QWidget):
                 actions_text += f"• Action: {action.get('action', 'unknown')}\n"
                 if 'action_desc' in action:
                     actions_text += f"  Description: {action['action_desc']}\n"
-                
+
                 # Check for label_id OR target_bounding_box
                 label_id = action.get('label_id')
                 bbox = action.get('target_bounding_box')
-                
+
                 if label_id is not None:
                     actions_text += f"  Label ID: {label_id}\n"
                 elif bbox:
@@ -362,7 +362,7 @@ class StepDetailWidget(QWidget):
                         actions_text += f"  Target: [{tl[0]}, {tl[1]}] → [{br[0]}, {br[1]}]\n"
                     else:
                         actions_text += f"  Target: {bbox}\n"
-                
+
                 if 'input_text' in action and action['input_text']:
                     actions_text += f"  Input: {action['input_text']}\n"
                 if 'reasoning' in action:
@@ -405,12 +405,12 @@ class StepDetailWidget(QWidget):
         """Handle screenshot viewer toggle change."""
         if not self.orig_pixmap:
             return
-            
+
         if button == self.annotated_radio:
             pixmap = self.annotated_pixmap
         else:
             pixmap = self.ocr_pixmap
-            
+
         if pixmap:
             scaled_pixmap = pixmap.scaledToWidth(200, Qt.TransformationMode.SmoothTransformation)
             self.screenshot_label.setPixmap(scaled_pixmap)
@@ -431,11 +431,11 @@ class AIMonitorPanel(QWidget):
         self._interactions = {}  # step_number -> interaction data
         self._filter_state = {"status": "all", "search": ""}
         self._setup_ui()
-    
+
     @Slot(int, int, str)
     def add_screenshot_path(self, run_id: int, step_number: int, screenshot_path: str):
         """Store screenshot path for a step.
-        
+
         Args:
             run_id: Run ID
             step_number: Step number
@@ -452,7 +452,7 @@ class AIMonitorPanel(QWidget):
                 "success": False,
                 "_response_updated": False
             }
-        
+
         # Update path
         self._interactions[step_number]["screenshot_path"] = screenshot_path
 
@@ -521,12 +521,12 @@ class AIMonitorPanel(QWidget):
                 "error_message": None,
                 "_response_updated": False
             }
-        
+
         # Update request data and ensure basic fields are set
         interaction = self._interactions[step_number]
         interaction["run_id"] = run_id
         interaction["request_data"] = request_data
-        
+
         # If timestamp was just a placeholder, update it to actual request time
         if "timestamp" not in interaction:
             interaction["timestamp"] = datetime.now()
@@ -547,17 +547,17 @@ class AIMonitorPanel(QWidget):
             return
 
         interaction = self._interactions[step_number]
-        
+
         # Skip if already updated with full data and this is just a summary
         is_full = self._is_full_response(response_data)
         if interaction.get("_response_updated") and not is_full:
             return
-            
+
         # Update interaction with response
         interaction["response_data"] = response_data
         interaction["success"] = self._determine_success(response_data)
         interaction["error_message"] = response_data.get("error_message")
-        
+
         if is_full:
             interaction["_response_updated"] = True
 
@@ -698,7 +698,7 @@ class AIMonitorPanel(QWidget):
         # Has error? -> Failed
         if response_data.get("error_message"):
             return False
-        
+
         # Has parsed actions? -> Success
         if "parsed_response" in response_data:
             try:
@@ -707,11 +707,11 @@ class AIMonitorPanel(QWidget):
                     return True
             except (json.JSONDecodeError, TypeError):
                 pass
-        
+
         # Has actions count > 0? -> Success
         if response_data.get("actions_count", 0) > 0:
             return True
-        
+
         # Default to False
         return False
 
@@ -728,7 +728,7 @@ class AIMonitorPanel(QWidget):
         # Remove old list item if it exists
         old_list_item = interaction.get("_list_item")
         old_widget = interaction.get("_item_widget")
-        
+
         if old_list_item:
             row = self.interactions_list.row(old_list_item)
             if row >= 0:
@@ -777,7 +777,7 @@ class AIMonitorPanel(QWidget):
         status_filter = self._filter_state["status"]
         search_text = self._filter_state["search"].lower()
 
-        for step_number, interaction in self._interactions.items():
+        for _step_number, interaction in self._interactions.items():
             if "_list_item" not in interaction:
                 continue
 

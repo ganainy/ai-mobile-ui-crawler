@@ -1,7 +1,7 @@
 """CLI commands for configuration management."""
 
 import json
-from typing import Any, Optional
+from typing import Any
 
 import click
 
@@ -28,7 +28,7 @@ def set(key: str, value: str):
     VALUE: Value to set (will be parsed as appropriate type)
     """
     from mobile_crawler.config.config_manager import ConfigManager
-    
+
     try:
         # Ensure app data directory exists
         app_data_dir = get_app_data_dir()
@@ -67,7 +67,7 @@ def set(key: str, value: str):
 
     except Exception as e:
         click.echo(f"Error setting config: {e}", err=True)
-        raise click.Abort()
+        raise click.Abort() from e
 
 
 @config.command()
@@ -78,7 +78,7 @@ def get(key: str):
     KEY: Configuration key to retrieve
     """
     from mobile_crawler.config.config_manager import ConfigManager
-    
+
     try:
         # Initialize config manager
         config_manager = ConfigManager()
@@ -107,14 +107,14 @@ def get(key: str):
 
     except Exception as e:
         click.echo(f"Error getting config: {e}", err=True)
-        raise click.Abort()
+        raise click.Abort() from e
 
 
 @config.command()
 def list():
     """List all configuration settings."""
     from mobile_crawler.config.config_manager import ConfigManager
-    
+
     try:
         # Initialize config manager
         config_manager = ConfigManager()
@@ -151,4 +151,4 @@ def list():
 
     except Exception as e:
         click.echo(f"Error listing config: {e}", err=True)
-        raise click.Abort()
+        raise click.Abort() from e

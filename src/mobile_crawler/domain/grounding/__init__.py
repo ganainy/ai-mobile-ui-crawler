@@ -2,7 +2,7 @@
 Grounding module for visual interaction mapping.
 """
 
-from .dtos import OCRResult, GroundingOverlay
+from .dtos import GroundingOverlay, OCRResult
 from .interfaces import GroundingService
 from .manager import GroundingManager
 

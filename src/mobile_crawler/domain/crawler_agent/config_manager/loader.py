@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 import platformdirs
 import yaml
@@ -34,7 +34,7 @@ class ConfigLoader:
         return cls.get_user_config_dir() / cls.CONFIG_FILE
 
     @classmethod
-    def load(cls, config_path: Optional[str] = None) -> DroidConfig:
+    def load(cls, config_path: str | None = None) -> DroidConfig:
         """
         Load config with resolution order:
         1. Explicit config_path argument
@@ -59,7 +59,7 @@ class ConfigLoader:
     @classmethod
     def _load_user_config(cls, user_config_path: Path) -> DroidConfig:
         """Load user config and run migrations."""
-        with open(user_config_path, "r", encoding="utf-8") as f:
+        with open(user_config_path, encoding="utf-8") as f:
             user_dict = yaml.safe_load(f) or {}
 
         if "_version" not in user_dict:
@@ -92,7 +92,7 @@ class ConfigLoader:
         return cls._save_dict(config_dict, cls.get_user_config_path())
 
     @classmethod
-    def _save_dict(cls, config_dict: Dict[str, Any], path: Path) -> Path:
+    def _save_dict(cls, config_dict: dict[str, Any], path: Path) -> Path:
         """Save config dict to path."""
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "w", encoding="utf-8") as f:

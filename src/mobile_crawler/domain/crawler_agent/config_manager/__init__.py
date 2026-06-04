@@ -1,11 +1,11 @@
 from mobile_crawler.domain.crawler_agent.config_manager.config_manager import (
     AgentConfig,
     AppCardConfig,
-    FastAgentConfig,
     CredentialsConfig,
     DeviceConfig,
     DroidConfig,
     ExecutorConfig,
+    FastAgentConfig,
     LLMProfile,
     LoggingConfig,
     ManagerConfig,

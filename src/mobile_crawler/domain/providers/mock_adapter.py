@@ -1,8 +1,8 @@
 """Mock AI provider for testing."""
 
-from typing import Dict, Any, Tuple
-import time
 import json
+import time
+from typing import Any
 
 from mobile_crawler.domain.model_adapters import ModelAdapter
 
@@ -42,11 +42,11 @@ class MockAdapter(ModelAdapter):
             }
         ]
 
-    def initialize(self, model_config: Dict[str, Any], safety_settings: Dict[str, Any]) -> None:
+    def initialize(self, model_config: dict[str, Any], safety_settings: dict[str, Any]) -> None:
         """Initialize the mock adapter."""
         pass
 
-    def generate_response(self, system_prompt: str, user_prompt: str) -> Tuple[str, Dict[str, Any]]:
+    def generate_response(self, system_prompt: str, user_prompt: str) -> tuple[str, dict[str, Any]]:
         """Generate a mock response in the expected AI response format."""
         self.call_count += 1
 
@@ -74,7 +74,7 @@ class MockAdapter(ModelAdapter):
         return json.dumps(response), metadata
 
     @property
-    def model_info(self) -> Dict[str, Any]:
+    def model_info(self) -> dict[str, Any]:
         """Get model information."""
         return {
             "name": "mock-model",

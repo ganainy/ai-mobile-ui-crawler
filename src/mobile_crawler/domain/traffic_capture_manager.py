@@ -29,7 +29,7 @@ class TrafficCaptureManager:
         config_manager: "ConfigManager",
         adb_client: Optional["ADBClient"] = None,
         session_folder_manager: Optional["SessionFolderManager"] = None,
-        device_id: Optional[str] = None,
+        device_id: str | None = None,
     ):
         """Initialize the traffic capture manager.
 
@@ -49,10 +49,10 @@ class TrafficCaptureManager:
         )
         logger.debug(f"TrafficCaptureManager initialized, enabled: {self.traffic_capture_enabled}")
 
-        self.pcap_filename_on_device: Optional[str] = None
-        self.local_pcap_file_path: Optional[str] = None
+        self.pcap_filename_on_device: str | None = None
+        self.local_pcap_file_path: str | None = None
         self._is_currently_capturing: bool = False
-        self._capture_startup_readiness_passed: Optional[bool] = None
+        self._capture_startup_readiness_passed: bool | None = None
         self._last_consent_labels_tapped: list[str] = []
         self._last_capture_readiness_diagnostics: dict[str, Any] = {}
         self._last_capture_startup_diagnostics: dict[str, Any] = {}
@@ -117,9 +117,9 @@ class TrafficCaptureManager:
 
     async def start_capture_async(
         self,
-        run_id: Optional[int] = None,
-        step_num: Optional[int] = None,
-        session_path: Optional[str] = None,
+        run_id: int | None = None,
+        step_num: int | None = None,
+        session_path: str | None = None,
     ) -> tuple[bool, str]:
         """Starts PCAPdroid traffic capture using the official API.
 
@@ -354,7 +354,7 @@ class TrafficCaptureManager:
 
     async def stop_capture_and_pull_async(
         self, run_id: int, step_num: int
-    ) -> Optional[str]:
+    ) -> str | None:
         """Stops PCAPdroid capture, pulls the file, and optionally cleans up.
 
         Args:
@@ -542,7 +542,6 @@ class TrafficCaptureManager:
         deadline = time.monotonic() + timeout
         inspected = False
         accepted_any = False
-        dump_path = "/sdcard/ui_dump.xml"
         while time.monotonic() < deadline:
             stdout = await self._dump_current_ui_async(
                 purpose="PCAPdroid consent inspection"
@@ -581,7 +580,7 @@ class TrafficCaptureManager:
             logger.debug("[DEBUG] PCAPdroid consent dialog could not be inspected")
         return accepted_any
 
-    async def _dump_current_ui_async(self, purpose: str) -> Optional[str]:
+    async def _dump_current_ui_async(self, purpose: str) -> str | None:
         dump_path = "/sdcard/ui_dump.xml"
         dump_output, dump_retcode = await self._run_adb_command_async(
             ["shell", "uiautomator", "dump", dump_path],
@@ -600,7 +599,7 @@ class TrafficCaptureManager:
             return None
         return stdout
 
-    async def _check_capture_readiness_async(self, api_status_running: Optional[bool] = None) -> dict[str, Any]:
+    async def _check_capture_readiness_async(self, api_status_running: bool | None = None) -> dict[str, Any]:
         ui_dump = await self._dump_current_ui_async(purpose="PCAPdroid readiness check")
         unresolved = bool(ui_dump and self._find_pcapdroid_consent_button(ui_dump))
         pcapdroid_foreground = self._ui_dump_has_package(ui_dump or "")
@@ -870,7 +869,7 @@ class TrafficCaptureManager:
             return compact
         return compact[:limit] + "..."
 
-    def _find_pcapdroid_consent_button(self, ui_dump: str) -> Optional[tuple[int, int, str]]:
+    def _find_pcapdroid_consent_button(self, ui_dump: str) -> tuple[int, int, str] | None:
         """Return the center of a safe consent button when the dump has capture context."""
         xml_text = self._extract_uiautomator_xml(ui_dump)
         if not xml_text:
@@ -917,7 +916,7 @@ class TrafficCaptureManager:
         return None
 
     @staticmethod
-    def _extract_uiautomator_xml(ui_dump: str) -> Optional[str]:
+    def _extract_uiautomator_xml(ui_dump: str) -> str | None:
         start = ui_dump.find("<hierarchy")
         end = ui_dump.rfind("</hierarchy>")
         if start == -1 or end == -1:
@@ -925,7 +924,7 @@ class TrafficCaptureManager:
         return ui_dump[start : end + len("</hierarchy>")]
 
     @staticmethod
-    def _bounds_center(bounds: str) -> Optional[tuple[int, int]]:
+    def _bounds_center(bounds: str) -> tuple[int, int] | None:
         parsed = TrafficCaptureManager._parse_bounds(bounds)
         if not parsed:
             return None
@@ -933,7 +932,7 @@ class TrafficCaptureManager:
         return (left + right) // 2, (top + bottom) // 2
 
     @staticmethod
-    def _parse_bounds(bounds: str) -> Optional[tuple[int, int, int, int]]:
+    def _parse_bounds(bounds: str) -> tuple[int, int, int, int] | None:
         match = re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", bounds)
         if not match:
             return None
@@ -991,7 +990,7 @@ class TrafficCaptureManager:
         }
 
     @staticmethod
-    def _parse_running_from_status_output(output: str) -> Optional[bool]:
+    def _parse_running_from_status_output(output: str) -> bool | None:
         lowered = str(output).lower()
         if re.search(r"\brunning\s*[:=]\s*true\b", lowered):
             return True

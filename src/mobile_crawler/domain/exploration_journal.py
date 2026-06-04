@@ -3,7 +3,6 @@
 import json
 import logging
 from dataclasses import dataclass
-from typing import List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -13,14 +12,14 @@ class JournalEntry:
     """Represents a single journal entry from exploration history."""
 
     step_number: int
-    from_screen_id: Optional[int]
-    to_screen_id: Optional[int]
+    from_screen_id: int | None
+    to_screen_id: int | None
     action_type: str
-    action_description: Optional[str]
+    action_description: str | None
     success: bool
-    error_message: Optional[str]
+    error_message: str | None
     timestamp: str
-    target_element: Optional[str] = None
+    target_element: str | None = None
 
 
 class ExplorationJournal:
@@ -34,7 +33,7 @@ class ExplorationJournal:
         """
         self._step_log_repository = step_log_repository
 
-    def get_entries(self, run_id: int, limit: int = 15) -> List[JournalEntry]:
+    def get_entries(self, run_id: int, limit: int = 15) -> list[JournalEntry]:
         """Get exploration journal entries for a run.
 
         Args:

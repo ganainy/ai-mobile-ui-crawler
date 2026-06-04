@@ -1,16 +1,15 @@
 import json
 import sys
-import threading
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any
 
 import click
 
 from mobile_crawler.config import get_app_data_dir
 from mobile_crawler.config.config_manager import ConfigManager
 from mobile_crawler.core.crawler_event_listener import CrawlerEventListener
-from mobile_crawler.domain.models import ActionResult
 from mobile_crawler.core.crawler_loop import CrawlerLoop
+from mobile_crawler.domain.models import ActionResult
 from mobile_crawler.infrastructure.database import DatabaseManager
 from mobile_crawler.infrastructure.run_repository import Run, RunRepository
 from mobile_crawler.infrastructure.session_folder_manager import SessionFolderManager
@@ -60,7 +59,7 @@ class JSONEventListener(CrawlerEventListener):
         }
         print(json.dumps(event), flush=True)
 
-    def on_error(self, run_id: Optional[int], step_number: Optional[int], error: Exception) -> None:
+    def on_error(self, run_id: int | None, step_number: int | None, error: Exception) -> None:
         """Handle error event."""
         event = {
             "event": "error",
@@ -92,7 +91,7 @@ class JSONEventListener(CrawlerEventListener):
         }
         print(json.dumps(event), flush=True)
 
-    def on_ai_request_sent(self, run_id: int, step_number: int, request_data: Dict[str, Any]) -> None:
+    def on_ai_request_sent(self, run_id: int, step_number: int, request_data: dict[str, Any]) -> None:
         """Handle AI request sent event."""
         event = {
             "event": "ai_request_sent",
@@ -103,7 +102,7 @@ class JSONEventListener(CrawlerEventListener):
         }
         print(json.dumps(event), flush=True)
 
-    def on_ai_response_received(self, run_id: int, step_number: int, response_data: Dict[str, Any]) -> None:
+    def on_ai_response_received(self, run_id: int, step_number: int, response_data: dict[str, Any]) -> None:
         """Handle AI response received event."""
         event = {
             "event": "ai_response_received",
@@ -211,7 +210,7 @@ class JSONEventListener(CrawlerEventListener):
 @click.option('--enable-traffic-capture', is_flag=True, help='Enable PCAPdroid traffic capture during crawl')
 @click.option('--enable-video-recording', is_flag=True, help='Enable video recording during crawl')
 @click.option('--enable-mobsf-analysis', is_flag=True, help='Enable MobSF static analysis after crawl')
-def crawl(device: str, package: str, model: str, steps: Optional[int], duration: Optional[int], provider: Optional[str], enable_traffic_capture: bool, enable_video_recording: bool, enable_mobsf_analysis: bool) -> None:
+def crawl(device: str, package: str, model: str, steps: int | None, duration: int | None, provider: str | None, enable_traffic_capture: bool, enable_video_recording: bool, enable_mobsf_analysis: bool) -> None:
     """Start a crawl on the specified device and app."""
     try:
         # Ensure app data directory exists

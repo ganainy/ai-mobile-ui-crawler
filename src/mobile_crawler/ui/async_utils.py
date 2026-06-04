@@ -1,7 +1,8 @@
 """Utilities for asynchronous operations in the UI."""
 
 import traceback
-from typing import Any, Callable, Dict, Optional, Tuple
+from collections.abc import Callable
+from typing import Any
 
 from PySide6.QtCore import QThread, Signal
 
@@ -9,7 +10,7 @@ from PySide6.QtCore import QThread, Signal
 class AsyncOperation(QThread):
     """Generic worker thread for running a target function in the background.
 
-    This class moves heavy lifting (like ADB commands or network requests) 
+    This class moves heavy lifting (like ADB commands or network requests)
     off the main UI thread to prevent interface freezing.
 
     Signals:
@@ -25,10 +26,10 @@ class AsyncOperation(QThread):
     error_occurred = Signal(str)
 
     def __init__(
-        self, 
-        target: Callable, 
-        args: Optional[Tuple[Any, ...]] = None, 
-        kwargs: Optional[Dict[str, Any]] = None,
+        self,
+        target: Callable,
+        args: tuple[Any, ...] | None = None,
+        kwargs: dict[str, Any] | None = None,
         parent=None
     ):
         """Initialize the async operation.

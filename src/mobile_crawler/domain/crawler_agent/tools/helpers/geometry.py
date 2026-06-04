@@ -1,8 +1,7 @@
 """Geometry utilities for UI element bounds and tap point calculation."""
 
-from typing import List, Tuple, Optional
 
-Bounds = Tuple[int, int, int, int]
+Bounds = tuple[int, int, int, int]
 
 
 def rects_overlap(a: Bounds, b: Bounds) -> bool:
@@ -12,9 +11,9 @@ def rects_overlap(a: Bounds, b: Bounds) -> bool:
 
 def find_clear_point(
     bounds: Bounds,
-    blockers: List[Bounds],
+    blockers: list[Bounds],
     depth: int = 0,
-) -> Optional[Tuple[int, int]]:
+) -> tuple[int, int] | None:
     """Find a clear point in bounds using quadrant subdivision."""
     left, top, right, bottom = bounds
     cx, cy = (left + right) // 2, (top + bottom) // 2

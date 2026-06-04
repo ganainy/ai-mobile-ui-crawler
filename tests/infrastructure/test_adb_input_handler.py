@@ -6,8 +6,6 @@ All subprocess calls to ADB are mocked.
 import subprocess
 from unittest.mock import Mock, patch
 
-import pytest
-
 from mobile_crawler.infrastructure.adb_input_handler import ADBInputHandler
 
 

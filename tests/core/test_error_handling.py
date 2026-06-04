@@ -2,16 +2,14 @@
 
 import json
 import sqlite3
-from contextlib import closing
-from datetime import datetime, timezone
-from unittest.mock import Mock, patch
+from datetime import UTC, datetime
+from unittest.mock import patch
 
 import pytest
 
 from mobile_crawler.domain.errors import (
     CrawlerError,
     ErrorContext,
-    ErrorSeverity,
     RecorderError,
 )
 from mobile_crawler.infrastructure.database import DatabaseManager
@@ -74,7 +72,7 @@ class TestFailClosedRepository:
                 device_id="dev",
                 app_package="com.test",
                 start_activity=None,
-                start_time=datetime.now(tz=timezone.utc),
+                start_time=datetime.now(tz=UTC),
                 end_time=None,
                 status="RUNNING",
                 ai_provider=None,

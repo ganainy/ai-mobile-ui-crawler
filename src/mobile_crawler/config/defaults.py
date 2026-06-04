@@ -1,10 +1,10 @@
 """Default configuration values."""
 
-from typing import Dict, Any
+from typing import Any
 
 # Default configuration values
 # These are used when no other source provides a value
-DEFAULTS: Dict[str, Any] = {
+DEFAULTS: dict[str, Any] = {
     # Crawl settings
     "max_crawl_steps": 15,
     "max_crawl_duration_seconds": 600,

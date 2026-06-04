@@ -5,7 +5,6 @@ import re
 import subprocess
 import time
 from dataclasses import dataclass
-from typing import Optional, Tuple, List
 
 from mobile_crawler.domain.models import ActionResult
 from mobile_crawler.infrastructure.adb_client import ADBClient
@@ -18,10 +17,10 @@ class DeviceReadinessResult:
     """Result of the pre-crawl device wake/readiness check."""
 
     success: bool
-    error_message: Optional[str] = None
-    screen_on: Optional[bool] = None
-    keyguard_locked: Optional[bool] = None
-    keyguard_secure: Optional[bool] = None
+    error_message: str | None = None
+    screen_on: bool | None = None
+    keyguard_locked: bool | None = None
+    keyguard_secure: bool | None = None
 
 
 class ADBActionExecutor:
@@ -30,7 +29,7 @@ class ADBActionExecutor:
     Provides compatibility with DroidRun while maintaining ActionResult interface.
     """
 
-    def __init__(self, device_id: str, adb_client: Optional[ADBClient] = None):
+    def __init__(self, device_id: str, adb_client: ADBClient | None = None):
         """Initialize ADB action executor.
 
         Args:
@@ -51,7 +50,7 @@ class ADBActionExecutor:
             time.sleep((self._action_delay_ms - elapsed) / 1000)
         self._last_action_time = time.time() * 1000
 
-    def _execute_adb_command(self, command: List[str], timeout: float = 10.0) -> Tuple[bool, str, float]:
+    def _execute_adb_command(self, command: list[str], timeout: float = 10.0) -> tuple[bool, str, float]:
         """Execute ADB command with timing.
 
         Args:
@@ -85,7 +84,7 @@ class ADBActionExecutor:
             duration_ms = (time.time() - start_time) * 1000
             return False, str(e), duration_ms
 
-    def _calculate_center(self, bounds: Tuple[int, int, int, int]) -> Tuple[int, int]:
+    def _calculate_center(self, bounds: tuple[int, int, int, int]) -> tuple[int, int]:
         """Calculate center point from bounding box.
 
         Args:
@@ -97,7 +96,7 @@ class ADBActionExecutor:
         x1, y1, x2, y2 = bounds
         return ((x1 + x2) // 2, (y1 + y2) // 2)
 
-    def _get_screen_size(self) -> Tuple[int, int]:
+    def _get_screen_size(self) -> tuple[int, int]:
         """Get screen dimensions via ADB.
 
         Returns:
@@ -118,7 +117,7 @@ class ADBActionExecutor:
             logger.error(f"Failed to get screen size: {e}")
             return 1080, 1920
 
-    def _read_screen_on_state(self) -> Tuple[bool, Optional[bool], str]:
+    def _read_screen_on_state(self) -> tuple[bool, bool | None, str]:
         """Read whether the display is awake from dumpsys power."""
         success, output, _ = self._execute_adb_command(['shell', 'dumpsys', 'power'])
         if not success:
@@ -140,7 +139,7 @@ class ADBActionExecutor:
 
         return True, None, output
 
-    def _read_keyguard_state(self) -> Tuple[bool, Optional[bool], Optional[bool], str]:
+    def _read_keyguard_state(self) -> tuple[bool, bool | None, bool | None, str]:
         """Read keyguard visibility/security from dumpsys window policy."""
         success, output, _ = self._execute_adb_command(['shell', 'dumpsys', 'window', 'policy'])
         if not success:
@@ -345,7 +344,7 @@ class ADBActionExecutor:
             keyguard_secure=state.keyguard_secure,
         )
 
-    def click(self, bounds: Tuple[int, int, int, int]) -> ActionResult:
+    def click(self, bounds: tuple[int, int, int, int]) -> ActionResult:
         """Execute click action at bounding box center.
 
         Args:
@@ -370,7 +369,7 @@ class ADBActionExecutor:
             navigated_away=False
         )
 
-    def input(self, bounds: Tuple[int, int, int, int], text: str) -> ActionResult:
+    def input(self, bounds: tuple[int, int, int, int], text: str) -> ActionResult:
         """Execute input action: tap then send text.
 
         Args:
@@ -428,7 +427,7 @@ class ADBActionExecutor:
             input_text=text
         )
 
-    def long_press(self, bounds: Tuple[int, int, int, int]) -> ActionResult:
+    def long_press(self, bounds: tuple[int, int, int, int]) -> ActionResult:
         """Execute long press action at bounding box center.
 
         Args:
@@ -471,7 +470,7 @@ class ADBActionExecutor:
         return ActionResult(
             success=success,
             action_type="scroll_up",
-            target=f"screen_center",
+            target="screen_center",
             duration_ms=duration_ms,
             error_message=output if not success else None,
             navigated_away=False
@@ -493,7 +492,7 @@ class ADBActionExecutor:
         return ActionResult(
             success=success,
             action_type="scroll_down",
-            target=f"screen_center",
+            target="screen_center",
             duration_ms=duration_ms,
             error_message=output if not success else None,
             navigated_away=False
@@ -515,7 +514,7 @@ class ADBActionExecutor:
         return ActionResult(
             success=success,
             action_type="scroll_left",
-            target=f"screen_center",
+            target="screen_center",
             duration_ms=duration_ms,
             error_message=output if not success else None,
             navigated_away=False
@@ -537,7 +536,7 @@ class ADBActionExecutor:
         return ActionResult(
             success=success,
             action_type="scroll_right",
-            target=f"screen_center",
+            target="screen_center",
             duration_ms=duration_ms,
             error_message=output if not success else None,
             navigated_away=False
@@ -651,7 +650,7 @@ class ADBActionExecutor:
             error_message=pull_output if not pull_success else None
         )
 
-    def get_current_package(self) -> Optional[str]:
+    def get_current_package(self) -> str | None:
         """Get the currently focused app package.
 
         Uses adb shell with a single command string (pipe processed on device)
@@ -675,7 +674,7 @@ class ADBActionExecutor:
             logger.error(f"Failed to get current package: {e}")
             return None
 
-    def get_current_activity(self) -> Optional[str]:
+    def get_current_activity(self) -> str | None:
         """Get the currently focused app activity component.
 
         Extracts the activity name from dumpsys window output, returning
@@ -703,7 +702,7 @@ class ADBActionExecutor:
             logger.error(f"Failed to get current activity: {e}")
             return None
 
-    def get_resumed_activity(self) -> Optional[Tuple[str, str]]:
+    def get_resumed_activity(self) -> tuple[str, str] | None:
         """Get the resumed (foreground) activity from ActivityManager.
 
         Uses dumpsys activity activities to capture the resumed activity,
@@ -751,7 +750,7 @@ class ADBActionExecutor:
             navigated_away=False
         )
 
-    def resolve_launcher_activity(self, package_name: str) -> Optional[str]:
+    def resolve_launcher_activity(self, package_name: str) -> str | None:
         """Resolve the main launcher activity for a given package.
 
         Per D-07: Always recovers to the main launcher activity, never a deep activity.
@@ -857,7 +856,7 @@ class ADBActionExecutor:
         """
         launcher_activity = self.resolve_launcher_activity(package_name)
 
-        start_time = time.time()
+        time.time()
 
         if launcher_activity:
             # Primary path: am start with resolved launcher activity (per D-05)

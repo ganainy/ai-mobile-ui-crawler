@@ -1,12 +1,11 @@
 """Prompt builder for AI interactions."""
 
 import json
-from typing import Dict, List, Optional, Set
 
 from mobile_crawler.config.config_manager import ConfigManager
 from mobile_crawler.domain.prompts import DEFAULT_SYSTEM_PROMPT
 from mobile_crawler.infrastructure.screen_repository import ScreenRepository
-from mobile_crawler.infrastructure.step_log_repository import StepLog, StepLogRepository
+from mobile_crawler.infrastructure.step_log_repository import StepLogRepository
 
 
 class PromptBuilder:
@@ -16,7 +15,7 @@ class PromptBuilder:
         self,
         config_manager: ConfigManager,
         step_log_repository: StepLogRepository,
-        screen_repository: Optional[ScreenRepository] = None
+        screen_repository: ScreenRepository | None = None
     ):
         """Initialize prompt builder.
 
@@ -42,7 +41,7 @@ class PromptBuilder:
         prompt = DEFAULT_SYSTEM_PROMPT
         prompt = prompt.replace("{test_credentials}", test_credentials)
         prompt = prompt.replace("{stuck_status}", "{stuck_status}")  # Keep as placeholder
-        
+
         return prompt
 
     def build_user_prompt(
@@ -50,12 +49,12 @@ class PromptBuilder:
         screenshot_b64: str,
         run_id: int,
         is_stuck: bool = False,
-        stuck_reason: Optional[str] = None,
-        current_screen_id: Optional[int] = None,
-        current_screen_is_new: Optional[bool] = None,
-        total_unique_screens: Optional[int] = None,
-        screen_dimensions: Optional[Dict[str, int]] = None,
-        ocr_grounding: Optional[List[Dict]] = None
+        stuck_reason: str | None = None,
+        current_screen_id: int | None = None,
+        current_screen_is_new: bool | None = None,
+        total_unique_screens: int | None = None,
+        screen_dimensions: dict[str, int] | None = None,
+        ocr_grounding: list[dict] | None = None
     ) -> str:
         """Build the user prompt with current context.
 
@@ -109,52 +108,52 @@ class PromptBuilder:
     def _build_exploration_progress(
         self,
         run_id: int,
-        current_screen_id: Optional[int] = None,
-        current_screen_is_new: Optional[bool] = None,
-        total_unique_screens: Optional[int] = None
-    ) -> Dict:
+        current_screen_id: int | None = None,
+        current_screen_is_new: bool | None = None,
+        total_unique_screens: int | None = None
+    ) -> dict:
         """Build exploration progress summary for the AI.
-        
+
         Args:
             run_id: Current run ID
             current_screen_id: ID of the current screen
             current_screen_is_new: Whether current screen is new
             total_unique_screens: Total unique screens discovered
-            
+
         Returns:
             Dictionary with exploration progress metrics
         """
         progress = {}
-        
+
         # Add current screen context
         if current_screen_id is not None:
             progress["current_screen_id"] = current_screen_id
             progress["current_screen_status"] = "NEW - First time seeing this screen!" if current_screen_is_new else "REVISITED - Already explored this screen"
-        
+
         # Add total unique screens
         if total_unique_screens is not None:
             progress["unique_screens_discovered"] = total_unique_screens
-        
+
         # Add step count
         step_stats = self.step_log_repository.get_step_statistics(run_id)
         progress["total_steps"] = step_stats.get('total_steps', 0)
         progress["successful_actions"] = step_stats.get('successful_steps', 0)
         progress["failed_actions"] = step_stats.get('failed_steps', 0)
-        
+
         # Calculate exploration efficiency
         if progress.get("total_steps", 0) > 0 and progress.get("unique_screens_discovered", 0) > 0:
             efficiency = progress["unique_screens_discovered"] / progress["total_steps"]
             progress["exploration_hint"] = self._get_exploration_hint(efficiency, current_screen_is_new)
-        
+
         return progress
-    
-    def _get_exploration_hint(self, efficiency: float, current_screen_is_new: Optional[bool]) -> str:
+
+    def _get_exploration_hint(self, efficiency: float, current_screen_is_new: bool | None) -> str:
         """Generate a hint to guide exploration strategy.
-        
+
         Args:
             efficiency: Ratio of unique screens to total steps
             current_screen_is_new: Whether current screen is new
-            
+
         Returns:
             Hint string for the AI
         """
@@ -197,7 +196,7 @@ class PromptBuilder:
         else:
             return "No test credentials configured. Use default test values when encountering forms."
 
-    def _get_exploration_journal(self, run_id: int) -> List[Dict]:
+    def _get_exploration_journal(self, run_id: int) -> list[dict]:
         """Get formatted exploration journal for the run with screen novelty info.
 
         Args:
@@ -207,21 +206,21 @@ class PromptBuilder:
             List of journal entries with novelty signals
         """
         step_logs = self.step_log_repository.get_exploration_journal(run_id, limit=15)
-        
+
         # Track which screens we've seen to determine novelty in the journal
-        seen_screens: Set[int] = set()
-        
+        seen_screens: set[int] = set()
+
         journal = []
         for step in step_logs:  # Already in chronological order from repository
             # Determine screen novelty (first occurrence in journal = new at that time)
             screen_id = step.to_screen_id
             is_new_in_journal = False
-            
+
             if screen_id is not None:
                 if screen_id not in seen_screens:
                     is_new_in_journal = True
                     seen_screens.add(screen_id)
-            
+
             # Build journal entry with novelty signal
             outcome = "Success" if step.execution_success else f"Failed: {step.error_message or 'Unknown error'}"
             entry = {
@@ -229,19 +228,19 @@ class PromptBuilder:
                 "action": step.action_description or step.action_type,
                 "outcome": outcome,
             }
-            
+
             # Add screen info with novelty signal
             if screen_id is not None:
                 entry["screen"] = f"Screen #{screen_id}"
                 entry["screen_status"] = "NEW" if is_new_in_journal else "revisited"
             else:
                 entry["screen"] = "Unknown"
-            
+
             journal.append(entry)
 
         return journal
 
-    def _get_available_actions(self) -> Dict[str, str]:
+    def _get_available_actions(self) -> dict[str, str]:
         """Get descriptions of available actions.
 
         Returns:

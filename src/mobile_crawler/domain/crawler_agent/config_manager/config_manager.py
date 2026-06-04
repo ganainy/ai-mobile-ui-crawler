@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import yaml
 
@@ -17,11 +17,11 @@ class LLMProfile:
     provider: str = "GoogleGenAI"
     model: str = "gemini-3.1-flash-lite-preview"
     temperature: float = 0.2
-    base_url: Optional[str] = None
-    api_base: Optional[str] = None
-    kwargs: Dict[str, Any] = field(default_factory=dict)
+    base_url: str | None = None
+    api_base: str | None = None
+    kwargs: dict[str, Any] = field(default_factory=dict)
 
-    def to_load_llm_kwargs(self) -> Dict[str, Any]:
+    def to_load_llm_kwargs(self) -> dict[str, Any]:
         """Convert profile to kwargs for load_llm function."""
         result = {
             "model": self.model,
@@ -65,7 +65,7 @@ class AppCardConfig:
     enabled: bool = True
     mode: str = "local"  # local | server | composite
     app_cards_dir: str = "config/app_cards"
-    server_url: Optional[str] = None
+    server_url: str | None = None
     server_timeout: float = 2.0
     server_max_retries: int = 2
 
@@ -102,7 +102,7 @@ class AgentConfig:
 class DeviceConfig:
     """Device-related configuration."""
 
-    serial: Optional[str] = None
+    serial: str | None = None
     use_tcp: bool = False
     platform: str = "android"
     auto_setup: bool = False  # No Portal needed - using ADB + OmniParser
@@ -142,7 +142,7 @@ class LoggingConfig:
     trajectory_gifs: bool = True
 
 
-def _default_disabled_tools() -> List[str]:
+def _default_disabled_tools() -> list[str]:
     return ["click_at", "click_area", "long_press_at"]
 
 
@@ -150,7 +150,7 @@ def _default_disabled_tools() -> List[str]:
 class ToolsConfig:
     """Tools configuration."""
 
-    disabled_tools: List[str] = field(default_factory=_default_disabled_tools)
+    disabled_tools: list[str] = field(default_factory=_default_disabled_tools)
     stealth: bool = False
 
     # OmniParser settings
@@ -179,14 +179,14 @@ class DroidConfig:
     """Complete Droidrun configuration schema."""
 
     agent: AgentConfig = field(default_factory=AgentConfig)
-    llm_profiles: Dict[str, LLMProfile] = field(default_factory=dict)
+    llm_profiles: dict[str, LLMProfile] = field(default_factory=dict)
     device: DeviceConfig = field(default_factory=DeviceConfig)
     telemetry: TelemetryConfig = field(default_factory=TelemetryConfig)
     tracing: TracingConfig = field(default_factory=TracingConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     tools: ToolsConfig = field(default_factory=ToolsConfig)
     credentials: CredentialsConfig = field(default_factory=CredentialsConfig)
-    external_agents: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    external_agents: dict[str, dict[str, Any]] = field(default_factory=dict)
     mcp: MCPConfig = field(default_factory=MCPConfig)
     # OmniParser settings
     ui_parser_mode: str = "omniparser"
@@ -195,7 +195,7 @@ class DroidConfig:
     omniparser_local_url: str = "http://localhost:8000"
     omniparser_box_threshold: float = 0.05
     omniparser_a11y_threshold: int = 5
-    target_package: Optional[str] = None
+    target_package: str | None = None
 
     def __post_init__(self):
         """Ensure default profiles exist."""
@@ -203,7 +203,7 @@ class DroidConfig:
             self.llm_profiles = self._default_profiles()
 
     @staticmethod
-    def _default_profiles() -> Dict[str, LLMProfile]:
+    def _default_profiles() -> dict[str, LLMProfile]:
         """Get default agent specific LLM profiles."""
         return {
             "manager": LLMProfile(
@@ -238,7 +238,7 @@ class DroidConfig:
             ),
         }
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert config to dictionary."""
         result = asdict(self)
         # Convert LLMProfile objects to dicts
@@ -248,7 +248,7 @@ class DroidConfig:
         return result
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "DroidConfig":
+    def from_dict(cls, data: dict[str, Any]) -> DroidConfig:
         """Create config from dictionary."""
         # Parse LLM profiles
         llm_profiles = {}
@@ -329,7 +329,7 @@ class DroidConfig:
         )
 
     @classmethod
-    def from_yaml(cls, path: str) -> "DroidConfig":
+    def from_yaml(cls, path: str) -> DroidConfig:
         """
         Load config from YAML file.
 
@@ -343,6 +343,6 @@ class DroidConfig:
             FileNotFoundError: If file doesn't exist
             Exception: If file can't be parsed
         """
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             data = yaml.safe_load(f)
         return cls.from_dict(data)

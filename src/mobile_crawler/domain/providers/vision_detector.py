@@ -1,7 +1,7 @@
 """Vision model detection and filtering."""
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from mobile_crawler.domain.providers.registry import ProviderRegistry
 
@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 class VisionDetector:
     """Detects and filters vision-capable AI models."""
 
-    def __init__(self, registry: Optional[ProviderRegistry] = None):
+    def __init__(self, registry: ProviderRegistry | None = None):
         """Initialize the vision detector.
 
         Args:
@@ -22,9 +22,9 @@ class VisionDetector:
     def get_vision_models(
         self,
         provider: str,
-        api_key: Optional[str] = None,
-        base_url: Optional[str] = None
-    ) -> List[Dict[str, Any]]:
+        api_key: str | None = None,
+        base_url: str | None = None
+    ) -> list[dict[str, Any]]:
         """Get vision-capable models for a provider.
 
         Args:
@@ -64,10 +64,10 @@ class VisionDetector:
 
     def get_all_vision_models(
         self,
-        gemini_api_key: Optional[str] = None,
-        openrouter_api_key: Optional[str] = None,
+        gemini_api_key: str | None = None,
+        openrouter_api_key: str | None = None,
         ollama_base_url: str = 'http://localhost:11434'
-    ) -> Dict[str, List[Dict[str, Any]]]:
+    ) -> dict[str, list[dict[str, Any]]]:
         """Get vision-capable models from all available providers.
 
         Args:
@@ -106,8 +106,8 @@ class VisionDetector:
         self,
         provider: str,
         model_id: str,
-        api_key: Optional[str] = None,
-        base_url: Optional[str] = None
+        api_key: str | None = None,
+        base_url: str | None = None
     ) -> bool:
         """Check if a specific model supports vision.
 
@@ -131,9 +131,9 @@ class VisionDetector:
         self,
         provider: str,
         model_id: str,
-        api_key: Optional[str] = None,
-        base_url: Optional[str] = None
-    ) -> Optional[Dict[str, Any]]:
+        api_key: str | None = None,
+        base_url: str | None = None
+    ) -> dict[str, Any] | None:
         """Get model information by ID.
 
         Args:

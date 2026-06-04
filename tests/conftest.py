@@ -7,7 +7,7 @@ from PySide6.QtWidgets import QApplication
 @pytest.fixture(scope="session")
 def qt_app():
     """Create QApplication instance for all UI tests.
-    
+
     This fixture is created at session scope to ensure QApplication
     exists for all UI tests. PySide6 requires exactly one QApplication
     instance to exist for widgets to work properly.

@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-from typing import List
 
 
 class CredentialNotFoundError(KeyError):
@@ -28,7 +27,7 @@ class CredentialManager(ABC):
         pass
 
     @abstractmethod
-    async def get_keys(self) -> List[str]:
+    async def get_keys(self) -> list[str]:
         """
         Get all available credential keys.
 

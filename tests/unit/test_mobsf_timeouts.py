@@ -1,7 +1,10 @@
 """Unit tests for MobSFManager timeout handling."""
-import pytest
 from unittest.mock import Mock, patch
+
+import pytest
+
 from mobile_crawler.infrastructure.mobsf_manager import MobSFManager
+
 
 class TestMobSFManagerTimeout:
     @pytest.fixture
@@ -30,7 +33,7 @@ class TestMobSFManagerTimeout:
 
         # Call with no explicit timeout
         manager._make_api_request("test", "POST")
-        
+
         # Verify it used the default (300)
         mock_post.assert_called_once()
         args, kwargs = mock_post.call_args
@@ -47,7 +50,7 @@ class TestMobSFManagerTimeout:
 
         # Call with explicit timeout
         manager._make_api_request("test", "POST", timeout=10)
-        
+
         # Verify it used the explicit value
         mock_post.assert_called_once()
         args, kwargs = mock_post.call_args
@@ -57,9 +60,9 @@ class TestMobSFManagerTimeout:
     def test_get_report_json_passes_timeout(self, mock_request, manager):
         """Test that get_report_json correctly passes the timeout."""
         mock_request.return_value = (True, {})
-        
+
         manager.get_report_json("hash123", timeout=15)
-        
+
         mock_request.assert_called_once_with("report_json", "POST", data={"hash": "hash123"}, timeout=15)
 
     @patch("mobile_crawler.infrastructure.mobsf_manager.MobSFManager.get_pdf_report")
@@ -68,7 +71,7 @@ class TestMobSFManagerTimeout:
     def test_save_pdf_report_passes_timeout(self, mock_open, mock_makedirs, mock_get_pdf, manager):
         """Test that save_pdf_report correctly passes the timeout."""
         mock_get_pdf.return_value = (True, b"fake content")
-        
+
         manager.save_pdf_report("hash123", output_path="/tmp/test.pdf", timeout=20)
-        
+
         mock_get_pdf.assert_called_once_with("hash123", timeout=20)

@@ -1,9 +1,8 @@
 #!/usr/bin/env python
 """Test script for crawler_agent integration."""
 
-import sys
-import os
 import logging
+import sys
 from pathlib import Path
 
 # Add src to Python path
@@ -27,12 +26,12 @@ def test_mobile_crawler_imports():
     """Test mobile crawler imports."""
     try:
         from mobile_crawler.config.config_manager import ConfigManager
-        logger.info("✅ ConfigManager import successful")
-
-        from mobile_crawler.domain.droidrun_agent_service import DroidRunAgentService
-        logger.info("✅ DroidRunAgentService import successful")
-
         from mobile_crawler.domain.adb_action_executor import ADBActionExecutor
+        from mobile_crawler.domain.crawler_agent_service import CrawlerAgentService
+
+        _ = (ConfigManager, ADBActionExecutor, CrawlerAgentService)
+        logger.info("✅ ConfigManager import successful")
+        logger.info("✅ CrawlerAgentService import successful")
         logger.info("✅ ADBActionExecutor import successful")
 
         return True
@@ -44,9 +43,9 @@ def test_droidrun_config():
     """Test DroidRun configuration creation."""
     try:
         from mobile_crawler.config.config_manager import ConfigManager
-        from mobile_crawler.domain.droidrun_agent_service import DroidRunAgentService
-        from mobile_crawler.infrastructure.database import DatabaseManager
+        from mobile_crawler.domain.crawler_agent_service import CrawlerAgentService
         from mobile_crawler.infrastructure.ai_interaction_repository import AIInteractionRepository
+        from mobile_crawler.infrastructure.database import DatabaseManager
 
         # Create test configuration
         config_manager = ConfigManager()
@@ -58,7 +57,7 @@ def test_droidrun_config():
         ai_repo = AIInteractionRepository(db)
 
         # Test DroidRun agent service creation
-        agent_service = DroidRunAgentService(
+        agent_service = CrawlerAgentService(
             config_manager=config_manager,
             ai_interaction_repository=ai_repo,
             device_id="test_device"
@@ -81,7 +80,7 @@ def test_adb_executor():
         from mobile_crawler.domain.adb_action_executor import ADBActionExecutor
 
         # Create executor (won't actually connect to device)
-        executor = ADBActionExecutor(device_id="test_device")
+        ADBActionExecutor(device_id="test_device")
         logger.info("✅ ADB action executor created successfully")
 
         return True
@@ -93,6 +92,8 @@ def test_ui_imports():
     """Test UI component imports."""
     try:
         from mobile_crawler.ui.widgets.settings_panel import SettingsPanel
+
+        _ = SettingsPanel
         logger.info("✅ Settings panel import successful")
 
         return True

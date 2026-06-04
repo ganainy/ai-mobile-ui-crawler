@@ -2,7 +2,6 @@
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional
 
 from mobile_crawler.infrastructure.database import DatabaseManager
 
@@ -10,27 +9,27 @@ from mobile_crawler.infrastructure.database import DatabaseManager
 @dataclass
 class AIInteraction:
     """Data class representing an AI interaction."""
-    id: Optional[int]
+    id: int | None
     run_id: int
     step_number: int
     timestamp: datetime
-    
+
     # Request Details
     request_json: str
-    screenshot_path: Optional[str]
-    
+    screenshot_path: str | None
+
     # Response Details
-    response_raw: Optional[str]
-    response_parsed_json: Optional[str]
-    
+    response_raw: str | None
+    response_parsed_json: str | None
+
     # Performance Metrics
-    tokens_input: Optional[int]
-    tokens_output: Optional[int]
-    latency_ms: Optional[float]
-    
+    tokens_input: int | None
+    tokens_output: int | None
+    latency_ms: float | None
+
     # Status
     success: bool
-    error_message: Optional[str]
+    error_message: str | None
     retry_count: int
 
 

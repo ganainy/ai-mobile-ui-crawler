@@ -6,7 +6,6 @@ to extract structured data from the text.
 """
 
 import logging
-from typing import Type
 
 from llama_index.core.llms.llm import LLM
 from llama_index.core.prompts import PromptTemplate
@@ -28,7 +27,7 @@ class StructuredOutputAgent(Workflow):
     def __init__(
         self,
         llm: LLM,
-        pydantic_model: Type[BaseModel],
+        pydantic_model: type[BaseModel],
         answer_text: str,
         **kwargs,
     ):

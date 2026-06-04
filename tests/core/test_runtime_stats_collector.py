@@ -3,8 +3,6 @@
 from datetime import datetime
 from unittest.mock import Mock
 
-import pytest
-
 from mobile_crawler.core.runtime_stats_collector import (
     RuntimeStats,
     RuntimeStatsCollector,

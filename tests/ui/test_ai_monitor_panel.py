@@ -1,9 +1,8 @@
 """Tests for AI monitor panel widget."""
 
+
 import pytest
 from PySide6.QtWidgets import QApplication
-from PySide6.QtCore import Qt
-from datetime import datetime
 
 from mobile_crawler.ui.widgets.ai_monitor_panel import AIMonitorPanel
 
@@ -86,7 +85,7 @@ def test_add_response_completes_interaction(ai_monitor_panel):
     # Check internal storage updated
     interaction = ai_monitor_panel._interactions[step_number]
     assert interaction["response_data"] == response_data
-    assert interaction["success"] == True
+    assert interaction["success"]
 
 
 def test_status_filter_shows_only_matching_entries(ai_monitor_panel):

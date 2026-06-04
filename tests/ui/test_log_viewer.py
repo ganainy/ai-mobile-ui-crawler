@@ -2,8 +2,8 @@
 
 import pytest
 
-from mobile_crawler.ui.widgets.log_viewer import LogViewer
 from mobile_crawler.core.logging_service import LogLevel
+from mobile_crawler.ui.widgets.log_viewer import LogViewer
 
 
 def _create_log_viewer():
@@ -61,7 +61,7 @@ class TestLevelFilter:
             LogLevel.ERROR: "ERROR",
             LogLevel.ACTION: "ACTION",
         }
-        
+
         for level, text in level_map.items():
             log_viewer.set_level_filter(level)
             assert log_viewer.level_filter.currentText() == text
@@ -87,11 +87,11 @@ class TestLogDisplay:
     def test_append_log_filters_by_level(self, log_viewer):
         """Test that append_log() filters by level."""
         log_viewer.set_level_filter(LogLevel.WARNING)
-        
+
         log_viewer.append_log(LogLevel.DEBUG, "Debug message")
         log_viewer.append_log(LogLevel.INFO, "Info message")
         log_viewer.append_log(LogLevel.WARNING, "Warning message")
-        
+
         text = log_viewer.log_text.toPlainText()
         assert "[DEBUG] Debug message" not in text
         assert "[INFO] Info message" not in text
@@ -218,7 +218,7 @@ class TestClearLogs:
         """Test that clear button clears log text."""
         log_viewer.append_log(LogLevel.INFO, "Test message")
         assert log_viewer.log_text.toPlainText() != ""
-        
+
         log_viewer.clear_button.click()
         assert log_viewer.log_text.toPlainText() == ""
 
@@ -226,7 +226,7 @@ class TestClearLogs:
         """Test that clear_logs() method clears log text."""
         log_viewer.append_log(LogLevel.INFO, "Test message")
         assert log_viewer.log_text.toPlainText() != ""
-        
+
         log_viewer.clear_logs()
         assert log_viewer.log_text.toPlainText() == ""
 
@@ -283,7 +283,7 @@ class TestAutoScroll:
         # Add enough messages to trigger scrollbar
         for i in range(10):
             log_viewer.append_log(LogLevel.INFO, f"Message {i}")
-        
+
         # Check that scrollbar is at maximum
         scrollbar = log_viewer.log_text.verticalScrollBar()
         assert scrollbar.value() == scrollbar.maximum()

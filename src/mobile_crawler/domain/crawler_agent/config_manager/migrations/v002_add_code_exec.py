@@ -1,6 +1,6 @@
 """Migration v2: Rename codeact config to fast_agent, add codeact flag."""
 
-from typing import Any, Dict
+from typing import Any
 
 VERSION = 2
 
@@ -10,7 +10,7 @@ _NEW_SYSTEM_PROMPT = "config/prompts/codeact/tools_system.jinja2"
 _NEW_USER_PROMPT = "config/prompts/codeact/tools_user.jinja2"
 
 
-def migrate(config: Dict[str, Any]) -> Dict[str, Any]:
+def migrate(config: dict[str, Any]) -> dict[str, Any]:
     """Rename agent.codeact -> agent.fast_agent and llm_profiles.codeact -> fast_agent."""
     agent = config.get("agent", {})
 

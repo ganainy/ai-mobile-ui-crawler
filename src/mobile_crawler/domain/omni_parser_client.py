@@ -5,7 +5,7 @@ import io
 import logging
 import os
 from enum import Enum
-from typing import List, Dict, Any, Optional
+from typing import Any
 
 import requests
 
@@ -20,7 +20,7 @@ class OmniParserBackend(Enum):
 class OmniParserClient:
     """Client for OmniParser vision-based UI parsing."""
 
-    def __init__(self, config_manager, replicate_api_key: Optional[str] = None):
+    def __init__(self, config_manager, replicate_api_key: str | None = None):
         self.config_manager = config_manager
         self._replicate_api_key = replicate_api_key
         self._backend = self._detect_backend()
@@ -53,17 +53,17 @@ class OmniParserClient:
         except Exception:
             return False
 
-    def parse(self, image_bytes: bytes) -> List[Dict[str, Any]]:
+    def parse(self, image_bytes: bytes) -> list[dict[str, Any]]:
         if self._backend == OmniParserBackend.LOCAL:
             return self._parse_local(image_bytes)
         else:
             return self._parse_replicate(image_bytes)
 
-    def _parse_replicate(self, image_bytes: bytes) -> List[Dict[str, Any]]:
+    def _parse_replicate(self, image_bytes: bytes) -> list[dict[str, Any]]:
         try:
             import replicate
-        except ImportError:
-            raise ImportError("replicate package required: pip install replicate")
+        except ImportError as e:
+            raise ImportError("replicate package required: pip install replicate") from e
 
         api_key = self._get_api_key()
         if not api_key:
@@ -88,9 +88,9 @@ class OmniParserClient:
 
         except Exception as e:
             logger.error(f"Replicate API error: {e}")
-            raise RuntimeError(f"OmniParser Replicate error: {e}")
+            raise RuntimeError(f"OmniParser Replicate error: {e}") from e
 
-    def _parse_local(self, image_bytes: bytes) -> List[Dict[str, Any]]:
+    def _parse_local(self, image_bytes: bytes) -> list[dict[str, Any]]:
         local_url = self.config_manager.get("omniparser_local_url", "http://localhost:8000")
         box_threshold = self.config_manager.get("omniparser_box_threshold", 0.05)
         b64_image = base64.b64encode(image_bytes).decode("utf-8")
@@ -121,14 +121,14 @@ class OmniParserClient:
 
             if response.status_code != 200:
                 raise RuntimeError(f"Local OmniParser error: {response.status_code}")
-            
+
             result = response.json()
             return result.get("parsed_content_list", result.get("elements", []))
         except requests.exceptions.RequestException as e:
             logger.error(f"Local OmniParser connection error: {e}")
             raise
 
-    def _get_api_key(self) -> Optional[str]:
+    def _get_api_key(self) -> str | None:
         if self._replicate_api_key:
             return self._replicate_api_key
         try:

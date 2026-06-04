@@ -1,9 +1,8 @@
 """ADB input handler for Android text input."""
 
-import subprocess
-import shlex
 import logging
-from typing import Optional
+import shlex
+import subprocess
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +13,7 @@ class ADBInputHandler:
     This handler provides text input capabilities using ADB's shell input command.
     """
 
-    def __init__(self, device_id: Optional[str] = None):
+    def __init__(self, device_id: str | None = None):
         """Initialize ADB input handler.
 
         Args:

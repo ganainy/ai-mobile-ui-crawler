@@ -1,17 +1,18 @@
 """Tests for MobSFManager."""
 
-from unittest.mock import Mock, patch, MagicMock, mock_open
-import pytest
 import os
 import tempfile
 import zipfile
 from pathlib import Path
+from unittest.mock import Mock, mock_open, patch
+
+import pytest
 
 from mobile_crawler.infrastructure.mobsf_manager import (
-    MobSFManager,
-    MobSFAnalysisResult,
     MOBSF_INVALID_KEY_ERROR,
     MOBSF_KEY_DISCOVERY_ERROR,
+    MobSFAnalysisResult,
+    MobSFManager,
 )
 
 

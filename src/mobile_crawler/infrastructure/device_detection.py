@@ -1,11 +1,10 @@
 """Device detection utilities for Android devices using ADB."""
 
-import subprocess
-import re
-import time
-from typing import List, Dict, Optional, Tuple
-from dataclasses import dataclass
 import logging
+import re
+import subprocess
+import time
+from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
@@ -15,10 +14,10 @@ class AndroidDevice:
     """Represents an Android device detected via ADB."""
     device_id: str
     status: str  # 'device', 'offline', 'unauthorized', etc.
-    model: Optional[str] = None
-    manufacturer: Optional[str] = None
-    android_version: Optional[str] = None
-    api_level: Optional[int] = None
+    model: str | None = None
+    manufacturer: str | None = None
+    android_version: str | None = None
+    api_level: int | None = None
 
     @property
     def is_available(self) -> bool:
@@ -52,7 +51,7 @@ class ADBNotFoundError(DeviceDetectionError):
 class DeviceDetection:
     """Handles detection and information retrieval for Android devices via ADB."""
 
-    def __init__(self, adb_path: Optional[str] = None):
+    def __init__(self, adb_path: str | None = None):
         """Initialize device detection.
 
         Args:
@@ -72,10 +71,10 @@ class DeviceDetection:
             )
             if result.returncode != 0:
                 raise ADBNotFoundError(f"ADB command failed: {result.stderr}")
-        except FileNotFoundError:
-            raise ADBNotFoundError("ADB executable not found in PATH")
+        except FileNotFoundError as e:
+            raise ADBNotFoundError("ADB executable not found in PATH") from e
 
-    def _run_adb_command(self, args: List[str], timeout: int = 30) -> Tuple[str, str]:
+    def _run_adb_command(self, args: list[str], timeout: int = 30) -> tuple[str, str]:
         """Run an ADB command and return stdout, stderr.
 
         Args:
@@ -96,12 +95,12 @@ class DeviceDetection:
                 timeout=timeout
             )
             return result.stdout, result.stderr
-        except subprocess.TimeoutExpired:
-            raise DeviceDetectionError(f"ADB command timed out: {' '.join(args)}")
+        except subprocess.TimeoutExpired as e:
+            raise DeviceDetectionError(f"ADB command timed out: {' '.join(args)}") from e
         except Exception as e:
             raise DeviceDetectionError(f"ADB command failed: {e}") from e
 
-    def get_connected_devices(self) -> List[AndroidDevice]:
+    def get_connected_devices(self) -> list[AndroidDevice]:
         """Get list of connected Android devices.
 
         Returns:
@@ -206,7 +205,7 @@ class DeviceDetection:
 
         return device
 
-    def _get_device_prop(self, device_id: str, prop: str) -> Optional[str]:
+    def _get_device_prop(self, device_id: str, prop: str) -> str | None:
         """Get a device property using ADB shell getprop.
 
         Args:
@@ -223,7 +222,7 @@ class DeviceDetection:
         except Exception:
             return None
 
-    def get_available_devices(self) -> List[AndroidDevice]:
+    def get_available_devices(self) -> list[AndroidDevice]:
         """Get list of available (online) Android devices.
 
         Returns:
@@ -232,7 +231,7 @@ class DeviceDetection:
         devices = self.get_connected_devices()
         return [d for d in devices if d.is_available]
 
-    def find_device_by_id(self, device_id: str) -> Optional[AndroidDevice]:
+    def find_device_by_id(self, device_id: str) -> AndroidDevice | None:
         """Find a device by its ID.
 
         Args:
@@ -247,7 +246,7 @@ class DeviceDetection:
                 return device
         return None
 
-    def wait_for_device(self, device_id: Optional[str] = None, timeout: int = 60) -> AndroidDevice:
+    def wait_for_device(self, device_id: str | None = None, timeout: int = 60) -> AndroidDevice:
         """Wait for a device to become available.
 
         Args:
@@ -260,7 +259,6 @@ class DeviceDetection:
         Raises:
             DeviceDetectionError: If timeout expires or device not found
         """
-        import time
 
         start_time = time.time()
         while time.time() - start_time < timeout:

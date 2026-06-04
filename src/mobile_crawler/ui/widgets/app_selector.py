@@ -2,11 +2,10 @@
 
 import re
 import subprocess
-from typing import Optional
 from typing import TYPE_CHECKING
 
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QMessageBox, QComboBox
-from PySide6.QtCore import Signal, QObject
+from PySide6.QtCore import Signal
+from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPushButton, QVBoxLayout, QWidget
 
 from mobile_crawler.ui.async_utils import AsyncOperation
 
@@ -38,7 +37,7 @@ class AppSelector(QWidget):
             parent: Parent widget
         """
         super().__init__(parent)
-        self.device_id: Optional[str] = None
+        self.device_id: str | None = None
         self._config_store = config_store
         self._current_package: str = None
         self._setup_ui()
@@ -142,7 +141,7 @@ class AppSelector(QWidget):
         pattern = r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$"
         return bool(re.match(pattern, package))
 
-    def set_device_id(self, device_id: Optional[str]) -> None:
+    def set_device_id(self, device_id: str | None) -> None:
         """Update the active device id used for ADB calls."""
         self.device_id = device_id
 

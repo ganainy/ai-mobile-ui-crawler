@@ -1,7 +1,6 @@
 """Tests for OpenRouter adapter."""
 
 from unittest.mock import Mock, patch
-import pytest
 
 from mobile_crawler.domain.providers.openrouter_adapter import OpenRouterAdapter
 
@@ -10,20 +9,20 @@ class TestOpenRouterAdapter:
     def test_initialize(self):
         """Test initialization of OpenRouter adapter."""
         adapter = OpenRouterAdapter()
-        
+
         model_config = {
             'api_key': 'test_key',
             'model_name': 'anthropic/claude-3-haiku',
             'referer': 'http://example.com',
             'title': 'Test App'
         }
-        
+
         with patch('mobile_crawler.domain.providers.openrouter_adapter.requests.Session') as mock_session:
             mock_session_instance = Mock()
             mock_session.return_value = mock_session_instance
-            
+
             adapter.initialize(model_config)
-            
+
             mock_session.assert_called_once()
             mock_session_instance.headers.update.assert_called_once_with({
                 'Authorization': 'Bearer test_key',
@@ -38,7 +37,7 @@ class TestOpenRouterAdapter:
         adapter = OpenRouterAdapter()
         adapter._session = Mock()
         adapter._model_config = {'model_name': 'anthropic/claude-3-haiku'}
-        
+
         mock_response = Mock()
         mock_response.json.return_value = {
             'choices': [{'message': {'content': 'Test response'}}],
@@ -50,9 +49,9 @@ class TestOpenRouterAdapter:
         }
         mock_response.raise_for_status.return_value = None
         adapter._session.post.return_value = mock_response
-        
+
         response, metadata = adapter.generate_response("System prompt", "User prompt")
-        
+
         assert response == "Test response"
         assert metadata['token_usage']['input_tokens'] == 10
         assert metadata['token_usage']['output_tokens'] == 5
@@ -67,7 +66,7 @@ class TestOpenRouterAdapter:
         adapter = OpenRouterAdapter()
         adapter._session = Mock()
         adapter._model_config = {'model_name': 'anthropic/claude-3-haiku'}
-        
+
         mock_response = Mock()
         mock_response.json.return_value = {
             'choices': [{'message': {'content': 'Test'}}],
@@ -75,9 +74,9 @@ class TestOpenRouterAdapter:
         }
         mock_response.raise_for_status.return_value = None
         adapter._session.post.return_value = mock_response
-        
+
         adapter.generate_response("Be helpful", "{\"screenshot\": \"abc\"}")
-        
+
         call_args = adapter._session.post.call_args
         content = call_args[1]['json']['messages'][0]['content']
         assert 'Be helpful' in content
@@ -87,9 +86,9 @@ class TestOpenRouterAdapter:
         """Test model info property."""
         adapter = OpenRouterAdapter()
         adapter._model_config = {'model_name': 'openai/gpt-4'}
-        
+
         info = adapter.model_info
-        
+
         assert info['provider'] == 'openrouter'
         assert info['model'] == 'openai/gpt-4'
         assert info['supports_vision'] is False

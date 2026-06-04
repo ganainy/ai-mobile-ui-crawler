@@ -5,56 +5,53 @@ import re
 import sys
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional, Set, List, Dict, Any
-from PySide6.QtWidgets import (
-    QMainWindow,
-    QWidget,
-    QVBoxLayout,
-    QHBoxLayout,
-    QSplitter,
-    QMenuBar,
-    QMenu,
-    QApplication,
-)
-from PySide6.QtCore import Qt, QThread, Signal, QTimer
-from PySide6.QtGui import QIcon
+from typing import Any
 
-# Service imports
-from mobile_crawler.infrastructure.device_detection import DeviceDetection
-from mobile_crawler.infrastructure.database import DatabaseManager
-from mobile_crawler.infrastructure.user_config_store import UserConfigStore
-from mobile_crawler.infrastructure.session_folder_manager import SessionFolderManager
-from mobile_crawler.infrastructure.run_repository import RunRepository
-from mobile_crawler.infrastructure.mobsf_manager import MobSFManager
+from PySide6.QtCore import Qt, QThread, QTimer, Signal
+from PySide6.QtGui import QIcon
+from PySide6.QtWidgets import (
+    QApplication,
+    QMainWindow,
+    QSplitter,
+    QVBoxLayout,
+    QWidget,
+)
+
+# Import resources
+from mobile_crawler.config.config_manager import ConfigManager
+from mobile_crawler.core.crawl_controller import CrawlController
+from mobile_crawler.core.crawl_state_machine import CrawlState
+from mobile_crawler.core.crawler_loop import CrawlerLoop
+from mobile_crawler.core.log_sinks import LogLevel, QLogHandler
+from mobile_crawler.core.stale_run_cleaner import StaleRunCleaner
+from mobile_crawler.domain.models import ActionResult
 from mobile_crawler.domain.providers.registry import ProviderRegistry
 from mobile_crawler.domain.providers.vision_detector import VisionDetector
 from mobile_crawler.domain.report_generator import ReportGenerator
-from mobile_crawler.core.crawl_controller import CrawlController
-from mobile_crawler.config.config_manager import ConfigManager
-from mobile_crawler.core.crawler_loop import CrawlerLoop
-from mobile_crawler.core.crawl_state_machine import CrawlStateMachine, CrawlState
-from mobile_crawler.core.log_sinks import LogLevel, QLogHandler
-from mobile_crawler.core.stale_run_cleaner import StaleRunCleaner
-from mobile_crawler.infrastructure.screen_repository import ScreenRepository
-from mobile_crawler.infrastructure.step_log_repository import StepLogRepository
-from mobile_crawler.domain.models import ActionResult
+from mobile_crawler.infrastructure.database import DatabaseManager
 
-# Widget imports
-from mobile_crawler.ui.widgets.device_selector import DeviceSelector
-from mobile_crawler.ui.widgets.app_selector import AppSelector
-from mobile_crawler.ui.widgets.ai_model_selector import AIModelSelector
-from mobile_crawler.ui.widgets.crawl_control_panel import CrawlControlPanel
-from mobile_crawler.ui.widgets.log_viewer import LogViewer
-from mobile_crawler.ui.widgets.stats_dashboard import StatsDashboard
-from mobile_crawler.ui.widgets.settings_panel import SettingsPanel
-from mobile_crawler.ui.widgets.run_history_view import RunHistoryView
+# Service imports
+from mobile_crawler.infrastructure.device_detection import DeviceDetection
+from mobile_crawler.infrastructure.mobsf_manager import MobSFManager
+from mobile_crawler.infrastructure.run_repository import RunRepository
+from mobile_crawler.infrastructure.screen_repository import ScreenRepository
+from mobile_crawler.infrastructure.session_folder_manager import SessionFolderManager
+from mobile_crawler.infrastructure.step_log_repository import StepLogRepository
+from mobile_crawler.infrastructure.user_config_store import UserConfigStore
 from mobile_crawler.ui.log_cleaner import LogCleaner
 
 # Signal adapter
 from mobile_crawler.ui.signal_adapter import QtSignalAdapter
+from mobile_crawler.ui.widgets.ai_model_selector import AIModelSelector
+from mobile_crawler.ui.widgets.app_selector import AppSelector
+from mobile_crawler.ui.widgets.crawl_control_panel import CrawlControlPanel
 
-# Import resources
-import mobile_crawler.ui.resources.resources_rc
+# Widget imports
+from mobile_crawler.ui.widgets.device_selector import DeviceSelector
+from mobile_crawler.ui.widgets.log_viewer import LogViewer
+from mobile_crawler.ui.widgets.run_history_view import RunHistoryView
+from mobile_crawler.ui.widgets.settings_panel import SettingsPanel
+from mobile_crawler.ui.widgets.stats_dashboard import StatsDashboard
 
 
 @dataclass
@@ -70,10 +67,10 @@ class CrawlStatistics:
     total_steps: int = 0
     successful_actions: int = 0
     failed_actions: int = 0
-    unique_screen_hashes: Set[str] = field(default_factory=set)
+    unique_screen_hashes: set[str] = field(default_factory=set)
     total_screen_visits: int = 0
     ai_call_count: int = 0
-    ai_response_times_ms: List[float] = field(default_factory=list)
+    ai_response_times_ms: list[float] = field(default_factory=list)
     last_step_number: int = 0  # Track last seen step to avoid double counting
 
     # OCR timing
@@ -95,7 +92,7 @@ class CrawlStatistics:
     # OTel-sourced token counts (populated from StatsCollectorSpanProcessor)
     total_input_tokens: int = 0
     total_output_tokens: int = 0
-    otel_latencies_ms: List[float] = field(default_factory=list)  # per-call real latencies
+    otel_latencies_ms: list[float] = field(default_factory=list)  # per-call real latencies
 
     # DroidRun-derived metrics
     tool_call_count: int = 0  # total tool calls observed
@@ -191,7 +188,7 @@ class MainWindow(QMainWindow):
         self.signal_adapter: QtSignalAdapter = QtSignalAdapter()
 
         # Statistics tracking
-        self._current_stats: Optional[CrawlStatistics] = None
+        self._current_stats: CrawlStatistics | None = None
         self._elapsed_timer: QTimer = QTimer(self)
         self._elapsed_timer.timeout.connect(self._update_elapsed_time)
 
@@ -592,8 +589,9 @@ class MainWindow(QMainWindow):
         Returns:
             Run instance
         """
-        from mobile_crawler.infrastructure.run_repository import Run
         from datetime import datetime
+
+        from mobile_crawler.infrastructure.run_repository import Run
 
         return Run(
             id=None,
@@ -1330,9 +1328,10 @@ class MainWindow(QMainWindow):
         # Compute perceptual hash to identify unique screens
         if screenshot_path:
             try:
+                import os
+
                 import imagehash
                 from PIL import Image
-                import os
 
                 if os.path.exists(screenshot_path):
                     img = Image.open(screenshot_path)
@@ -1345,7 +1344,7 @@ class MainWindow(QMainWindow):
         # Update dashboard
         self._update_dashboard_stats()
 
-    def _on_ai_response_stats(self, run_id: int, step_number: int, response_data: Dict[str, Any]) -> None:
+    def _on_ai_response_stats(self, run_id: int, step_number: int, response_data: dict[str, Any]) -> None:
         """Update AI performance metrics when response received."""
         if not self._current_stats or self._current_stats.run_id != run_id:
             return
@@ -1471,7 +1470,7 @@ class MainWindow(QMainWindow):
         self._update_dashboard_stats()
         self._current_stats = None
 
-    def _query_final_statistics(self, run_id: int) -> Dict[str, Any]:
+    def _query_final_statistics(self, run_id: int) -> dict[str, Any]:
         """Query database for accurate final statistics.
 
         Returns:

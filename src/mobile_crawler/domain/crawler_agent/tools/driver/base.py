@@ -6,7 +6,7 @@ Unsupported methods are detected via the ``supported`` set, not introspection.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 class DeviceDisconnectedError(Exception):
@@ -89,7 +89,7 @@ class DeviceDriver:
 
     # -- app management ------------------------------------------------------
 
-    async def start_app(self, package: str, activity: Optional[str] = None) -> str:
+    async def start_app(self, package: str, activity: str | None = None) -> str:
         """Launch an application.
 
         Returns a human-readable result string.
@@ -100,11 +100,11 @@ class DeviceDriver:
         """Install an APK/IPA at *path*."""
         raise NotImplementedError
 
-    async def get_apps(self, include_system: bool = True) -> List[Dict[str, str]]:
+    async def get_apps(self, include_system: bool = True) -> list[dict[str, str]]:
         """Return installed apps as ``[{"package": …, "label": …}, …]``."""
         raise NotImplementedError
 
-    async def list_packages(self, include_system: bool = False) -> List[str]:
+    async def list_packages(self, include_system: bool = False) -> list[str]:
         """Return installed package names."""
         raise NotImplementedError
 
@@ -117,7 +117,7 @@ class DeviceDriver:
         """
         raise NotImplementedError
 
-    async def get_ui_tree(self) -> Dict[str, Any]:
+    async def get_ui_tree(self) -> dict[str, Any]:
         """Return the raw UI / accessibility tree from the device."""
         raise NotImplementedError
 

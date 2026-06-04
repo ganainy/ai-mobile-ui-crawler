@@ -2,22 +2,10 @@
 
 from typing import TYPE_CHECKING
 
-from PySide6.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
-    QHBoxLayout,
-    QLabel,
-    QComboBox,
-    QPushButton,
-    QMessageBox
-)
-from PySide6.QtCore import Signal, QObject
+from PySide6.QtCore import Signal
+from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QMessageBox, QPushButton, QVBoxLayout, QWidget
 
-from mobile_crawler.infrastructure.device_detection import (
-    DeviceDetection,
-    AndroidDevice,
-    DeviceDetectionError
-)
+from mobile_crawler.infrastructure.device_detection import AndroidDevice, DeviceDetection
 from mobile_crawler.ui.async_utils import AsyncOperation
 
 if TYPE_CHECKING:
@@ -145,8 +133,8 @@ class DeviceSelector(QWidget):
             self._current_device = None
             # Show error dialog for no devices found
             QMessageBox.warning(
-                self.parent(), 
-                "No Devices Found", 
+                self.parent(),
+                "No Devices Found",
                 "No Android devices were detected. Please:\n\n"
                 "1. Ensure USB debugging is enabled on your device\n"
                 "2. Connect your device via USB\n"

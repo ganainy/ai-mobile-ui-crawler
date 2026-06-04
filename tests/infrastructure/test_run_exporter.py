@@ -1,12 +1,12 @@
 """Tests for RunExporter service."""
 
-import pytest
 import json
 from datetime import datetime
-from pathlib import Path
 
-from mobile_crawler.infrastructure.run_exporter import RunExporter
+import pytest
+
 from mobile_crawler.infrastructure.database import DatabaseManager
+from mobile_crawler.infrastructure.run_exporter import RunExporter
 from mobile_crawler.infrastructure.run_repository import Run, RunRepository
 from mobile_crawler.infrastructure.step_log_repository import StepLog, StepLogRepository
 
@@ -48,9 +48,9 @@ class TestRunExporter:
         """Test that export_run creates a JSON file."""
         exporter = RunExporter(db_manager)
         output_dir = tmp_path / "exports"
-        
+
         export_path = exporter.export_run(sample_run, output_dir)
-        
+
         assert export_path.exists()
         assert export_path.suffix == ".json"
 
@@ -58,12 +58,12 @@ class TestRunExporter:
         """Test that exported JSON contains all required sections."""
         exporter = RunExporter(db_manager)
         output_dir = tmp_path / "exports"
-        
+
         export_path = exporter.export_run(sample_run, output_dir)
-        
-        with open(export_path, 'r') as f:
+
+        with open(export_path) as f:
             data = json.load(f)
-        
+
         assert "export_timestamp" in data
         assert "run" in data
         assert "screens" in data
@@ -76,12 +76,12 @@ class TestRunExporter:
         """Test that run metadata is correctly exported."""
         exporter = RunExporter(db_manager)
         output_dir = tmp_path / "exports"
-        
+
         export_path = exporter.export_run(sample_run, output_dir)
-        
-        with open(export_path, 'r') as f:
+
+        with open(export_path) as f:
             data = json.load(f)
-        
+
         assert data["run"]["id"] == sample_run
         assert data["run"]["device_id"] == "test-device"
         assert data["run"]["app_package"] == "com.test.app"
@@ -90,7 +90,7 @@ class TestRunExporter:
     def test_export_run_with_step_logs(self, db_manager, sample_run, tmp_path):
         """Test that step logs are exported."""
         from mobile_crawler.infrastructure.screen_repository import Screen, ScreenRepository
-        
+
         # Create a screen first
         screen_repo = ScreenRepository(db_manager)
         screen = Screen(
@@ -103,7 +103,7 @@ class TestRunExporter:
             first_seen_step=1
         )
         screen_id = screen_repo.create_screen(screen)
-        
+
         # Add a step log
         step_log_repo = StepLogRepository(db_manager)
         step_log = StepLog(
@@ -124,13 +124,13 @@ class TestRunExporter:
             ai_reasoning="Button visible"
         )
         step_log_repo.create_step_log(step_log)
-        
+
         exporter = RunExporter(db_manager)
         export_path = exporter.export_run(sample_run, tmp_path / "exports")
-        
-        with open(export_path, 'r') as f:
+
+        with open(export_path) as f:
             data = json.load(f)
-        
+
         assert len(data["step_logs"]) == 1
         assert data["step_logs"][0]["step_number"] == 1
         assert data["step_logs"][0]["action_type"] == "click"
@@ -139,14 +139,14 @@ class TestRunExporter:
     def test_export_run_not_found(self, db_manager, tmp_path):
         """Test that exporting non-existent run raises error."""
         exporter = RunExporter(db_manager)
-        
+
         with pytest.raises(ValueError, match="Run 999 not found"):
             exporter.export_run(999, tmp_path / "exports")
 
     def test_clean_request_json_removes_base64(self, db_manager):
         """Test that base64 screenshots are removed from request JSON."""
         exporter = RunExporter(db_manager)
-        
+
         request_json = json.dumps({
             "user_prompt": json.dumps({
                 "screenshot": "iVBORw0KGgoAAAANSUhEUgAAAAUA" + "A" * 200,
@@ -154,9 +154,9 @@ class TestRunExporter:
             }),
             "system_prompt": "System prompt text"
         })
-        
+
         cleaned = exporter._clean_request_json(request_json)
-        
+
         user_prompt_data = json.loads(cleaned["user_prompt"])
         assert user_prompt_data["screenshot"] == "[BASE64_SCREENSHOT_REMOVED]"
         assert user_prompt_data["other_data"] == "keep this"
@@ -164,7 +164,7 @@ class TestRunExporter:
     def test_export_statistics(self, db_manager, sample_run, tmp_path):
         """Test that statistics are correctly calculated."""
         from mobile_crawler.infrastructure.screen_repository import Screen, ScreenRepository
-        
+
         # Create screens first
         screen_repo = ScreenRepository(db_manager)
         screen_ids = []
@@ -179,7 +179,7 @@ class TestRunExporter:
                 first_seen_step=i + 1
             )
             screen_ids.append(screen_repo.create_screen(screen))
-        
+
         # Add some step logs
         step_log_repo = StepLogRepository(db_manager)
         for i in range(3):
@@ -201,13 +201,13 @@ class TestRunExporter:
                 ai_reasoning=None
             )
             step_log_repo.create_step_log(step_log)
-        
+
         exporter = RunExporter(db_manager)
         export_path = exporter.export_run(sample_run, tmp_path / "exports")
-        
-        with open(export_path, 'r') as f:
+
+        with open(export_path) as f:
             data = json.load(f)
-        
+
         stats = data["statistics"]
         assert stats["total_steps"] == 3
         assert stats["successful_actions"] == 2

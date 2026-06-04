@@ -10,7 +10,7 @@ import logging
 import os
 import time
 import uuid
-from typing import Any, Dict, List
+from typing import Any
 
 from llama_index.core.workflow import Event
 
@@ -27,11 +27,11 @@ class Trajectory:
             goal: The goal/prompt that this trajectory is trying to achieve
             base_path: Directory for saving (absolute or relative to cwd)
         """
-        self.events: List[Event] = []
+        self.events: list[Event] = []
         self.screenshot_count: int = 0
-        self.screenshot_queue: List[bytes] = []
-        self.ui_states: List[Dict[str, Any]] = []
-        self.macro: List[Dict[str, Any]] = []  # populated from RecordingDriver.log
+        self.screenshot_queue: list[bytes] = []
+        self.ui_states: list[dict[str, Any]] = []
+        self.macro: list[dict[str, Any]] = []  # populated from RecordingDriver.log
         self.goal = goal or "Droidrun automation sequence"
 
         self.base_path = self._resolve_path(base_path)
@@ -48,7 +48,6 @@ class Trajectory:
 
     def _create_trajectory_folder(self):
         """Create unique trajectory folder with timestamp and UUID."""
-        from pathlib import Path
 
         timestamp = time.strftime("%Y%m%d_%H%M%S")
         unique_id = str(uuid.uuid4())[:8]
@@ -64,7 +63,7 @@ class Trajectory:
         """
         self.goal = goal
 
-    def get_trajectory(self) -> List[Dict[str, Any]]:
+    def get_trajectory(self) -> list[dict[str, Any]]:
         # Save main trajectory events
         serializable_events = []
         for event in self.events:
@@ -81,7 +80,7 @@ class Trajectory:
         return serializable_events
 
     @staticmethod
-    def load_trajectory_folder(trajectory_folder: str) -> Dict[str, Any]:
+    def load_trajectory_folder(trajectory_folder: str) -> dict[str, Any]:
         """
         Load trajectory data from a trajectory folder.
 
@@ -102,14 +101,14 @@ class Trajectory:
             # Load main trajectory
             trajectory_json_path = os.path.join(trajectory_folder, "trajectory.json")
             if os.path.exists(trajectory_json_path):
-                with open(trajectory_json_path, "r") as f:
+                with open(trajectory_json_path) as f:
                     result["trajectory_data"] = json.load(f)
                 logger.debug(f"📖 Loaded trajectory data from {trajectory_json_path}")
 
             # Load macro sequence
             macro_json_path = os.path.join(trajectory_folder, "macro.json")
             if os.path.exists(macro_json_path):
-                with open(macro_json_path, "r") as f:
+                with open(macro_json_path) as f:
                     result["macro_data"] = json.load(f)
                 logger.debug(f"📖 Loaded macro data from {macro_json_path}")
 
@@ -126,7 +125,7 @@ class Trajectory:
             return result
 
     @staticmethod
-    def load_macro_sequence(macro_file_path: str) -> Dict[str, Any]:
+    def load_macro_sequence(macro_file_path: str) -> dict[str, Any]:
         """
         Load a macro sequence from a saved macro file.
 
@@ -141,7 +140,7 @@ class Trajectory:
             macro_file_path = os.path.join(macro_file_path, "macro.json")
 
         try:
-            with open(macro_file_path, "r") as f:
+            with open(macro_file_path) as f:
                 macro_data = json.load(f)
 
             logger.debug(
@@ -156,7 +155,7 @@ class Trajectory:
             return {}
 
     @staticmethod
-    def get_macro_summary(macro_data: Dict[str, Any]) -> Dict[str, Any]:
+    def get_macro_summary(macro_data: dict[str, Any]) -> dict[str, Any]:
         """
         Get a summary of a macro sequence.
 
@@ -259,7 +258,7 @@ class Trajectory:
 
         print("=================================")
 
-    def print_trajectory_summary(self, trajectory_data: Dict[str, Any]) -> None:
+    def print_trajectory_summary(self, trajectory_data: dict[str, Any]) -> None:
         """
         Print a summary of a trajectory.
 
@@ -284,8 +283,8 @@ class Trajectory:
 
 
 def get_trajectory_statistics(
-    trajectory_steps: List[Dict[str, Any]],
-) -> Dict[str, Any]:
+    trajectory_steps: list[dict[str, Any]],
+) -> dict[str, Any]:
     """
     Get statistics about a trajectory.
 

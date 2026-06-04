@@ -1,6 +1,6 @@
 import contextlib
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 from uuid import uuid4
 
 from llama_index.core.callbacks.base_handler import BaseCallbackHandler
@@ -110,7 +110,7 @@ class TokenCountingHandler(BaseCallbackHandler):
             requests=self.requests,
         )
 
-    def _get_event_usage(self, payload: Dict[str, Any]) -> UsageResult:
+    def _get_event_usage(self, payload: dict[str, Any]) -> UsageResult:
         if EventPayload.RESPONSE not in payload:
             raise ValueError("No response in payload")
 
@@ -120,7 +120,7 @@ class TokenCountingHandler(BaseCallbackHandler):
     def on_event_start(
         self,
         event_type: CBEventType,
-        payload: Optional[Dict[str, Any]] = None,
+        payload: dict[str, Any] | None = None,
         event_id: str = "",
         parent_id: str = "",
         **kwargs: Any,
@@ -131,7 +131,7 @@ class TokenCountingHandler(BaseCallbackHandler):
     def on_event_end(
         self,
         event_type: CBEventType,
-        payload: Optional[Dict[str, Any]] = None,
+        payload: dict[str, Any] | None = None,
         event_id: str = "",
         **kwargs: Any,
     ) -> None:
@@ -150,21 +150,21 @@ class TokenCountingHandler(BaseCallbackHandler):
                 extra={"provider": self.provider},
             )
 
-    def start_trace(self, trace_id: Optional[str] = None) -> None:
+    def start_trace(self, trace_id: str | None = None) -> None:
         """Run when an overall trace is launched."""
         pass
 
     def end_trace(
         self,
-        trace_id: Optional[str] = None,
-        trace_map: Optional[Dict[str, List[str]]] = None,
+        trace_id: str | None = None,
+        trace_map: dict[str, list[str]] | None = None,
     ) -> None:
         """Run when an overall trace is exited."""
         pass
 
 
 @contextlib.contextmanager
-def llm_callback(llm: LLM, *args: List[BaseCallbackHandler]):
+def llm_callback(llm: LLM, *args: list[BaseCallbackHandler]):
     for arg in args:
         llm.callback_manager.add_handler(arg)
     yield

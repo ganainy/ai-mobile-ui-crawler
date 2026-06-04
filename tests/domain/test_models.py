@@ -3,11 +3,11 @@
 import pytest
 
 from mobile_crawler.domain.models import (
-    UIElement,
     ActionResult,
-    BoundingBox,
     AIAction,
     AIResponse,
+    BoundingBox,
+    UIElement,
 )
 
 

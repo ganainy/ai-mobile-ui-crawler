@@ -3,7 +3,6 @@
 import asyncio
 import logging
 import subprocess
-from typing import List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -31,8 +30,8 @@ class ADBClient:
         self.default_timeout = timeout
 
     async def execute_async(
-        self, command_list: List[str], suppress_stderr: bool = False, timeout: Optional[float] = None
-    ) -> Tuple[str, int]:
+        self, command_list: list[str], suppress_stderr: bool = False, timeout: float | None = None
+    ) -> tuple[str, int]:
         """Execute an ADB command asynchronously.
 
         Args:
@@ -83,7 +82,7 @@ class ADBClient:
             logger.error(f"Exception executing ADB command: {e}", exc_info=True)
             return str(e), -1
 
-    def execute(self, command: str, timeout: Optional[float] = None) -> Optional[str]:
+    def execute(self, command: str, timeout: float | None = None) -> str | None:
         """Execute an ADB command synchronously (for backward compatibility).
 
         Args:

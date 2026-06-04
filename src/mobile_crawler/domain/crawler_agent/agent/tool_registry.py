@@ -8,8 +8,9 @@ from __future__ import annotations
 import inspect
 import json
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Callable, Dict, Optional, Set
+from typing import TYPE_CHECKING, Any
 
 from mobile_crawler.domain.crawler_agent.agent.action_result import ActionResult
 
@@ -24,16 +25,16 @@ logger = logging.getLogger("crawler_agent")
 @dataclass
 class ToolEntry:
     fn: Callable
-    params: Dict[str, Any]
+    params: dict[str, Any]
     description: str
-    deps: Optional[Set[str]] = None
+    deps: set[str] | None = None
 
 
 class ToolRegistry:
     """Central registry of all agent-callable tools."""
 
     def __init__(self) -> None:
-        self.tools: Dict[str, ToolEntry] = {}
+        self.tools: dict[str, ToolEntry] = {}
 
     # -- registration --------------------------------------------------------
 
@@ -41,15 +42,15 @@ class ToolRegistry:
         self,
         name: str,
         fn: Callable,
-        params: Dict[str, Any],
+        params: dict[str, Any],
         description: str,
-        deps: Optional[Set[str]] = None,
+        deps: set[str] | None = None,
     ) -> None:
         self.tools[name] = ToolEntry(
             fn=fn, params=params, description=description, deps=deps
         )
 
-    def register_from_dict(self, tools_dict: Dict[str, Any]) -> None:
+    def register_from_dict(self, tools_dict: dict[str, Any]) -> None:
         """Register tools from the existing ``{name: {parameters, description, function}}`` format."""
         for name, spec in tools_dict.items():
             deps = spec.get("deps")
@@ -68,7 +69,7 @@ class ToolRegistry:
         for name in tool_names:
             self.tools.pop(name, None)
 
-    def disable_unsupported(self, capabilities: Set[str]) -> None:
+    def disable_unsupported(self, capabilities: set[str]) -> None:
         """Remove tools whose ``deps`` set is not satisfied by *capabilities*.
 
         Tools with ``deps=None`` (custom tools, MCP tools, etc.) are kept.
@@ -84,7 +85,7 @@ class ToolRegistry:
 
     # -- query ---------------------------------------------------------------
 
-    def get_signatures(self, exclude: Optional[Set[str]] = None) -> Dict[str, Any]:
+    def get_signatures(self, exclude: set[str] | None = None) -> dict[str, Any]:
         """Return ``{name: {parameters, description}}`` for prompt building.
 
         Args:
@@ -104,9 +105,9 @@ class ToolRegistry:
     async def execute(
         self,
         name: str,
-        args: Dict[str, Any],
-        ctx: "ActionContext",
-        workflow_ctx: "Optional[WorkflowContext]" = None,
+        args: dict[str, Any],
+        ctx: ActionContext,
+        workflow_ctx: WorkflowContext | None = None,
     ) -> ActionResult:
         """Dispatch action by name.
 
@@ -171,9 +172,9 @@ class ToolRegistry:
 
     @staticmethod
     def _emit_event(
-        workflow_ctx: "Optional[WorkflowContext]",
+        workflow_ctx: WorkflowContext | None,
         name: str,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         result: ActionResult,
     ) -> None:
         if workflow_ctx is None:
@@ -191,7 +192,7 @@ class ToolRegistry:
 
     # -- prompt helpers ------------------------------------------------------
 
-    def get_tool_descriptions_xml(self, exclude: Optional[Set[str]] = None) -> str:
+    def get_tool_descriptions_xml(self, exclude: set[str] | None = None) -> str:
         """Build XML ``<functions>`` block for FastAgent system prompt."""
         exclude = exclude or set()
         lines = ["<functions>"]
@@ -202,7 +203,7 @@ class ToolRegistry:
         lines.append("</functions>")
         return "\n".join(lines)
 
-    def get_tool_descriptions_text(self, exclude: Optional[Set[str]] = None) -> str:
+    def get_tool_descriptions_text(self, exclude: set[str] | None = None) -> str:
         """Build text tool descriptions for executor prompts."""
         exclude = exclude or set()
         descriptions = []
@@ -213,13 +214,13 @@ class ToolRegistry:
             descriptions.append(f"- {name}({params}): {entry.description}")
         return "\n".join(descriptions)
 
-    def get_param_types(self, exclude: Optional[Set[str]] = None) -> Dict[str, str]:
+    def get_param_types(self, exclude: set[str] | None = None) -> dict[str, str]:
         """Build a flat ``{param_name: type_string}`` map for XML coercion.
 
         Note: parameter names are global (not per-tool).
         """
         exclude = exclude or set()
-        param_types: Dict[str, str] = {}
+        param_types: dict[str, str] = {}
         for name, entry in self.tools.items():
             if name in exclude:
                 continue
@@ -230,7 +231,7 @@ class ToolRegistry:
     # -- internal helpers ----------------------------------------------------
 
     @staticmethod
-    def _format_params(parameters: Dict[str, Any]) -> str:
+    def _format_params(parameters: dict[str, Any]) -> str:
         parts = []
         for name, info in parameters.items():
             type_str = info.get("type", "string")

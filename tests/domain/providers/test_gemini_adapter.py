@@ -1,7 +1,6 @@
 """Tests for Gemini adapter."""
 
 from unittest.mock import Mock, patch
-import pytest
 
 from mobile_crawler.domain.providers.gemini_adapter import GeminiAdapter
 
@@ -10,15 +9,15 @@ class TestGeminiAdapter:
     def test_initialize(self):
         """Test initialization of Gemini adapter."""
         adapter = GeminiAdapter()
-        
+
         model_config = {
             'api_key': 'test_key',
             'model_name': 'gemini-1.5-pro'
         }
-        
+
         with patch('mobile_crawler.domain.providers.gemini_adapter.genai') as mock_genai:
             adapter.initialize(model_config)
-            
+
             mock_genai.Client.assert_called_once_with(api_key='test_key')
             assert adapter._model_config == model_config
 
@@ -27,7 +26,7 @@ class TestGeminiAdapter:
         adapter = GeminiAdapter()
         adapter._client = Mock()
         adapter._model_config = {'model_name': 'gemini-1.5-flash'}
-        
+
         mock_response = Mock()
         mock_response.candidates = [Mock()]
         mock_response.candidates[0].content.parts = [Mock()]
@@ -36,10 +35,10 @@ class TestGeminiAdapter:
         mock_response.usage_metadata.candidates_token_count = 5
         mock_response.usage_metadata.total_token_count = 15
         adapter._client.models.generate_content.return_value = mock_response
-        
+
         # Call with system_prompt and user_prompt (no screenshot)
         response, metadata = adapter.generate_response("System prompt", "User prompt")
-        
+
         assert response == "Test response"
         assert metadata['token_usage']['input_tokens'] == 10
         assert metadata['token_usage']['output_tokens'] == 5
@@ -58,11 +57,11 @@ class TestGeminiAdapter:
         """Test generating response with image in user prompt JSON."""
         import base64
         import json
-        
+
         adapter = GeminiAdapter()
         adapter._client = Mock()
         adapter._model_config = {'model': 'gemini-2.0-flash'}
-        
+
         mock_response = Mock()
         mock_response.candidates = [Mock()]
         mock_response.candidates[0].content.parts = [Mock()]
@@ -71,14 +70,14 @@ class TestGeminiAdapter:
         mock_response.usage_metadata.candidates_token_count = 10
         mock_response.usage_metadata.total_token_count = 30
         adapter._client.models.generate_content.return_value = mock_response
-        
+
         # Create user_prompt JSON with base64 screenshot
         dummy_image_bytes = b"fake image data"
         screenshot_b64 = base64.b64encode(dummy_image_bytes).decode()
         user_prompt = json.dumps({"screenshot": screenshot_b64, "other_data": "test"})
-        
+
         response, metadata = adapter.generate_response("Describe image", user_prompt)
-        
+
         assert response == "Image response"
         call_args = adapter._client.models.generate_content.call_args
         contents = call_args[1]['contents']
@@ -95,9 +94,9 @@ class TestGeminiAdapter:
         """Test model info property."""
         adapter = GeminiAdapter()
         adapter._model_config = {'model_name': 'gemini-1.5-pro'}
-        
+
         info = adapter.model_info
-        
+
         assert info['provider'] == 'google'
         assert info['model'] == 'gemini-1.5-pro'
         assert info['supports_vision'] is True

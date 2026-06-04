@@ -1,8 +1,8 @@
 import os
-import pytest
-from mobile_crawler.infrastructure.session_folder_manager import SessionFolderManager
 from datetime import datetime, timedelta
 from unittest.mock import Mock
+
+from mobile_crawler.infrastructure.session_folder_manager import SessionFolderManager
 
 
 def test_create_session_folder(tmp_path):

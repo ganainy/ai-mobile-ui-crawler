@@ -3,7 +3,6 @@
 import logging
 import sqlite3
 from pathlib import Path
-from typing import Optional
 
 from mobile_crawler.config import get_app_data_dir
 
@@ -13,7 +12,7 @@ logger = logging.getLogger(__name__)
 class DatabaseManager:
     """Manages SQLite database connections and schema for crawler.db."""
 
-    def __init__(self, db_path: Optional[Path] = None):
+    def __init__(self, db_path: Path | None = None):
         """Initialize database manager.
 
         Args:
@@ -24,7 +23,7 @@ class DatabaseManager:
             db_path = app_data_dir / "crawler.db"
 
         self.db_path = db_path
-        self._connection: Optional[sqlite3.Connection] = None
+        self._connection: sqlite3.Connection | None = None
 
     def get_connection(self) -> sqlite3.Connection:
         """Get database connection with row factory configured."""

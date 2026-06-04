@@ -1,12 +1,13 @@
 """Tests for StaleRunCleaner module."""
 
-import pytest
-from unittest.mock import Mock, MagicMock, patch, call
 from datetime import datetime
+from unittest.mock import MagicMock, Mock
+
+import pytest
 
 from mobile_crawler.core.stale_run_cleaner import StaleRunCleaner
 from mobile_crawler.infrastructure.database import DatabaseManager
-from mobile_crawler.infrastructure.run_repository import RunRepository, Run
+from mobile_crawler.infrastructure.run_repository import Run, RunRepository
 
 
 @pytest.fixture

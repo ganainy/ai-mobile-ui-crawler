@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Any, Dict, List
+from typing import Any
 
 from mobile_crawler.domain.crawler_agent.tools.driver.base import DeviceDisconnectedError, DeviceDriver
 from mobile_crawler.domain.crawler_agent.tools.ui.provider import StateProvider
@@ -105,12 +105,12 @@ class IOSStateProvider(StateProvider):
 # ---------------------------------------------------------------------------
 
 
-def _parse_a11y_tree(a11y_text: str) -> List[Dict[str, Any]]:
+def _parse_a11y_tree(a11y_text: str) -> list[dict[str, Any]]:
     """Parse iOS accessibility tree text into structured elements.
 
     Moved verbatim from ``IOSTools._parse_ios_accessibility_tree``.
     """
-    elements: List[Dict[str, Any]] = []
+    elements: list[dict[str, Any]] = []
     element_index = 0
 
     seen_signatures: set[tuple[str, str, str]] = set()
@@ -191,8 +191,8 @@ def _parse_a11y_tree(a11y_text: str) -> List[Dict[str, Any]]:
 
 
 def _normalize_phone_state(
-    phone_state: Dict[str, Any], a11y_text: str
-) -> Dict[str, Any]:
+    phone_state: dict[str, Any], a11y_text: str
+) -> dict[str, Any]:
     package_name = phone_state.get("packageName", "") or ""
     current_app = phone_state.get("currentApp", "") or ""
 
@@ -210,8 +210,8 @@ def _normalize_phone_state(
 
 
 def _prioritize_actionable_elements(
-    elements: List[Dict[str, Any]],
-) -> List[Dict[str, Any]]:
+    elements: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
     actionable_types = {
         "Icon",
         "Button",
@@ -225,7 +225,7 @@ def _prioritize_actionable_elements(
         "Switch",
     }
 
-    def sort_key(el: Dict[str, Any]) -> tuple[int, int]:
+    def sort_key(el: dict[str, Any]) -> tuple[int, int]:
         class_name = el.get("className", "")
         text = el.get("text", "")
         actionable_rank = 0 if class_name in actionable_types and text else 1
@@ -243,7 +243,7 @@ def _prioritize_actionable_elements(
 
 
 def _format_elements(
-    elements: List[Dict[str, Any]],
+    elements: list[dict[str, Any]],
     screen_width: int,
     screen_height: int,
 ) -> str:

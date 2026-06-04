@@ -2,7 +2,6 @@
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import List, Optional
 
 from mobile_crawler.infrastructure.database import DatabaseManager
 
@@ -10,24 +9,24 @@ from mobile_crawler.infrastructure.database import DatabaseManager
 @dataclass
 class StepLog:
     """Data class representing a step in a crawl run."""
-    id: Optional[int]
+    id: int | None
     run_id: int
     step_number: int
     timestamp: datetime
-    from_screen_id: Optional[int]
-    to_screen_id: Optional[int]
+    from_screen_id: int | None
+    to_screen_id: int | None
     action_type: str  # click, input, scroll_down, etc.
-    action_description: Optional[str]  # human-readable
-    target_bbox_json: Optional[str]  # {"top_left": [...], "bottom_right": [...]}
-    input_text: Optional[str]  # for input actions
+    action_description: str | None  # human-readable
+    target_bbox_json: str | None  # {"top_left": [...], "bottom_right": [...]}
+    input_text: str | None  # for input actions
     execution_success: bool
-    error_message: Optional[str]
-    action_duration_ms: Optional[float]
-    ai_response_time_ms: Optional[float]
-    ai_reasoning: Optional[str]  # AI's reasoning for this action
+    error_message: str | None
+    action_duration_ms: float | None
+    ai_response_time_ms: float | None
+    ai_reasoning: str | None  # AI's reasoning for this action
     was_retried: bool = False
     retry_count: int = 0
-    recovery_time_ms: Optional[float] = None
+    recovery_time_ms: float | None = None
 
 
 class StepLogRepository:
@@ -84,7 +83,7 @@ class StepLogRepository:
         conn.commit()
         return cursor.lastrowid
 
-    def get_step_logs_by_run(self, run_id: int) -> List[StepLog]:
+    def get_step_logs_by_run(self, run_id: int) -> list[StepLog]:
         """Get all step logs for a specific run.
 
         Args:
@@ -132,7 +131,7 @@ class StepLogRepository:
 
         return step_logs
 
-    def get_exploration_journal(self, run_id: int, limit: int = 15) -> List[StepLog]:
+    def get_exploration_journal(self, run_id: int, limit: int = 15) -> list[StepLog]:
         """Get recent step logs for exploration journal (most recent first).
 
         Args:
@@ -211,7 +210,7 @@ class StepLogRepository:
 
     def get_step_statistics(self, run_id: int) -> dict:
         """Get aggregated step statistics for a run.
-        
+
         Returns:
             {
                 'total_steps': int,
@@ -221,20 +220,20 @@ class StepLogRepository:
         """
         conn = self.db_manager.get_connection()
         cursor = conn.cursor()
-        
+
         cursor.execute("""
-            SELECT 
+            SELECT
                 COUNT(*) as total_steps,
                 SUM(CASE WHEN execution_success = 1 THEN 1 ELSE 0 END) as successful,
                 SUM(CASE WHEN execution_success = 0 THEN 1 ELSE 0 END) as failed
-            FROM step_logs 
+            FROM step_logs
             WHERE run_id = ?
         """, (run_id,))
-        
+
         row = cursor.fetchone()
         if not row:
             return {'total_steps': 0, 'successful_steps': 0, 'failed_steps': 0}
-        
+
         return {
             'total_steps': row[0] or 0,
             'successful_steps': row[1] or 0,
@@ -243,7 +242,7 @@ class StepLogRepository:
 
     def get_ai_statistics(self, run_id: int) -> dict:
         """Get AI performance statistics for a run.
-        
+
         Returns:
             {
                 'ai_calls': int (number of unique AI calls),
@@ -252,20 +251,20 @@ class StepLogRepository:
         """
         conn = self.db_manager.get_connection()
         cursor = conn.cursor()
-        
+
         # Count distinct step_numbers since one  AI call per step can produce multiple actions
         cursor.execute("""
-            SELECT 
+            SELECT
                 COUNT(DISTINCT step_number) as ai_calls,
                 AVG(ai_response_time_ms) as avg_response_time
-            FROM step_logs 
+            FROM step_logs
             WHERE run_id = ? AND ai_response_time_ms IS NOT NULL
         """, (run_id,))
-        
+
         row = cursor.fetchone()
         if not row:
             return {'ai_calls': 0, 'avg_response_time_ms': 0.0}
-        
+
         return {
             'ai_calls': row[0] or 0,
             'avg_response_time_ms': row[1] or 0.0
@@ -275,13 +274,13 @@ class StepLogRepository:
         """Count total screen visits (including revisits) for a run."""
         conn = self.db_manager.get_connection()
         cursor = conn.cursor()
-        
+
         cursor.execute("""
-            SELECT COUNT(*) 
-            FROM step_logs 
-            WHERE run_id = ? 
+            SELECT COUNT(*)
+            FROM step_logs
+            WHERE run_id = ?
                 AND (from_screen_id IS NOT NULL OR to_screen_id IS NOT NULL)
         """, (run_id,))
-        
+
         row = cursor.fetchone()
         return row[0] if row else 0

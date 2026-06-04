@@ -2,7 +2,7 @@
 
 import enum
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional
+from typing import Any
 
 
 class ErrorSeverity(enum.Enum):
@@ -17,13 +17,13 @@ class ErrorSeverity(enum.Enum):
 class ErrorContext:
     """Structured context for errors."""
 
-    run_id: Optional[int] = None
-    step_id: Optional[int] = None
-    action_type: Optional[str] = None
-    device_state: Optional[Dict[str, Any]] = None
-    extra: Dict[str, Any] = field(default_factory=dict)
+    run_id: int | None = None
+    step_id: int | None = None
+    action_type: str | None = None
+    device_state: dict[str, Any] | None = None
+    extra: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "run_id": self.run_id,
             "step_id": self.step_id,
@@ -42,15 +42,15 @@ class CrawlerError(Exception):
         self,
         message: str,
         *,
-        context: Optional[ErrorContext] = None,
-        cause: Optional[Exception] = None,
+        context: ErrorContext | None = None,
+        cause: Exception | None = None,
     ):
         super().__init__(message)
         self.context = context or ErrorContext()
         self.__cause__ = cause
 
-    def to_log_dict(self) -> Dict[str, Any]:
-        result: Dict[str, Any] = {
+    def to_log_dict(self) -> dict[str, Any]:
+        result: dict[str, Any] = {
             "error_type": self.__class__.__name__,
             "severity": self.severity.value,
             "message": str(self),

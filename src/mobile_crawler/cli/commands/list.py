@@ -14,15 +14,15 @@ def list(target: str, limit: int, output_format: str):
     """
     try:
         from mobile_crawler.infrastructure.database import DatabaseManager
-        from mobile_crawler.infrastructure.run_repository import RunRepository
         from mobile_crawler.infrastructure.device_detection import DeviceDetection
-        
+        from mobile_crawler.infrastructure.run_repository import RunRepository
+
         db_manager = DatabaseManager()
-        
+
         if target == 'runs':
             run_repository = RunRepository(db_manager)
             runs = run_repository.get_recent_runs(limit)
-            
+
             if output_format == 'json':
                 import json
                 runs_data = []
@@ -41,7 +41,7 @@ def list(target: str, limit: int, output_format: str):
                 if not runs:
                     click.echo("No runs found.")
                     return
-                
+
                 # Table format
                 click.echo("Recent Runs:")
                 click.echo("-" * 80)
@@ -50,11 +50,11 @@ def list(target: str, limit: int, output_format: str):
                 for run in runs:
                     start_time = run.start_time.strftime("%Y-%m-%d %H:%M") if run.start_time else "N/A"
                     click.echo(f"{run.id:<5} {run.device_id:<15} {run.app_package[:19]:<20} {run.status:<10} {run.total_steps:<6} {run.unique_screens:<7} {start_time}")
-        
+
         elif target == 'devices':
             device_detection = DeviceDetection()
             devices = device_detection.get_connected_devices()
-            
+
             if output_format == 'json':
                 import json
                 devices_data = []
@@ -71,7 +71,7 @@ def list(target: str, limit: int, output_format: str):
                 if not devices:
                     click.echo("No devices found.")
                     return
-                
+
                 # Table format
                 click.echo("Connected Devices:")
                 click.echo("-" * 60)
@@ -79,7 +79,7 @@ def list(target: str, limit: int, output_format: str):
                 click.echo("-" * 60)
                 for device in devices[:limit]:
                     click.echo(f"{device.device_id:<20} {device.model[:19]:<20} {'Android':<10} {device.android_version:<10} {device.status}")
-                
+
     except Exception as e:
         click.echo(f"Error listing {target}: {e}", err=True)
-        raise click.Abort()
+        raise click.Abort() from e

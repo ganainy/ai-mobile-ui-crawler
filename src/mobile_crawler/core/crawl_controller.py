@@ -2,7 +2,7 @@
 
 import logging
 import threading
-from typing import Callable, Optional
+from collections.abc import Callable
 from enum import Enum
 
 logger = logging.getLogger(__name__)

@@ -1,6 +1,7 @@
 """Detailed filtering - all logic self-contained."""
 
-from typing import Dict, Any, Optional
+from typing import Any
+
 from .base import TreeFilter
 
 
@@ -18,8 +19,8 @@ class DetailedFilter(TreeFilter):
         self.clip_bounds = clip_bounds
 
     def filter(
-        self, a11y_tree: Dict[str, Any], device_context: Dict[str, Any]
-    ) -> Optional[Dict[str, Any]]:
+        self, a11y_tree: dict[str, Any], device_context: dict[str, Any]
+    ) -> dict[str, Any] | None:
         """Filter using detailed logic."""
         screen_bounds = device_context.get("screen_bounds", {})
         screen_width = screen_bounds.get("width", 1080)
@@ -45,7 +46,7 @@ class DetailedFilter(TreeFilter):
 
     @staticmethod
     def _get_visible_percentage(
-        bounds: Dict[str, int], screen_width: int, screen_height: int
+        bounds: dict[str, int], screen_width: int, screen_height: int
     ) -> float:
         """Calculate what percentage of element is visible on screen."""
         left = bounds.get("left", 0)
@@ -75,8 +76,8 @@ class DetailedFilter(TreeFilter):
 
     @staticmethod
     def _clip_bounds_to_screen(
-        bounds: Dict[str, int], screen_width: int, screen_height: int
-    ) -> Dict[str, int]:
+        bounds: dict[str, int], screen_width: int, screen_height: int
+    ) -> dict[str, int]:
         """Clip element bounds to screen boundaries."""
         return {
             "left": max(bounds.get("left", 0), 0),
@@ -87,8 +88,8 @@ class DetailedFilter(TreeFilter):
 
     @classmethod
     def _clip_tree_bounds(
-        cls, node: Dict[str, Any], screen_width: int, screen_height: int
-    ) -> Dict[str, Any]:
+        cls, node: dict[str, Any], screen_width: int, screen_height: int
+    ) -> dict[str, Any]:
         """Recursively clip all bounds in tree to screen."""
         if "boundsInScreen" in node:
             node = {**node}
@@ -105,15 +106,15 @@ class DetailedFilter(TreeFilter):
         return node
 
     @staticmethod
-    def _should_filter_keyboard(node: Dict[str, Any]) -> bool:
+    def _should_filter_keyboard(node: dict[str, Any]) -> bool:
         """Check if element is from Google keyboard."""
         resource_id = node.get("resourceId", "")
         return resource_id.startswith("com.google.android.inputmethod.latin:id/")
 
     @classmethod
     def _filter_keyboard_elements(
-        cls, node: Dict[str, Any]
-    ) -> Optional[Dict[str, Any]]:
+        cls, node: dict[str, Any]
+    ) -> dict[str, Any] | None:
         """Recursively remove keyboard elements from tree."""
         filtered_children = []
         for child in node.get("children", []):
@@ -127,8 +128,8 @@ class DetailedFilter(TreeFilter):
         return {**node, "children": filtered_children}
 
     def _filter_out_of_bounds(
-        self, node: Dict[str, Any], screen_width: int, screen_height: int
-    ) -> Optional[Dict[str, Any]]:
+        self, node: dict[str, Any], screen_width: int, screen_height: int
+    ) -> dict[str, Any] | None:
         """Filter tree by visibility with parent preservation."""
         if node.get("ignoreBoundsFiltering") == "true":
             return node

@@ -1,13 +1,10 @@
 """Tests for logging infrastructure."""
 
 import json
-import sys
 import tempfile
 from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
-
-import pytest
 
 from mobile_crawler.core.log_sinks import (
     ConsoleSink,

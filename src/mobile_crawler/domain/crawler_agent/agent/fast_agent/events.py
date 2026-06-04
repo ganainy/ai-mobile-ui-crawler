@@ -4,7 +4,6 @@ Events for the FastAgent workflow.
 Internal events for streaming to frontend/logging.
 """
 
-from typing import Optional
 
 from llama_index.core.workflow import Event
 
@@ -21,8 +20,8 @@ class FastAgentResponseEvent(Event):
     """LLM response received."""
 
     thought: str
-    code: Optional[str] = None
-    usage: Optional[UsageResult] = None
+    code: str | None = None
+    usage: UsageResult | None = None
 
 
 class FastAgentToolCallEvent(Event):

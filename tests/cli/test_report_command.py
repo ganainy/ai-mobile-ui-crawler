@@ -1,9 +1,8 @@
 """Tests for the report CLI command."""
 
-from unittest.mock import Mock, patch, MagicMock
-from click.testing import CliRunner
+from unittest.mock import Mock, patch
 
-import pytest
+from click.testing import CliRunner
 
 from mobile_crawler.cli.main import cli
 
@@ -27,7 +26,7 @@ class TestReportCommand:
         """Test generating a PDF report successfully."""
         mock_db_manager = Mock()
         mock_db_manager_cls.return_value = mock_db_manager
-        
+
         mock_report_generator = Mock()
         mock_report_generator.generate.return_value = '/path/to/report.pdf'
         mock_report_generator_cls.return_value = mock_report_generator
@@ -45,7 +44,7 @@ class TestReportCommand:
         """Test generating a PDF report with custom output path."""
         mock_db_manager = Mock()
         mock_db_manager_cls.return_value = mock_db_manager
-        
+
         mock_report_generator = Mock()
         mock_report_generator.generate.return_value = '/custom/path/report.pdf'
         mock_report_generator_cls.return_value = mock_report_generator
@@ -63,7 +62,7 @@ class TestReportCommand:
         """Test that HTML format falls back to PDF."""
         mock_db_manager = Mock()
         mock_db_manager_cls.return_value = mock_db_manager
-        
+
         mock_report_generator = Mock()
         mock_report_generator.generate.return_value = '/path/to/report.pdf'
         mock_report_generator_cls.return_value = mock_report_generator
@@ -90,7 +89,7 @@ class TestReportCommand:
         """Test that report generation errors are handled."""
         mock_db_manager = Mock()
         mock_db_manager_cls.return_value = mock_db_manager
-        
+
         mock_report_generator = Mock()
         mock_report_generator.generate.side_effect = Exception('Database connection failed')
         mock_report_generator_cls.return_value = mock_report_generator
@@ -107,7 +106,7 @@ class TestReportCommand:
         """Test generating report for run ID 0."""
         mock_db_manager = Mock()
         mock_db_manager_cls.return_value = mock_db_manager
-        
+
         mock_report_generator = Mock()
         mock_report_generator.generate.return_value = '/path/to/report.pdf'
         mock_report_generator_cls.return_value = mock_report_generator
@@ -125,7 +124,7 @@ class TestReportCommand:
         """Test generating report with large run ID."""
         mock_db_manager = Mock()
         mock_db_manager_cls.return_value = mock_db_manager
-        
+
         mock_report_generator = Mock()
         mock_report_generator.generate.return_value = '/path/to/report.pdf'
         mock_report_generator_cls.return_value = mock_report_generator

@@ -1,17 +1,16 @@
 """Statistics dashboard widget for mobile-crawler GUI."""
 
-from PySide6.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
-    QHBoxLayout,
-    QLabel,
-    QProgressBar,
-    QGroupBox,
-    QGridLayout,
-    QFrame,
-)
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
+from PySide6.QtWidgets import (
+    QFrame,
+    QGridLayout,
+    QGroupBox,
+    QLabel,
+    QProgressBar,
+    QVBoxLayout,
+    QWidget,
+)
 
 
 def _make_section_label(text: str) -> QLabel:

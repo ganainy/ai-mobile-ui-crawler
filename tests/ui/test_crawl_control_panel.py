@@ -1,11 +1,10 @@
 """Tests for CrawlControlPanel widget."""
 
-import pytest
 from unittest.mock import Mock
 
-from mobile_crawler.ui.widgets.crawl_control_panel import CrawlControlPanel
 from mobile_crawler.core.crawl_controller import CrawlController
 from mobile_crawler.core.crawl_state_machine import CrawlState
+from mobile_crawler.ui.widgets.crawl_control_panel import CrawlControlPanel
 
 
 def _create_panel():

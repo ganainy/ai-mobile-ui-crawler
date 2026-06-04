@@ -1,7 +1,7 @@
 """Protocol for crawler event listeners."""
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional
+from typing import Any
 
 from mobile_crawler.domain.models import ActionResult
 
@@ -25,12 +25,12 @@ class CrawlerEventListener(ABC):
         pass
 
     @abstractmethod
-    def on_ai_request_sent(self, run_id: int, step_number: int, request_data: Dict[str, Any]) -> None:
+    def on_ai_request_sent(self, run_id: int, step_number: int, request_data: dict[str, Any]) -> None:
         """Called when an AI request is sent."""
         pass
 
     @abstractmethod
-    def on_ai_response_received(self, run_id: int, step_number: int, response_data: Dict[str, Any]) -> None:
+    def on_ai_response_received(self, run_id: int, step_number: int, response_data: dict[str, Any]) -> None:
         """Called when an AI response is received."""
         pass
 
@@ -57,7 +57,7 @@ class CrawlerEventListener(ABC):
         pass
 
     @abstractmethod
-    def on_error(self, run_id: int, step_number: Optional[int], error: Exception) -> None:
+    def on_error(self, run_id: int, step_number: int | None, error: Exception) -> None:
         """Called when an error occurs.
 
         Args:
@@ -114,15 +114,15 @@ class CrawlerEventListener(ABC):
 
     def on_recovery_started(self, run_id: int, step_number: int, attempt_number: int) -> None:
         """Called when a crash recovery attempt starts."""
-        pass
+        return None
 
     def on_recovery_completed(self, run_id: int, step_number: int, success: bool, duration_ms: float) -> None:
         """Called when a crash recovery attempt completes."""
-        pass
+        return None
 
     def on_recovery_exhausted(self, run_id: int, step_number: int, attempts: int, message: str) -> None:
         """Called when all recovery attempts are exhausted."""
-        pass
+        return None
 
     def on_step_phase_transition(
         self,
@@ -141,4 +141,4 @@ class CrawlerEventListener(ABC):
             to_phase: New phase (e.g., "decide")
             duration_ms: Time spent in from_phase in milliseconds
         """
-        pass
+        return None

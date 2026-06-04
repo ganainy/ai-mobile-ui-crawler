@@ -1,6 +1,5 @@
 """Tests for prompt builder."""
 
-import pytest
 from unittest.mock import Mock
 
 from mobile_crawler.domain.prompt_builder import PromptBuilder
@@ -14,10 +13,10 @@ class TestPromptBuilder:
         config_manager = Mock()
         config_manager.get.return_value = None
         step_log_repo = Mock()
-        
+
         builder = PromptBuilder(config_manager, step_log_repo)
         prompt = builder.build_system_prompt()
-        
+
         assert "You are an AI-powered Android app exploration agent" in prompt
         assert "No test credentials configured" in prompt
 
@@ -32,10 +31,10 @@ class TestPromptBuilder:
             'test_phone': '+49 170 1234567',
         }.get(key, default)
         step_log_repo = Mock()
-        
+
         builder = PromptBuilder(config_manager, step_log_repo)
         prompt = builder.build_system_prompt()
-        
+
         assert "Username: testuser" in prompt
         assert "Password: testpass" in prompt
         assert "Address: Kaiserstraße 12, 60311 Frankfurt am Main, Germany" in prompt
@@ -52,10 +51,10 @@ class TestPromptBuilder:
             'successful_steps': 0,
             'failed_steps': 0
         }
-        
+
         builder = PromptBuilder(config_manager, step_log_repo)
         prompt = builder.build_user_prompt("base64screenshot", 1)
-        
+
         assert '"screenshot": "base64screenshot"' in prompt
         assert '"exploration_journal": []' in prompt
         assert '"is_stuck": false' in prompt
@@ -64,12 +63,13 @@ class TestPromptBuilder:
 
     def test_build_user_prompt_with_journal(self):
         """Test user prompt building with exploration journal."""
-        from mobile_crawler.infrastructure.step_log_repository import StepLog
         from datetime import datetime
-        
+
+        from mobile_crawler.infrastructure.step_log_repository import StepLog
+
         config_manager = Mock()
         step_log_repo = Mock()
-        
+
         # Create mock step logs
         step_log = StepLog(
             id=1,
@@ -94,10 +94,10 @@ class TestPromptBuilder:
             'successful_steps': 1,
             'failed_steps': 0
         }
-        
+
         builder = PromptBuilder(config_manager, step_log_repo)
         prompt = builder.build_user_prompt("base64screenshot", 1)
-        
+
         assert '"step": 1' in prompt
         assert '"action": "Clicked login button"' in prompt
         assert '"outcome": "Success"' in prompt
@@ -113,10 +113,10 @@ class TestPromptBuilder:
             'successful_steps': 3,
             'failed_steps': 2
         }
-        
+
         builder = PromptBuilder(config_manager, step_log_repo)
         prompt = builder.build_user_prompt("base64screenshot", 1, is_stuck=True, stuck_reason="Same screen 3 times")
-        
+
         assert '"is_stuck": true' in prompt
         assert '"stuck_reason": "Same screen 3 times"' in prompt
 
@@ -130,7 +130,7 @@ class TestPromptBuilder:
             'successful_steps': 5,
             'failed_steps': 0
         }
-        
+
         builder = PromptBuilder(config_manager, step_log_repo)
         prompt = builder.build_user_prompt(
             screenshot_b64="base64screenshot",
@@ -140,7 +140,7 @@ class TestPromptBuilder:
             current_screen_is_new=True,
             total_unique_screens=3
         )
-        
+
         assert '"current_screen_id": 5' in prompt
         assert 'NEW' in prompt
         assert '"unique_screens_discovered": 3' in prompt
@@ -149,15 +149,15 @@ class TestPromptBuilder:
         """Test that all expected actions are available."""
         config_manager = Mock()
         step_log_repo = Mock()
-        
+
         builder = PromptBuilder(config_manager, step_log_repo)
         actions = builder._get_available_actions()
-        
+
         expected_actions = [
-            "click", "input", "long_press", "scroll_up", "scroll_down", 
+            "click", "input", "long_press", "scroll_up", "scroll_down",
             "scroll_left", "scroll_right", "back"
         ]
-        
+
         for action in expected_actions:
             assert action in actions
             assert isinstance(actions[action], str)
@@ -165,12 +165,13 @@ class TestPromptBuilder:
 
     def test_get_exploration_journal_formatting(self):
         """Test exploration journal formatting with novelty signals."""
-        from mobile_crawler.infrastructure.step_log_repository import StepLog
         from datetime import datetime
-        
+
+        from mobile_crawler.infrastructure.step_log_repository import StepLog
+
         config_manager = Mock()
         step_log_repo = Mock()
-        
+
         # Create mock step logs
         step1 = StepLog(
             id=1,
@@ -189,7 +190,7 @@ class TestPromptBuilder:
             ai_response_time_ms=200.0,
             ai_reasoning=None
         )
-        
+
         step2 = StepLog(
             id=2,
             run_id=1,
@@ -207,13 +208,13 @@ class TestPromptBuilder:
             ai_response_time_ms=150.0,
             ai_reasoning=None
         )
-        
+
         # Return in chronological order (as the repo does after reversing)
         step_log_repo.get_exploration_journal.return_value = [step1, step2]
-        
+
         builder = PromptBuilder(config_manager, step_log_repo)
         journal = builder._get_exploration_journal(1)
-        
+
         assert len(journal) == 2
         # First entry should be step 1, marked as NEW (first time seeing screen 1)
         assert journal[0]["step"] == 1
@@ -228,18 +229,18 @@ class TestPromptBuilder:
         """Test exploration hint for new screen discovery."""
         config_manager = Mock()
         step_log_repo = Mock()
-        
+
         builder = PromptBuilder(config_manager, step_log_repo)
         hint = builder._get_exploration_hint(0.5, current_screen_is_new=True)
-        
+
         assert "discovered a new screen" in hint.lower()
 
     def test_get_exploration_hint_low_efficiency(self):
         """Test exploration hint for low discovery efficiency."""
         config_manager = Mock()
         step_log_repo = Mock()
-        
+
         builder = PromptBuilder(config_manager, step_log_repo)
         hint = builder._get_exploration_hint(0.2, current_screen_is_new=False)
-        
+
         assert "Low discovery" in hint or "different actions" in hint

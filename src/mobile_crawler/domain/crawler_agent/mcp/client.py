@@ -26,7 +26,7 @@ class MCPToolInfo:
 class MCPClientManager:
     """Manages MCP server connections with lazy initialization."""
 
-    def __init__(self, config: "MCPConfig"):
+    def __init__(self, config: MCPConfig):
         self.config = config
         self._tools: dict[str, MCPToolInfo] = {}
         self._server_tools: dict[str, list[str]] = {}
@@ -53,7 +53,7 @@ class MCPClientManager:
         return self._tools
 
     async def _discover_server_tools(
-        self, server_name: str, config: "MCPServerConfig"
+        self, server_name: str, config: MCPServerConfig
     ) -> None:
         """Connect temporarily to fetch tool schemas."""
         # Lazy import to avoid circular dependency with droidrun.mcp package
@@ -93,7 +93,7 @@ class MCPClientManager:
         self._server_tools[server_name] = server_tool_names
         logger.debug(f"MCP '{server_name}': discovered {len(server_tool_names)} tools")
 
-    def _should_include_tool(self, tool_name: str, config: "MCPServerConfig") -> bool:
+    def _should_include_tool(self, tool_name: str, config: MCPServerConfig) -> bool:
         """Check if tool passes include/exclude filters."""
         if tool_name in config.exclude_tools:
             return False

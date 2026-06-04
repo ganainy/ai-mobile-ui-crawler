@@ -1,16 +1,15 @@
 """Collapsible tree widget for displaying JSON data."""
 
 import json
-from typing import Any, List, Optional, Union
+from typing import Any
 
-from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QTreeWidget, QTreeWidgetItem, QWidget
 
 
 class JsonTreeWidget(QTreeWidget):
     """Collapsible tree widget for displaying JSON data."""
 
-    def __init__(self, data: Union[dict, list, str], parent: Optional[QWidget] = None):
+    def __init__(self, data: dict | list | str, parent: QWidget | None = None):
         """
         Args:
             data: JSON data as dict, list, or JSON string
@@ -20,7 +19,7 @@ class JsonTreeWidget(QTreeWidget):
         self.setHeaderLabels(["Key", "Value"])
         self.setColumnCount(2)
         self.setAlternatingRowColors(True)
-        
+
         # Set dark theme styling
         self.setStyleSheet("""
             QTreeWidget {
@@ -47,11 +46,11 @@ class JsonTreeWidget(QTreeWidget):
         parsed_data = self._parse_json(data)
         if parsed_data is not None:
             self._build_tree(parsed_data, self.invisibleRootItem())
-        
+
         # Adjust column widths
         self.header().setStretchLastSection(True)
         self.setColumnWidth(0, 150)
-        
+
         # Initially collapse to root level
         self.collapse_to_root()
 
@@ -59,7 +58,7 @@ class JsonTreeWidget(QTreeWidget):
         """Parse input data into dict or list."""
         if isinstance(data, (dict, list)):
             return data
-        
+
         if isinstance(data, str):
             # Strip markdown code fences if present
             cleaned = data.strip()
@@ -72,7 +71,7 @@ class JsonTreeWidget(QTreeWidget):
                 if lines and lines[-1].strip() == "```":
                     lines = lines[:-1]
                 cleaned = '\n'.join(lines).strip()
-            
+
             try:
                 # First attempt
                 parsed = json.loads(cleaned)
@@ -86,10 +85,10 @@ class JsonTreeWidget(QTreeWidget):
             except (json.JSONDecodeError, TypeError):
                 # Return data as-is if not valid JSON
                 return data
-        
+
         return data
 
-    def _build_tree(self, data: Any, parent_item: QTreeWidgetItem, key: Optional[str] = None) -> None:
+    def _build_tree(self, data: Any, parent_item: QTreeWidgetItem, key: str | None = None) -> None:
         """Recursively build tree items from JSON data."""
         if isinstance(data, dict):
             # Create item for the dictionary itself if it's nested
@@ -98,11 +97,11 @@ class JsonTreeWidget(QTreeWidget):
                 item = QTreeWidgetItem(parent_item)
                 item.setText(0, str(key))
                 item.setText(1, f"{{ {len(data)} keys }}")
-            
+
             # Add child items for each key/value pair
             for k, v in data.items():
                 self._build_tree(v, item, k)
-                
+
         elif isinstance(data, list):
             # Create item for the list itself if it's nested
             item = parent_item
@@ -110,22 +109,22 @@ class JsonTreeWidget(QTreeWidget):
                 item = QTreeWidgetItem(parent_item)
                 item.setText(0, str(key))
                 item.setText(1, f"[ {len(data)} items ]")
-            
+
             # Add child items for each element
             for i, v in enumerate(data):
                 self._build_tree(v, item, f"[{i}]")
-                
+
         else:
             # Simple value
             item = QTreeWidgetItem(parent_item)
             item.setText(0, str(key) if key is not None else "")
-            
+
             # Format value string
             val_str = str(data)
             # Truncate very long single values if needed
             if len(val_str) > 1000:
                 val_str = val_str[:1000] + "..."
-                
+
             item.setText(1, val_str)
 
     def collapse_to_root(self) -> None:

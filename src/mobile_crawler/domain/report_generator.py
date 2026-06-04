@@ -1,21 +1,20 @@
 """Enhanced HTML/JSON report generator for crawl runs."""
 
-import os
 import json
 import logging
+import os
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Dict, Any, List
+from typing import Any
 
+from mobile_crawler.infrastructure.ai_interaction_repository import AIInteractionRepository
 from mobile_crawler.infrastructure.database import DatabaseManager
 from mobile_crawler.infrastructure.run_repository import RunRepository
 from mobile_crawler.infrastructure.step_log_repository import StepLogRepository
-from mobile_crawler.infrastructure.ai_interaction_repository import AIInteractionRepository
-from mobile_crawler.reporting.contracts import RunReportData, RunSummary, EnrichedStep, NetworkRequest
-from mobile_crawler.reporting.generator import JinjaReportGenerator
 from mobile_crawler.reporting.correlator import RunCorrelator
-from mobile_crawler.reporting.parsers.pcap_parser import DpktPcapParser
+from mobile_crawler.reporting.generator import JinjaReportGenerator
 from mobile_crawler.reporting.parsers.mobsf_parser import JsonMobSFParser
+from mobile_crawler.reporting.parsers.pcap_parser import DpktPcapParser
 
 logger = logging.getLogger(__name__)
 
@@ -32,14 +31,14 @@ class ReportGenerator:
         self.run_repository = RunRepository(db_manager)
         self.step_log_repository = StepLogRepository(db_manager)
         self.ai_interaction_repository = AIInteractionRepository(db_manager)
-        
+
         # Initialize reporting components
         self.pcap_parser = DpktPcapParser()
         self.mobsf_parser = JsonMobSFParser()
         self.correlator = RunCorrelator(self.pcap_parser, self.mobsf_parser)
         self.jinja_generator = JinjaReportGenerator()
 
-    def generate(self, run_id: int, output_path: Optional[str] = None) -> str:
+    def generate(self, run_id: int, output_path: str | None = None) -> str:
         """Generate enhanced report for a run.
 
         Args:
@@ -55,7 +54,7 @@ class ReportGenerator:
             raise ValueError(f"Run {run_id} not found")
 
         step_logs = self.step_log_repository.get_step_logs_by_run(run_id)
-        
+
         # 2. Prepare paths for optional artifacts
         pcap_path = None
         mobsf_path = None
@@ -64,17 +63,17 @@ class ReportGenerator:
             pcap_candidate = os.path.join(run.session_path, "traffic", "capture.pcap")
             if os.path.exists(pcap_candidate):
                 pcap_path = pcap_candidate
-            
+
             # Check for MobSF JSON
             mobsf_candidate = os.path.join(run.session_path, "mobsf", "report.json")
             if os.path.exists(mobsf_candidate):
                 mobsf_path = mobsf_candidate
-        
+
         # 2.2. Fetch AI interactions to get screenshot paths (which are missing in step_logs)
         interactions = self.ai_interaction_repository.get_ai_interactions_by_run(run_id)
         # Map step_number -> screenshot_path
         step_screenshots = {i.step_number: i.screenshot_path for i in interactions}
-        
+
         # 3. Assemble run_data for correlator
         # Map DB model to dictionary expected by correlator
         run_dict = {
@@ -85,11 +84,11 @@ class ReportGenerator:
             'device_id': run.device_id,
             'steps': []
         }
-        
+
         for log in step_logs:
             # Resolve screenshot from AI interactions map
             ss_path = step_screenshots.get(log.step_number)
-            
+
             # Resolve screenshot relative to session folder if possible, or use absolute
             if ss_path and run.session_path and ss_path.startswith(run.session_path):
                  ss_path = os.path.relpath(ss_path, os.path.join(run.session_path, "reports"))
@@ -121,11 +120,11 @@ class ReportGenerator:
 
         # 6. Generate
         self.jinja_generator.generate(report_data, output_path)
-        
+
         logger.info(f"Generated enhanced report: {output_path}")
         return output_path
 
-    def _safe_json_load(self, data: Optional[str]) -> Dict[str, Any]:
+    def _safe_json_load(self, data: str | None) -> dict[str, Any]:
         """Safely load JSON data, with fallback to ast.literal_eval for older format."""
         if not data:
             return {}
@@ -135,5 +134,5 @@ class ReportGenerator:
             try:
                 import ast
                 return ast.literal_eval(data)
-            except:
+            except Exception:
                 return {"raw": data}

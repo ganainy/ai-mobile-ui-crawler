@@ -1,7 +1,6 @@
 """Stuck detector for identifying when crawler is stuck on the same screen."""
 
 import logging
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -17,9 +16,9 @@ class StuckDetector:
         """
         self._threshold = threshold
         self._screen_visit_counts: dict[int, int] = {}  # screen_id -> consecutive count
-        self._current_screen_id: Optional[int] = None
+        self._current_screen_id: int | None = None
         self._is_stuck: bool = False
-        self._stuck_reason: Optional[str] = None
+        self._stuck_reason: str | None = None
         self._stuck_recovery_success_count: int = 0
 
     def record_screen_visit(self, screen_id: int) -> None:
@@ -84,7 +83,7 @@ class StuckDetector:
         return self._is_stuck
 
     @property
-    def stuck_reason(self) -> Optional[str]:
+    def stuck_reason(self) -> str | None:
         """Get the reason for being stuck.
 
         Returns:
@@ -113,7 +112,7 @@ class StuckDetector:
         return self._screen_visit_counts.get(self._current_screen_id, 0)
 
     @property
-    def current_screen_id(self) -> Optional[int]:
+    def current_screen_id(self) -> int | None:
         """Get the current screen ID.
 
         Returns:

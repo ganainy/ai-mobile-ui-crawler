@@ -4,7 +4,6 @@ Manages integration with Mobile Security Framework (MobSF) for
 static analysis of Android applications.
 """
 
-import base64
 import json
 import logging
 import os
@@ -12,16 +11,17 @@ import re
 import subprocess
 import time
 import zipfile
+from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Optional
 
 import requests
 
 if TYPE_CHECKING:
     from mobile_crawler.config.config_manager import ConfigManager
     from mobile_crawler.infrastructure.adb_client import ADBClient
-    from mobile_crawler.infrastructure.session_folder_manager import SessionFolderManager
     from mobile_crawler.infrastructure.run_repository import Run
+    from mobile_crawler.infrastructure.session_folder_manager import SessionFolderManager
 
 logger = logging.getLogger(__name__)
 
@@ -40,11 +40,11 @@ class MobSFAnalysisResult:
     def __init__(
         self,
         success: bool,
-        report_path: Optional[str] = None,
-        json_path: Optional[str] = None,
-        error: Optional[str] = None,
-        scan_id: Optional[str] = None,
-        security_score: Optional[Dict[str, Any]] = None,
+        report_path: str | None = None,
+        json_path: str | None = None,
+        error: str | None = None,
+        scan_id: str | None = None,
+        security_score: dict[str, Any] | None = None,
     ):
         """Initialize analysis result.
 
@@ -111,11 +111,11 @@ class MobSFManager:
         self,
         endpoint: str,
         method: str = "GET",
-        data: Optional[Dict[str, Any]] = None,
-        files: Optional[Dict[str, Any]] = None,
+        data: dict[str, Any] | None = None,
+        files: dict[str, Any] | None = None,
         stream: bool = False,
-        timeout: Optional[int] = None,
-    ) -> Tuple[bool, Any]:
+        timeout: int | None = None,
+    ) -> tuple[bool, Any]:
         """Make an API request to MobSF.
 
         Args:
@@ -183,7 +183,7 @@ class MobSFManager:
             logger.error(f"Unexpected error during API request to {url}: {str(e)}")
             return False, f"Error: {str(e)}"
 
-    def _refresh_runtime_config(self) -> Tuple[str, str]:
+    def _refresh_runtime_config(self) -> tuple[str, str]:
         """Read MobSF URL and resolve the API key from automatic sources."""
         api_url = self.config_manager.get("mobsf_api_url", "http://localhost:8000")
         if not api_url:
@@ -234,7 +234,7 @@ class MobSFManager:
 
         return ""
 
-    def _find_api_key_file(self) -> Optional[Path]:
+    def _find_api_key_file(self) -> Path | None:
         """Find .mobsf_api_key in the current working tree or parents."""
         for parent in [Path.cwd(), *Path.cwd().parents]:
             candidate = parent / MOBSF_API_KEY_FILE
@@ -276,7 +276,7 @@ class MobSFManager:
             return match.group(1).strip()
         return ""
 
-    def _validate_api_key(self, api_url: str, api_key: str) -> Tuple[bool, Optional[str]]:
+    def _validate_api_key(self, api_url: str, api_key: str) -> tuple[bool, str | None]:
         """Validate a MobSF API key against an authenticated API endpoint."""
         url = self._build_api_url(api_url, "scans")
         timeout = int(self.config_manager.get("mobsf_request_timeout", 300))
@@ -296,7 +296,7 @@ class MobSFManager:
             return False, "401"
         return False, f"API Error: {response.status_code} - {response.text[:200]}"
 
-    def preflight(self) -> Tuple[bool, str]:
+    def preflight(self) -> tuple[bool, str]:
         """Resolve and validate MobSF authentication before expensive APK work."""
         api_url, api_key = self._refresh_runtime_config()
         if not api_key:
@@ -321,7 +321,7 @@ class MobSFManager:
 
         return False, error or MOBSF_KEY_DISCOVERY_ERROR
 
-    def _adb_base_command(self, device_id: Optional[str] = None) -> List[str]:
+    def _adb_base_command(self, device_id: str | None = None) -> list[str]:
         """Build the configured ADB command prefix."""
         adb_executable = self.config_manager.get("adb_executable_path", "adb") or "adb"
         command = [adb_executable]
@@ -330,8 +330,8 @@ class MobSFManager:
         return command
 
     async def _run_adb_command_async(
-        self, command_list: List[str], suppress_stderr: bool = False
-    ) -> Tuple[str, int]:
+        self, command_list: list[str], suppress_stderr: bool = False
+    ) -> tuple[str, int]:
         """Async helper to run ADB commands.
 
         Args:
@@ -352,8 +352,8 @@ class MobSFManager:
         return await temp_client.execute_async(command_list, suppress_stderr)
 
     def extract_apk_from_device(
-        self, package_name: str, output_dir: Optional[str] = None, device_id: Optional[str] = None
-    ) -> Optional[str]:
+        self, package_name: str, output_dir: str | None = None, device_id: str | None = None
+    ) -> str | None:
         """Extract the APK file from a connected Android device using ADB.
 
         Args:
@@ -397,7 +397,7 @@ class MobSFManager:
                 selected_output_dir = output_dir
             else:
                 selected_output_dir = os.path.join("output_data", "apks")
-            
+
             os.makedirs(selected_output_dir, exist_ok=True)
 
             pulled_files = []
@@ -439,7 +439,7 @@ class MobSFManager:
             logger.error(f"Error extracting APK: {str(e)}")
             return None
 
-    def upload_apk(self, apk_path: str) -> Tuple[bool, Dict[str, Any]]:
+    def upload_apk(self, apk_path: str) -> tuple[bool, dict[str, Any]]:
         """Upload an APK file to MobSF for analysis.
 
         Args:
@@ -462,7 +462,7 @@ class MobSFManager:
             logger.error(f"Error uploading APK: {str(e)}")
             return False, {"error": str(e)}
 
-    def scan_apk(self, file_hash: str, rescan: bool = False) -> Tuple[bool, Dict[str, Any]]:
+    def scan_apk(self, file_hash: str, rescan: bool = False) -> tuple[bool, dict[str, Any]]:
         """Scan an uploaded APK file.
 
         Args:
@@ -475,7 +475,7 @@ class MobSFManager:
         data = {"hash": file_hash, "re_scan": 1 if rescan else 0}
         return self._make_api_request("scan", "POST", data=data)
 
-    def get_scan_logs(self, file_hash: str) -> Tuple[bool, Dict[str, Any]]:
+    def get_scan_logs(self, file_hash: str) -> tuple[bool, dict[str, Any]]:
         """Get scan logs for a file.
 
         Args:
@@ -487,7 +487,7 @@ class MobSFManager:
         data = {"hash": file_hash}
         return self._make_api_request("scan_logs", "POST", data=data)
 
-    def get_report_json(self, file_hash: str, timeout: Optional[int] = None) -> Tuple[bool, Dict[str, Any]]:
+    def get_report_json(self, file_hash: str, timeout: int | None = None) -> tuple[bool, dict[str, Any]]:
         """Get JSON report for a scanned file.
 
         Args:
@@ -500,7 +500,7 @@ class MobSFManager:
         data = {"hash": file_hash}
         return self._make_api_request("report_json", "POST", data=data, timeout=timeout)
 
-    def get_pdf_report(self, file_hash: str, timeout: Optional[int] = None) -> Tuple[bool, bytes]:
+    def get_pdf_report(self, file_hash: str, timeout: int | None = None) -> tuple[bool, bytes]:
         """Get PDF report for a scanned file.
 
         Args:
@@ -514,8 +514,8 @@ class MobSFManager:
         return self._make_api_request("download_pdf", "POST", data=data, timeout=timeout)
 
     def save_pdf_report(
-        self, file_hash: str, output_path: Optional[str] = None, timeout: Optional[int] = None
-    ) -> Optional[str]:
+        self, file_hash: str, output_path: str | None = None, timeout: int | None = None
+    ) -> str | None:
         """Save the PDF report to a file.
 
         Args:
@@ -545,8 +545,8 @@ class MobSFManager:
             return None
 
     def save_json_report(
-        self, file_hash: str, output_path: Optional[str] = None, timeout: Optional[int] = None
-    ) -> Optional[str]:
+        self, file_hash: str, output_path: str | None = None, timeout: int | None = None
+    ) -> str | None:
         """Save the JSON report to a file.
 
         Args:
@@ -575,7 +575,7 @@ class MobSFManager:
             logger.error(f"Error saving JSON report: {str(e)}")
             return None
 
-    def get_security_score(self, file_hash: str) -> Tuple[bool, Dict[str, Any]]:
+    def get_security_score(self, file_hash: str) -> tuple[bool, dict[str, Any]]:
         """Get security scorecard for a scanned file.
 
         Args:
@@ -590,11 +590,11 @@ class MobSFManager:
     def perform_complete_scan(
         self,
         package_name: str,
-        run_id: Optional[int] = None,
-        session_path: Optional[str] = None,
-        device_id: Optional[str] = None,
-        log_callback: Optional[Callable[[str, Optional[str]], None]] = None,
-    ) -> Tuple[bool, Dict[str, Any]]:
+        run_id: int | None = None,
+        session_path: str | None = None,
+        device_id: str | None = None,
+        log_callback: Callable[[str, str | None], None] | None = None,
+    ) -> tuple[bool, dict[str, Any]]:
         """Perform a complete scan workflow.
 
         1. Extract APK from device
@@ -612,7 +612,7 @@ class MobSFManager:
         Returns:
             Tuple of (success, scan_summary)
         """
-        def _log(message: str, color: Optional[str] = None):
+        def _log(message: str, color: str | None = None):
             """Helper to log messages via callback or standard logging."""
             if log_callback:
                 log_callback(message, color)
@@ -646,8 +646,8 @@ class MobSFManager:
             reports_dir = os.path.join(session_path, "reports")
             apks_dir = os.path.join(session_path, "apks")
         elif self.session_folder_manager and run_id:
-            from mobile_crawler.infrastructure.run_repository import RunRepository
             from mobile_crawler.infrastructure.database import DatabaseManager
+            from mobile_crawler.infrastructure.run_repository import RunRepository
 
             db_manager = DatabaseManager()
             run_repo = RunRepository(db_manager)
@@ -785,7 +785,7 @@ class MobSFManager:
         pdf_path = None
         json_path = None
         scorecard = None
-        
+
         if scan_complete:
             _log("Generating reports...", "blue")
             pdf_path = os.path.join(reports_dir, f"{file_hash}_report.pdf")

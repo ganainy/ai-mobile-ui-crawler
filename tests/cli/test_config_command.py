@@ -1,10 +1,8 @@
 """Tests for the config CLI commands."""
 
-import json
 from unittest.mock import Mock, patch
-from click.testing import CliRunner
 
-import pytest
+from click.testing import CliRunner
 
 from mobile_crawler.cli.main import cli
 

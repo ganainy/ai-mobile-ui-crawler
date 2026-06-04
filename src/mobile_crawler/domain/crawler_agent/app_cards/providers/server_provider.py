@@ -5,7 +5,6 @@ Fetches app cards from a remote HTTP server.
 """
 
 import logging
-from typing import Dict
 
 import httpx
 
@@ -29,7 +28,7 @@ class ServerAppCardProvider(AppCardProvider):
         self.server_url = server_url.rstrip("/")
         self.timeout = timeout
         self.max_retries = max_retries
-        self._content_cache: Dict[tuple[str, str], str] = {}
+        self._content_cache: dict[tuple[str, str], str] = {}
 
     async def load_app_card(self, package_name: str, instruction: str = "") -> str:
         """
@@ -108,7 +107,7 @@ class ServerAppCardProvider(AppCardProvider):
         self._content_cache.clear()
         logger.debug("Server app card cache cleared")
 
-    def get_cache_stats(self) -> Dict[str, int]:
+    def get_cache_stats(self) -> dict[str, int]:
         """
         Get cache statistics.
 

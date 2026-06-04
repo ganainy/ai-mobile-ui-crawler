@@ -5,12 +5,10 @@ import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional
 
 import aiofiles
-from PIL import Image
-
 from aiofiles import ospath
+from PIL import Image
 
 logger = logging.getLogger("crawler_agent")
 
@@ -199,7 +197,7 @@ class WriterWorker:
 
         try:
             await asyncio.wait_for(self.queue.join(), timeout=timeout)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning(
                 f"Writer timeout after {timeout}s, {self.queue.qsize()} jobs remaining"
             )
@@ -340,7 +338,7 @@ class TrajectoryWriter:
 
     def _create_events_job(
         self, events_snapshot, trajectory, trajectory_id, stage
-    ) -> Optional[EventsWriteJob]:
+    ) -> EventsWriteJob | None:
         serialized_events = []
 
         for event in events_snapshot:
@@ -368,7 +366,7 @@ class TrajectoryWriter:
 
     def _create_macro_job(
         self, macro_snapshot, trajectory, trajectory_id, stage
-    ) -> Optional[MacroWriteJob]:
+    ) -> MacroWriteJob | None:
         if not macro_snapshot:
             return None
 
@@ -389,7 +387,7 @@ class TrajectoryWriter:
 
     def _create_screenshot_jobs(
         self, screenshot_queue_snapshot, trajectory, trajectory_id, stage
-    ) -> List[ScreenshotWriteJob]:
+    ) -> list[ScreenshotWriteJob]:
         jobs = []
         screenshots_folder = trajectory.trajectory_folder / "screenshots"
         screenshots_folder.mkdir(exist_ok=True)
@@ -412,7 +410,7 @@ class TrajectoryWriter:
 
     def _create_gif_job(
         self, trajectory, trajectory_id, stage
-    ) -> Optional[GifWriteJob]:
+    ) -> GifWriteJob | None:
         if trajectory.screenshot_count == 0:
             return None
 
@@ -429,7 +427,7 @@ class TrajectoryWriter:
 
     def _create_ui_state_jobs(
         self, ui_states_snapshot, trajectory, trajectory_id, stage
-    ) -> List[UIStateWriteJob]:
+    ) -> list[UIStateWriteJob]:
         jobs = []
         ui_states_folder = trajectory.trajectory_folder / "ui_states"
         ui_states_folder.mkdir(exist_ok=True)

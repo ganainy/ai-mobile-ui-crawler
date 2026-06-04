@@ -1,8 +1,7 @@
 """Tests for the crawl CLI command."""
 
-import json
-import pytest
 from unittest.mock import Mock, patch
+
 from click.testing import CliRunner
 
 from mobile_crawler.cli.main import cli

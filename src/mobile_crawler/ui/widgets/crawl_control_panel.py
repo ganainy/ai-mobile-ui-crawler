@@ -1,15 +1,7 @@
 """Crawl control panel widget for mobile-crawler GUI."""
 
-from PySide6.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
-    QHBoxLayout,
-    QLabel,
-    QPushButton,
-    QGroupBox,
-    QCheckBox
-)
 from PySide6.QtCore import Signal
+from PySide6.QtWidgets import QCheckBox, QGroupBox, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from mobile_crawler.core.crawl_controller import CrawlController, CrawlControlState
 from mobile_crawler.core.crawl_state_machine import CrawlState

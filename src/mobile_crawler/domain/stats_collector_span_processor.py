@@ -4,12 +4,9 @@ from __future__ import annotations
 
 import threading
 from dataclasses import dataclass, field
-from typing import Optional
 
 try:
-    from opentelemetry.sdk.trace import ReadableSpan
-    from opentelemetry.sdk.trace.export import SpanExporter, SpanExportResult
-    from opentelemetry.sdk.trace import SpanProcessor
+    from opentelemetry.sdk.trace import ReadableSpan, SpanProcessor
     OTEL_AVAILABLE = True
 except ImportError:
     OTEL_AVAILABLE = False
@@ -65,7 +62,7 @@ class StatsCollectorSpanProcessor(SpanProcessor):
     def on_start(self, span, parent_context=None) -> None:  # noqa: ARG002
         pass
 
-    def on_end(self, span: "ReadableSpan") -> None:
+    def on_end(self, span: ReadableSpan) -> None:
         if not OTEL_AVAILABLE:
             return
         attrs = span.attributes or {}

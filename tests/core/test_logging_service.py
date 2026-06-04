@@ -1,12 +1,9 @@
 """Tests for LoggingService."""
 
-import sys
 from unittest.mock import Mock, patch
 
-import pytest
-
+from mobile_crawler.core.log_sinks import LogLevel
 from mobile_crawler.core.logging_service import LoggingService
-from mobile_crawler.core.log_sinks import LogLevel, LogSink, ConsoleSink
 
 
 class TestLoggingService:

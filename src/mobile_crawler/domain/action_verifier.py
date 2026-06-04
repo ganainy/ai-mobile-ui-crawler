@@ -5,12 +5,12 @@ the expected transition occurred.
 """
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Protocol, Set
+from typing import Any, Protocol
 
 logger = logging.getLogger(__name__)
 
 # Actions that are expected to change the UI state
-NAVIGATION_ACTIONS: Set[str] = {
+NAVIGATION_ACTIONS: set[str] = {
     "back", "home", "click", "tap", "start_app", "launch_app",
     "recent_apps",
 }
@@ -62,7 +62,7 @@ class ActionVerifier:
         self.state_provider = state_provider
         self.driver = driver
 
-    async def capture_pre_state(self) -> Dict[str, Any]:
+    async def capture_pre_state(self) -> dict[str, Any]:
         """Capture UI state before action.
 
         Returns:
@@ -86,7 +86,7 @@ class ActionVerifier:
 
     async def verify(
         self,
-        pre_state: Dict[str, Any],
+        pre_state: dict[str, Any],
         action_type: str,
     ) -> VerificationResult:
         """Verify post-action state changed as expected.

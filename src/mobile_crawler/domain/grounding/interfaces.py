@@ -1,9 +1,11 @@
-from typing import Protocol, List
-from .dtos import OCRResult, GroundingOverlay
+from typing import Protocol
+
+from .dtos import GroundingOverlay, OCRResult
+
 
 class OCREngine(Protocol):
     """Protocol for OCR engine implementations."""
-    def detect_text(self, image_path: str) -> List[OCRResult]:
+    def detect_text(self, image_path: str) -> list[OCRResult]:
         """Detects text in the given image."""
         ...
 

@@ -1,10 +1,10 @@
 """Unit tests for ADBActionExecutor."""
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 from mobile_crawler.domain.adb_action_executor import ADBActionExecutor
-from mobile_crawler.domain.models import ActionResult
 
 
 class TestADBActionExecutor:
