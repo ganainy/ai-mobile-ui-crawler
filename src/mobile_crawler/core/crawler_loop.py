@@ -1,4 +1,4 @@
-"""DroidRun-backed crawler loop wrapper."""
+"""Crawler-agent-backed crawl lifecycle wrapper."""
 
 import asyncio
 import inspect
@@ -7,18 +7,17 @@ import logging
 import threading
 import time
 from datetime import datetime
-from typing import List, Optional
 
 from mobile_crawler.config.config_manager import ConfigManager
 from mobile_crawler.core.crawler_event_listener import CrawlerEventListener
 from mobile_crawler.core.log_sinks import LogLevel, capture_stdout_to_ui
-from mobile_crawler.domain.droidrun_agent_service import DroidRunAgentService
+from mobile_crawler.domain.crawler_agent_service import CrawlerAgentService
 from mobile_crawler.domain.errors import (
+    CheckpointError,
     CrawlerError,
+    ErrorContext,
     FatalError,
     RecorderError,
-    CheckpointError,
-    ErrorContext,
 )
 from mobile_crawler.domain.traffic_capture_manager import TrafficCaptureManager
 from mobile_crawler.domain.video_recording_manager import VideoRecordingManager
@@ -30,17 +29,17 @@ logger = logging.getLogger(__name__)
 
 
 class CrawlerLoop:
-    """Thin wrapper that delegates traversal to DroidRun."""
+    """Thin wrapper that delegates traversal to the internal crawler agent."""
 
     def __init__(
         self,
         config_manager: ConfigManager,
         run_repository: RunRepository,
         session_folder_manager: SessionFolderManager,
-        event_listeners: Optional[List[CrawlerEventListener]] = None,
+        event_listeners: list[CrawlerEventListener] | None = None,
         ai_interaction_repository=None,
     ):
-        """Initialize the DroidRun-backed crawler wrapper.
+        """Initialize the crawler-agent-backed crawl wrapper.
 
         Args:
             config_manager: Configuration manager
@@ -55,11 +54,11 @@ class CrawlerLoop:
         self.event_listeners = event_listeners or []
         self._ai_interaction_repository = ai_interaction_repository
 
-        self._crawl_thread: Optional[threading.Thread] = None
-        self._current_run_id: Optional[int] = None
-        self._droidrun_agent_service: Optional[DroidRunAgentService] = None
-        self._traffic_capture_manager: Optional[TrafficCaptureManager] = None
-        self._video_recording_manager: Optional[VideoRecordingManager] = None
+        self._crawl_thread: threading.Thread | None = None
+        self._current_run_id: int | None = None
+        self._crawler_agent_service: CrawlerAgentService | None = None
+        self._traffic_capture_manager: TrafficCaptureManager | None = None
+        self._video_recording_manager: VideoRecordingManager | None = None
         self._cancel_requested = False
         self._state = "IDLE"
 
@@ -106,7 +105,7 @@ class CrawlerLoop:
     def stop(self) -> None:
         """Stop the crawler."""
         self._cancel_requested = True
-        if self._droidrun_agent_service and self._droidrun_agent_service.request_cancel():
+        if self._crawler_agent_service and self._crawler_agent_service.request_cancel():
             logger.info("Requested cancellation of DroidRun workflow.")
 
     def is_running(self) -> bool:
@@ -163,20 +162,20 @@ class CrawlerLoop:
             self._transition_state("RUNNING", run_id)
             self._emit_event("on_crawl_started", run_id, run.app_package)
 
-            self._droidrun_agent_service = DroidRunAgentService(
+            self._crawler_agent_service = CrawlerAgentService(
                 config_manager=self.config_manager,
                 ai_interaction_repository=self._ai_interaction_repository,
                 device_id=run.device_id
             )
 
             # Initialize step phase tracking per D-01 (wrap at action level)
-            self._droidrun_agent_service.begin_step_tracking(
+            self._crawler_agent_service.begin_step_tracking(
                 run_id=run_id,
                 emit_step_phase_event=self._emit_event,
             )
 
             logs_dir = self.session_folder_manager.get_subfolder(run, "logs")
-            self._droidrun_agent_service.configure_run_logging(
+            self._crawler_agent_service.configure_run_logging(
                 run_id,
                 logs_dir,
                 self._emit_event,
@@ -184,11 +183,11 @@ class CrawlerLoop:
             )
 
             exploration_objective = self.config_manager.get("exploration_objective", None)
-            
+
             limit_type = self.config_manager.get("limit_type", "steps")
             max_steps = self.config_manager.get("max_steps", self.config_manager.get("max_crawl_steps", 100))
             max_duration = self.config_manager.get("max_duration_seconds", self.config_manager.get("max_crawl_duration_seconds", 300))
-            
+
             if limit_type == "duration":
                 actual_max_steps = 9999
             else:
@@ -243,7 +242,7 @@ class CrawlerLoop:
                         f"Video recording {status_text}: {message}",
                     )
                 try:
-                    return await self._droidrun_agent_service.execute_exploration_task(
+                    return await self._crawler_agent_service.execute_exploration_task(
                         run_id=run_id,
                         app_package=run.app_package,
                         max_steps=actual_max_steps,
@@ -311,7 +310,7 @@ class CrawlerLoop:
                             self._traffic_capture_manager = None
 
                     # Always cleanup, even if execute fails
-                    cleanup_result = self._droidrun_agent_service.cleanup()
+                    cleanup_result = self._crawler_agent_service.cleanup()
                     if inspect.isawaitable(cleanup_result):
                         await cleanup_result
                     # Force GC of google.genai objects while event loop is still running.
@@ -328,7 +327,7 @@ class CrawlerLoop:
                                 asyncio.gather(*pending, return_exceptions=True),
                                 timeout=5.0
                             )
-                        except asyncio.TimeoutError:
+                        except TimeoutError:
                             for task in pending:
                                 if not task.done():
                                     task.cancel()
@@ -401,9 +400,9 @@ class CrawlerLoop:
         finally:
             self._video_recording_manager = None
             self._traffic_capture_manager = None
-            if self._droidrun_agent_service:
-                self._droidrun_agent_service.clear_run_logging()
-                self._droidrun_agent_service = None
+            if self._crawler_agent_service:
+                self._crawler_agent_service.clear_run_logging()
+                self._crawler_agent_service = None
             self._transition_state("STOPPED", run_id)
 
     def _run_mobsf_analysis(self, run, run_id: int) -> None:
@@ -435,7 +434,7 @@ class CrawlerLoop:
 
     def get_span_stats(self):
         """Return current OTel span stats from the active agent service, or None."""
-        svc = self._droidrun_agent_service
+        svc = self._crawler_agent_service
         if svc is not None:
             return svc._stats_processor.get_stats()
         return None
@@ -448,7 +447,7 @@ class CrawlerLoop:
         finally:
             loop.close()
 
-    def _transition_state(self, new_state: str, run_id: Optional[int]) -> None:
+    def _transition_state(self, new_state: str, run_id: int | None) -> None:
         """Update internal state and notify listeners."""
         old_state = self._state
         self._state = new_state

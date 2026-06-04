@@ -1,6 +1,6 @@
 from mobile_crawler.domain.crawler_agent.telemetry.events import (
-    DroidAgentFinalizeEvent,
-    DroidAgentInitEvent,
+    CrawlerAgentFinalizeEvent,
+    CrawlerAgentInitEvent,
     PackageVisitEvent,
 )
 from mobile_crawler.domain.crawler_agent.telemetry.tracker import capture, flush, print_telemetry_message
@@ -8,8 +8,8 @@ from mobile_crawler.domain.crawler_agent.telemetry.tracker import capture, flush
 __all__ = [
     "capture",
     "flush",
-    "DroidAgentInitEvent",
+    "CrawlerAgentInitEvent",
     "PackageVisitEvent",
-    "DroidAgentFinalizeEvent",
+    "CrawlerAgentFinalizeEvent",
     "print_telemetry_message",
 ]

@@ -15,8 +15,8 @@ from mobile_crawler.domain.crawler_agent.agent.utils.actions import (
     remember,
     swipe,
     system_button,
-    type_text,
     type_secret,
+    type_text,
     wait,
 )
 
@@ -41,7 +41,7 @@ async def build_tool_registry(
         ``(registry, standard_tool_names)`` where *standard_tool_names* is the
         set of tool names registered here.  The ManagerAgent uses this to
         exclude already-described tools from its ``<custom_actions>`` prompt
-        section.  User/MCP tools added later by DroidAgent will NOT be in
+        section.  User/MCP tools added later by CrawlerAgent will NOT be in
         this set, so they correctly appear in ``<custom_actions>``.
     """
     registry = ToolRegistry()

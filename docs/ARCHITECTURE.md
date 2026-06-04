@@ -36,7 +36,7 @@
 | CLI command surface | Parses commands/options and starts crawl/config/report/list/delete workflows | `src/mobile_crawler/cli/main.py`, `src/mobile_crawler/cli/commands/*.py` |
 | GUI shell | Builds widgets, wires Qt signals, starts crawl worker thread, updates dashboards | `src/mobile_crawler/ui/main_window.py`, `src/mobile_crawler/ui/signal_adapter.py` |
 | Crawl orchestrator | Owns crawl lifecycle, emits events, delegates exploration to the internalized agent service | `src/mobile_crawler/core/crawler_loop.py` |
-| Domain integration services | Adapts provider/model discovery, internalized crawler agent behavior, parser settings, and reporting orchestration | `src/mobile_crawler/domain/droidrun_agent_service.py`, `src/mobile_crawler/domain/crawler_agent/`, `src/mobile_crawler/domain/providers/*.py`, `src/mobile_crawler/domain/report_generator.py` |
+| Domain integration services | Adapts provider/model discovery, internalized crawler agent behavior, parser settings, and reporting orchestration | `src/mobile_crawler/domain/crawler_agent_service.py`, `src/mobile_crawler/domain/crawler_agent/`, `src/mobile_crawler/domain/providers/*.py`, `src/mobile_crawler/domain/report_generator.py` |
 | Infrastructure repositories | Handles SQLite schema/migrations and data CRUD for runs/screens/steps/AI interactions | `src/mobile_crawler/infrastructure/database.py`, `src/mobile_crawler/infrastructure/*_repository.py` |
 | Artifact/session layout | Creates and resolves run folder topology (screenshots, reports, pcap, logs, data) | `src/mobile_crawler/infrastructure/session_folder_manager.py` |
 
@@ -69,7 +69,7 @@
 **Domain Services Layer:**
 - Purpose: Provider/model logic, internalized crawler-agent adapter logic, reporting assembly, parser configuration, and grounding.
 - Location: `src/mobile_crawler/domain/`
-- Contains: `DroidRunAgentService`, internalized `crawler_agent`, provider registry, models, report generator, OCR grounding modules.
+- Contains: `CrawlerAgentService`, internalized `crawler_agent`, provider registry, models, report generator, OCR grounding modules.
 - Depends on: `config`, `infrastructure`, external SDKs.
 - Used by: `core` and UI service creation.
 
@@ -87,7 +87,7 @@
 1. CLI or GUI starts crawl (`src/mobile_crawler/cli/commands/crawl.py:180`, `src/mobile_crawler/ui/main_window.py:348`).
 2. Run row is created and crawler loop invoked (`src/mobile_crawler/cli/commands/crawl.py:228`, `src/mobile_crawler/core/crawler_loop.py:125`).
 3. `CrawlerLoop` creates session folder + updates run path (`src/mobile_crawler/core/crawler_loop.py:141`, `src/mobile_crawler/infrastructure/session_folder_manager.py:31`).
-4. `CrawlerLoop` delegates exploration to `DroidRunAgentService`, which wraps the internalized `crawler_agent` runtime.
+4. `CrawlerLoop` delegates exploration to `CrawlerAgentService`, which wraps the internalized `crawler_agent` runtime.
 5. Final status/stats are persisted, then completion event is emitted (`src/mobile_crawler/core/crawler_loop.py:232`, `src/mobile_crawler/core/crawler_loop.py:246`).
 
 ### Secondary Flow: Report Generation
@@ -137,13 +137,14 @@
 ## Architectural Constraints
 
 - **Threading:** Qt main thread + `QThread` worker (`src/mobile_crawler/ui/main_window.py:133`) plus dedicated crawl thread option in `CrawlerLoop.start` (`src/mobile_crawler/core/crawler_loop.py:58`) and per-run asyncio loop (`src/mobile_crawler/core/crawler_loop.py:263`).
-- **Global state:** Module-level config singleton (`src/mobile_crawler/config/config_manager.py:103`) and root logger filters installed on import (`src/mobile_crawler/domain/droidrun_agent_service.py:45`).
+- **Global state:** Module-level config singleton (`src/mobile_crawler/config/config_manager.py:103`) and root logger filters installed on import (`src/mobile_crawler/domain/crawler_agent_service.py:45`).
 - **Circular imports:** Not detected in inspected modules; local imports are used in some UI helpers to avoid cycles (`src/mobile_crawler/ui/main_window.py:551`).
 - **Internalized runtime:** Exploration logic is delegated to `src/mobile_crawler/domain/crawler_agent`; `CrawlerLoop` remains intentionally thin and manages run/session lifecycle around that runtime.
 
 ## Current Runtime State
 
-- `src/mobile_crawler/domain/crawler_agent` is the active runtime namespace for `DroidAgent`, `DroidConfig`, drivers, UI state providers, OmniParser integration, macro replay, and telemetry support.
+- `src/mobile_crawler/domain/crawler_agent` is the active runtime namespace for `CrawlerAgent`, `DroidConfig`, drivers, UI state providers, OmniParser integration, macro replay, and telemetry support.
+- `src/mobile_crawler/domain/crawler_agent_service.py` exposes `CrawlerAgentService`, the Mobile Crawler adapter around that internal runtime.
 - UI settings are organized around General, AI Crawler, API Keys, and Integrations tabs.
 - App test credentials include address, email, and phone fields that are included in the agent prompt when configured.
 - Parser settings support `boost`, `omniparser`, and `accessibility` modes, with OmniParser backend selection between Replicate and a local FastAPI server.
@@ -175,7 +176,7 @@
 
 **Logging:** Python logging + UI bridge handler + stdout/stderr capture (`src/mobile_crawler/core/log_sinks.py`, `src/mobile_crawler/ui/main_window.py`).  
 **Validation:** UI pre-flight checks for selected device/package/model and required keys (`src/mobile_crawler/ui/main_window.py:404`).  
-**Authentication:** API keys are read from encrypted config store and env fallbacks (`src/mobile_crawler/infrastructure/user_config_store.py`, `src/mobile_crawler/domain/droidrun_agent_service.py:165`).
+**Authentication:** API keys are read from encrypted config store and env fallbacks (`src/mobile_crawler/infrastructure/user_config_store.py`, `src/mobile_crawler/domain/crawler_agent_service.py:165`).
 
 ---
 

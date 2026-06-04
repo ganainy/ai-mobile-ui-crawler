@@ -1,5 +1,5 @@
 """
-DroidAgent - A wrapper class that coordinates the planning and execution of tasks
+CrawlerAgent - A wrapper class that coordinates the planning and execution of tasks
 to achieve a user's goal on a mobile device.
 
 Architecture:
@@ -10,7 +10,8 @@ Architecture:
 import logging
 import os
 import traceback
-from typing import TYPE_CHECKING, Awaitable, Type, Union
+from collections.abc import Awaitable
+from typing import TYPE_CHECKING, Union
 
 from async_adbutils import adb
 from llama_index.core.llms.llm import LLM
@@ -21,8 +22,6 @@ from workflows.events import Event
 from workflows.handler import WorkflowHandler
 
 from mobile_crawler.domain.crawler_agent.agent.action_context import ActionContext
-from mobile_crawler.domain.crawler_agent.agent.fast_agent import FastAgent
-from mobile_crawler.domain.crawler_agent.agent.fast_agent.events import FastAgentOutputEvent
 from mobile_crawler.domain.crawler_agent.agent.common.events import RecordUIStateEvent, ScreenshotEvent
 from mobile_crawler.domain.crawler_agent.agent.droid.events import (
     ExecutorInputEvent,
@@ -35,9 +34,11 @@ from mobile_crawler.domain.crawler_agent.agent.droid.events import (
     ManagerPlanEvent,
     ResultEvent,
 )
-from mobile_crawler.domain.crawler_agent.agent.droid.state import DroidAgentState, QueuedUserMessage
+from mobile_crawler.domain.crawler_agent.agent.droid.state import CrawlerAgentState, QueuedUserMessage
 from mobile_crawler.domain.crawler_agent.agent.executor import ExecutorAgent
 from mobile_crawler.domain.crawler_agent.agent.external import load_agent
+from mobile_crawler.domain.crawler_agent.agent.fast_agent import FastAgent
+from mobile_crawler.domain.crawler_agent.agent.fast_agent.events import FastAgentOutputEvent
 from mobile_crawler.domain.crawler_agent.agent.manager import ManagerAgent, StatelessManagerAgent
 from mobile_crawler.domain.crawler_agent.agent.oneflows.structured_output_agent import StructuredOutputAgent
 from mobile_crawler.domain.crawler_agent.agent.trajectory import TrajectoryWriter
@@ -70,8 +71,8 @@ from mobile_crawler.domain.crawler_agent.mcp.client import MCPClientManager
 from mobile_crawler.domain.crawler_agent.mcp.config import MCPConfig
 from mobile_crawler.domain.crawler_agent.portal import ensure_portal_ready
 from mobile_crawler.domain.crawler_agent.telemetry import (
-    DroidAgentFinalizeEvent,
-    DroidAgentInitEvent,
+    CrawlerAgentFinalizeEvent,
+    CrawlerAgentInitEvent,
     capture,
     flush,
 )
@@ -92,7 +93,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger("crawler_agent")
 
 
-class DroidAgent(Workflow):
+class CrawlerAgent(Workflow):
     """
     A wrapper class that coordinates between agents to achieve a user's goal.
 
@@ -104,7 +105,7 @@ class DroidAgent(Workflow):
     @staticmethod
     def _configure_default_logging(debug: bool = False):
         """
-        Configure default logging for DroidAgent if no real handler is present.
+        Configure default logging for CrawlerAgent if no real handler is present.
         """
         has_real_handler = any(not isinstance(h, logging.NullHandler) for h in logger.handlers)
         if not has_real_handler:
@@ -124,7 +125,7 @@ class DroidAgent(Workflow):
         custom_tools: dict = None,
         credentials: Union[dict, "CredentialManager", None] = None,
         variables: dict | None = None,
-        output_model: Type[BaseModel] | None = None,
+        output_model: type[BaseModel] | None = None,
         prompts: dict[str, str] | None = None,
         driver: "DeviceDriver | None" = None,
         state_provider: "StateProvider | None" = None,
@@ -134,7 +135,7 @@ class DroidAgent(Workflow):
     ):
         self.user_id = kwargs.pop("user_id", None)
         self.runtype = kwargs.pop("runtype", "developer")
-        self.shared_state = DroidAgentState(
+        self.shared_state = CrawlerAgentState(
             instruction=goal,
             err_to_manager_thresh=2,
             user_id=self.user_id,
@@ -306,7 +307,7 @@ class DroidAgent(Workflow):
         self._init_prompts = prompts  # stash for telemetry
         self._init_timeout = timeout
 
-        logger.debug("✅ DroidAgent initialized successfully.")
+        logger.debug("✅ CrawlerAgent initialized successfully.")
 
     def run(self, *args, **kwargs) -> Awaitable[ResultEvent] | WorkflowHandler:
         apply_session_context()
@@ -321,7 +322,7 @@ class DroidAgent(Workflow):
     async def start_handler(
         self, ctx: Context, ev: StartEvent
     ) -> FastAgentExecuteEvent | ManagerInputEvent:
-        logger.info(f"🚀 Running DroidAgent to achieve goal: {self.shared_state.instruction}")
+        logger.info(f"🚀 Running CrawlerAgent to achieve goal: {self.shared_state.instruction}")
         ctx.write_event_to_stream(ev)
 
         if self.trajectory_writer:
@@ -510,7 +511,7 @@ class DroidAgent(Workflow):
 
         # ── 7. Telemetry init event ───────────────────────────────────
         capture(
-            DroidAgentInitEvent(
+            CrawlerAgentInitEvent(
                 goal=self.shared_state.instruction,
                 llms={
                     "manager": (self.manager_llm.class_name() if self.manager_llm else "None"),
@@ -642,7 +643,7 @@ class DroidAgent(Workflow):
             return FinalizeEvent(success=ev.success, reason=ev.reason)
 
         except Exception as e:
-            logger.error(f"❌ Error during DroidAgent execution: {e}")
+            logger.error(f"❌ Error during CrawlerAgent execution: {e}")
             if self.config.logging.debug:
                 logger.error(traceback.format_exc())
             return FinalizeEvent(
@@ -782,7 +783,7 @@ class DroidAgent(Workflow):
         self.shared_state.workflow_completed = True
         ctx.write_event_to_stream(ev)
         capture(
-            DroidAgentFinalizeEvent(
+            CrawlerAgentFinalizeEvent(
                 success=ev.success,
                 reason=ev.reason,
                 steps=self.shared_state.step_number,

@@ -6,7 +6,7 @@ and loads them from config profiles.
 """
 
 import logging
-from typing import Any, List, Type
+from typing import Any
 
 from llama_index.core.llms.llm import LLM
 from pydantic import BaseModel
@@ -18,8 +18,8 @@ logger = logging.getLogger("crawler_agent")
 
 
 def _get_required_profiles(
-    config: DroidConfig, output_model: Type[BaseModel] | None = None
-) -> List[str]:
+    config: DroidConfig, output_model: type[BaseModel] | None = None
+) -> list[str]:
     """
     Determine which LLM profiles are required based on agent configuration.
 
@@ -46,8 +46,8 @@ def _get_required_profiles(
 def validate_llm_dict(
     config: DroidConfig,
     llms: dict[str, LLM],
-    output_model: Type[BaseModel] | None = None,
-) -> List[str]:
+    output_model: type[BaseModel] | None = None,
+) -> list[str]:
     """
     Validate that required LLM profiles exist in the provided LLM dictionary.
 
@@ -77,8 +77,8 @@ def validate_llm_dict(
 
 
 def validate_llm_profiles(
-    config: DroidConfig, output_model: Type[BaseModel] | None = None
-) -> List[str]:
+    config: DroidConfig, output_model: type[BaseModel] | None = None
+) -> list[str]:
     """
     Validate that required LLM profiles exist in the configuration.
 
@@ -113,11 +113,11 @@ def load_agent_llms(
     custom_provider: str | None = None,
     custom_model: str | None = None,
     temperature: float | None = None,
-    output_model: Type[BaseModel] | None = None,
+    output_model: type[BaseModel] | None = None,
     **kwargs: Any,
 ) -> dict[str, LLM]:
     """
-    Load LLMs required for DroidAgent based on reasoning mode and configuration.
+    Load LLMs required for CrawlerAgent based on reasoning mode and configuration.
 
     Args:
         config: Droidrun configuration containing LLM profiles
@@ -206,7 +206,7 @@ def load_agent_llms(
 def merge_llms_with_config(
     config: DroidConfig,
     llms: dict[str, LLM],
-    output_model: Type[BaseModel] | None = None,
+    output_model: type[BaseModel] | None = None,
     **kwargs: Any,
 ) -> dict[str, LLM]:
     """

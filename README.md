@@ -59,7 +59,7 @@ Startup helper:
 
 - Python 3.12. `pyproject.toml` currently requires `>=3.12,<3.13`.
 - Android device or emulator reachable through ADB.
-- AI provider credentials for the selected provider. Current config mapping supports Gemini, OpenAI, Anthropic, Ollama, and OpenRouter in `DroidRunAgentService`.
+- AI provider credentials for the selected provider. Current config mapping supports Gemini, OpenAI, Anthropic, Ollama, and OpenRouter in `CrawlerAgentService`.
 
 Optional integrations:
 
@@ -278,9 +278,9 @@ The current crawl flow is:
 
 1. `run_cli.py`, `mobile-crawler-cli`, `mobile-crawler-gui`, or `.\scripts\start.ps1` starts the CLI or GUI.
 2. The CLI `crawl` command or GUI `MainWindow` creates a run record, prepares `ConfigManager`, repositories, and `SessionFolderManager`, then runs `CrawlerLoop`.
-3. `CrawlerLoop` creates a timestamped session folder, stores the session path on the run, emits lifecycle events, attaches DroidRun logging, and calls `DroidRunAgentService.execute_exploration_task()`.
-4. `DroidRunAgentService` translates Mobile Crawler settings into a DroidRun `DroidConfig`, ensures the target package is active through ADB preflight checks, creates a DroidRun `DroidAgent`, and runs the DroidRun workflow.
-5. During execution, Mobile Crawler consumes DroidRun tool events for step phase tracking, forwards logs and stdout to UI/CLI listeners, handles duration limits and cancellation, tracks action outcomes from DroidRun shared state, retries app-crash-like failures, and cleans up async LLM clients.
+3. `CrawlerLoop` creates a timestamped session folder, stores the session path on the run, emits lifecycle events, attaches crawler-agent logging, and calls `CrawlerAgentService.execute_exploration_task()`.
+4. `CrawlerAgentService` translates Mobile Crawler settings into the internal runtime's `DroidConfig`, ensures the target package is active through ADB preflight checks, creates a `CrawlerAgent`, and runs the crawler-agent workflow.
+5. During execution, Mobile Crawler consumes tool events for step phase tracking, forwards logs and stdout to UI/CLI listeners, handles duration limits and cancellation, tracks action outcomes from shared state, retries app-crash-like failures, and cleans up async LLM clients.
 6. `CrawlerLoop` updates final run stats and emits completion or error events.
 7. If MobSF analysis is enabled and the crawl completed successfully, `CrawlerLoop` runs MobSF static analysis and logs the generated report paths.
 
@@ -289,7 +289,7 @@ The current crawl flow is:
 ## How the Agent Runtime is Used
 
 The agent runtime is fully internalized within the `mobile_crawler` package at `src/mobile_crawler/domain/crawler_agent/`. 
-Imports from the agent runtime resolve directly under the `mobile_crawler.domain.crawler_agent` namespace (e.g., `from mobile_crawler.domain.crawler_agent import DroidConfig, DroidAgent, ToolExecutionEvent`). The dynamic runtime injection that inserted the external path into `sys.path` has been completely removed.
+Imports from the agent runtime resolve directly under the `mobile_crawler.domain.crawler_agent` namespace (e.g., `from mobile_crawler.domain.crawler_agent import DroidConfig, CrawlerAgent, ToolExecutionEvent`). The dynamic runtime injection that inserted the external path into `sys.path` has been completely removed.
 
 Mobile Crawler does not own the agent runtime's core exploration loop. The internalized `crawler_agent` package owns screenshot and UI-state capture, LLM planning and execution, agent workflows, and ADB-backed device actions.
 
@@ -305,9 +305,11 @@ Mobile Crawler wraps the internalized `crawler_agent` with:
 - Duration limits, cancellation requests, crash recovery, and LLM client cleanup.
 - Optional MobSF, PCAPdroid, video, and report/artifact infrastructure.
 
+For a detailed explanation of the Manager/Executor decision loop, FastAgent mode, timing costs, and speed/quality tuning options, see `docs/readmes/crawler-agent-decision-loop.md`.
+
 ## How UI Parsing Works With crawler_agent
 
-`crawler_agent` mainly uses Android Accessibility APIs, not pure screenshot vision first. Mobile Crawler passes parser settings into the agent through `DroidRunAgentService`, and the agent runtime owns active screenshot capture, UI parsing, formatted state text, indexed element lookup, and ADB-backed action execution during the crawl.
+`crawler_agent` mainly uses Android Accessibility APIs, not pure screenshot vision first. Mobile Crawler passes parser settings into the agent through `CrawlerAgentService`, and the agent runtime owns active screenshot capture, UI parsing, formatted state text, indexed element lookup, and ADB-backed action execution during the crawl.
 
 In the default `boost` mode, the agent uses the accessibility tree first and falls back to OmniParser only when accessibility metadata is unavailable or insufficient.
 
@@ -333,7 +335,7 @@ Mobile Crawler owns:
 
 The internalized `crawler_agent` owns:
 
-- `DroidAgent` and active UI-agent execution.
+- `CrawlerAgent` and active UI-agent execution.
 - Manager, executor, fast-agent, app-opener, and structured-output workflows.
 - Prompt templates and agent internals.
 - Android driver, state provider, UI action tools, and ADB-backed device actions.
@@ -353,7 +355,7 @@ Default values live in `src/mobile_crawler/config/defaults.py`. Notable defaults
 - `omniparser_backend`: `replicate`
 - optional traffic capture, video recording, and MobSF analysis disabled by default
 
-API keys can come from persisted secrets/settings or environment variables. `DroidRunAgentService` resolves provider keys and passes them into DroidRun LLM profiles.
+API keys can come from persisted secrets/settings or environment variables. `CrawlerAgentService` resolves provider keys and passes them into crawler-agent LLM profiles.
 
 ## Data Organization
 

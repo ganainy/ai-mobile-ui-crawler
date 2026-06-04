@@ -1,4 +1,4 @@
-"""Tests for DroidRunAgentService initialization, step tracking, and error handling.
+"""Tests for CrawlerAgentService initialization, step tracking, and error handling.
 
 All DroidRun imports are mocked to avoid importing real DroidRun code.
 """
@@ -9,21 +9,19 @@ import logging
 import os
 import sys
 import types
-from datetime import datetime
-from unittest.mock import Mock, patch, MagicMock, AsyncMock
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-from mobile_crawler.domain.droidrun_agent_service import (
-    DroidRunAgentService,
-    DroidRunGoal,
-    DroidRunResult,
-    DroidRunLogHandler,
-    CancelledErrorFilter,
-)
-from mobile_crawler.domain.models import AIAction, BoundingBox, ActionResult
-from mobile_crawler.domain.step_phase import StepPhase
 from mobile_crawler.domain.adb_action_executor import DeviceReadinessResult
+from mobile_crawler.domain.crawler_agent_service import (
+    CancelledErrorFilter,
+    CrawlerAgentService,
+    DroidRunGoal,
+    DroidRunLogHandler,
+)
+from mobile_crawler.domain.models import ActionResult, BoundingBox
+from mobile_crawler.domain.step_phase import StepPhase
 
 
 @pytest.fixture
@@ -62,20 +60,20 @@ def mock_ai_repo():
 
 @pytest.fixture
 def droidrun_service(mock_config_manager, mock_ai_repo):
-    """Create a DroidRunAgentService with mocked dependencies."""
-    return DroidRunAgentService(
+    """Create a CrawlerAgentService with mocked dependencies."""
+    return CrawlerAgentService(
         config_manager=mock_config_manager,
         ai_interaction_repository=mock_ai_repo,
         device_id="test_device_123",
     )
 
 
-class TestDroidRunAgentServiceInitialization:
-    """Tests for DroidRunAgentService initialization."""
+class TestCrawlerAgentServiceInitialization:
+    """Tests for CrawlerAgentService initialization."""
 
     def test_init_with_config_manager(self, mock_config_manager):
         """Test initialization with ConfigManager."""
-        service = DroidRunAgentService(
+        service = CrawlerAgentService(
             config_manager=mock_config_manager,
             ai_interaction_repository=None,
             device_id="device1",
@@ -83,12 +81,12 @@ class TestDroidRunAgentServiceInitialization:
         assert service.config_manager == mock_config_manager
         assert service.ai_interaction_repository is None
         assert service.device_id == "device1"
-        assert service._droid_agent is None
+        assert service._crawler_agent is None
         assert not service._is_initialized
 
     def test_init_with_ai_repository(self, mock_config_manager, mock_ai_repo):
         """Test initialization with AI interaction repository."""
-        service = DroidRunAgentService(
+        service = CrawlerAgentService(
             config_manager=mock_config_manager,
             ai_interaction_repository=mock_ai_repo,
             device_id="device1",
@@ -97,7 +95,7 @@ class TestDroidRunAgentServiceInitialization:
 
     def test_init_default_state(self, mock_config_manager):
         """Test default state after initialization."""
-        service = DroidRunAgentService(
+        service = CrawlerAgentService(
             config_manager=mock_config_manager,
             ai_interaction_repository=None,
             device_id="device1",
@@ -111,22 +109,22 @@ class TestDroidRunAgentServiceInitialization:
 
     def test_max_step_reason_is_normal_completion(self):
         """DroidRun max-step reasons should not be treated as crawl errors."""
-        assert DroidRunAgentService._is_max_step_completion_reason(
+        assert CrawlerAgentService._is_max_step_completion_reason(
             "Reached max step count of 1 steps"
         )
-        assert DroidRunAgentService._is_max_step_completion_reason(
+        assert CrawlerAgentService._is_max_step_completion_reason(
             "Reached maximum steps"
         )
-        assert not DroidRunAgentService._is_max_step_completion_reason(
+        assert not CrawlerAgentService._is_max_step_completion_reason(
             "Unable to locate target app"
         )
 
 
-class TestDroidRunAgentServiceStepTracking:
+class TestCrawlerAgentServiceStepTracking:
     """Tests for step tracking functionality."""
 
-    @patch('mobile_crawler.domain.droidrun_agent_service.StepPhaseStateMachine')
-    @patch('mobile_crawler.domain.droidrun_agent_service.StepPhaseRepository')
+    @patch('mobile_crawler.domain.crawler_agent_service.StepPhaseStateMachine')
+    @patch('mobile_crawler.domain.crawler_agent_service.StepPhaseRepository')
     @patch('mobile_crawler.infrastructure.database.DatabaseManager')
     def test_begin_step_tracking_creates_state_machine(
         self, mock_db_class, mock_repo_class, mock_machine_class, droidrun_service
@@ -148,8 +146,8 @@ class TestDroidRunAgentServiceStepTracking:
         mock_machine_class.assert_called_once()
         mock_machine.add_listener.assert_called_once()
 
-    @patch('mobile_crawler.domain.droidrun_agent_service.StepPhaseStateMachine')
-    @patch('mobile_crawler.domain.droidrun_agent_service.StepPhaseRepository')
+    @patch('mobile_crawler.domain.crawler_agent_service.StepPhaseStateMachine')
+    @patch('mobile_crawler.domain.crawler_agent_service.StepPhaseRepository')
     @patch('mobile_crawler.infrastructure.database.DatabaseManager')
     def test_begin_step_tracking_wires_repository(
         self, mock_db_class, mock_repo_class, mock_machine_class, droidrun_service
@@ -169,8 +167,8 @@ class TestDroidRunAgentServiceStepTracking:
 
     def test_begin_step_tracking_without_callback(self, droidrun_service):
         """Test begin_step_tracking works without emit callback."""
-        with patch('mobile_crawler.domain.droidrun_agent_service.StepPhaseStateMachine') as mock_machine_class, \
-             patch('mobile_crawler.domain.droidrun_agent_service.StepPhaseRepository') as mock_repo_class, \
+        with patch('mobile_crawler.domain.crawler_agent_service.StepPhaseStateMachine') as mock_machine_class, \
+             patch('mobile_crawler.domain.crawler_agent_service.StepPhaseRepository'), \
              patch('mobile_crawler.infrastructure.database.DatabaseManager'):
             mock_machine = Mock()
             mock_machine_class.return_value = mock_machine
@@ -178,7 +176,7 @@ class TestDroidRunAgentServiceStepTracking:
             assert droidrun_service._emit_step_phase_event is None
 
 
-class TestDroidRunAgentServicePhaseTransition:
+class TestCrawlerAgentServicePhaseTransition:
     """Tests for phase transition handling."""
 
     def test_on_phase_transition_without_run_id(self, droidrun_service):
@@ -247,12 +245,12 @@ class TestDroidRunAgentServicePhaseTransition:
         mock_repo.record_transition.assert_called_once()
 
 
-class TestDroidRunAgentServiceWireObservers:
+class TestCrawlerAgentServiceWireObservers:
     """Tests for wiring observers to agent."""
 
     def test_wire_observers_without_agent(self, droidrun_service):
         """Test _wire_observers_to_agent returns early without agent."""
-        droidrun_service._droid_agent = None
+        droidrun_service._crawler_agent = None
         # Should not raise
         droidrun_service._wire_observers_to_agent()
         assert droidrun_service._ui_wait_predicate is None
@@ -264,13 +262,13 @@ class TestDroidRunAgentServiceWireObservers:
         mock_driver = Mock()
         mock_agent.state_provider = mock_state_provider
         mock_agent.driver = mock_driver
-        droidrun_service._droid_agent = mock_agent
+        droidrun_service._crawler_agent = mock_agent
         droidrun_service._target_package = "com.example.app"
 
-        with patch('mobile_crawler.domain.droidrun_agent_service.UIWaitPredicate') as mock_wait, \
-             patch('mobile_crawler.domain.droidrun_agent_service.ActionVerifier') as mock_verifier, \
-             patch('mobile_crawler.domain.droidrun_agent_service.DeviceContextCapture') as mock_ctx, \
-             patch('mobile_crawler.domain.droidrun_agent_service.AppSwitchRecovery') as mock_recovery, \
+        with patch('mobile_crawler.domain.crawler_agent_service.UIWaitPredicate') as mock_wait, \
+             patch('mobile_crawler.domain.crawler_agent_service.ActionVerifier') as mock_verifier, \
+             patch('mobile_crawler.domain.crawler_agent_service.DeviceContextCapture') as mock_ctx, \
+             patch('mobile_crawler.domain.crawler_agent_service.AppSwitchRecovery') as mock_recovery, \
              patch('mobile_crawler.domain.adb_action_executor.ADBActionExecutor'):
             droidrun_service._wire_observers_to_agent()
             mock_wait.assert_called_once()
@@ -284,20 +282,20 @@ class TestDroidRunAgentServiceWireObservers:
         mock_state_provider = Mock()
         mock_agent.state_provider = mock_state_provider
         mock_agent.driver = None
-        droidrun_service._droid_agent = mock_agent
+        droidrun_service._crawler_agent = mock_agent
         droidrun_service._target_package = "com.example.app"
 
-        with patch('mobile_crawler.domain.droidrun_agent_service.UIWaitPredicate') as mock_wait, \
-             patch('mobile_crawler.domain.droidrun_agent_service.ActionVerifier') as mock_verifier, \
-             patch('mobile_crawler.domain.droidrun_agent_service.DeviceContextCapture'), \
-             patch('mobile_crawler.domain.droidrun_agent_service.AppSwitchRecovery'), \
+        with patch('mobile_crawler.domain.crawler_agent_service.UIWaitPredicate') as mock_wait, \
+             patch('mobile_crawler.domain.crawler_agent_service.ActionVerifier') as mock_verifier, \
+             patch('mobile_crawler.domain.crawler_agent_service.DeviceContextCapture'), \
+             patch('mobile_crawler.domain.crawler_agent_service.AppSwitchRecovery'), \
              patch('mobile_crawler.domain.adb_action_executor.ADBActionExecutor'):
             droidrun_service._wire_observers_to_agent()
             mock_wait.assert_called_once()
             mock_verifier.assert_not_called()
 
 
-class TestDroidRunAgentServiceHandleToolExecution:
+class TestCrawlerAgentServiceHandleToolExecution:
     """Tests for _handle_tool_execution_event."""
 
     def test_handle_tool_execution_without_machine(self, droidrun_service):
@@ -367,14 +365,14 @@ class TestDroidRunAgentServiceHandleToolExecution:
         mock_validator.validate.return_value = Mock(is_valid=False, error="empty", element_count=0)
         droidrun_service._ui_dump_validator = mock_validator
 
-        # Need to mock droid_agent state_provider to return a11y data
+        # Need to mock crawler_agent state_provider to return a11y data
         mock_agent = Mock()
         mock_state_provider = Mock()
         mock_state = Mock()
         mock_state.get.return_value = [{"clickable": True}]
         mock_state_provider.get_state = AsyncMock(return_value=mock_state)
         mock_agent.state_provider = mock_state_provider
-        droidrun_service._droid_agent = mock_agent
+        droidrun_service._crawler_agent = mock_agent
 
         droidrun_service._action_verifier = None
         droidrun_service._ui_wait_predicate = None
@@ -394,7 +392,7 @@ class TestDroidRunAgentServiceHandleToolExecution:
         assert StepPhase.CAPTURE in calls
 
 
-class TestDroidRunAgentServiceErrorHandling:
+class TestCrawlerAgentServiceErrorHandling:
     """Tests for error handling."""
 
     def test_is_app_crash_error_detects_crash(self, droidrun_service):
@@ -452,7 +450,7 @@ class TestDroidRunAgentServiceErrorHandling:
         assert response_data["actions_taken"] == result
 
 
-class TestDroidRunAgentServiceConfig:
+class TestCrawlerAgentServiceConfig:
     """Tests for DroidRun configuration."""
 
     @patch.dict(os.environ, {}, clear=False)
@@ -541,7 +539,7 @@ class TestDroidRunAgentServiceConfig:
         assert config["telemetry"]["enabled"] is False
 
 
-class TestDroidRunAgentServiceTargetPreflight:
+class TestCrawlerAgentServiceTargetPreflight:
     """Tests for launching/verifying the target app before DroidRun starts."""
 
     @pytest.mark.asyncio
@@ -577,7 +575,7 @@ class TestDroidRunAgentServiceTargetPreflight:
             error_message="Device is locked. Unlock it manually and start the crawl again.",
         )
         fake_modules = self._fake_droidrun_modules(success=True)
-        fake_agent = fake_modules["droidrun.agent.droid.droid_agent"].DroidAgent
+        fake_agent = fake_modules["droidrun.agent.droid.crawler_agent"].CrawlerAgent
 
         with patch("mobile_crawler.domain.adb_action_executor.ADBActionExecutor", return_value=mock_adb), \
              patch.object(droidrun_service, "_ensure_target_app_active_before_droidrun", new=AsyncMock()) as target_preflight, \
@@ -644,7 +642,7 @@ class TestDroidRunAgentServiceTargetPreflight:
         mock_adb.get_current_package.return_value = "com.example.app"
 
         fake_modules = self._fake_droidrun_modules(success=True)
-        agent_instance = fake_modules["droidrun.agent.droid.droid_agent"].DroidAgent.return_value
+        agent_instance = fake_modules["droidrun.agent.droid.crawler_agent"].CrawlerAgent.return_value
 
         async def _run_list_result():
             return [{"action": "tap"}]
@@ -665,7 +663,7 @@ class TestDroidRunAgentServiceTargetPreflight:
         assert result.steps_completed == 1
 
     @pytest.mark.asyncio
-    async def test_execute_preflight_failure_returns_without_creating_droid_agent(self, droidrun_service):
+    async def test_execute_preflight_failure_returns_without_creating_crawler_agent(self, droidrun_service):
         mock_adb = Mock()
         mock_adb.get_current_package.return_value = "com.android.launcher"
         mock_adb.am_start_recovery.return_value = ActionResult(
@@ -676,7 +674,7 @@ class TestDroidRunAgentServiceTargetPreflight:
         )
 
         fake_modules = self._fake_droidrun_modules(success=True)
-        fake_agent = fake_modules["droidrun.agent.droid.droid_agent"].DroidAgent
+        fake_agent = fake_modules["droidrun.agent.droid.crawler_agent"].CrawlerAgent
 
         with patch("mobile_crawler.domain.adb_action_executor.ADBActionExecutor", return_value=mock_adb), \
              patch.object(droidrun_service, "_initialize_agent", new=AsyncMock()), \
@@ -704,22 +702,22 @@ class TestDroidRunAgentServiceTargetPreflight:
             action_outcomes=[],
         )
 
-        droid_agent_module = types.ModuleType("droidrun.agent.droid.droid_agent")
-        droid_agent_module.DroidAgent = Mock(return_value=agent_instance)
+        crawler_agent_module = types.ModuleType("droidrun.agent.droid.crawler_agent")
+        crawler_agent_module.CrawlerAgent = Mock(return_value=agent_instance)
 
         return {
             "droidrun": types.ModuleType("droidrun"),
             "droidrun.agent": types.ModuleType("droidrun.agent"),
             "droidrun.agent.droid": types.ModuleType("droidrun.agent.droid"),
-            "droidrun.agent.droid.droid_agent": droid_agent_module,
+            "droidrun.agent.droid.crawler_agent": crawler_agent_module,
             "mobile_crawler.domain.crawler_agent": types.ModuleType("mobile_crawler.domain.crawler_agent"),
             "mobile_crawler.domain.crawler_agent.agent": types.ModuleType("mobile_crawler.domain.crawler_agent.agent"),
             "mobile_crawler.domain.crawler_agent.agent.droid": types.ModuleType("mobile_crawler.domain.crawler_agent.agent.droid"),
-            "mobile_crawler.domain.crawler_agent.agent.droid.droid_agent": droid_agent_module,
+            "mobile_crawler.domain.crawler_agent.agent.droid.crawler_agent": crawler_agent_module,
         }
 
 
-class TestDroidRunAgentServiceLogging:
+class TestCrawlerAgentServiceLogging:
     """Tests for run logging configuration."""
 
     def test_configure_run_logging(self, droidrun_service, tmp_path):
@@ -730,7 +728,7 @@ class TestDroidRunAgentServiceLogging:
         original_propagate = droid_logger.propagate
 
         try:
-            with patch('mobile_crawler.domain.droidrun_agent_service.DroidRunLogHandler') as mock_handler_class:
+            with patch('mobile_crawler.domain.crawler_agent_service.DroidRunLogHandler') as mock_handler_class:
                 mock_handler = Mock()
                 mock_handler_class.return_value = mock_handler
                 droidrun_service.configure_run_logging(1, log_dir, emit_debug, True)
@@ -749,7 +747,7 @@ class TestDroidRunAgentServiceLogging:
         original_propagate = droid_logger.propagate
 
         try:
-            with patch('mobile_crawler.domain.droidrun_agent_service.DroidRunLogHandler') as mock_handler_class:
+            with patch('mobile_crawler.domain.crawler_agent_service.DroidRunLogHandler') as mock_handler_class:
                 mock_handler = Mock()
                 mock_handler_class.return_value = mock_handler
                 droidrun_service.configure_run_logging(1, log_dir, emit_debug, True)
@@ -760,7 +758,7 @@ class TestDroidRunAgentServiceLogging:
             droid_logger.propagate = original_propagate
 
 
-class TestDroidRunAgentServiceActionConversion:
+class TestCrawlerAgentServiceActionConversion:
     """Tests for action conversion."""
 
     def test_convert_droidrun_actions(self, droidrun_service):
@@ -821,7 +819,7 @@ class TestDroidRunLogHandler:
 
         handler.emit(record)
 
-        with open(log_path, "r") as f:
+        with open(log_path) as f:
             line = f.readline()
             event = json.loads(line)
             assert event["message"] == "test log message"

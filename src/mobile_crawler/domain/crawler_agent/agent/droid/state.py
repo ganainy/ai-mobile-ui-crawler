@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from typing import Dict, List, Optional
 from uuid import uuid4
 
 from llama_index.core.base.llms.types import ChatMessage
@@ -15,9 +14,9 @@ class QueuedUserMessage(BaseModel):
     queued_at_step: int = 0
 
 
-class DroidAgentState(BaseModel):
+class CrawlerAgentState(BaseModel):
     """
-    State model for DroidAgent workflow - shared across parent and child workflows.
+    State model for CrawlerAgent workflow - shared across parent and child workflows.
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -34,8 +33,8 @@ class DroidAgentState(BaseModel):
     device_date: str = ""  # Fetched once at startup
     formatted_device_state: str = ""  # Text description for prompts
     focused_text: str = ""  # Text in focused input field
-    a11y_tree: List[Dict] = Field(default_factory=list)  # Raw accessibility tree
-    phone_state: Dict = Field(default_factory=dict)  # Package, activity, etc.
+    a11y_tree: list[dict] = Field(default_factory=list)  # Raw accessibility tree
+    phone_state: dict = Field(default_factory=dict)  # Package, activity, etc.
     screenshot: str | bytes | None = None  # Current screenshot
     width: int = 0
     height: int = 0
@@ -73,29 +72,29 @@ class DroidAgentState(BaseModel):
     # ========================================================================
     # Action Tracking
     # ========================================================================
-    action_history: List[Dict] = Field(default_factory=list)
-    summary_history: List[str] = Field(default_factory=list)
-    action_outcomes: List[bool] = Field(default_factory=list)
-    error_descriptions: List[str] = Field(default_factory=list)
-    last_action: Dict = Field(default_factory=dict)
+    action_history: list[dict] = Field(default_factory=list)
+    summary_history: list[str] = Field(default_factory=list)
+    action_outcomes: list[bool] = Field(default_factory=list)
+    error_descriptions: list[str] = Field(default_factory=list)
+    last_action: dict = Field(default_factory=dict)
     last_summary: str = ""
 
     # ========================================================================
     # Memory
     # ========================================================================
     manager_memory: str = ""  # Manager's planning notes (append-only string)
-    fast_memory: List[str] = Field(default_factory=list)  # FastAgent remember() items
+    fast_memory: list[str] = Field(default_factory=list)  # FastAgent remember() items
 
     # ========================================================================
     # Completion State (set by complete() tool, checked by FastAgent)
     # ========================================================================
     finished: bool = False
-    success: Optional[bool] = None
+    success: bool | None = None
 
     # ========================================================================
     # Message History (for stateful agents - preserves ChatMessage blocks)
     # ========================================================================
-    message_history: List[ChatMessage] = Field(default_factory=list)
+    message_history: list[ChatMessage] = Field(default_factory=list)
 
     # ========================================================================
     # Error Handling
@@ -106,13 +105,13 @@ class DroidAgentState(BaseModel):
     # ========================================================================
     # External User Messages (mid-run injection queue)
     # ========================================================================
-    pending_user_messages: List[QueuedUserMessage] = Field(default_factory=list)
+    pending_user_messages: list[QueuedUserMessage] = Field(default_factory=list)
     workflow_completed: bool = False
 
     # ========================================================================
     # Custom Variables (user-defined)
     # ========================================================================
-    custom_variables: Dict = Field(default_factory=dict)
+    custom_variables: dict = Field(default_factory=dict)
     output_dir: str = ""
 
     # ========================================================================

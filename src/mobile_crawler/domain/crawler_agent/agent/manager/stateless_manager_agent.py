@@ -5,7 +5,7 @@ StatelessManagerAgent - Stateless planning agent that rebuilds context each turn
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Optional, Type
+from typing import TYPE_CHECKING
 
 from llama_index.core.llms.llm import LLM
 from llama_index.core.workflow import Context, StartEvent, StopEvent, Workflow, step
@@ -29,7 +29,7 @@ from mobile_crawler.domain.crawler_agent.tools.driver.base import DeviceDisconne
 
 if TYPE_CHECKING:
     from mobile_crawler.domain.crawler_agent.agent.action_context import ActionContext
-    from mobile_crawler.domain.crawler_agent.agent.droid import DroidAgentState
+    from mobile_crawler.domain.crawler_agent.agent.droid import CrawlerAgentState
     from mobile_crawler.domain.crawler_agent.agent.tool_registry import ToolRegistry
     from mobile_crawler.domain.crawler_agent.config_manager.config_manager import AgentConfig, TracingConfig
     from mobile_crawler.domain.crawler_agent.tools.ui.provider import StateProvider
@@ -42,15 +42,15 @@ class StatelessManagerAgent(Workflow):
     def __init__(
         self,
         llm: LLM,
-        action_ctx: "ActionContext | None",
-        state_provider: "StateProvider | None",
+        action_ctx: ActionContext | None,
+        state_provider: StateProvider | None,
         save_trajectory: str = "none",
-        shared_state: "DroidAgentState" = None,
-        agent_config: "AgentConfig" = None,
-        registry: "ToolRegistry | None" = None,
-        output_model: Type[BaseModel] | None = None,
-        prompt_resolver: Optional[PromptResolver] = None,
-        tracing_config: "TracingConfig | None" = None,
+        shared_state: CrawlerAgentState = None,
+        agent_config: AgentConfig = None,
+        registry: ToolRegistry | None = None,
+        output_model: type[BaseModel] | None = None,
+        prompt_resolver: PromptResolver | None = None,
+        tracing_config: TracingConfig | None = None,
         **kwargs,
     ):
         super().__init__(**kwargs)

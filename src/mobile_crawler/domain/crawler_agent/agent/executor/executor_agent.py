@@ -12,7 +12,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from llama_index.core.base.llms.types import ChatMessage, ImageBlock, TextBlock
 from llama_index.core.llms.llm import LLM
@@ -33,7 +33,7 @@ from mobile_crawler.domain.crawler_agent.config_manager.prompt_loader import Pro
 
 if TYPE_CHECKING:
     from mobile_crawler.domain.crawler_agent.agent.action_context import ActionContext
-    from mobile_crawler.domain.crawler_agent.agent.droid import DroidAgentState
+    from mobile_crawler.domain.crawler_agent.agent.droid import CrawlerAgentState
     from mobile_crawler.domain.crawler_agent.agent.tool_registry import ToolRegistry
 
 logger = logging.getLogger("crawler_agent")
@@ -53,11 +53,11 @@ class ExecutorAgent(Workflow):
     def __init__(
         self,
         llm: LLM,
-        registry: "ToolRegistry | None",
-        action_ctx: "ActionContext | None",
-        shared_state: "DroidAgentState",
+        registry: ToolRegistry | None,
+        action_ctx: ActionContext | None,
+        shared_state: CrawlerAgentState,
         agent_config: AgentConfig,
-        prompt_resolver: Optional[PromptResolver] = None,
+        prompt_resolver: PromptResolver | None = None,
         **kwargs,
     ):
         super().__init__(**kwargs)

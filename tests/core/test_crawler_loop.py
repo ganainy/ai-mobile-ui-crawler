@@ -1,10 +1,10 @@
 """Tests for CrawlerLoop lifecycle, event emission, and error handling."""
 
+from unittest.mock import AsyncMock, Mock, patch
+
 import pytest
-from unittest.mock import Mock, patch, MagicMock, AsyncMock
 
 from mobile_crawler.core.crawler_loop import CrawlerLoop
-from mobile_crawler.domain.models import ActionResult
 
 
 @pytest.fixture
@@ -80,7 +80,7 @@ class TestCrawlerLoopInitialization:
 class TestCrawlerLoopLifecycle:
     """Tests for CrawlerLoop lifecycle and state transitions."""
 
-    @patch('mobile_crawler.core.crawler_loop.DroidRunAgentService')
+    @patch('mobile_crawler.core.crawler_loop.CrawlerAgentService')
     def test_run_emits_on_crawl_started(self, mock_droid_service_class, crawler_loop, mock_run_repository, mock_session_folder_manager, mock_listener):
         """Test that run() emits on_crawl_started event."""
         mock_run = Mock()
@@ -112,7 +112,7 @@ class TestCrawlerLoopLifecycle:
         mock_listener.on_crawl_started.assert_called_once_with(1, "com.example.app")
 
     @patch('mobile_crawler.core.crawler_loop.VideoRecordingManager')
-    @patch('mobile_crawler.core.crawler_loop.DroidRunAgentService')
+    @patch('mobile_crawler.core.crawler_loop.CrawlerAgentService')
     def test_run_starts_and_stops_video_recording_when_enabled(
         self,
         mock_droid_service_class,
@@ -168,7 +168,7 @@ class TestCrawlerLoopLifecycle:
         assert mock_run_repository.update_run_stats.call_args.kwargs["status"] == "COMPLETED"
 
     @patch('mobile_crawler.core.crawler_loop.TrafficCaptureManager')
-    @patch('mobile_crawler.core.crawler_loop.DroidRunAgentService')
+    @patch('mobile_crawler.core.crawler_loop.CrawlerAgentService')
     def test_run_starts_traffic_capture_before_exploration_when_enabled(
         self,
         mock_droid_service_class,
@@ -246,7 +246,7 @@ class TestCrawlerLoopLifecycle:
         )
 
     @patch('mobile_crawler.core.crawler_loop.TrafficCaptureManager')
-    @patch('mobile_crawler.core.crawler_loop.DroidRunAgentService')
+    @patch('mobile_crawler.core.crawler_loop.CrawlerAgentService')
     def test_run_stops_traffic_capture_when_droidrun_raises(
         self,
         mock_droid_service_class,
@@ -291,7 +291,7 @@ class TestCrawlerLoopLifecycle:
         )
 
     @patch('mobile_crawler.core.crawler_loop.TrafficCaptureManager')
-    @patch('mobile_crawler.core.crawler_loop.DroidRunAgentService')
+    @patch('mobile_crawler.core.crawler_loop.CrawlerAgentService')
     def test_run_logs_nonfatal_traffic_capture_start_failure(
         self,
         mock_droid_service_class,
@@ -343,7 +343,7 @@ class TestCrawlerLoopLifecycle:
         )
 
     @patch('mobile_crawler.core.crawler_loop.TrafficCaptureManager')
-    @patch('mobile_crawler.core.crawler_loop.DroidRunAgentService')
+    @patch('mobile_crawler.core.crawler_loop.CrawlerAgentService')
     def test_run_continues_when_traffic_capture_start_raises(
         self,
         mock_droid_service_class,
@@ -394,7 +394,7 @@ class TestCrawlerLoopLifecycle:
             for call in mock_listener.on_debug_log.call_args_list
         )
 
-    @patch('mobile_crawler.core.crawler_loop.DroidRunAgentService')
+    @patch('mobile_crawler.core.crawler_loop.CrawlerAgentService')
     def test_run_transitions_through_states(self, mock_droid_service_class, crawler_loop, mock_run_repository, mock_session_folder_manager, mock_listener):
         """Test that run() transitions through states IDLE -> RUNNING -> STOPPED."""
         mock_run = Mock()
@@ -429,7 +429,7 @@ class TestCrawlerLoopLifecycle:
         assert any(s[1] == "STOPPED" for s in states)
 
     @patch('mobile_crawler.core.crawler_loop.MobSFManager')
-    @patch('mobile_crawler.core.crawler_loop.DroidRunAgentService')
+    @patch('mobile_crawler.core.crawler_loop.CrawlerAgentService')
     def test_run_calls_mobsf_after_success_when_enabled(
         self,
         mock_droid_service_class,
@@ -479,7 +479,7 @@ class TestCrawlerLoopLifecycle:
         mock_mobsf.analyze_run.assert_called_once_with(mock_run, "device123")
 
     @patch('mobile_crawler.core.crawler_loop.MobSFManager')
-    @patch('mobile_crawler.core.crawler_loop.DroidRunAgentService')
+    @patch('mobile_crawler.core.crawler_loop.CrawlerAgentService')
     def test_run_skips_mobsf_when_disabled(
         self,
         mock_droid_service_class,
@@ -520,7 +520,7 @@ class TestCrawlerLoopLifecycle:
         mock_mobsf_class.assert_not_called()
 
     @patch('mobile_crawler.core.crawler_loop.MobSFManager')
-    @patch('mobile_crawler.core.crawler_loop.DroidRunAgentService')
+    @patch('mobile_crawler.core.crawler_loop.CrawlerAgentService')
     def test_run_logs_mobsf_failure_without_erroring_crawl(
         self,
         mock_droid_service_class,
@@ -569,7 +569,7 @@ class TestCrawlerLoopLifecycle:
             for call in mock_listener.on_debug_log.call_args_list
         )
 
-    @patch('mobile_crawler.core.crawler_loop.DroidRunAgentService')
+    @patch('mobile_crawler.core.crawler_loop.CrawlerAgentService')
     def test_run_handles_exception_and_emits_on_error(self, mock_droid_service_class, crawler_loop, mock_run_repository, mock_session_folder_manager, mock_listener):
         """Test that run() handles exceptions and emits on_error."""
         mock_run = Mock()
@@ -728,7 +728,7 @@ class TestCrawlerLoopErrorHandling:
         from mobile_crawler.domain.errors import FatalError
         assert isinstance(args[0][2], FatalError)
 
-    @patch('mobile_crawler.core.crawler_loop.DroidRunAgentService')
+    @patch('mobile_crawler.core.crawler_loop.CrawlerAgentService')
     def test_run_handles_crawler_error(self, mock_droid_service_class, crawler_loop, mock_run_repository, mock_session_folder_manager, mock_listener):
         """Test run() handles CrawlerError gracefully."""
         from mobile_crawler.domain.errors import CrawlerError, ErrorContext

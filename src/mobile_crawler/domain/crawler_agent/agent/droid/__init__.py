@@ -1,10 +1,11 @@
 """
-Droidrun Agent Module.
+Crawler agent module.
 
-This module provides a ReAct agent for automating Android devices using reasoning and acting.
+This module provides the workflow agent for automating mobile devices with
+planning and action execution.
 """
 
-from mobile_crawler.domain.crawler_agent.agent.droid.droid_agent import DroidAgent
-from mobile_crawler.domain.crawler_agent.agent.droid.state import DroidAgentState
+from mobile_crawler.domain.crawler_agent.agent.droid.crawler_agent import CrawlerAgent
+from mobile_crawler.domain.crawler_agent.agent.droid.state import CrawlerAgentState
 
-__all__ = ["DroidAgent", "DroidAgentState"]
+__all__ = ["CrawlerAgent", "CrawlerAgentState"]

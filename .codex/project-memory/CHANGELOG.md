@@ -7,7 +7,8 @@ Durable agent-maintained memory for `E:\VS-projects\mobile-crawler`. Newest entr
 Project state:
 - Mobile Crawler is a Python 3.12 desktop/CLI tool for AI-assisted Android app exploration.
 - The active agent runtime is internalized at `src/mobile_crawler/domain/crawler_agent`.
-- `DroidRunAgentService` remains the Mobile Crawler adapter/service name, but it imports runtime classes from `mobile_crawler.domain.crawler_agent`.
+- `CrawlerAgentService` is the Mobile Crawler adapter/service around the internal runtime and imports runtime classes from `mobile_crawler.domain.crawler_agent`.
+- The internal workflow class is now `CrawlerAgent`; the old `DroidAgent` symbol/module name has been removed from active source and docs.
 - `docs/ARCHITECTURE.md` is the canonical architecture document.
 - `.planning` and completed planning artifacts have been removed by design.
 - `AGENTS.md` is currently missing from the workspace.
@@ -35,6 +36,151 @@ Validation baseline:
 Open cleanup notes:
 - Decide whether to restore, replace, or intentionally remove `CLAUDE.md`.
 - Recreate `AGENTS.md` only if persistent project-wide agent instructions are needed.
+
+## 2026-06-04 - Ran Ruff On Renamed Agent Files
+
+Files touched:
+- `src/mobile_crawler/core/crawler_loop.py`
+- `src/mobile_crawler/domain/crawler_agent_service.py`
+- `src/mobile_crawler/domain/crawler_agent/**/*.py`
+- `tests/core/test_crawler_loop.py`
+- `tests/core/test_droidrun_crawler_loop.py`
+- `tests/domain/test_crawler_agent_service.py`
+- `.codex/project-memory/CHANGELOG.md`
+
+What changed:
+- Ran Ruff after dev dependencies were installed.
+- Applied Ruff auto-fixes to the Python files touched by the `CrawlerAgent`/`CrawlerAgentService` rename.
+- Manually fixed remaining scoped Ruff issues in `crawler_agent_service.py`, `crawler_agent/__init__.py`, and the service tests.
+
+Architecture impact:
+- Runtime architecture unchanged.
+- Background workflow event consumption now explicitly binds the workflow handler into the nested consumer task to satisfy Ruff's loop-variable closure rule.
+
+Decisions:
+- Did not run repo-wide auto-fix because Ruff reports a large pre-existing backlog across old specs, tests, and unrelated files.
+- Excluded YAML example files from Python Ruff validation after Ruff tried to parse `credentials_example.yaml` as Python when passed explicitly.
+
+Validation:
+- Scoped Ruff check passed for the renamed agent/service Python files and related tests.
+- `pytest tests/domain/test_crawler_agent_service.py tests/core/test_crawler_loop.py tests/core/test_droidrun_crawler_loop.py` passed: 82 tests, 1 existing collection warning.
+
+Docs updated:
+- `.codex/project-memory/CHANGELOG.md`
+
+Follow-ups:
+- Decide whether to do a separate repo-wide Ruff cleanup commit for the pre-existing lint backlog.
+
+## 2026-06-04 - Added Crawler Agent Decision Loop README
+
+Files touched:
+- `docs/readmes/crawler-agent-decision-loop.md`
+- `docs/readmes/INDEX.md`
+- `README.md`
+- `.codex/project-memory/CHANGELOG.md`
+
+What changed:
+- Added a detailed README-style document explaining how `CrawlerAgent` runs in FastAgent mode and Manager/Executor reasoning mode.
+- Documented decision inputs, shared runtime state, action dispatch, loop termination, estimated timing costs, and speed/quality tuning levers.
+- Linked the new document from the root README and `docs/readmes/INDEX.md`.
+
+Architecture impact:
+- Runtime architecture unchanged.
+- Documentation now has a focused reference for understanding and tuning the agent decision loop.
+
+Decisions:
+- Kept this as a secondary README under `docs/readmes/` instead of expanding the root README further.
+- Used estimated timing ranges as practical guidance, not benchmarks.
+
+Validation:
+- Documentation update only; no code tests run.
+- Ran doc inventory and searched for the new document link.
+
+Docs updated:
+- `README.md`
+- `docs/readmes/INDEX.md`
+- `docs/readmes/crawler-agent-decision-loop.md`
+- `.codex/project-memory/CHANGELOG.md`
+
+Follow-ups:
+- Add runtime timing metrics per state-capture, Manager LLM, Executor LLM, action execution, wait, and verification phase before making major speed optimizations.
+
+## 2026-06-04 - Renamed Internal Workflow Agent
+
+Files touched:
+- `src/mobile_crawler/domain/crawler_agent/agent/droid/crawler_agent.py`
+- `src/mobile_crawler/domain/crawler_agent/agent/droid/__init__.py`
+- `src/mobile_crawler/domain/crawler_agent/agent/droid/state.py`
+- `src/mobile_crawler/domain/crawler_agent/telemetry/events.py`
+- `src/mobile_crawler/domain/crawler_agent/telemetry/__init__.py`
+- `src/mobile_crawler/domain/crawler_agent_service.py`
+- `README.md`
+- `docs/ARCHITECTURE.md`
+- `.codex/project-memory/CHANGELOG.md`
+
+What changed:
+- Renamed the internal workflow class from `DroidAgent` to `CrawlerAgent`.
+- Renamed the module from `agent/droid/droid_agent.py` to `agent/droid/crawler_agent.py`.
+- Renamed related internal types and telemetry events from `DroidAgentState`/`DroidAgent*Event` to `CrawlerAgentState`/`CrawlerAgent*Event`.
+- Updated `CrawlerAgentService` to instantiate and hold `_crawler_agent`.
+
+Architecture impact:
+- Runtime behavior unchanged.
+- Naming now reflects that Mobile Crawler runs the internalized crawler-agent workflow rather than an external DroidRun agent.
+
+Decisions:
+- Kept `DroidConfig` and other broader runtime/config names for now because this request was scoped to the workflow agent identity.
+- Kept the `agent/droid/` package path because it still describes the Android/mobile device workflow area.
+
+Validation:
+- `pytest tests/domain/test_crawler_agent_service.py tests/core/test_crawler_loop.py tests/core/test_droidrun_crawler_loop.py` passed: 82 tests, 1 existing collection warning.
+- Import check passed for `CrawlerAgent`, `CrawlerAgentState`, and `CrawlerAgentService`.
+- Search check found no active `DroidAgent`, `droid_agent`, or `_droid_agent` references in source, tests, or docs; historical memory entries still mention the old names as rename context.
+- `ruff` was not available on PATH or as `python -m ruff` in the current shell.
+
+Docs updated:
+- `README.md`
+- `docs/ARCHITECTURE.md`
+- `.codex/project-memory/CHANGELOG.md`
+
+Follow-ups:
+- Consider later cleanup for remaining broad DroidRun/Droid-prefixed config, DTO, and compatibility labels if the project should remove all inherited terminology.
+
+## 2026-06-04 - Renamed Internal Agent Service
+
+Files touched:
+- `src/mobile_crawler/domain/crawler_agent_service.py`
+- `src/mobile_crawler/core/crawler_loop.py`
+- `tests/domain/test_crawler_agent_service.py`
+- `tests/core/test_crawler_loop.py`
+- `tests/core/test_droidrun_crawler_loop.py`
+- `README.md`
+- `docs/ARCHITECTURE.md`
+- `.codex/project-memory/CHANGELOG.md`
+
+What changed:
+- Renamed the Mobile Crawler adapter from `DroidRunAgentService` to `CrawlerAgentService`.
+- Renamed the service module from `droidrun_agent_service.py` to `crawler_agent_service.py`.
+- Updated imports, test patches, docs, and memory to use the new service name.
+
+Architecture impact:
+- Runtime behavior unchanged.
+- Naming now matches the internalized `crawler_agent` runtime instead of implying an external DroidRun bridge.
+
+Decisions:
+- Kept runtime DTO names such as `DroidRunGoal`, `DroidRunResult`, and `DroidRunLogHandler` for now because they still describe inherited runtime semantics/log formats.
+
+Validation:
+- `pytest tests/domain/test_crawler_agent_service.py tests/core/test_crawler_loop.py tests/core/test_droidrun_crawler_loop.py` passed: 82 tests.
+- `ruff` was not available on PATH or as `python -m ruff` in the current shell.
+
+Docs updated:
+- `README.md`
+- `docs/ARCHITECTURE.md`
+- `.codex/project-memory/CHANGELOG.md`
+
+Follow-ups:
+- Consider a later deeper terminology cleanup for remaining DroidRun-prefixed DTOs and UI labels.
 
 ## 2026-06-04 - Grouped Secondary README Docs
 

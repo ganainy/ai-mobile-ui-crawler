@@ -2,10 +2,9 @@
 Events for the ManagerAgent workflow.
 
 Internal events for streaming to frontend/logging.
-For DroidAgent coordination events, see droid/events.py
+For CrawlerAgent coordination events, see droid/events.py
 """
 
-from typing import Optional
 
 from llama_index.core.workflow import Event
 
@@ -22,7 +21,7 @@ class ManagerResponseEvent(Event):
     """LLM response received, ready for parsing."""
 
     response: str
-    usage: Optional[UsageResult] = None
+    usage: UsageResult | None = None
 
 
 class ManagerPlanDetailsEvent(Event):
@@ -34,5 +33,5 @@ class ManagerPlanDetailsEvent(Event):
     answer: str = ""
     memory_update: str = ""
     progress_summary: str = ""
-    success: Optional[bool] = None  # True/False if complete, None if in progress
+    success: bool | None = None  # True/False if complete, None if in progress
     full_response: str = ""

@@ -5,7 +5,6 @@ This module defines Pydantic models for telemetry events captured during
 agent execution. All events inherit from TelemetryEvent base class.
 """
 
-from typing import Dict, Optional
 
 from pydantic import BaseModel
 
@@ -16,21 +15,21 @@ class TelemetryEvent(BaseModel):
     pass
 
 
-class DroidAgentInitEvent(TelemetryEvent):
-    """Event captured when DroidAgent is initialized."""
+class CrawlerAgentInitEvent(TelemetryEvent):
+    """Event captured when CrawlerAgent is initialized."""
 
     goal: str
-    llms: Dict[str, str]
+    llms: dict[str, str]
     tools: str
     max_steps: int
     timeout: int
-    vision: Dict[str, bool]
+    vision: dict[str, bool]
     reasoning: bool
     enable_tracing: bool
     debug: bool
     save_trajectories: str = "none"
     runtype: str = "developer"  # "cli" | "developer" | "web"
-    custom_prompts: Optional[Dict[str, str]] = (
+    custom_prompts: dict[str, str] | None = (
         None  # Keys: prompt names, Values: "custom" or None
     )
 
@@ -43,8 +42,8 @@ class PackageVisitEvent(TelemetryEvent):
     step_number: int
 
 
-class DroidAgentFinalizeEvent(TelemetryEvent):
-    """Event captured when DroidAgent execution completes."""
+class CrawlerAgentFinalizeEvent(TelemetryEvent):
+    """Event captured when CrawlerAgent execution completes."""
 
     success: bool
     reason: str

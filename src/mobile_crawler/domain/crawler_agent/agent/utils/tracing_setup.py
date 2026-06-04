@@ -1,15 +1,14 @@
 """
-Tracing setup utility for DroidAgent.
+Tracing setup utility for CrawlerAgent.
 
 This module provides a centralized way to configure tracing providers
 (Phoenix, Langfuse, etc.) based on the TracingConfig.
 """
 
+import base64
 import logging
 import os
-from typing import Optional
 from uuid import uuid4
-import base64
 
 import llama_index.core
 
@@ -20,12 +19,12 @@ logger = logging.getLogger("crawler_agent")
 _default_session_id: str = str(uuid4())
 _session_id: str = _default_session_id
 _tracing_initialized: bool = False
-_tracing_provider: Optional[str] = None
+_tracing_provider: str | None = None
 _user_id: str = "anonymous"
 
 
 def setup_tracing(
-    tracing_config: TracingConfig, agent: Optional[object] = None
+    tracing_config: TracingConfig, agent: object | None = None
 ) -> None:
     global _tracing_initialized, _tracing_provider, _session_id, _user_id
 
@@ -72,8 +71,8 @@ def setup_tracing(
 
 def _check_phoenix_reachable(endpoint: str, timeout: float = 3.0) -> bool:
     """Ping the Phoenix server to check if it's reachable."""
-    import urllib.request
     import urllib.error
+    import urllib.request
 
     try:
         req = urllib.request.Request(endpoint, method="GET")
@@ -111,14 +110,14 @@ def _setup_phoenix_tracing() -> bool:
 
 
 def _setup_langfuse_tracing(
-    tracing_config: TracingConfig, agent: Optional[object] = None
+    tracing_config: TracingConfig, agent: object | None = None
 ) -> None:
     """
     Set up Langfuse tracing with custom span processor.
 
     Args:
         tracing_config: TracingConfig instance containing Langfuse credentials
-        agent: Optional DroidAgent instance to pass to span processor
+        agent: Optional CrawlerAgent instance to pass to span processor
     """
 
     try:
@@ -149,8 +148,8 @@ def _setup_langfuse_tracing(
             return
 
         # STEP 1: Set up tracer provider (before any LlamaIndex imports!)
-        from opentelemetry.sdk.trace import TracerProvider
         from opentelemetry import trace
+        from opentelemetry.sdk.trace import TracerProvider
 
         # Check if there's already a tracer provider (from Phoenix or previous setup)
         existing_provider = trace.get_tracer_provider()
@@ -175,8 +174,8 @@ def _setup_langfuse_tracing(
             logger.debug("🔍 LlamaIndex already instrumented")
 
         # STEP 3: Patch the encoder (now that instrumentation is active)
-        from pydantic import BaseModel as PydanticV2BaseModel
         from openinference.instrumentation.llama_index import _handler
+        from pydantic import BaseModel as PydanticV2BaseModel
 
         _original_encoder = _handler._encoder
 
@@ -219,8 +218,8 @@ def apply_session_context() -> None:
     if not _tracing_initialized or _tracing_provider != "langfuse":
         return
 
-    from opentelemetry.context import attach, get_current, set_value
     from openinference.semconv.trace import SpanAttributes
+    from opentelemetry.context import attach, get_current, set_value
 
     ctx = get_current()
     ctx = set_value(SpanAttributes.SESSION_ID, _session_id, ctx)
@@ -251,9 +250,10 @@ def record_langfuse_screenshot(
 
     try:
         from opentelemetry import trace
+
         from mobile_crawler.domain.crawler_agent.telemetry.langfuse_processor import (
-            get_root_span_context,
             get_last_step_span_context,
+            get_root_span_context,
         )
 
         tracer = trace.get_tracer("droidrun.screenshot")

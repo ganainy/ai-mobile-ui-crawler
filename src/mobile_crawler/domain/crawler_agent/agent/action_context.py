@@ -6,10 +6,10 @@ previously received.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from mobile_crawler.domain.crawler_agent.agent.droid.state import DroidAgentState
+    from mobile_crawler.domain.crawler_agent.agent.droid.state import CrawlerAgentState
     from mobile_crawler.domain.crawler_agent.credential_manager import CredentialManager
     from mobile_crawler.domain.crawler_agent.tools.driver.base import DeviceDriver
     from mobile_crawler.domain.crawler_agent.tools.ui.provider import StateProvider
@@ -21,12 +21,12 @@ class ActionContext:
 
     def __init__(
         self,
-        driver: "DeviceDriver",
-        ui: "Optional[UIState]",
-        shared_state: "DroidAgentState",
-        state_provider: "StateProvider",
+        driver: DeviceDriver,
+        ui: UIState | None,
+        shared_state: CrawlerAgentState,
+        state_provider: StateProvider,
         app_opener_llm=None,
-        credential_manager: "Optional[CredentialManager]" = None,
+        credential_manager: CredentialManager | None = None,
         streaming: bool = False,
     ) -> None:
         self.driver = driver

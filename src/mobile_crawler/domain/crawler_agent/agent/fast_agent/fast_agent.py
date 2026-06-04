@@ -9,7 +9,7 @@ import asyncio
 import copy
 import logging
 import os
-from typing import TYPE_CHECKING, Optional, Type
+from typing import TYPE_CHECKING, Optional
 
 from llama_index.core.base.llms.types import ChatMessage, ImageBlock, TextBlock
 from llama_index.core.llms.llm import LLM
@@ -18,6 +18,12 @@ from opentelemetry import trace
 from pydantic import BaseModel
 
 from mobile_crawler.domain.crawler_agent.agent.action_result import ActionResult
+from mobile_crawler.domain.crawler_agent.agent.common.constants import LLM_HISTORY_LIMIT
+from mobile_crawler.domain.crawler_agent.agent.common.events import RecordUIStateEvent, ScreenshotEvent
+from mobile_crawler.domain.crawler_agent.agent.droid.events import (
+    ExternalUserMessageAppliedEvent,
+    ExternalUserMessageDroppedEvent,
+)
 from mobile_crawler.domain.crawler_agent.agent.fast_agent.events import (
     FastAgentEndEvent,
     FastAgentInputEvent,
@@ -32,12 +38,6 @@ from mobile_crawler.domain.crawler_agent.agent.fast_agent.xml_parser import (
     format_tool_results,
     parse_tool_calls,
 )
-from mobile_crawler.domain.crawler_agent.agent.common.constants import LLM_HISTORY_LIMIT
-from mobile_crawler.domain.crawler_agent.agent.common.events import RecordUIStateEvent, ScreenshotEvent
-from mobile_crawler.domain.crawler_agent.agent.droid.events import (
-    ExternalUserMessageAppliedEvent,
-    ExternalUserMessageDroppedEvent,
-)
 from mobile_crawler.domain.crawler_agent.agent.usage import get_usage_from_response
 from mobile_crawler.domain.crawler_agent.agent.utils.chat_utils import limit_history
 from mobile_crawler.domain.crawler_agent.agent.utils.inference import acall_with_retries
@@ -49,7 +49,7 @@ from mobile_crawler.domain.crawler_agent.tools.driver.base import DeviceDisconne
 
 if TYPE_CHECKING:
     from mobile_crawler.domain.crawler_agent.agent.action_context import ActionContext
-    from mobile_crawler.domain.crawler_agent.agent.droid import DroidAgentState
+    from mobile_crawler.domain.crawler_agent.agent.droid import CrawlerAgentState
     from mobile_crawler.domain.crawler_agent.agent.tool_registry import ToolRegistry
     from mobile_crawler.domain.crawler_agent.tools.ui.provider import StateProvider
 
@@ -72,9 +72,9 @@ class FastAgent(Workflow):
         state_provider: "StateProvider",
         save_trajectory: str = "none",
         debug: bool = False,
-        shared_state: Optional["DroidAgentState"] = None,
-        output_model: Type[BaseModel] | None = None,
-        prompt_resolver: Optional[PromptResolver] = None,
+        shared_state: Optional["CrawlerAgentState"] = None,
+        output_model: type[BaseModel] | None = None,
+        prompt_resolver: PromptResolver | None = None,
         tracing_config: TracingConfig | None = None,
         *args,
         **kwargs,

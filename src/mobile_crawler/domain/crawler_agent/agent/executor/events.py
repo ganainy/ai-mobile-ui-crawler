@@ -2,10 +2,9 @@
 Events for the ExecutorAgent workflow.
 
 Internal events for streaming to frontend/logging.
-For DroidAgent coordination events, see droid/events.py
+For CrawlerAgent coordination events, see droid/events.py
 """
 
-from typing import Dict, Optional
 
 from llama_index.core.workflow import Event
 
@@ -22,7 +21,7 @@ class ExecutorResponseEvent(Event):
     """LLM response received, ready for parsing."""
 
     response: str
-    usage: Optional[UsageResult] = None
+    usage: UsageResult | None = None
 
 
 class ExecutorActionEvent(Event):
@@ -37,7 +36,7 @@ class ExecutorActionEvent(Event):
 class ExecutorActionResultEvent(Event):
     """Action execution result (internal event with full details)."""
 
-    action: Dict
+    action: dict
     success: bool
     error: str
     summary: str

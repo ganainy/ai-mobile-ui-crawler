@@ -5,10 +5,9 @@ This module provides logic to resolve prompts from either:
 1. Custom prompt strings (Jinja2 templates passed at runtime)
 2. File paths (default behavior via AgentConfig)
 
-This keeps the DroidAgent clean and separates prompt resolution logic.
+This keeps the CrawlerAgent clean and separates prompt resolution logic.
 """
 
-from typing import Dict, Optional
 
 
 class PromptResolver:
@@ -20,7 +19,7 @@ class PromptResolver:
         prompt = resolver.get_prompt("fast_agent_system", fallback_path="/path/to/prompt.j2")
     """
 
-    def __init__(self, custom_prompts: Optional[Dict[str, str]] = None):
+    def __init__(self, custom_prompts: dict[str, str] | None = None):
         """
         Initialize prompt resolver.
 
@@ -32,8 +31,8 @@ class PromptResolver:
         self.custom_prompts = custom_prompts or {}
 
     def get_prompt(
-        self, prompt_key: str, fallback_path: Optional[str] = None
-    ) -> Optional[str]:
+        self, prompt_key: str, fallback_path: str | None = None
+    ) -> str | None:
         """
         Get prompt by key, returning custom template or None if not found.
 

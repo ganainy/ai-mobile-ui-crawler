@@ -2,12 +2,12 @@
 Macro Replay Module - Replay recorded UI automation sequences.
 
 This module provides functionality to load and replay macro JSON files
-that were generated during DroidAgent trajectory recording.
+that were generated during CrawlerAgent trajectory recording.
 """
 
 import asyncio
 import logging
-from typing import Any, Dict, Optional
+from typing import Any
 
 from mobile_crawler.domain.crawler_agent.agent.utils.trajectory import Trajectory
 from mobile_crawler.domain.crawler_agent.tools.driver.android import AndroidDriver
@@ -46,7 +46,7 @@ class MacroPlayer:
             logger.info(f"🤖 Initialized driver for device: {self.device_serial}")
         return self.driver
 
-    def load_macro_from_file(self, macro_file_path: str) -> Dict[str, Any]:
+    def load_macro_from_file(self, macro_file_path: str) -> dict[str, Any]:
         """
         Load macro data from a JSON file.
 
@@ -58,7 +58,7 @@ class MacroPlayer:
         """
         return Trajectory.load_macro_sequence(macro_file_path)
 
-    def load_macro_from_folder(self, trajectory_folder: str) -> Dict[str, Any]:
+    def load_macro_from_folder(self, trajectory_folder: str) -> dict[str, Any]:
         """
         Load macro data from a trajectory folder.
 
@@ -70,7 +70,7 @@ class MacroPlayer:
         """
         return Trajectory.load_macro_sequence(trajectory_folder)
 
-    async def replay_action(self, action: Dict[str, Any]) -> bool:
+    async def replay_action(self, action: dict[str, Any]) -> bool:
         """
         Replay a single action.
 
@@ -171,9 +171,9 @@ class MacroPlayer:
 
     async def replay_macro(
         self,
-        macro_data: Dict[str, Any],
+        macro_data: dict[str, Any],
         start_from_step: int = 0,
-        max_steps: Optional[int] = None,
+        max_steps: int | None = None,
     ) -> bool:
         """
         Replay a complete macro sequence.
@@ -257,7 +257,7 @@ async def replay_macro_file(
     device_serial: str = None,
     delay_between_actions: float = 1.0,
     start_from_step: int = 0,
-    max_steps: Optional[int] = None,
+    max_steps: int | None = None,
 ) -> bool:
     """
     Convenience function to replay a macro from a file.
@@ -291,7 +291,7 @@ async def replay_macro_folder(
     device_serial: str = None,
     delay_between_actions: float = 1.0,
     start_from_step: int = 0,
-    max_steps: Optional[int] = None,
+    max_steps: int | None = None,
 ) -> bool:
     """
     Convenience function to replay a macro from a trajectory folder.

@@ -23,38 +23,37 @@ import json
 import logging
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor, Future
+from concurrent.futures import Future, ThreadPoolExecutor
 from contextvars import ContextVar
-from datetime import datetime, timezone
-from typing import List, Optional, TYPE_CHECKING
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Optional
 
 import requests
-from opentelemetry.context import Context
-from opentelemetry.sdk.trace import ReadableSpan, Span
-from opentelemetry import trace
-
 from langfuse._client.span_processor import (
     LangfuseSpanProcessor as BaseLangfuseSpanProcessor,
 )
+from opentelemetry import trace
+from opentelemetry.context import Context
+from opentelemetry.sdk.trace import ReadableSpan, Span
 
 from mobile_crawler.domain.crawler_agent import __version__
 
 if TYPE_CHECKING:
-    from mobile_crawler.domain.crawler_agent import DroidAgent
+    from mobile_crawler.domain.crawler_agent import CrawlerAgent
 
-_current_agent: ContextVar[Optional["DroidAgent"]] = ContextVar(
+_current_agent: ContextVar[Optional["CrawlerAgent"]] = ContextVar(
     "_current_agent", default=None
 )
-_root_span_context: ContextVar[Optional[Context]] = ContextVar(
+_root_span_context: ContextVar[Context | None] = ContextVar(
     "_root_span_context", default=None
 )
 # Track last active step span (FastAgent/Manager/Executor) to parent screenshots
-_last_step_span_context: ContextVar[Optional[Context]] = ContextVar(
+_last_step_span_context: ContextVar[Context | None] = ContextVar(
     "_last_step_span_context", default=None
 )
 
 
-def set_current_agent(agent: "DroidAgent") -> None:
+def set_current_agent(agent: "CrawlerAgent") -> None:
     _current_agent.set(agent)
 
 
@@ -67,7 +66,7 @@ def set_root_span_context(span: Span) -> None:
         pass
 
 
-def get_root_span_context() -> Optional[Context]:
+def get_root_span_context() -> Context | None:
     return _root_span_context.get()
 
 
@@ -79,7 +78,7 @@ def set_last_step_span_context(span: Span) -> None:
         pass
 
 
-def get_last_step_span_context() -> Optional[Context]:
+def get_last_step_span_context() -> Context | None:
     return _last_step_span_context.get()
 
 
@@ -107,17 +106,17 @@ class LangfuseSpanProcessor(BaseLangfuseSpanProcessor):
         public_key: str,
         secret_key: str,
         base_url: str,
-        timeout: Optional[int] = None,
-        flush_at: Optional[int] = None,
-        flush_interval: Optional[float] = None,
-        blocked_instrumentation_scopes: Optional[List[str]] = None,
-        additional_headers: Optional[dict] = None,
-        agent: Optional["DroidAgent"] = None,
+        timeout: int | None = None,
+        flush_at: int | None = None,
+        flush_interval: float | None = None,
+        blocked_instrumentation_scopes: list[str] | None = None,
+        additional_headers: dict | None = None,
+        agent: Optional["CrawlerAgent"] = None,
     ):
         """Initialize the span processor with media upload support.
 
         Args:
-            agent: Optional DroidAgent instance for accessing agent context during span processing.
+            agent: Optional CrawlerAgent instance for accessing agent context during span processing.
         """
         super().__init__(
             public_key=public_key,
@@ -156,14 +155,14 @@ class LangfuseSpanProcessor(BaseLangfuseSpanProcessor):
             thread_name_prefix="LangfuseMediaUpload",
         )
 
-        self._pending_uploads: List[Future] = []
+        self._pending_uploads: list[Future] = []
         self._pending_lock = threading.Lock()
 
     @property
-    def agent(self) -> Optional["DroidAgent"]:
+    def agent(self) -> Optional["CrawlerAgent"]:
         return _current_agent.get()
 
-    def _extract_agent_input(self) -> Optional[dict]:
+    def _extract_agent_input(self) -> dict | None:
         if not self.agent:
             return None
 
@@ -329,9 +328,9 @@ class LangfuseSpanProcessor(BaseLangfuseSpanProcessor):
         content_length: int,
         sha256_hash: str,
         trace_id: str,
-        observation_id: Optional[str],
+        observation_id: str | None,
         field: str,
-    ) -> Optional[dict]:
+    ) -> dict | None:
         """Request presigned upload URL from Langfuse API."""
         try:
             url = f"{self._base_url}/api/public/media"
@@ -369,7 +368,7 @@ class LangfuseSpanProcessor(BaseLangfuseSpanProcessor):
         try:
             url = f"{self._base_url}/api/public/media/{media_id}"
             payload = {
-                "uploadedAt": datetime.now(timezone.utc).isoformat(),
+                "uploadedAt": datetime.now(UTC).isoformat(),
                 "uploadHttpStatus": status_code,
             }
 
@@ -415,7 +414,7 @@ class LangfuseSpanProcessor(BaseLangfuseSpanProcessor):
 
         super().shutdown()
 
-    def on_start(self, span: Span, parent_context: Optional[Context] = None) -> None:
+    def on_start(self, span: Span, parent_context: Context | None = None) -> None:
         super().on_start(span, parent_context)
 
         if not self.agent:
@@ -425,7 +424,7 @@ class LangfuseSpanProcessor(BaseLangfuseSpanProcessor):
             if "input.value" in span._attributes:
                 del span._attributes["input.value"]
 
-            if span.name == "DroidAgent.run":
+            if span.name == "CrawlerAgent.run":
                 set_root_span_context(span)
                 span._attributes["langfuse.release"] = "v" + __version__
                 input_data = self._extract_agent_input()
@@ -497,7 +496,7 @@ class LangfuseSpanProcessor(BaseLangfuseSpanProcessor):
                 ]
                 del span._attributes["output.value"]
             if span.name in (
-                "DroidAgent.run",
+                "CrawlerAgent.run",
                 "ManagerAgent.run",
                 "StatelessManagerAgent.run",
                 "ExecutorAgent.run",
@@ -735,7 +734,7 @@ class LangfuseSpanProcessor(BaseLangfuseSpanProcessor):
         block: dict,
         trace_id: str,
         field: str,
-    ) -> Optional[dict]:
+    ) -> dict | None:
         """Upload image to blob storage and return media reference."""
         if "image" in block and block["image"] is not None:
             image_base64 = block["image"]

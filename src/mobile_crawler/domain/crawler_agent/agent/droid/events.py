@@ -1,11 +1,10 @@
 """
-DroidAgent coordination events.
+CrawlerAgent coordination events.
 
-These events route between DroidAgent and child agents.
+These events route between CrawlerAgent and child agents.
 For internal agent events, see each agent's events.py file.
 """
 
-from typing import Dict, List, Optional
 
 from llama_index.core.workflow import Event, StopEvent
 from pydantic import BaseModel
@@ -34,7 +33,7 @@ class ManagerInputEvent(Event):
 
 class ManagerPlanEvent(Event):
     """
-    Coordination event from ManagerAgent to DroidAgent.
+    Coordination event from ManagerAgent to CrawlerAgent.
 
     Used for workflow step routing only (NOT streamed to frontend).
     For internal events with memory_update metadata, see ManagerPlanDetailsEvent.
@@ -44,7 +43,7 @@ class ManagerPlanEvent(Event):
     current_subgoal: str
     thought: str
     answer: str = ""
-    success: Optional[bool] = None  # True/False if complete, None if in progress
+    success: bool | None = None  # True/False if complete, None if in progress
 
 
 class ExecutorInputEvent(Event):
@@ -56,7 +55,7 @@ class ExecutorInputEvent(Event):
 class ExecutorResultEvent(Event):
     """Executor finished with action result."""
 
-    action: Dict
+    action: dict
     outcome: bool
     error: str
     summary: str
@@ -68,13 +67,13 @@ class ExecutorResultEvent(Event):
 
 
 class ExternalUserMessageAppliedEvent(Event):
-    message_ids: List[str]
+    message_ids: list[str]
     consumer: str
     step_number: int
 
 
 class ExternalUserMessageDroppedEvent(Event):
-    message_ids: List[str]
+    message_ids: list[str]
     reason: str
     step_number: int
 
@@ -93,9 +92,9 @@ class FinalizeEvent(Event):
 
 class ResultEvent(StopEvent):
     """
-    Final result from DroidAgent.
+    Final result from CrawlerAgent.
 
-    Returned by DroidAgent.run() with:
+    Returned by CrawlerAgent.run() with:
     - success: Whether the task completed successfully
     - reason: Explanation or answer
     - steps: Number of steps taken
@@ -105,4 +104,4 @@ class ResultEvent(StopEvent):
     success: bool
     reason: str
     steps: int
-    structured_output: Optional[BaseModel] = None
+    structured_output: BaseModel | None = None
