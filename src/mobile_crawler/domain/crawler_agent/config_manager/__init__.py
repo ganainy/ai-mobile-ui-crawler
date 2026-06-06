@@ -3,7 +3,7 @@ from mobile_crawler.domain.crawler_agent.config_manager.config_manager import (
     AppCardConfig,
     CredentialsConfig,
     DeviceConfig,
-    DroidConfig,
+    CrawlerConfig,
     ExecutorConfig,
     FastAgentConfig,
     LLMProfile,
@@ -18,7 +18,7 @@ from mobile_crawler.domain.crawler_agent.config_manager.path_resolver import Pat
 from mobile_crawler.domain.crawler_agent.config_manager.prompt_loader import PromptLoader
 
 __all__ = [
-    "DroidConfig",
+    "CrawlerConfig",
     "LLMProfile",
     "AgentConfig",
     "FastAgentConfig",

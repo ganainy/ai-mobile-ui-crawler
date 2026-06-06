@@ -6,7 +6,7 @@ Two variants available:
 - StatelessManagerAgent: Stateless, rebuilds context each turn
 """
 
-from mobile_crawler.domain.crawler_agent.agent.droid.events import ManagerInputEvent, ManagerPlanEvent
+from mobile_crawler.domain.crawler_agent.agent.common.events import ManagerInputEvent, ManagerPlanEvent
 from mobile_crawler.domain.crawler_agent.agent.manager.events import (
     ManagerContextEvent,
     ManagerPlanDetailsEvent,

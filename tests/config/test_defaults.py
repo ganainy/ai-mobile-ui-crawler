@@ -46,17 +46,18 @@ class TestDefaultConfigValues:
             "mobsf_scan_timeout",
             "mobsf_poll_interval",
             "mobsf_request_timeout",
-            "use_droidrun_agent",
+            "use_crawler_agent",
             "pre_crawl_wake_device",
             "pre_crawl_unlock_swipe",
             "pre_crawl_wake_timeout_seconds",
-            "droidrun_reasoning_mode",
-            "droidrun_max_cycles",
-            "droidrun_streaming",
-            "droidrun_retry_count",
+            "crawler_reasoning_mode",
+            "crawler_max_cycles",
+            "crawler_streaming",
+            "crawler_retry_count",
             "ui_parser_mode",
             "omniparser_backend",
             "omniparser_local_url",
+            "omniparser_local_parse_timeout_seconds",
             "omniparser_box_threshold",
             "omniparser_cache_ttl_days",
             "omniparser_a11y_ratio_threshold",
@@ -85,10 +86,11 @@ class TestDefaultConfigValues:
             "pcapdroid_finalize_wait",
             "pcapdroid_consent_timeout_seconds",
             "pcapdroid_consent_poll_interval_seconds",
-            "droidrun_max_cycles",
-            "droidrun_retry_count",
+            "crawler_max_cycles",
+            "crawler_retry_count",
             "pre_crawl_wake_timeout_seconds",
             "omniparser_cache_ttl_days",
+            "omniparser_local_parse_timeout_seconds",
             "wait_default_timeout_ms",
             "wait_default_poll_interval_ms",
         ]
@@ -129,11 +131,11 @@ class TestDefaultConfigValues:
             "pcapdroid_auto_accept_consent",
             "enable_video_recording",
             "enable_mobsf_analysis",
-            "use_droidrun_agent",
+            "use_crawler_agent",
             "pre_crawl_wake_device",
             "pre_crawl_unlock_swipe",
-            "droidrun_reasoning_mode",
-            "droidrun_streaming",
+            "crawler_reasoning_mode",
+            "crawler_streaming",
         ]
         for key in bool_keys:
             value = DEFAULTS[key]
@@ -163,8 +165,8 @@ class TestDefaultConfigValues:
             "theme",
             "window_width",
             "window_height",
-            "use_droidrun_agent",
-            "droidrun_reasoning_mode",
+            "use_crawler_agent",
+            "crawler_reasoning_mode",
         ]
         for key in required_keys:
             assert DEFAULTS[key] is not None, f"Required key {key} should not be None"
@@ -183,10 +185,10 @@ class TestDefaultConfigValues:
         assert DEFAULTS["mobsf_scan_timeout"] >= 60  # At least 1 minute
         assert DEFAULTS["mobsf_request_timeout"] >= 60  # At least 1 minute
 
-    def test_droidrun_config_sensible(self):
-        """Test DroidRun config values make sense."""
-        assert DEFAULTS["droidrun_max_cycles"] >= 1
-        assert DEFAULTS["droidrun_retry_count"] >= 0
+    def test_crawler_agent_config_sensible(self):
+        """Test crawler agent config values make sense."""
+        assert DEFAULTS["crawler_max_cycles"] >= 1
+        assert DEFAULTS["crawler_retry_count"] >= 0
         assert DEFAULTS["omniparser_box_threshold"] > 0
         assert DEFAULTS["omniparser_box_threshold"] < 1
         assert DEFAULTS["omniparser_cache_ttl_days"] >= 1

@@ -404,6 +404,8 @@ class TestSettingsPersistence:
         panel.max_duration_input.setValue(600)
         panel.test_username_input.setText("testuser")
         panel.test_password_input.setText("testpass")
+        panel.omniparser_backend_combo.setCurrentText("local")
+        panel.omniparser_local_parse_timeout_input.setValue(180)
 
         # Mock QMessageBox to avoid showing dialog
         def mock_information(parent, title, message):
@@ -424,6 +426,23 @@ class TestSettingsPersistence:
         assert panel2.max_duration_input.value() == 600
         assert panel2.test_username_input.text() == "testuser"
         assert panel2.test_password_input.text() == "testpass"
+        assert panel2.omniparser_local_parse_timeout_input.value() == 180
+
+    def test_omniparser_local_parse_timeout_persists(self, qt_app, mock_config_store, monkeypatch):
+        """Test that local OmniParser parse timeout persists across sessions."""
+        panel = _create_settings_panel(mock_config_store)
+        panel.omniparser_backend_combo.setCurrentText("local")
+        panel.omniparser_local_parse_timeout_input.setValue(240)
+
+        def mock_information(parent, title, message):
+            pass
+
+        monkeypatch.setattr(QMessageBox, "information", mock_information)
+
+        panel._on_save_clicked()
+
+        assert mock_config_store.get_setting("omniparser_local_parse_timeout_seconds") == 240
+        assert panel.get_omniparser_local_parse_timeout_seconds() == 240
 
     def test_load_settings_with_defaults(self, qt_app, mock_config_store):
         """Test that settings load defaults when nothing is saved."""

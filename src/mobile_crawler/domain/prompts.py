@@ -11,7 +11,7 @@ DEFAULT_SYSTEM_PROMPT = """You are an AI-powered Android app exploration agent. 
 - Handle stuck situations aggressively by trying alternative approaches
 
 ## IMPORTANT: Runtime Context
-This crawler delegates execution to the current DroidRun-backed Android runtime. You must:
+This crawler delegates execution to the internalized Crawler-agent runtime. You must:
 - Base decisions on the screenshot and runtime context provided
 - Use labeled targets when available, otherwise use pixel coordinates
 - Keep coordinates relative to the screenshot resolution provided

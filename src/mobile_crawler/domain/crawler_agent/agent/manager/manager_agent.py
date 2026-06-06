@@ -14,6 +14,8 @@ import copy
 import json
 import logging
 import os
+import time
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 from llama_index.core.base.llms.types import (
@@ -27,8 +29,11 @@ from llama_index.core.workflow import Context, StartEvent, StopEvent, Workflow, 
 from opentelemetry import trace
 from pydantic import BaseModel
 
-from mobile_crawler.domain.crawler_agent.agent.common.events import RecordUIStateEvent, ScreenshotEvent
-from mobile_crawler.domain.crawler_agent.agent.droid.events import ExternalUserMessageAppliedEvent
+from mobile_crawler.domain.crawler_agent.agent.common.events import (
+    ExternalUserMessageAppliedEvent,
+    RecordUIStateEvent,
+    ScreenshotEvent,
+)
 from mobile_crawler.domain.crawler_agent.agent.manager.events import (
     ManagerContextEvent,
     ManagerPlanDetailsEvent,
@@ -305,10 +310,11 @@ class ManagerAgent(Workflow):
 
     async def _validate_and_retry(
         self, messages: list[ChatMessage], initial_response: str
-    ) -> str:
+    ) -> tuple[str, list[dict]]:
         """Validate LLM response and retry if needed."""
         output = initial_response
         parsed = parse_manager_response(output)
+        validation_retries: list[dict] = []
 
         max_retries = 3
         retry_count = 0
@@ -342,6 +348,13 @@ class ManagerAgent(Workflow):
 
             if error_message:
                 retry_count += 1
+                validation_retries.append(
+                    {
+                        "reason": error_message.splitlines()[0],
+                        "timestamp": datetime.now().isoformat(),
+                        "attempt": retry_count,
+                    }
+                )
                 logger.warning(
                     f"Manager response invalid (retry {retry_count}/{max_retries}): {error_message}"
                 )
@@ -360,9 +373,16 @@ class ManagerAgent(Workflow):
                     parsed = parse_manager_response(output)
                 except Exception as e:
                     logger.error(f"LLM retry failed: {e}")
+                    validation_retries.append(
+                        {
+                            "reason": f"LLM retry failed: {e}",
+                            "timestamp": datetime.now().isoformat(),
+                            "attempt": retry_count,
+                        }
+                    )
                     break
 
-        return output
+        return output, validation_retries
 
     # ========================================================================
     # Workflow Steps
@@ -422,12 +442,15 @@ class ManagerAgent(Workflow):
         ctx.write_event_to_stream(RecordUIStateEvent(ui_state=ui_state.elements))
 
         # Load app card
+        app_card_load_ms = None
         if self.app_card_config.enabled:
             try:
+                app_card_start = time.perf_counter()
                 self.shared_state.app_card = await self.app_card_provider.load_app_card(
                     package_name=self.shared_state.current_package_name,
                     instruction=self.shared_state.instruction,
                 )
+                app_card_load_ms = (time.perf_counter() - app_card_start) * 1000
             except Exception as e:
                 logger.warning(f"Error loading app card: {e}")
                 self.shared_state.app_card = ""
@@ -462,7 +485,7 @@ class ManagerAgent(Workflow):
             ChatMessage(role="user", content=user_content)
         )
 
-        event = ManagerContextEvent()
+        event = ManagerContextEvent(app_card_load_ms=app_card_load_ms)
         ctx.write_event_to_stream(event)
         return event
 
@@ -485,9 +508,11 @@ class ManagerAgent(Workflow):
 
         try:
             logger.info("📋 Manager response:", extra={"color": "cyan"})
+            llm_start = time.perf_counter()
             response = await acall_with_retries(
                 self.llm, messages, stream=self.agent_config.streaming
             )
+            manager_llm_ms = (time.perf_counter() - llm_start) * 1000
             output = response.message.content
         except Exception as e:
             logger.error(f"LLM call failed: {e}")
@@ -500,9 +525,14 @@ class ManagerAgent(Workflow):
         except Exception as e:
             logger.warning(f"Could not get usage: {e}")
 
-        output = await self._validate_and_retry(messages, output)
+        output, validation_retries = await self._validate_and_retry(messages, output)
 
-        event = ManagerResponseEvent(response=output, usage=usage)
+        event = ManagerResponseEvent(
+            response=output,
+            usage=usage,
+            manager_llm_ms=manager_llm_ms,
+            validation_retries=validation_retries,
+        )
         ctx.write_event_to_stream(event)
         return event
 

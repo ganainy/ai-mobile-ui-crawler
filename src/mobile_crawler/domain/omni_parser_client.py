@@ -11,6 +11,8 @@ import requests
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_LOCAL_PARSE_TIMEOUT_SECONDS = 120
+
 
 class OmniParserBackend(Enum):
     REPLICATE = "replicate"
@@ -93,37 +95,37 @@ class OmniParserClient:
     def _parse_local(self, image_bytes: bytes) -> list[dict[str, Any]]:
         local_url = self.config_manager.get("omniparser_local_url", "http://localhost:8000")
         box_threshold = self.config_manager.get("omniparser_box_threshold", 0.05)
+        timeout_seconds = float(
+            self.config_manager.get(
+                "omniparser_local_parse_timeout_seconds",
+                DEFAULT_LOCAL_PARSE_TIMEOUT_SECONDS,
+            )
+        )
         b64_image = base64.b64encode(image_bytes).decode("utf-8")
 
         try:
-            # Try /parse/ first (Microsoft format), fallback to /parse
+            payload = {"base64_image": b64_image, "box_threshold": box_threshold}
+
+            # Try /parse/ first (Microsoft format), fallback to /parse only
+            # when the endpoint is missing. Do not retry timed-out parses.
             parse_url = f"{local_url}/parse/"
-            try:
-                response = requests.post(
-                    parse_url,
-                    json={"base64_image": b64_image, "box_threshold": box_threshold},
-                    timeout=30,
-                )
-                if response.status_code == 404:
-                    parse_url = f"{local_url}/parse"
-                    response = requests.post(
-                        parse_url,
-                        json={"base64_image": b64_image, "box_threshold": box_threshold},
-                        timeout=30,
-                    )
-            except Exception:
+            response = requests.post(parse_url, json=payload, timeout=timeout_seconds)
+            if response.status_code == 404:
                 parse_url = f"{local_url}/parse"
-                response = requests.post(
-                    parse_url,
-                    json={"base64_image": b64_image, "box_threshold": box_threshold},
-                    timeout=30,
-                )
+                response = requests.post(parse_url, json=payload, timeout=timeout_seconds)
 
             if response.status_code != 200:
                 raise RuntimeError(f"Local OmniParser error: {response.status_code}")
 
             result = response.json()
             return result.get("parsed_content_list", result.get("elements", []))
+        except requests.exceptions.Timeout:
+            logger.error(
+                "Local OmniParser parse timed out after %.0fs. "
+                "Increase omniparser_local_parse_timeout_seconds or use GPU acceleration.",
+                timeout_seconds,
+            )
+            raise
         except requests.exceptions.RequestException as e:
             logger.error(f"Local OmniParser connection error: {e}")
             raise

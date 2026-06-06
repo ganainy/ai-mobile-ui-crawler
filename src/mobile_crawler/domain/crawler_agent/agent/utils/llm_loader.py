@@ -12,13 +12,13 @@ from llama_index.core.llms.llm import LLM
 from pydantic import BaseModel
 
 from mobile_crawler.domain.crawler_agent.agent.utils.llm_picker import load_llm, load_llms_from_profiles
-from mobile_crawler.domain.crawler_agent.config_manager.config_manager import DroidConfig
+from mobile_crawler.domain.crawler_agent.config_manager.config_manager import CrawlerConfig
 
 logger = logging.getLogger("crawler_agent")
 
 
 def _get_required_profiles(
-    config: DroidConfig, output_model: type[BaseModel] | None = None
+    config: CrawlerConfig, output_model: type[BaseModel] | None = None
 ) -> list[str]:
     """
     Determine which LLM profiles are required based on agent configuration.
@@ -44,7 +44,7 @@ def _get_required_profiles(
 
 
 def validate_llm_dict(
-    config: DroidConfig,
+    config: CrawlerConfig,
     llms: dict[str, LLM],
     output_model: type[BaseModel] | None = None,
 ) -> list[str]:
@@ -77,7 +77,7 @@ def validate_llm_dict(
 
 
 def validate_llm_profiles(
-    config: DroidConfig, output_model: type[BaseModel] | None = None
+    config: CrawlerConfig, output_model: type[BaseModel] | None = None
 ) -> list[str]:
     """
     Validate that required LLM profiles exist in the configuration.
@@ -109,7 +109,7 @@ def validate_llm_profiles(
 
 
 def load_agent_llms(
-    config: DroidConfig,
+    config: CrawlerConfig,
     custom_provider: str | None = None,
     custom_model: str | None = None,
     temperature: float | None = None,
@@ -204,7 +204,7 @@ def load_agent_llms(
 
 
 def merge_llms_with_config(
-    config: DroidConfig,
+    config: CrawlerConfig,
     llms: dict[str, LLM],
     output_model: type[BaseModel] | None = None,
     **kwargs: Any,

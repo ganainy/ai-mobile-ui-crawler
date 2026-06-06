@@ -135,7 +135,7 @@ def load_llms_from_profiles(
         Dict mapping profile names to initialized LLM instances
 
     Example:
-        >>> config = DroidConfig.from_yaml("config.yaml")
+        >>> config = CrawlerConfig.from_yaml("config.yaml")
         >>> llms = load_llms_from_profiles(config.llm_profiles)
         >>> manager_llm = llms['manager']
 

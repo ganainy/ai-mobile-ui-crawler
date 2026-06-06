@@ -81,7 +81,7 @@ class TestCrawlerLoopLifecycle:
     """Tests for CrawlerLoop lifecycle and state transitions."""
 
     @patch('mobile_crawler.core.crawler_loop.CrawlerAgentService')
-    def test_run_emits_on_crawl_started(self, mock_droid_service_class, crawler_loop, mock_run_repository, mock_session_folder_manager, mock_listener):
+    def test_run_emits_on_crawl_started(self, mock_crawler_service_class, crawler_loop, mock_run_repository, mock_session_folder_manager, mock_listener):
         """Test that run() emits on_crawl_started event."""
         mock_run = Mock()
         mock_run.app_package = "com.example.app"
@@ -93,7 +93,7 @@ class TestCrawlerLoopLifecycle:
         mock_service.configure_run_logging.return_value = None
         mock_service.clear_run_logging.return_value = None
         mock_service.execute_exploration_task = Mock()
-        mock_droid_service_class.return_value = mock_service
+        mock_crawler_service_class.return_value = mock_service
 
         async def mock_explore(*args, **kwargs):
             mock_result = Mock()
@@ -115,7 +115,7 @@ class TestCrawlerLoopLifecycle:
     @patch('mobile_crawler.core.crawler_loop.CrawlerAgentService')
     def test_run_starts_and_stops_video_recording_when_enabled(
         self,
-        mock_droid_service_class,
+        mock_crawler_service_class,
         mock_video_manager_class,
         crawler_loop,
         mock_config_manager,
@@ -143,7 +143,7 @@ class TestCrawlerLoopLifecycle:
         mock_video_manager_class.return_value = mock_video_manager
 
         mock_service = Mock()
-        mock_droid_service_class.return_value = mock_service
+        mock_crawler_service_class.return_value = mock_service
 
         async def mock_explore(*args, **kwargs):
             mock_result = Mock()
@@ -171,7 +171,7 @@ class TestCrawlerLoopLifecycle:
     @patch('mobile_crawler.core.crawler_loop.CrawlerAgentService')
     def test_run_starts_traffic_capture_before_exploration_when_enabled(
         self,
-        mock_droid_service_class,
+        mock_crawler_service_class,
         mock_traffic_manager_class,
         crawler_loop,
         mock_config_manager,
@@ -179,7 +179,7 @@ class TestCrawlerLoopLifecycle:
         mock_session_folder_manager,
         mock_listener,
     ):
-        """Traffic capture should start before DroidRun exploration and stop in cleanup."""
+        """Traffic capture should start before crawler agent exploration and stop in cleanup."""
         mock_config_manager.get.side_effect = lambda key, default=None: {
             "enable_traffic_capture": True,
             "enable_video_recording": False,
@@ -209,7 +209,7 @@ class TestCrawlerLoopLifecycle:
         mock_traffic_manager_class.return_value = mock_traffic_manager
 
         mock_service = Mock()
-        mock_droid_service_class.return_value = mock_service
+        mock_crawler_service_class.return_value = mock_service
 
         async def mock_explore(*args, **kwargs):
             order.append("explore")
@@ -247,16 +247,16 @@ class TestCrawlerLoopLifecycle:
 
     @patch('mobile_crawler.core.crawler_loop.TrafficCaptureManager')
     @patch('mobile_crawler.core.crawler_loop.CrawlerAgentService')
-    def test_run_stops_traffic_capture_when_droidrun_raises(
+    def test_run_stops_traffic_capture_when_crawler_agent_raises(
         self,
-        mock_droid_service_class,
+        mock_crawler_service_class,
         mock_traffic_manager_class,
         crawler_loop,
         mock_config_manager,
         mock_run_repository,
         mock_session_folder_manager,
     ):
-        """Traffic capture cleanup should run even when DroidRun fails."""
+        """Traffic capture cleanup should run even when crawler agent fails."""
         mock_config_manager.get.side_effect = lambda key, default=None: {
             "enable_traffic_capture": True,
             "enable_video_recording": False,
@@ -275,7 +275,7 @@ class TestCrawlerLoopLifecycle:
         mock_traffic_manager_class.return_value = mock_traffic_manager
 
         mock_service = Mock()
-        mock_droid_service_class.return_value = mock_service
+        mock_crawler_service_class.return_value = mock_service
 
         async def mock_explore_raises(*args, **kwargs):
             raise ValueError("Simulated error")
@@ -294,7 +294,7 @@ class TestCrawlerLoopLifecycle:
     @patch('mobile_crawler.core.crawler_loop.CrawlerAgentService')
     def test_run_logs_nonfatal_traffic_capture_start_failure(
         self,
-        mock_droid_service_class,
+        mock_crawler_service_class,
         mock_traffic_manager_class,
         crawler_loop,
         mock_config_manager,
@@ -321,7 +321,7 @@ class TestCrawlerLoopLifecycle:
         mock_traffic_manager_class.return_value = mock_traffic_manager
 
         mock_service = Mock()
-        mock_droid_service_class.return_value = mock_service
+        mock_crawler_service_class.return_value = mock_service
 
         async def mock_explore(*args, **kwargs):
             mock_result = Mock()
@@ -346,7 +346,7 @@ class TestCrawlerLoopLifecycle:
     @patch('mobile_crawler.core.crawler_loop.CrawlerAgentService')
     def test_run_continues_when_traffic_capture_start_raises(
         self,
-        mock_droid_service_class,
+        mock_crawler_service_class,
         mock_traffic_manager_class,
         crawler_loop,
         mock_config_manager,
@@ -373,7 +373,7 @@ class TestCrawlerLoopLifecycle:
         mock_traffic_manager_class.return_value = mock_traffic_manager
 
         mock_service = Mock()
-        mock_droid_service_class.return_value = mock_service
+        mock_crawler_service_class.return_value = mock_service
 
         async def mock_explore(*args, **kwargs):
             mock_result = Mock()
@@ -395,7 +395,7 @@ class TestCrawlerLoopLifecycle:
         )
 
     @patch('mobile_crawler.core.crawler_loop.CrawlerAgentService')
-    def test_run_transitions_through_states(self, mock_droid_service_class, crawler_loop, mock_run_repository, mock_session_folder_manager, mock_listener):
+    def test_run_transitions_through_states(self, mock_crawler_service_class, crawler_loop, mock_run_repository, mock_session_folder_manager, mock_listener):
         """Test that run() transitions through states IDLE -> RUNNING -> STOPPED."""
         mock_run = Mock()
         mock_run.app_package = "com.example.app"
@@ -404,7 +404,7 @@ class TestCrawlerLoopLifecycle:
         mock_session_folder_manager.create_session_folder.return_value = "/tmp/session"
 
         mock_service = Mock()
-        mock_droid_service_class.return_value = mock_service
+        mock_crawler_service_class.return_value = mock_service
 
         async def mock_explore(*args, **kwargs):
             mock_result = Mock()
@@ -432,7 +432,7 @@ class TestCrawlerLoopLifecycle:
     @patch('mobile_crawler.core.crawler_loop.CrawlerAgentService')
     def test_run_calls_mobsf_after_success_when_enabled(
         self,
-        mock_droid_service_class,
+        mock_crawler_service_class,
         mock_mobsf_class,
         crawler_loop,
         mock_config_manager,
@@ -453,7 +453,7 @@ class TestCrawlerLoopLifecycle:
         mock_session_folder_manager.create_session_folder.return_value = "/tmp/session"
 
         mock_service = Mock()
-        mock_droid_service_class.return_value = mock_service
+        mock_crawler_service_class.return_value = mock_service
 
         async def mock_explore(*args, **kwargs):
             mock_result = Mock()
@@ -482,7 +482,7 @@ class TestCrawlerLoopLifecycle:
     @patch('mobile_crawler.core.crawler_loop.CrawlerAgentService')
     def test_run_skips_mobsf_when_disabled(
         self,
-        mock_droid_service_class,
+        mock_crawler_service_class,
         mock_mobsf_class,
         crawler_loop,
         mock_config_manager,
@@ -502,7 +502,7 @@ class TestCrawlerLoopLifecycle:
         mock_session_folder_manager.create_session_folder.return_value = "/tmp/session"
 
         mock_service = Mock()
-        mock_droid_service_class.return_value = mock_service
+        mock_crawler_service_class.return_value = mock_service
 
         async def mock_explore(*args, **kwargs):
             mock_result = Mock()
@@ -523,7 +523,7 @@ class TestCrawlerLoopLifecycle:
     @patch('mobile_crawler.core.crawler_loop.CrawlerAgentService')
     def test_run_logs_mobsf_failure_without_erroring_crawl(
         self,
-        mock_droid_service_class,
+        mock_crawler_service_class,
         mock_mobsf_class,
         crawler_loop,
         mock_config_manager,
@@ -544,7 +544,7 @@ class TestCrawlerLoopLifecycle:
         mock_session_folder_manager.create_session_folder.return_value = "/tmp/session"
 
         mock_service = Mock()
-        mock_droid_service_class.return_value = mock_service
+        mock_crawler_service_class.return_value = mock_service
 
         async def mock_explore(*args, **kwargs):
             mock_result = Mock()
@@ -570,7 +570,7 @@ class TestCrawlerLoopLifecycle:
         )
 
     @patch('mobile_crawler.core.crawler_loop.CrawlerAgentService')
-    def test_run_handles_exception_and_emits_on_error(self, mock_droid_service_class, crawler_loop, mock_run_repository, mock_session_folder_manager, mock_listener):
+    def test_run_handles_exception_and_emits_on_error(self, mock_crawler_service_class, crawler_loop, mock_run_repository, mock_session_folder_manager, mock_listener):
         """Test that run() handles exceptions and emits on_error."""
         mock_run = Mock()
         mock_run.app_package = "com.example.app"
@@ -579,7 +579,7 @@ class TestCrawlerLoopLifecycle:
         mock_session_folder_manager.create_session_folder.return_value = "/tmp/session"
 
         mock_service = Mock()
-        mock_droid_service_class.return_value = mock_service
+        mock_crawler_service_class.return_value = mock_service
 
         async def mock_explore_raises(*args, **kwargs):
             raise ValueError("Simulated error")
@@ -729,7 +729,7 @@ class TestCrawlerLoopErrorHandling:
         assert isinstance(args[0][2], FatalError)
 
     @patch('mobile_crawler.core.crawler_loop.CrawlerAgentService')
-    def test_run_handles_crawler_error(self, mock_droid_service_class, crawler_loop, mock_run_repository, mock_session_folder_manager, mock_listener):
+    def test_run_handles_crawler_error(self, mock_crawler_service_class, crawler_loop, mock_run_repository, mock_session_folder_manager, mock_listener):
         """Test run() handles CrawlerError gracefully."""
         from mobile_crawler.domain.errors import CrawlerError, ErrorContext
         mock_run = Mock()
@@ -739,7 +739,7 @@ class TestCrawlerLoopErrorHandling:
         mock_session_folder_manager.create_session_folder.return_value = "/tmp/session"
 
         mock_service = Mock()
-        mock_droid_service_class.return_value = mock_service
+        mock_crawler_service_class.return_value = mock_service
 
         async def mock_explore_raises(*args, **kwargs):
             raise CrawlerError("crawler error", context=ErrorContext(run_id=1))

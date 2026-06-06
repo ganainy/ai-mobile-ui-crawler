@@ -22,6 +22,7 @@ class ExecutorResponseEvent(Event):
 
     response: str
     usage: UsageResult | None = None
+    executor_llm_ms: float | None = None
 
 
 class ExecutorActionEvent(Event):

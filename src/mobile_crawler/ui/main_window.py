@@ -5,14 +5,17 @@ import re
 import sys
 from dataclasses import dataclass, field
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from PySide6.QtCore import Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QApplication,
+    QDialog,
     QMainWindow,
     QSplitter,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -37,12 +40,14 @@ from mobile_crawler.infrastructure.run_repository import RunRepository
 from mobile_crawler.infrastructure.screen_repository import ScreenRepository
 from mobile_crawler.infrastructure.session_folder_manager import SessionFolderManager
 from mobile_crawler.infrastructure.step_log_repository import StepLogRepository
+from mobile_crawler.infrastructure.step_phase_repository import StepPhaseRepository
 from mobile_crawler.infrastructure.user_config_store import UserConfigStore
 from mobile_crawler.ui.log_cleaner import LogCleaner
 
 # Signal adapter
 from mobile_crawler.ui.signal_adapter import QtSignalAdapter
 from mobile_crawler.ui.widgets.ai_model_selector import AIModelSelector
+from mobile_crawler.ui.widgets.ai_monitor_panel import AIMonitorPanel, StepDetailWidget
 from mobile_crawler.ui.widgets.app_selector import AppSelector
 from mobile_crawler.ui.widgets.crawl_control_panel import CrawlControlPanel
 
@@ -52,6 +57,29 @@ from mobile_crawler.ui.widgets.log_viewer import LogViewer
 from mobile_crawler.ui.widgets.run_history_view import RunHistoryView
 from mobile_crawler.ui.widgets.settings_panel import SettingsPanel
 from mobile_crawler.ui.widgets.stats_dashboard import StatsDashboard
+
+
+def _get_gui_icon_path() -> str:
+    """Return the absolute path to the GUI/taskbar icon."""
+    return str(Path(__file__).resolve().parents[3] / "crawler_logo.ico")
+
+
+def _set_windows_app_user_model_id() -> None:
+    """Set Windows taskbar identity so the taskbar uses the app icon."""
+    if sys.platform != "win32":
+        return
+
+    try:
+        import ctypes
+
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+            "MobileCrawler.MobileCrawler.GUI"
+        )
+    except Exception:
+        logging.getLogger(__name__).debug(
+            "Could not set Windows AppUserModelID",
+            exc_info=True,
+        )
 
 
 @dataclass
@@ -94,7 +122,7 @@ class CrawlStatistics:
     total_output_tokens: int = 0
     otel_latencies_ms: list[float] = field(default_factory=list)  # per-call real latencies
 
-    # DroidRun-derived metrics
+    # CrawlerAgent-derived metrics
     tool_call_count: int = 0  # total tool calls observed
     tool_error_count: int = 0  # tool calls that returned errors
     phase_transition_count: int = 0  # step phase transitions observed
@@ -179,6 +207,7 @@ class MainWindow(QMainWindow):
         self.ai_selector: AIModelSelector = None
         self.control_panel: CrawlControlPanel = None
         self.log_viewer: LogViewer = None
+        self.ai_monitor_panel: AIMonitorPanel = None
         self.stats_dashboard: StatsDashboard = None
         self.settings_panel: SettingsPanel = None
         self.run_history_view: RunHistoryView = None
@@ -238,6 +267,7 @@ class MainWindow(QMainWindow):
         # History and reporting services
         run_repository = RunRepository(db_manager)
         report_generator = ReportGenerator(db_manager)
+        step_phase_repository = StepPhaseRepository(db_manager)
         session_folder_manager = SessionFolderManager()
 
         # Create config manager for feature managers
@@ -263,6 +293,7 @@ class MainWindow(QMainWindow):
             "crawl_controller": crawl_controller,
             "user_config_store": user_config_store,
             "run_repository": run_repository,
+            "step_phase_repository": step_phase_repository,
             "report_generator": report_generator,
             "mobsf_manager": mobsf_manager,
             "database_manager": db_manager,
@@ -277,7 +308,7 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(1024, 768)
         self.resize(1280, 960)
         # Set window icon
-        self.setWindowIcon(QIcon(":/resources/crawler_logo.ico"))
+        self.setWindowIcon(QIcon(_get_gui_icon_path()))
 
         # Hide menu bar as requested (Streamlined UI)
         self.menuBar().setVisible(False)
@@ -332,6 +363,10 @@ class MainWindow(QMainWindow):
         self.signal_adapter.ocr_completed.connect(self._on_ocr_completed)
         self.signal_adapter.screenshot_timing.connect(self._on_screenshot_timing)
         self.signal_adapter.step_phase_transition.connect(self._on_step_phase_transition)
+        if self.ai_monitor_panel and hasattr(self.signal_adapter, "ai_request_sent"):
+            self.signal_adapter.ai_request_sent.connect(self.ai_monitor_panel.add_request)
+            self.signal_adapter.ai_response_received.connect(self.ai_monitor_panel.add_response)
+            self.signal_adapter.screenshot_captured.connect(self.ai_monitor_panel.add_screenshot_path)
 
         # Bottom panel: Run history
         bottom_panel = self._create_bottom_panel()
@@ -388,8 +423,8 @@ class MainWindow(QMainWindow):
             crawler_loop = self._create_crawler_loop(config_manager, run)
             self._crawler_loop = crawler_loop
 
-            # Disable pause/step-by-step when DroidRun agent is used
-            if self.settings_panel.get_enable_droidrun_agent():
+            # Disable pause/step-by-step when crawler agent is used
+            if self.settings_panel.get_enable_crawler_agent():
                 self._step_by_step_enabled = False
                 self.control_panel.set_step_by_step(False)
                 self.control_panel.set_step_by_step_available(False)
@@ -545,6 +580,12 @@ class MainWindow(QMainWindow):
         config_manager.set("omniparser_local_url", omniparser_local_url)
         self.signal_adapter.on_debug_log(0, 0, f"UI: omniparser_local_url = {omniparser_local_url}")
 
+        omniparser_timeout = self.settings_panel.get_omniparser_local_parse_timeout_seconds()
+        config_manager.set("omniparser_local_parse_timeout_seconds", omniparser_timeout)
+        self.signal_adapter.on_debug_log(
+            0, 0, f"UI: omniparser_local_parse_timeout_seconds = {omniparser_timeout}"
+        )
+
         replicate_api_key = self.settings_panel.get_replicate_api_key()
         if replicate_api_key:
             config_manager.set("replicate_api_key", replicate_api_key)
@@ -670,16 +711,16 @@ class MainWindow(QMainWindow):
         self._append_clean_log(LogLevel.INFO, f"Step {step_number} finished. Paused for review.", "ui")
 
     def _on_debug_log(self, run_id: int, step_number: int, message: str) -> None:
-        """Handle debug log message from crawler (includes DroidRun stdout lines)."""
+        """Handle debug log message from crawler (includes crawler agent stdout lines)."""
         self._append_clean_log(LogLevel.DEBUG, message, "debug_log")
 
         if self._current_stats and self._current_stats.run_id == run_id:
-            self._parse_droidrun_progress(run_id, message)
+            self._parse_crawler_agent_progress(run_id, message)
 
     def _parse_droidrun_progress(self, run_id: int, message: str) -> None:
-        """Parse DroidRun stdout/log messages to update all live statistics.
+        """Parse crawler agent stdout/log messages to update all live statistics.
 
-        DroidRun doesn't emit our custom signals (on_action_executed, on_ai_response_received,
+        The agent doesn't emit our custom signals (on_action_executed, on_ai_response_received,
         on_screen_processed) — it's a black box. We mine its stdout lines instead.
 
         Patterns tracked:
@@ -711,7 +752,7 @@ class MainWindow(QMainWindow):
             return  # Step lines don't need further parsing
 
         # ── Action outcome from executor debug log ────────────────────────
-        # DroidRun executor logs: "✅ Execution complete: <summary>"
+        # CrawlerAgent executor logs: "✅ Execution complete: <summary>"
         #                     or  "❌ Execution complete: <summary>"
         if "Execution complete:" in message:
             if "\u2705" in message:  # ✅
@@ -736,7 +777,7 @@ class MainWindow(QMainWindow):
             stats.tool_error_count += 1
             updated = True
 
-        # ── AI call detection from DroidRun role response headers ─────────
+        # ── AI call detection from crawler agent role response headers ─────────
         AI_MARKERS = (
             "Manager response:",
             "Executor response:",
@@ -768,6 +809,10 @@ class MainWindow(QMainWindow):
 
         if updated:
             self._update_dashboard_stats()
+
+    def _parse_crawler_agent_progress(self, run_id: int, message: str) -> None:
+        """Alias for the crawler-agent terminology used by newer call sites."""
+        self._parse_droidrun_progress(run_id, message)
 
     def _pause_crawl(self) -> None:
         """Pause the current crawl."""
@@ -1024,16 +1069,58 @@ class MainWindow(QMainWindow):
         return panel
 
     def _create_right_panel(self) -> QWidget:
-        """Create the right panel with log viewer."""
+        """Create the right panel with logs and AI monitor."""
         panel = QWidget()
         layout = QVBoxLayout(panel)
 
+        tabs = QTabWidget()
         self.log_viewer = LogViewer()
         self.log_viewer.setObjectName("logViewer")
+        self.ai_monitor_panel = AIMonitorPanel()
+        self.ai_monitor_panel.setObjectName("aiMonitorPanel")
+        self.ai_monitor_panel.set_timing_provider(
+            self._services["step_phase_repository"].get_transitions_for_step
+        )
+        self.ai_monitor_panel.show_step_details.connect(self._show_ai_step_details)
 
-        layout.addWidget(self.log_viewer)
+        tabs.addTab(self.log_viewer, "Logs")
+        tabs.addTab(self.ai_monitor_panel, "AI Monitor")
+
+        layout.addWidget(tabs)
 
         return panel
+
+    def _show_ai_step_details(
+        self,
+        step_number: int,
+        timestamp: datetime,
+        success: bool,
+        prompt_text: str,
+        response_text: str,
+        parsed_actions: list,
+        error_message: object,
+        screenshot_path: str,
+        timing_data: object,
+    ) -> None:
+        """Open the AI monitor detail view for a step."""
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"Step {step_number} Details")
+        dialog.resize(1100, 760)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(
+            StepDetailWidget(
+                step_number=step_number,
+                timestamp=timestamp,
+                success=success,
+                full_prompt=prompt_text,
+                full_response=response_text,
+                parsed_actions=parsed_actions,
+                error_message=str(error_message) if error_message else None,
+                screenshot_path=screenshot_path,
+                timing_data=timing_data if isinstance(timing_data, dict) else {},
+            )
+        )
+        dialog.exec()
 
     def _create_bottom_panel(self) -> QWidget:
         """Create the bottom panel with run history."""
@@ -1230,7 +1317,7 @@ class MainWindow(QMainWindow):
         # This covers the case where the message came via the logging bridge rather
         # than the stdout capture path.
         if self._current_stats:
-            self._parse_droidrun_progress(self._current_stats.run_id, message)
+            self._parse_crawler_agent_progress(self._current_stats.run_id, message)
 
     def _on_python_log_direct(self, level: LogLevel, message: str) -> None:
         """Direct callback from QLogHandler running on any thread.
@@ -1528,16 +1615,15 @@ class MainWindow(QMainWindow):
 
 def run():
     """Entry point for the GUI application."""
+    _set_windows_app_user_model_id()
+
     app = QApplication(sys.argv)
     app.setApplicationName("Mobile Crawler")
     app.setOrganizationName("mobile-crawler")
 
     # Set application icon for taskbar using absolute file path
     # IMPORTANT: Must be set BEFORE creating the window for Windows taskbar
-    import os
-
-    icon_path = os.path.join(os.path.dirname(__file__), "resources", "crawler_logo.ico")
-    app.setWindowIcon(QIcon(icon_path))
+    app.setWindowIcon(QIcon(_get_gui_icon_path()))
 
     # Create window after setting the app icon
     window = MainWindow()

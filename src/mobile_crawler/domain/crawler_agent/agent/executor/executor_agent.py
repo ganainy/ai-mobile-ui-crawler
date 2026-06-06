@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 from typing import TYPE_CHECKING
 
 from llama_index.core.base.llms.types import ChatMessage, ImageBlock, TextBlock
@@ -157,9 +158,11 @@ class ExecutorAgent(Workflow):
 
         try:
             logger.info("Executor response:", extra={"color": "green"})
+            llm_start = time.perf_counter()
             response = await acall_with_retries(
                 self.llm, messages, stream=self.agent_config.streaming
             )
+            executor_llm_ms = (time.perf_counter() - llm_start) * 1000
             response_text = str(response)
         except ValueError as e:
             logger.warning(f"Executor LLM returned empty response: {e}")
@@ -168,7 +171,11 @@ class ExecutorAgent(Workflow):
                 '### Action\n{"action": "invalid"}\n'
                 "### Description\nExecutor failed to respond, try again"
             )
-            event = ExecutorResponseEvent(response=error_response, usage=None)
+            event = ExecutorResponseEvent(
+                response=error_response,
+                usage=None,
+                executor_llm_ms=None,
+            )
             ctx.write_event_to_stream(event)
             return event
         except Exception as e:
@@ -181,7 +188,11 @@ class ExecutorAgent(Workflow):
         except Exception as e:
             logger.warning(f"Could not get usage: {e}")
 
-        event = ExecutorResponseEvent(response=response_text, usage=usage)
+        event = ExecutorResponseEvent(
+            response=response_text,
+            usage=usage,
+            executor_llm_ms=executor_llm_ms,
+        )
         ctx.write_event_to_stream(event)
         return event
 

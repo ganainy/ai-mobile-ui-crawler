@@ -90,7 +90,7 @@ class CrawlerLoop:
             "on_debug_log",
             self._current_run_id or -1,
             0,
-            "Pause not supported in DroidRun mode."
+            "Pause not supported in internalized crawler mode."
         )
 
     def resume(self) -> None:
@@ -99,14 +99,14 @@ class CrawlerLoop:
             "on_debug_log",
             self._current_run_id or -1,
             0,
-            "Resume not supported in DroidRun mode."
+            "Resume not supported in internalized crawler mode."
         )
 
     def stop(self) -> None:
         """Stop the crawler."""
         self._cancel_requested = True
         if self._crawler_agent_service and self._crawler_agent_service.request_cancel():
-            logger.info("Requested cancellation of DroidRun workflow.")
+            logger.info("Requested cancellation of crawler agent workflow.")
 
     def is_running(self) -> bool:
         """Check if the crawler is currently running.
@@ -122,7 +122,7 @@ class CrawlerLoop:
             "on_debug_log",
             self._current_run_id or -1,
             0,
-            "Step-by-step mode not supported in DroidRun mode."
+            "Step-by-step mode not supported in internalized crawler mode."
         )
 
     def is_step_by_step_enabled(self) -> bool:
@@ -135,7 +135,7 @@ class CrawlerLoop:
             "on_debug_log",
             self._current_run_id or -1,
             0,
-            "Advance step not supported in DroidRun mode."
+            "Advance step not supported in internalized crawler mode."
         )
 
     def run(self, run_id: int) -> None:
@@ -342,7 +342,7 @@ class CrawlerLoop:
 
 
             duration_ms = (time.time() - start_time) * 1000
-            # Extract action statistics from DroidRun result's final_state
+            # Extract action statistics from Crawler agent result's final_state
             final_state = result.final_state or {}
             successful_actions = final_state.get('successful_actions', 0)
             failed_actions = final_state.get('failed_actions', 0)
@@ -354,10 +354,10 @@ class CrawlerLoop:
                 reason = "Stopped by user"
             elif result.success:
                 status = "COMPLETED"
-                reason = completion_reason or "DroidRun completed"
+                reason = completion_reason or "Crawler agent completed"
             else:
                 status = "ERROR"
-                reason = result.error_message or "DroidRun failed"
+                reason = result.error_message or "Crawler agent failed"
 
             self.run_repository.update_run_stats(
                 run_id=run_id,

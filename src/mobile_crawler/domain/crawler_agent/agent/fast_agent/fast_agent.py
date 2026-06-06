@@ -19,10 +19,11 @@ from pydantic import BaseModel
 
 from mobile_crawler.domain.crawler_agent.agent.action_result import ActionResult
 from mobile_crawler.domain.crawler_agent.agent.common.constants import LLM_HISTORY_LIMIT
-from mobile_crawler.domain.crawler_agent.agent.common.events import RecordUIStateEvent, ScreenshotEvent
-from mobile_crawler.domain.crawler_agent.agent.droid.events import (
+from mobile_crawler.domain.crawler_agent.agent.common.events import (
     ExternalUserMessageAppliedEvent,
     ExternalUserMessageDroppedEvent,
+    RecordUIStateEvent,
+    ScreenshotEvent,
 )
 from mobile_crawler.domain.crawler_agent.agent.fast_agent.events import (
     FastAgentEndEvent,

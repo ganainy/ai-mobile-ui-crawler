@@ -18,7 +18,7 @@ A user launches the Mobile Crawler GUI application and configures their AI provi
 **Acceptance Scenarios**:
 
 1. **Given** the user launches the GUI, **When** the main window opens, **Then** they see device selector, app selector, AI model selector, crawl controls, log viewer, and stats dashboard
-2. **Given** the main window is displayed, **When** the user selects an AI provider from dropdown, **Then** the available vision models populate in the model dropdown
+2. **Given** the main window is displayed, **When** the user selects an AI provider from dropdown, **Then** the available AI models populate in the searchable model dropdown
 3. **Given** the user has selected a provider, **When** they enter a valid API key, **Then** the system validates connectivity and shows success status
 
 ---

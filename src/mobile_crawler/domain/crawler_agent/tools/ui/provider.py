@@ -155,6 +155,7 @@ class AndroidStateProvider(StateProvider):
         omniparser_backend: str = "replicate",
         omniparser_api_key: str | None = None,
         omniparser_local_url: str = "http://localhost:8000",
+        omniparser_local_parse_timeout_seconds: int | float = 120,
         omniparser_box_threshold: float = 0.05,
         omniparser_a11y_threshold: int = 5,
         target_package: str | None = None,
@@ -171,6 +172,7 @@ class AndroidStateProvider(StateProvider):
         self.omniparser_backend = omniparser_backend
         self.omniparser_api_key = omniparser_api_key
         self.omniparser_local_url = omniparser_local_url
+        self.omniparser_local_parse_timeout_seconds = omniparser_local_parse_timeout_seconds
         self.omniparser_box_threshold = omniparser_box_threshold
         self.omniparser_a11y_threshold = omniparser_a11y_threshold
         self.target_package = target_package
@@ -374,6 +376,7 @@ class AndroidStateProvider(StateProvider):
                 backend=self.omniparser_backend,
                 api_key=api_key,
                 local_url=self.omniparser_local_url,
+                local_parse_timeout_seconds=self.omniparser_local_parse_timeout_seconds,
                 box_threshold=self.omniparser_box_threshold,
             )
         except Exception as e:

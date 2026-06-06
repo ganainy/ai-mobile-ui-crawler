@@ -3,7 +3,7 @@
 from unittest.mock import Mock
 
 import pytest
-from PySide6.QtWidgets import QApplication, QWidget
+from PySide6.QtWidgets import QApplication, QLabel, QWidget
 
 from mobile_crawler.domain.providers.registry import ProviderRegistry
 from mobile_crawler.domain.providers.vision_detector import VisionDetector
@@ -49,6 +49,14 @@ def ai_model_selector(qapp, mock_config_store):
     parent_widget.deleteLater()
 
 
+def wait_for_model_load(selector: AIModelSelector):
+    """Wait for the selector's background model fetch to finish."""
+    thread = getattr(selector, "_model_thread", None)
+    if thread is not None:
+        thread.wait(2000)
+        QApplication.processEvents()
+
+
 class TestAIModelSelectorInit:
     """Tests for AIModelSelector initialization."""
 
@@ -68,36 +76,40 @@ class TestProviderSelection:
         # Set API key callback for providers that require it
         ai_model_selector.set_api_key_callback(lambda p: "fake_key")
 
-        # Mock vision detector to return models
-        ai_model_selector.vision_detector.get_vision_models = Mock(return_value=[
+        # Mock provider registry to return all models
+        ai_model_selector.provider_registry.fetch_gemini_models = Mock(return_value=[
             {"id": "gemini-pro-vision"},
-            {"id": "gemini-1.5-pro"}
+            {"id": "text-only-model", "supports_vision": False},
         ])
 
         # Set provider to gemini (index 1 is "Gemini" with data "gemini")
         ai_model_selector.provider_combo.setCurrentIndex(1)
+        wait_for_model_load(ai_model_selector)
 
         assert ai_model_selector.current_provider() == "gemini"
         assert ai_model_selector.model_combo.count() == 3  # 2 models + placeholder
+        assert ai_model_selector.model_combo.findData("text-only-model") > 0
 
     def test_provider_change_with_no_models(self, qapp, ai_model_selector):
-        """Test provider change when no vision models available."""
+        """Test provider change when no models are available."""
         ai_model_selector.set_api_key_callback(lambda p: "fake_key")
-        ai_model_selector.vision_detector.get_vision_models = Mock(return_value=[])
+        ai_model_selector.provider_registry.fetch_gemini_models = Mock(return_value=[])
 
         ai_model_selector.provider_combo.setCurrentIndex(1)  # Select "Gemini"
+        wait_for_model_load(ai_model_selector)
 
-        assert "No vision models available" in ai_model_selector.model_combo.itemText(0)
-        assert "No vision models available" in ai_model_selector.status_label.text()
+        assert "No models available" in ai_model_selector.model_combo.itemText(0)
+        assert "No models available" in ai_model_selector.status_label.text()
 
     def test_provider_change_with_error(self, qapp, ai_model_selector):
         """Test provider change when error occurs."""
         ai_model_selector.set_api_key_callback(lambda p: "fake_key")
-        ai_model_selector.vision_detector.get_vision_models = Mock(
+        ai_model_selector.provider_registry.fetch_gemini_models = Mock(
             side_effect=Exception("API error")
         )
 
         ai_model_selector.provider_combo.setCurrentIndex(1)  # Select "Gemini"
+        wait_for_model_load(ai_model_selector)
 
         assert "Error loading models" in ai_model_selector.model_combo.itemText(0)
         assert "Error" in ai_model_selector.status_label.text()
@@ -109,8 +121,8 @@ class TestModelSelection:
     def test_model_selection_emits_signal(self, qapp, ai_model_selector):
         """Test that selecting a model emits signal."""
         ai_model_selector.set_api_key_callback(lambda p: "fake_key")
-        # Mock vision detector
-        ai_model_selector.vision_detector.get_vision_models = Mock(return_value=[
+        # Mock provider registry
+        ai_model_selector.provider_registry.fetch_gemini_models = Mock(return_value=[
             {"id": "gemini-pro-vision"}
         ])
 
@@ -124,6 +136,7 @@ class TestModelSelection:
 
         # Set provider to gemini (index 1)
         ai_model_selector.provider_combo.setCurrentIndex(1)
+        wait_for_model_load(ai_model_selector)
         # Model combo should now have the model at index 1
         ai_model_selector.model_combo.setCurrentIndex(1)
 
@@ -134,11 +147,12 @@ class TestModelSelection:
     def test_model_selection_updates_status(self, qapp, ai_model_selector):
         """Test that selecting a model updates status."""
         ai_model_selector.set_api_key_callback(lambda p: "fake_key")
-        ai_model_selector.vision_detector.get_vision_models = Mock(return_value=[
+        ai_model_selector.provider_registry.fetch_gemini_models = Mock(return_value=[
             {"id": "gemini-pro-vision"}
         ])
 
         ai_model_selector.provider_combo.setCurrentIndex(1)  # Select "Gemini"
+        wait_for_model_load(ai_model_selector)
         ai_model_selector.model_combo.setCurrentIndex(1)  # Select the model
 
         assert "Selected: gemini-pro-vision" in ai_model_selector.status_label.text()
@@ -152,20 +166,22 @@ class TestRefreshModels:
         """Test that refresh button updates model list."""
         ai_model_selector.set_api_key_callback(lambda p: "fake_key")
         # First load
-        ai_model_selector.vision_detector.get_vision_models = Mock(return_value=[
+        ai_model_selector.provider_registry.fetch_gemini_models = Mock(return_value=[
             {"id": "gemini-pro-vision"}
         ])
 
         ai_model_selector.provider_combo.setCurrentIndex(1)  # Select "Gemini"
+        wait_for_model_load(ai_model_selector)
 
         # Mock new models
-        ai_model_selector.vision_detector.get_vision_models = Mock(return_value=[
+        ai_model_selector.provider_registry.fetch_gemini_models = Mock(return_value=[
             {"id": "gemini-pro-vision"},
             {"id": "gemini-1.5-pro"}
         ])
 
         # Click refresh
         ai_model_selector._refresh_models()
+        wait_for_model_load(ai_model_selector)
 
         assert ai_model_selector.model_combo.count() == 3  # 2 models + placeholder
 
@@ -194,11 +210,12 @@ class TestCurrentModel:
     def test_current_model_returns_selected_model(self, qapp, ai_model_selector):
         """Test that current_model returns selected model."""
         ai_model_selector.set_api_key_callback(lambda p: "fake_key")
-        ai_model_selector.vision_detector.get_vision_models = Mock(return_value=[
+        ai_model_selector.provider_registry.fetch_gemini_models = Mock(return_value=[
             {"id": "gemini-pro-vision"}
         ])
 
         ai_model_selector.provider_combo.setCurrentIndex(1)  # Select "Gemini"
+        wait_for_model_load(ai_model_selector)
         ai_model_selector.model_combo.setCurrentIndex(1)  # Select the model
 
         assert ai_model_selector.current_model() == "gemini-pro-vision"
@@ -209,9 +226,10 @@ class TestSetProvider:
 
     def test_set_provider(self, qapp, ai_model_selector):
         """Test setting a specific provider."""
-        ai_model_selector.vision_detector.get_vision_models = Mock(return_value=[])
+        ai_model_selector.provider_registry.fetch_gemini_models = Mock(return_value=[])
 
         ai_model_selector.set_provider("openrouter")
+        wait_for_model_load(ai_model_selector)
 
         assert ai_model_selector.current_provider() == "openrouter"
 
@@ -222,12 +240,13 @@ class TestSetModel:
     def test_set_model(self, qapp, ai_model_selector):
         """Test setting a specific model."""
         ai_model_selector.set_api_key_callback(lambda p: "fake_key")
-        ai_model_selector.vision_detector.get_vision_models = Mock(return_value=[
+        ai_model_selector.provider_registry.fetch_gemini_models = Mock(return_value=[
             {"id": "gemini-pro-vision"},
             {"id": "gemini-1.5-pro"}
         ])
 
         ai_model_selector.set_model("gemini", "gemini-1.5-pro")
+        wait_for_model_load(ai_model_selector)
 
         assert ai_model_selector.current_provider() == "gemini"
         assert ai_model_selector.current_model() == "gemini-1.5-pro"
@@ -239,7 +258,7 @@ class TestClear:
     def test_clear_resets_state(self, qapp, ai_model_selector):
         """Test that clear resets all state."""
         # Set provider and model
-        ai_model_selector.vision_detector.get_vision_models = Mock(return_value=[
+        ai_model_selector.provider_registry.fetch_gemini_models = Mock(return_value=[
             "gemini-pro-vision"
         ])
 
@@ -266,6 +285,17 @@ class TestUIComponents:
         """Test that model combo box exists."""
         assert ai_model_selector.model_combo is not None
 
+    def test_model_search_input_exists(self, qapp, ai_model_selector):
+        """Test that model search input exists."""
+        assert ai_model_selector.model_search_input is not None
+        assert ai_model_selector.model_search_input.placeholderText() == "Search models..."
+
+    def test_model_label_is_generic(self, qapp, ai_model_selector):
+        """Test that model label does not imply vision-only filtering."""
+        labels = [label.text() for label in ai_model_selector.findChildren(QLabel)]
+        assert "AI Model:" in labels
+        assert "Vision Model:" not in labels
+
     def test_refresh_button_exists(self, qapp, ai_model_selector):
         """Test that refresh button exists."""
         assert ai_model_selector.refresh_button is not None
@@ -288,9 +318,10 @@ class TestModelSorting:
             {"id": "beta-model"}
         ]
 
-        ai_model_selector.vision_detector.get_vision_models = Mock(return_value=unsorted_models)
+        ai_model_selector.provider_registry.fetch_gemini_models = Mock(return_value=unsorted_models)
 
         ai_model_selector.provider_combo.setCurrentIndex(1)  # Select "Gemini"
+        wait_for_model_load(ai_model_selector)
 
         # Check models are sorted by id (skip placeholder at index 0)
         assert ai_model_selector.model_combo.itemData(1) == "alpha-model"
@@ -304,9 +335,10 @@ class TestModelSorting:
             {"id": "anthropic/claude-3.5-sonnet", "pricing": {"prompt_per_1M": "3.0000", "completion_per_1M": "15.0000", "image_per_1M": "3.0000"}},
         ]
 
-        ai_model_selector.vision_detector.get_vision_models = Mock(return_value=models_with_pricing)
+        ai_model_selector.provider_registry.fetch_gemini_models = Mock(return_value=models_with_pricing)
 
         ai_model_selector.provider_combo.setCurrentIndex(1)  # Select "Gemini"
+        wait_for_model_load(ai_model_selector)
 
         display_text = ai_model_selector.model_combo.itemText(1)
         assert "anthropic/claude-3.5-sonnet" in display_text
@@ -321,9 +353,47 @@ class TestModelSorting:
             {"id": "some-model"},
         ]
 
-        ai_model_selector.vision_detector.get_vision_models = Mock(return_value=models_without_pricing)
+        ai_model_selector.provider_registry.fetch_gemini_models = Mock(return_value=models_without_pricing)
 
         ai_model_selector.provider_combo.setCurrentIndex(1)  # Select "Gemini"
+        wait_for_model_load(ai_model_selector)
 
         assert ai_model_selector.model_combo.itemText(1) == "some-model"
         assert ai_model_selector.model_combo.itemData(1) == "some-model"
+
+
+class TestModelSearch:
+    """Tests for model search filtering."""
+
+    def test_search_filters_loaded_models(self, qapp, ai_model_selector):
+        """Test that search filters the model dropdown without refetching."""
+        ai_model_selector.set_api_key_callback(lambda p: "fake_key")
+        ai_model_selector.provider_registry.fetch_gemini_models = Mock(return_value=[
+            {"id": "alpha-model"},
+            {"id": "beta-model"},
+            {"id": "gamma-text-model", "supports_vision": False},
+        ])
+
+        ai_model_selector.provider_combo.setCurrentIndex(1)
+        wait_for_model_load(ai_model_selector)
+        assert ai_model_selector.model_combo.count() == 4
+
+        ai_model_selector.model_search_input.setText("text")
+
+        assert ai_model_selector.model_combo.count() == 2  # match + placeholder
+        assert ai_model_selector.model_combo.itemData(1) == "gamma-text-model"
+        assert "Showing 1 of 3 models" in ai_model_selector.status_label.text()
+
+    def test_search_shows_no_match_row(self, qapp, ai_model_selector):
+        """Test that search displays an empty-state row when nothing matches."""
+        ai_model_selector.set_api_key_callback(lambda p: "fake_key")
+        ai_model_selector.provider_registry.fetch_gemini_models = Mock(return_value=[
+            {"id": "alpha-model"},
+        ])
+
+        ai_model_selector.provider_combo.setCurrentIndex(1)
+        wait_for_model_load(ai_model_selector)
+        ai_model_selector.model_search_input.setText("missing")
+
+        assert ai_model_selector.model_combo.itemText(1) == "No matching models"
+        assert "Showing 0 of 1 models" in ai_model_selector.status_label.text()

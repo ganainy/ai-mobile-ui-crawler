@@ -22,8 +22,7 @@ from workflows.events import Event
 from workflows.handler import WorkflowHandler
 
 from mobile_crawler.domain.crawler_agent.agent.action_context import ActionContext
-from mobile_crawler.domain.crawler_agent.agent.common.events import RecordUIStateEvent, ScreenshotEvent
-from mobile_crawler.domain.crawler_agent.agent.droid.events import (
+from mobile_crawler.domain.crawler_agent.agent.common.events import (
     ExecutorInputEvent,
     ExecutorResultEvent,
     ExternalUserMessageDroppedEvent,
@@ -32,7 +31,9 @@ from mobile_crawler.domain.crawler_agent.agent.droid.events import (
     FinalizeEvent,
     ManagerInputEvent,
     ManagerPlanEvent,
+    RecordUIStateEvent,
     ResultEvent,
+    ScreenshotEvent,
 )
 from mobile_crawler.domain.crawler_agent.agent.droid.state import CrawlerAgentState, QueuedUserMessage
 from mobile_crawler.domain.crawler_agent.agent.executor import ExecutorAgent
@@ -56,9 +57,9 @@ from mobile_crawler.domain.crawler_agent.agent.utils.tracing_setup import (
 from mobile_crawler.domain.crawler_agent.agent.utils.trajectory import Trajectory
 from mobile_crawler.domain.crawler_agent.config_manager.config_manager import (
     AgentConfig,
+    CrawlerConfig,
     CredentialsConfig,
     DeviceConfig,
-    DroidConfig,
     LoggingConfig,
     TelemetryConfig,
     ToolsConfig,
@@ -120,7 +121,7 @@ class CrawlerAgent(Workflow):
     def __init__(
         self,
         goal: str,
-        config: DroidConfig | None = None,
+        config: CrawlerConfig | None = None,
         llms: dict[str, LLM] | LLM | None = None,
         custom_tools: dict = None,
         credentials: Union[dict, "CredentialManager", None] = None,
@@ -165,7 +166,7 @@ class CrawlerAgent(Workflow):
 
         self.resolved_device_config = config.device if config else DeviceConfig()
 
-        self.config = DroidConfig(
+        self.config = CrawlerConfig(
             agent=config.agent if config else AgentConfig(),
             device=self.resolved_device_config,
             tools=config.tools if config else ToolsConfig(),
@@ -180,6 +181,9 @@ class CrawlerAgent(Workflow):
             omniparser_backend=config.omniparser_backend if config else "replicate",
             omniparser_api_key=config.omniparser_api_key if config else "",
             omniparser_local_url=config.omniparser_local_url if config else "http://localhost:8000",
+            omniparser_local_parse_timeout_seconds=(
+                config.omniparser_local_parse_timeout_seconds if config else 120
+            ),
             omniparser_box_threshold=config.omniparser_box_threshold if config else 0.05,
             omniparser_a11y_threshold=config.omniparser_a11y_threshold if config else 5,
             target_package=config.target_package if config else None,
@@ -445,6 +449,9 @@ class CrawlerAgent(Workflow):
                 omniparser_backend=self.config.omniparser_backend,
                 omniparser_api_key=self.config.omniparser_api_key,
                 omniparser_local_url=self.config.omniparser_local_url,
+                omniparser_local_parse_timeout_seconds=(
+                    self.config.omniparser_local_parse_timeout_seconds
+                ),
                 omniparser_box_threshold=self.config.omniparser_box_threshold,
                 omniparser_a11y_threshold=self.config.omniparser_a11y_threshold,
                 target_package=self.config.target_package,

@@ -10,8 +10,8 @@ Mobile Crawler runs directly through the internalized agent runtime.
 git clone <repository-url>
 cd mobile-crawler
 
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
+python -m venv .venv312
+.\venv312\Scripts\Activate.ps1
 
 # Install Mobile Crawler and all its internalized crawler_agent dependencies
 pip install -e .
@@ -173,9 +173,9 @@ output_data/
         └── {mobsf_hash}_report.pdf
 ```
 
-## PCAPdroid Traffic Capture and TLS Decryption
+## CrawlerAgent Traffic Capture and TLS Decryption
 
-Mobile Crawler can start PCAPdroid before DroidRun begins crawling, request TLS decryption, stop capture during crawl cleanup, and save the resulting `.pcap` file in the run session.
+Mobile Crawler can start PCAPdroid before Crawler begins crawling, request TLS decryption, stop capture during crawl cleanup, and save the resulting `.pcap` file in the run session.
 
 Phone setup:
 
@@ -279,7 +279,7 @@ The current crawl flow is:
 1. `run_cli.py`, `mobile-crawler-cli`, `mobile-crawler-gui`, or `.\scripts\start.ps1` starts the CLI or GUI.
 2. The CLI `crawl` command or GUI `MainWindow` creates a run record, prepares `ConfigManager`, repositories, and `SessionFolderManager`, then runs `CrawlerLoop`.
 3. `CrawlerLoop` creates a timestamped session folder, stores the session path on the run, emits lifecycle events, attaches crawler-agent logging, and calls `CrawlerAgentService.execute_exploration_task()`.
-4. `CrawlerAgentService` translates Mobile Crawler settings into the internal runtime's `DroidConfig`, ensures the target package is active through ADB preflight checks, creates a `CrawlerAgent`, and runs the crawler-agent workflow.
+4. `CrawlerAgentService` translates Mobile Crawler settings into the internal runtime's `CrawlerConfig`, ensures the target package is active through ADB preflight checks, creates a `CrawlerAgent`, and runs the crawler-agent workflow.
 5. During execution, Mobile Crawler consumes tool events for step phase tracking, forwards logs and stdout to UI/CLI listeners, handles duration limits and cancellation, tracks action outcomes from shared state, retries app-crash-like failures, and cleans up async LLM clients.
 6. `CrawlerLoop` updates final run stats and emits completion or error events.
 7. If MobSF analysis is enabled and the crawl completed successfully, `CrawlerLoop` runs MobSF static analysis and logs the generated report paths.
@@ -289,7 +289,7 @@ The current crawl flow is:
 ## How the Agent Runtime is Used
 
 The agent runtime is fully internalized within the `mobile_crawler` package at `src/mobile_crawler/domain/crawler_agent/`. 
-Imports from the agent runtime resolve directly under the `mobile_crawler.domain.crawler_agent` namespace (e.g., `from mobile_crawler.domain.crawler_agent import DroidConfig, CrawlerAgent, ToolExecutionEvent`). The dynamic runtime injection that inserted the external path into `sys.path` has been completely removed.
+Imports from the agent runtime resolve directly under the `mobile_crawler.domain.crawler_agent` namespace (e.g., `from mobile_crawler.domain.crawler_agent import CrawlerConfig, CrawlerAgent, ToolExecutionEvent`). The dynamic runtime injection that inserted the external path into `sys.path` has been completely removed.
 
 Mobile Crawler does not own the agent runtime's core exploration loop. The internalized `crawler_agent` package owns screenshot and UI-state capture, LLM planning and execution, agent workflows, and ADB-backed device actions.
 
@@ -319,7 +319,7 @@ The `ui_parser_mode` setting controls which UI source the agent uses:
 - `boost` (default): use accessibility data first, otherwise fall back to OmniParser.
 - `accessibility`: use accessibility data only.
 
-When OmniParser is used, the agent converts OmniParser bounding boxes into indexed UI elements with tap-ready bounds before presenting them to the LLM agent. Mobile Crawler's local `OmniParserClient` and `UIContextManager` appear to be auxiliary diagnostic/cache code; they are not the active crawl path.
+When OmniParser is used, the agent converts OmniParser bounding boxes into indexed UI elements with tap-ready bounds before presenting them to the LLM agent. Local OmniParser parses use `/parse/` by default, fall back to `/parse` only when needed, and honor `omniparser_local_parse_timeout_seconds` (120 seconds by default for slower CPU inference).
 
 ## Project Boundaries
 
@@ -347,10 +347,10 @@ Default values live in `src/mobile_crawler/config/defaults.py`. Notable defaults
 
 - `max_crawl_steps`: `15`
 - `max_crawl_duration_seconds`: `600`
-- `use_droidrun_agent`: `True`
-- `droidrun_reasoning_mode`: `True`
-- `droidrun_streaming`: `False`
-- `droidrun_telemetry_enabled`: `False`
+- `use_crawler_agent`: `True`
+- `crawler_reasoning_mode`: `True`
+- `crawler_streaming`: `False`
+- `crawler_telemetry_enabled`: `False`
 - `ui_parser_mode`: `boost`
 - `omniparser_backend`: `replicate`
 - optional traffic capture, video recording, and MobSF analysis disabled by default
@@ -378,7 +378,7 @@ The session path is stored on the run record so the UI can resolve artifacts lat
 ## Current Limitations
 
 - Pause, resume, step-by-step mode, and manual next-step advancement are not supported. The current `CrawlerLoop` methods emit debug messages for those controls and do not pause the agent workflow.
-- The `use_droidrun_agent` setting remains in the UI/config, but the current `CrawlerLoop` implementation delegates traversal to the internalized `crawler_agent`.
+- The `use_crawler_agent` setting remains in the UI/config, but the current `CrawlerLoop` implementation delegates traversal to the internalized `crawler_agent`.
 
 ## Development
 

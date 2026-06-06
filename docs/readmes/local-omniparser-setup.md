@@ -1,6 +1,6 @@
 # Local OmniParser Setup Guide
 
-This guide describes how to set up a local, high-performance **Microsoft OmniParser v2.0** server on your machine to work seamlessly with `mobile-crawler` (DroidRun). Running OmniParser locally eliminates external API dependencies (such as Replicate), reduces cost, and improves performance.
+This guide describes how to set up a local, high-performance **Microsoft OmniParser v2.0** server on your machine to work seamlessly with `mobile-crawler`. Running OmniParser locally eliminates external API dependencies (such as Replicate), reduces cost, and improves performance.
 
 ## Current mobile-crawler Integration Status
 
@@ -126,4 +126,5 @@ The `mobile-crawler` Settings panel is fully integrated with this local setup:
 3. Under the **UI Parser** configuration:
    - Change the **OmniParser Backend** to `local`.
    - Set the **Local OmniParser URL** to `http://localhost:8000` (default).
+   - Keep **Local Parse Timeout** at `120` seconds for CPU inference, or lower it if your GPU setup consistently returns faster.
 4. Save and launch your crawl loop! The crawler will now bypass the cloud APIs and use your lightning-fast local CPU/GPU inference instead.

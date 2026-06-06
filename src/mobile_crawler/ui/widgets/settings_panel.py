@@ -227,51 +227,51 @@ class SettingsPanel(QWidget):
         layout = QVBoxLayout(tab)
         layout.setSpacing(15)
 
-        # AI Crawler Agent group
-        droidrun_group = QGroupBox("AI Crawler Agent")
-        droidrun_layout = QVBoxLayout()
-        droidrun_layout.setSpacing(12)
-        droidrun_layout.setContentsMargins(15, 20, 15, 20)
+        # Crawler Agent group
+        crawler_group = QGroupBox("Crawler Agent")
+        crawler_layout = QVBoxLayout()
+        crawler_layout.setSpacing(12)
+        crawler_layout.setContentsMargins(15, 20, 15, 20)
 
-        self.enable_droidrun_checkbox = QCheckBox("Enable AI Crawler Agent")
-        self.enable_droidrun_checkbox.setToolTip(
+        self.enable_crawler_agent_checkbox = QCheckBox("Enable Crawler Agent")
+        self.enable_crawler_agent_checkbox.setToolTip(
             "Use the advanced multi-step planning agent instead of single-shot AI responses"
         )
-        droidrun_layout.addWidget(self.enable_droidrun_checkbox)
+        crawler_layout.addWidget(self.enable_crawler_agent_checkbox)
 
-        self.droidrun_reasoning_checkbox = QCheckBox("Use Reasoning Mode")
-        self.droidrun_reasoning_checkbox.setToolTip(
+        self.crawler_reasoning_checkbox = QCheckBox("Use Reasoning Mode")
+        self.crawler_reasoning_checkbox.setToolTip(
             "Enable complex planning with ManagerAgent -> ExecutorAgent cycles (vs direct execution)"
         )
-        self.droidrun_reasoning_checkbox.setChecked(True)
-        droidrun_layout.addWidget(self.droidrun_reasoning_checkbox)
+        self.crawler_reasoning_checkbox.setChecked(True)
+        crawler_layout.addWidget(self.crawler_reasoning_checkbox)
 
         max_cycles_layout = QHBoxLayout()
         max_cycles_layout.addWidget(QLabel("Max Planning Cycles:"))
-        self.droidrun_max_cycles_input = QSpinBox()
-        self.droidrun_max_cycles_input.setRange(1, 20)
-        self.droidrun_max_cycles_input.setValue(5)
-        self.droidrun_max_cycles_input.setToolTip("Maximum planning/execution cycles for the AI crawler agent")
-        max_cycles_layout.addWidget(self.droidrun_max_cycles_input)
+        self.crawler_max_cycles_input = QSpinBox()
+        self.crawler_max_cycles_input.setRange(1, 20)
+        self.crawler_max_cycles_input.setValue(5)
+        self.crawler_max_cycles_input.setToolTip("Maximum planning/execution cycles for the crawler agent")
+        max_cycles_layout.addWidget(self.crawler_max_cycles_input)
         max_cycles_layout.addStretch()
-        droidrun_layout.addLayout(max_cycles_layout)
+        crawler_layout.addLayout(max_cycles_layout)
 
-        self.droidrun_streaming_checkbox = QCheckBox("Enable Streaming Output")
-        self.droidrun_streaming_checkbox.setToolTip("Show real-time agent planning and execution updates")
-        droidrun_layout.addWidget(self.droidrun_streaming_checkbox)
+        self.crawler_streaming_checkbox = QCheckBox("Enable Streaming Output")
+        self.crawler_streaming_checkbox.setToolTip("Show real-time agent planning and execution updates")
+        crawler_layout.addWidget(self.crawler_streaming_checkbox)
 
         retry_layout = QHBoxLayout()
         retry_layout.addWidget(QLabel("Agent Retry Count:"))
-        self.droidrun_retry_count_input = QSpinBox()
-        self.droidrun_retry_count_input.setRange(0, 10)
-        self.droidrun_retry_count_input.setValue(2)
-        self.droidrun_retry_count_input.setToolTip("Number of retries for failed agent operations")
-        retry_layout.addWidget(self.droidrun_retry_count_input)
+        self.crawler_retry_count_input = QSpinBox()
+        self.crawler_retry_count_input.setRange(0, 10)
+        self.crawler_retry_count_input.setValue(2)
+        self.crawler_retry_count_input.setToolTip("Number of retries for failed agent operations")
+        retry_layout.addWidget(self.crawler_retry_count_input)
         retry_layout.addStretch()
-        droidrun_layout.addLayout(retry_layout)
+        crawler_layout.addLayout(retry_layout)
 
-        droidrun_group.setLayout(droidrun_layout)
-        layout.addWidget(droidrun_group)
+        crawler_group.setLayout(crawler_layout)
+        layout.addWidget(crawler_group)
 
         # Exploration Objective group
         objective_group = QGroupBox("Exploration Objective")
@@ -320,14 +320,14 @@ class SettingsPanel(QWidget):
         objective_group.setLayout(objective_layout)
         layout.addWidget(objective_group)
 
-        def on_droidrun_enabled_changed(enabled):
-            self.droidrun_reasoning_checkbox.setEnabled(enabled)
-            self.droidrun_max_cycles_input.setEnabled(enabled)
-            self.droidrun_streaming_checkbox.setEnabled(enabled)
-            self.droidrun_retry_count_input.setEnabled(enabled)
+        def on_crawler_agent_enabled_changed(enabled):
+            self.crawler_reasoning_checkbox.setEnabled(enabled)
+            self.crawler_max_cycles_input.setEnabled(enabled)
+            self.crawler_streaming_checkbox.setEnabled(enabled)
+            self.crawler_retry_count_input.setEnabled(enabled)
 
-        self.enable_droidrun_checkbox.toggled.connect(on_droidrun_enabled_changed)
-        on_droidrun_enabled_changed(self.enable_droidrun_checkbox.isChecked())
+        self.enable_crawler_agent_checkbox.toggled.connect(on_crawler_agent_enabled_changed)
+        on_crawler_agent_enabled_changed(self.enable_crawler_agent_checkbox.isChecked())
 
         layout.addStretch()
         return self._wrap_in_scroll_area(tab)
@@ -413,6 +413,22 @@ class SettingsPanel(QWidget):
         self.local_url_container.setLayout(local_url_layout)
         parser_layout.addWidget(self.local_url_container)
 
+        self.local_timeout_container = QWidget()
+        local_timeout_layout = QHBoxLayout()
+        local_timeout_layout.setContentsMargins(0, 0, 0, 0)
+        local_timeout_layout.addWidget(QLabel("Local Parse Timeout (seconds):"))
+        self.omniparser_local_parse_timeout_input = QSpinBox()
+        self.omniparser_local_parse_timeout_input.setRange(5, 600)
+        self.omniparser_local_parse_timeout_input.setValue(120)
+        self.omniparser_local_parse_timeout_input.setSingleStep(5)
+        self.omniparser_local_parse_timeout_input.setToolTip(
+            "Maximum time to wait for one local OmniParser parse. CPU runs can take 40+ seconds."
+        )
+        local_timeout_layout.addWidget(self.omniparser_local_parse_timeout_input)
+        local_timeout_layout.addStretch()
+        self.local_timeout_container.setLayout(local_timeout_layout)
+        parser_layout.addWidget(self.local_timeout_container)
+
         # Replicate API Key (only visible/enabled when replicate backend is selected)
         self.replicate_container = QWidget()
         replicate_layout = QHBoxLayout()
@@ -429,6 +445,7 @@ class SettingsPanel(QWidget):
         # Toggle visibility based on selected backend
         def toggle_omniparser_backend(backend):
             self.local_url_container.setVisible(backend == "local")
+            self.local_timeout_container.setVisible(backend == "local")
             self.replicate_container.setVisible(backend == "replicate")
 
         self.omniparser_backend_combo.currentTextChanged.connect(toggle_omniparser_backend)
@@ -698,21 +715,21 @@ class SettingsPanel(QWidget):
         mobsf_api_url = self._config_store.get_setting("mobsf_api_url", default="http://localhost:8000")
         self.mobsf_api_url_input.setText(mobsf_api_url)
 
-        # Load DroidRun Agent settings
-        enable_droidrun = self._config_store.get_setting("use_droidrun_agent", default=True)
-        self.enable_droidrun_checkbox.setChecked(enable_droidrun)
+        # Load Crawler Agent settings
+        enable_crawler = self._config_store.get_setting("use_crawler_agent", default=True)
+        self.enable_crawler_agent_checkbox.setChecked(enable_crawler)
 
-        droidrun_reasoning = self._config_store.get_setting("droidrun_reasoning_mode", default=True)
-        self.droidrun_reasoning_checkbox.setChecked(droidrun_reasoning)
+        crawler_reasoning = self._config_store.get_setting("crawler_reasoning_mode", default=True)
+        self.crawler_reasoning_checkbox.setChecked(crawler_reasoning)
 
-        droidrun_max_cycles = self._config_store.get_setting("droidrun_max_cycles", default=5)
-        self.droidrun_max_cycles_input.setValue(droidrun_max_cycles)
+        crawler_max_cycles = self._config_store.get_setting("crawler_max_cycles", default=5)
+        self.crawler_max_cycles_input.setValue(crawler_max_cycles)
 
-        droidrun_streaming = self._config_store.get_setting("droidrun_streaming", default=False)
-        self.droidrun_streaming_checkbox.setChecked(droidrun_streaming)
+        crawler_streaming = self._config_store.get_setting("crawler_streaming", default=False)
+        self.crawler_streaming_checkbox.setChecked(crawler_streaming)
 
-        droidrun_retry_count = self._config_store.get_setting("droidrun_retry_count", default=2)
-        self.droidrun_retry_count_input.setValue(droidrun_retry_count)
+        crawler_retry_count = self._config_store.get_setting("crawler_retry_count", default=2)
+        self.crawler_retry_count_input.setValue(crawler_retry_count)
 
         # Load UI parser mode and Replicate API key
         ui_parser_mode = self._config_store.get_setting("ui_parser_mode", default="boost")
@@ -724,8 +741,14 @@ class SettingsPanel(QWidget):
         omniparser_local_url = self._config_store.get_setting("omniparser_local_url", default="http://localhost:8000")
         self.omniparser_local_url_input.setText(omniparser_local_url)
 
+        omniparser_local_parse_timeout = self._config_store.get_setting(
+            "omniparser_local_parse_timeout_seconds", default=120
+        )
+        self.omniparser_local_parse_timeout_input.setValue(int(omniparser_local_parse_timeout))
+
         # Trigger visibility update on load
         self.local_url_container.setVisible(omniparser_backend == "local")
+        self.local_timeout_container.setVisible(omniparser_backend == "local")
         self.replicate_container.setVisible(omniparser_backend == "replicate")
 
         replicate_key = self._config_store.get_setting("replicate_api_key", default="")
@@ -861,21 +884,21 @@ class SettingsPanel(QWidget):
             else:
                 self._config_store.set_setting("mobsf_api_url", "http://localhost:8000", "string")
 
-            # Save DroidRun Agent settings
-            enable_droidrun = self.enable_droidrun_checkbox.isChecked()
-            self._config_store.set_setting("use_droidrun_agent", enable_droidrun, "bool")
+            # Save Crawler Agent settings
+            enable_crawler = self.enable_crawler_agent_checkbox.isChecked()
+            self._config_store.set_setting("use_crawler_agent", enable_crawler, "bool")
 
-            droidrun_reasoning = self.droidrun_reasoning_checkbox.isChecked()
-            self._config_store.set_setting("droidrun_reasoning_mode", droidrun_reasoning, "bool")
+            crawler_reasoning = self.crawler_reasoning_checkbox.isChecked()
+            self._config_store.set_setting("crawler_reasoning_mode", crawler_reasoning, "bool")
 
-            droidrun_max_cycles = self.droidrun_max_cycles_input.value()
-            self._config_store.set_setting("droidrun_max_cycles", droidrun_max_cycles, "int")
+            crawler_max_cycles = self.crawler_max_cycles_input.value()
+            self._config_store.set_setting("crawler_max_cycles", crawler_max_cycles, "int")
 
-            droidrun_streaming = self.droidrun_streaming_checkbox.isChecked()
-            self._config_store.set_setting("droidrun_streaming", droidrun_streaming, "bool")
+            crawler_streaming = self.crawler_streaming_checkbox.isChecked()
+            self._config_store.set_setting("crawler_streaming", crawler_streaming, "bool")
 
-            droidrun_retry_count = self.droidrun_retry_count_input.value()
-            self._config_store.set_setting("droidrun_retry_count", droidrun_retry_count, "int")
+            crawler_retry_count = self.crawler_retry_count_input.value()
+            self._config_store.set_setting("crawler_retry_count", crawler_retry_count, "int")
 
             # Save UI parser mode
             ui_parser_mode = self.ui_parser_mode_combo.currentText()
@@ -887,6 +910,13 @@ class SettingsPanel(QWidget):
 
             omniparser_local_url = self.omniparser_local_url_input.text().strip()
             self._config_store.set_setting("omniparser_local_url", omniparser_local_url, "string")
+
+            omniparser_local_parse_timeout = self.omniparser_local_parse_timeout_input.value()
+            self._config_store.set_setting(
+                "omniparser_local_parse_timeout_seconds",
+                omniparser_local_parse_timeout,
+                "int",
+            )
 
             # Save Replicate API key (as regular setting, not secret - for easier debugging)
             replicate_key = self.replicate_api_key_input.text().strip()
@@ -1033,16 +1063,16 @@ class SettingsPanel(QWidget):
         """
         return self.enable_mobsf_analysis_checkbox.isChecked()
 
-    def get_enable_droidrun_agent(self) -> bool:
-        """Get the current DroidRun agent enabled state.
+    def get_enable_crawler_agent(self) -> bool:
+        """Get the current crawler agent enabled state.
 
         Returns:
-            True if DroidRun agent is enabled
+            True if crawler agent is enabled
         """
-        return self.enable_droidrun_checkbox.isChecked()
+        return self.enable_crawler_agent_checkbox.isChecked()
 
     def get_exploration_objective(self) -> str:
-        """Get the current exploration objective / prompt for DroidRun.
+        """Get the current exploration objective / prompt for crawler agent.
 
         Returns:
             Current exploration objective text (empty string if not set)
@@ -1084,6 +1114,10 @@ class SettingsPanel(QWidget):
             Local server URL
         """
         return self.omniparser_local_url_input.text().strip()
+
+    def get_omniparser_local_parse_timeout_seconds(self) -> int:
+        """Get the current local OmniParser parse timeout."""
+        return self.omniparser_local_parse_timeout_input.value()
 
     def get_pcapdroid_api_key(self) -> str:
         """Get the current PCAPdroid API key.
@@ -1139,6 +1173,7 @@ class SettingsPanel(QWidget):
         self.test_phone_input.clear()
         self.exploration_objective_input.setPlainText(DEFAULT_EXPLORATION_OBJECTIVE)
         self.ui_parser_mode_combo.setCurrentText("boost")
+        self.omniparser_local_parse_timeout_input.setValue(120)
         self.enable_tracing_checkbox.setChecked(False)
         self.tracing_provider_combo.setCurrentText("phoenix")
         self.phoenix_url_input.setText("http://localhost:6006")

@@ -73,8 +73,8 @@ except ImportError:
     UIContextManager = None
 
 
-class DroidRunLogHandler(logging.Handler):
-    """Forward DroidRun logs to UI and JSONL file per run."""
+class CrawlerLogHandler(logging.Handler):
+    """Forward Crawler logs to UI and JSONL file per run."""
 
     def __init__(self, run_id: int, log_path: str, emit_debug, enable_ui: bool):
         super().__init__()
@@ -101,12 +101,12 @@ class DroidRunLogHandler(logging.Handler):
                 self.emit_debug("on_debug_log", self.run_id, 0, message)
         except Exception as e:
             # Log the failure but avoid recursion by not re-emitting
-            logger.error(f"DroidRunLogHandler emit failed: {e}", exc_info=True)
+            logger.error(f"CrawlerLogHandler emit failed: {e}", exc_info=True)
 
 
 @dataclass
-class DroidRunGoal:
-    """Goal representation for DroidRun agent."""
+class CrawlerGoal:
+    """Goal representation for Crawler agent."""
 
     description: str
     max_steps: int = 15
@@ -115,8 +115,8 @@ class DroidRunGoal:
 
 
 @dataclass
-class DroidRunResult:
-    """Result from DroidRun agent execution."""
+class CrawlerRunResult:
+    """Result from Crawler agent execution."""
 
     success: bool
     steps_completed: int
@@ -151,7 +151,7 @@ class CrawlerAgentService:
         self.ai_interaction_repository = ai_interaction_repository
         self.device_id = device_id
         self._crawler_agent = None
-        self._droidrun_config = None
+        self._crawler_agent_config = None
         self._current_handler = None
         self._handler_loop = None
         self._log_handler = None
@@ -167,6 +167,9 @@ class CrawlerAgentService:
         self._current_run_id: int | None = None
         self._current_step_number: int = 0
         self._emit_step_phase_event = None  # Callback to CrawlerLoop._emit_event
+        self._sub_phase_starts: dict[str, float] = {}
+        self._phase_metadata: dict[str, dict[str, Any]] = {}
+        self._pending_step_timing: dict[str, Any] = {}
 
         # Initialize OmniParser if available
         if OMNIPARSER_AVAILABLE:
@@ -176,21 +179,21 @@ class CrawlerAgentService:
         self._stats_processor: StatsCollectorSpanProcessor = StatsCollectorSpanProcessor()
         self._instrumentation_done: bool = False
 
-    def _get_droidrun_config(
+    def _get_crawler_agent_config(
         self,
         max_steps: int = 15,
         target_package: str | None = None,
     ) -> dict[str, Any]:
-        """Convert crawler configuration to DroidRun format.
+        """Convert crawler configuration to internal crawler_agent format.
 
         Returns:
-            DroidRun configuration dictionary
+            Crawler agent configuration dictionary
         """
         # Get LLM configuration from crawler config
         ai_provider = self.config_manager.get("ai_provider", "gemini")
         ai_model = self.config_manager.get("ai_model", "gemini-1.5-flash")
 
-        # Map crawler providers to DroidRun format
+        # Map crawler providers to internal format
         provider_mapping = {
             "gemini": "GoogleGenAI",
             "openai": "OpenAI",
@@ -221,8 +224,8 @@ class CrawlerAgentService:
         config = {
             "agent": {
                 "max_steps": max_steps,
-                "reasoning": self.config_manager.get("droidrun_reasoning_mode", True),
-                "streaming": self.config_manager.get("droidrun_streaming", False),
+                "reasoning": self.config_manager.get("crawler_reasoning_mode", True),
+                "streaming": self.config_manager.get("crawler_streaming", False),
             },
             "device": {
                 "platform": "android",
@@ -232,10 +235,16 @@ class CrawlerAgentService:
             "ui_parser_mode": self.config_manager.get("ui_parser_mode", "boost"),
             "omniparser_backend": self.config_manager.get("omniparser_backend", "replicate"),
             "omniparser_api_key": resolve_api_key("replicate_api_key", ["REPLICATE_API_KEY"]) or "",
+            "omniparser_local_url": self.config_manager.get(
+                "omniparser_local_url", "http://localhost:8000"
+            ),
+            "omniparser_local_parse_timeout_seconds": self.config_manager.get(
+                "omniparser_local_parse_timeout_seconds", 120
+            ),
             "target_package": target_package,
         }
 
-        # Set Replicate API key in environment for DroidRun
+        # Set Replicate API key in environment for the agent
         replicate_key = config["omniparser_api_key"]
         if replicate_key:
             os.environ["REPLICATE_API_KEY"] = replicate_key
@@ -310,13 +319,13 @@ class CrawlerAgentService:
         return config
 
     def configure_run_logging(self, run_id: int, log_dir: str, emit_debug, enable_ui: bool) -> None:
-        """Attach a DroidRun log handler for UI/debug and JSONL output.
+        """Attach a Crawler log handler for UI/debug and JSONL output.
 
         Always enables UI forwarding so logs reach both the JSONL file
         and the root QLogHandler bridge in MainWindow.
         """
-        log_path = os.path.join(log_dir, "droidrun_trace.jsonl")
-        handler = DroidRunLogHandler(run_id, log_path, emit_debug, True)
+        log_path = os.path.join(log_dir, "crawler_trace.jsonl")
+        handler = CrawlerLogHandler(run_id, log_path, emit_debug, True)
         handler.setLevel(logging.DEBUG)
 
         # Patch the crawler_agent logger and known children for debug visibility.
@@ -330,7 +339,7 @@ class CrawlerAgentService:
         self._log_handler = handler
 
     def clear_run_logging(self) -> None:
-        """Detach DroidRun log handler if attached."""
+        """Detach Crawler log handler if attached."""
         if self._log_handler:
             droid_logger = logging.getLogger("crawler_agent")
             droid_logger.removeHandler(self._log_handler)
@@ -342,11 +351,11 @@ class CrawlerAgentService:
         max_steps: int = 15,
         target_package: str | None = None,
     ) -> None:
-        """Initialize DroidRun agent with current configuration."""
+        """Initialize Crawler agent with current configuration."""
         if self._is_initialized:
-            if self._droidrun_config is not None:
-                self._droidrun_config.agent.max_steps = max_steps
-                self._droidrun_config.target_package = target_package
+            if self._crawler_agent_config is not None:
+                self._crawler_agent_config.agent.max_steps = max_steps
+                self._crawler_agent_config.target_package = target_package
             return
 
         # Instrument LlamaIndex and register stats collector (idempotent)
@@ -354,25 +363,25 @@ class CrawlerAgentService:
         self._stats_processor.reset()
 
         try:
-            # Import internalized DroidRun components
-            from mobile_crawler.domain.crawler_agent.config_manager.config_manager import DroidConfig
+            # Import internalized crawler_agent components
+            from mobile_crawler.domain.crawler_agent.config_manager.config_manager import CrawlerConfig
 
-            # Create DroidRun configuration
-            config_dict = self._get_droidrun_config(max_steps, target_package=target_package)
-            self._droidrun_config = DroidConfig.from_dict(config_dict)
+            # Create Crawler configuration
+            config_dict = self._get_crawler_agent_config(max_steps, target_package=target_package)
+            self._crawler_agent_config = CrawlerConfig.from_dict(config_dict)
 
             self._is_initialized = True
-            logger.info("DroidRun agent initialized successfully")
+            logger.info("Crawler agent initialized successfully")
 
         except Exception as e:
-            logger.error(f"Failed to initialize DroidRun agent: {e}")
+            logger.error(f"Failed to initialize Crawler agent: {e}")
             raise
 
-    async def _ensure_target_app_active_before_droidrun(
+    async def _ensure_target_app_active_before_crawler(
         self,
         app_package: str,
     ) -> None:
-        """Launch and verify the target package before any DroidRun work starts."""
+        """Launch and verify the target package before any crawler work starts."""
         from mobile_crawler.domain.adb_action_executor import ADBActionExecutor
 
         attempts = int(self.config_manager.get("target_app_launch_attempts", 3) or 3)
@@ -380,11 +389,11 @@ class CrawlerAgentService:
         current_package = adb_executor.get_current_package()
 
         if current_package == app_package:
-            logger.info("Target app already active before DroidRun startup: %s", app_package)
+            logger.info("Target app already active before crawler startup: %s", app_package)
             return
 
         logger.info(
-            "Target app is not active before DroidRun startup "
+            "Target app is not active before crawler startup "
             "(current=%s, target=%s). Launching target app.",
             current_package,
             app_package,
@@ -424,11 +433,11 @@ class CrawlerAgentService:
 
         detail = f"last_error={last_error}" if last_error else f"current_package={current_package}"
         raise RuntimeError(
-            f"Unable to open target app '{app_package}' before DroidRun startup after "
+            f"Unable to open target app '{app_package}' before crawler startup after "
             f"{attempts} attempts ({detail})"
         )
 
-    async def _ensure_device_awake_before_droidrun(self) -> None:
+    async def _ensure_device_awake_before_crawler(self) -> None:
         """Wake the selected device and fail fast if it is still locked."""
         if not self.config_manager.get("pre_crawl_wake_device", True):
             return
@@ -515,6 +524,9 @@ class CrawlerAgentService:
         self._current_run_id = run_id
         self._current_step_number = 0
         self._emit_step_phase_event = emit_step_phase_event
+        self._sub_phase_starts = {}
+        self._phase_metadata = {}
+        self._pending_step_timing = {}
 
         # Initialize step phase machine with a listener that persists transitions
         self._step_phase_machine = StepPhaseStateMachine()
@@ -526,7 +538,7 @@ class CrawlerAgentService:
         self._step_phase_repository = StepPhaseRepository(db_manager)
 
         # Initialize wait predicate and verifier (lazy -- will be fully wired
-        # when DroidRun agent provides state_provider/driver)
+        # when crawler_agent provides state_provider/driver)
         self._ui_wait_predicate = None  # Wired after agent init
         self._action_verifier = None    # Wired after agent init
 
@@ -543,9 +555,9 @@ class CrawlerAgentService:
         logger.info(f"Step phase tracking initialized for run {run_id}")
 
     def _wire_observers_to_agent(self) -> None:
-        """Wire UIWaitPredicate, ActionVerifier, and DeviceContextCapture to DroidRun.
+        """Wire UIWaitPredicate, ActionVerifier, and DeviceContextCapture to the agent.
 
-        Called after DroidRun agent is initialized, when state_provider, driver,
+        Called after Crawler agent is initialized, when state_provider, driver,
         and ADB executor are available on the agent object.
         """
         if not self._crawler_agent:
@@ -587,13 +599,131 @@ class CrawlerAgentService:
                 f"target_package={self._target_package}"
             )
 
-        # Set after_sleep_action to 0.0 to disable DroidRun's fixed delay
+        # Set after_sleep_action to 0.0 to disable internal fixed delay
         # Our explicit wait predicates replace it
-        if self._droidrun_config:
+        if self._crawler_agent_config:
             try:
-                self._droidrun_config.agent.after_sleep_action = 0.0
+                self._crawler_agent_config.agent.after_sleep_action = 0.0
             except Exception:
                 logger.debug("Could not set after_sleep_action=0.0")
+
+    def _start_sub_phase(self, phase_name: str) -> None:
+        """Record the start timestamp for a diagnostic sub-phase."""
+        self._sub_phase_starts[phase_name] = time.perf_counter()
+
+    def _end_sub_phase(
+        self,
+        phase_name: str,
+        *,
+        metadata_key: str | None = None,
+        parent_phase: StepPhase | str | None = None,
+    ) -> float | None:
+        """Finish a diagnostic sub-phase and store its elapsed milliseconds."""
+        start = self._sub_phase_starts.pop(phase_name, None)
+        if start is None:
+            return None
+
+        duration_ms = (time.perf_counter() - start) * 1000
+        self._add_sub_phase_timing(
+            metadata_key or f"{phase_name}_ms",
+            duration_ms,
+            parent_phase=parent_phase,
+        )
+        return duration_ms
+
+    def _add_sub_phase_timing(
+        self,
+        key: str,
+        duration_ms: float | None,
+        *,
+        parent_phase: StepPhase | str | None = None,
+    ) -> None:
+        """Add an elapsed sub-phase duration to phase transition metadata."""
+        if duration_ms is None:
+            return
+        try:
+            normalized_duration_ms = round(float(duration_ms), 3)
+        except (TypeError, ValueError):
+            return
+
+        phase_key = self._metadata_phase_key(parent_phase)
+        metadata = self._phase_metadata.setdefault(phase_key, {})
+        sub_phases = metadata.setdefault("sub_phases", {})
+        sub_phases[key] = normalized_duration_ms
+
+    def _add_validation_retry(
+        self,
+        reason: str,
+        *,
+        parent_phase: StepPhase | str | None = StepPhase.DECIDE,
+        timestamp: str | None = None,
+        attempt: int | None = None,
+    ) -> None:
+        """Record a Manager validation retry with context."""
+        phase_key = self._metadata_phase_key(parent_phase)
+        metadata = self._phase_metadata.setdefault(phase_key, {})
+        retries = metadata.setdefault("validation_retries", [])
+        retry = {
+            "reason": reason,
+            "timestamp": timestamp or datetime.now().isoformat(),
+        }
+        if attempt is not None:
+            retry["attempt"] = attempt
+        retries.append(retry)
+
+    def _metadata_phase_key(self, phase: StepPhase | str | None) -> str:
+        if isinstance(phase, StepPhase):
+            return phase.value
+        if phase:
+            return str(phase)
+        if self._step_phase_machine:
+            return self._step_phase_machine.current_phase.value
+        return StepPhase.CAPTURE.value
+
+    def _pop_phase_metadata(self, phase: StepPhase) -> dict[str, Any]:
+        return self._phase_metadata.pop(phase.value, {})
+
+    def _buffer_workflow_timing(self, event) -> None:
+        """Buffer Manager/Executor timing until the following tool event creates a step."""
+        from mobile_crawler.domain.crawler_agent.agent.executor.events import ExecutorResponseEvent
+        from mobile_crawler.domain.crawler_agent.agent.manager.events import (
+            ManagerContextEvent,
+            ManagerResponseEvent,
+        )
+
+        if isinstance(event, ManagerContextEvent):
+            app_card_load_ms = getattr(event, "app_card_load_ms", None)
+            if app_card_load_ms is not None:
+                self._pending_step_timing["app_card_load_ms"] = app_card_load_ms
+        elif isinstance(event, ManagerResponseEvent):
+            manager_llm_ms = getattr(event, "manager_llm_ms", None)
+            if manager_llm_ms is not None:
+                self._pending_step_timing["manager_llm_ms"] = manager_llm_ms
+            retries = getattr(event, "validation_retries", None) or []
+            if retries:
+                self._pending_step_timing.setdefault("validation_retries", []).extend(retries)
+        elif isinstance(event, ExecutorResponseEvent):
+            executor_llm_ms = getattr(event, "executor_llm_ms", None)
+            if executor_llm_ms is not None:
+                self._pending_step_timing["executor_llm_ms"] = executor_llm_ms
+
+    def _apply_pending_step_timing(self) -> None:
+        """Attach buffered Manager/Executor timings to the current DECIDE phase."""
+        pending = self._pending_step_timing
+        if not pending:
+            return
+
+        for key in ("app_card_load_ms", "manager_llm_ms", "executor_llm_ms"):
+            self._add_sub_phase_timing(key, pending.get(key), parent_phase=StepPhase.DECIDE)
+
+        for retry in pending.get("validation_retries", []):
+            self._add_validation_retry(
+                str(retry.get("reason", "Validation retry")),
+                timestamp=retry.get("timestamp"),
+                attempt=retry.get("attempt"),
+            )
+
+        self._pending_step_timing = {}
 
     def _on_phase_transition(self, old_phase: StepPhase, new_phase: StepPhase) -> None:
         """Listener callback for state machine transitions.
@@ -609,6 +739,8 @@ class CrawlerAgentService:
             if duration_ms is not None:
                 duration_ms = duration_ms * 1000  # Convert seconds to ms
 
+        metadata = self._pop_phase_metadata(old_phase)
+
         transition = StepPhaseTransition(
             id=None,
             run_id=self._current_run_id,
@@ -618,7 +750,7 @@ class CrawlerAgentService:
             timestamp=datetime.now(),
             action_type=None,
             duration_ms=duration_ms,
-            metadata_json=None,
+            metadata_json=json.dumps(metadata) if metadata else None,
         )
 
         try:
@@ -659,7 +791,7 @@ class CrawlerAgentService:
                 logger.warning(f"Failed to emit step phase event: {e}")
 
     async def _handle_tool_execution_event(self, event) -> None:
-        """Handle a ToolExecutionEvent from DroidRun's event stream.
+        """Handle a ToolExecutionEvent from internal crawler_agent's event stream.
 
         Drives the step phase machine through transitions based on
         tool execution events. Before proceeding to DECIDE, validates:
@@ -678,6 +810,12 @@ class CrawlerAgentService:
 
         # Increment step number on each tool execution
         self._current_step_number += 1
+        self._apply_pending_step_timing()
+        self._add_sub_phase_timing(
+            "tool_execution_ms",
+            getattr(event, "duration_ms", None),
+            parent_phase=StepPhase.EXECUTE,
+        )
 
         logger.debug(
             f"Step {self._current_step_number}: tool={tool_name} "
@@ -742,7 +880,7 @@ class CrawlerAgentService:
         if skip_reason is None and self._ui_dump_validator:
             try:
                 async def get_ui_data():
-                    """Get fresh UI data from DroidRun agent's state."""
+                    """Get fresh UI data from crawler_agent's state."""
                     # 1. Try a11y_tree from state_provider.get_state() (live fetch)
                     if self._crawler_agent and hasattr(self._crawler_agent, "state_provider"):
                         state_provider = self._crawler_agent.state_provider
@@ -756,8 +894,8 @@ class CrawlerAgentService:
                             except Exception:
                                 pass
 
-                    # 2. Fall back to shared_state.a11y_tree - this is where DroidRun writes
-                    #    OmniParser results (manager_agent.py:412, stateless_manager_agent.py:206)
+                    # 2. Fall back to shared_state.a11y_tree - this is where the agent writes
+                    #    OmniParser results
                     if self._crawler_agent:
                         shared_state = getattr(self._crawler_agent, "shared_state", None)
                         if shared_state:
@@ -778,7 +916,7 @@ class CrawlerAgentService:
                     )
                     skip_reason = StepSkipReason.INVALID_UI_DUMP
                 # If ui_data is None, proceed without validation —
-                # DroidRun may not have state_provider in all execution paths
+                # The agent may not have state_provider in all execution paths
 
             except Exception as e:
                 logger.warning(
@@ -846,7 +984,13 @@ class CrawlerAgentService:
 
                 # Wait for UI to settle after action
                 if self._ui_wait_predicate:
+                    self._start_sub_phase("after_action_wait")
                     settled = await self._ui_wait_predicate.wait_for_ui_settled(tool_name)
+                    self._end_sub_phase(
+                        "after_action_wait",
+                        metadata_key="after_action_wait_ms",
+                        parent_phase=StepPhase.EXECUTE,
+                    )
                     if not settled:
                         logger.debug(
                             f"UI did not settle after {tool_name} "
@@ -859,14 +1003,25 @@ class CrawlerAgentService:
                 # Verify post-action state in RECORD phase
                 if self._action_verifier and pre_state:
                     try:
+                        self._start_sub_phase("verification")
                         verification = await self._action_verifier.verify(
                             pre_state, tool_name
+                        )
+                        self._end_sub_phase(
+                            "verification",
+                            metadata_key="verification_ms",
+                            parent_phase=StepPhase.RECORD,
                         )
                         logger.info(
                             f"Step {self._current_step_number}: verification "
                             f"result={verification} for action={tool_name}"
                         )
                     except Exception as e:
+                        self._end_sub_phase(
+                            "verification",
+                            metadata_key="verification_ms",
+                            parent_phase=StepPhase.RECORD,
+                        )
                         logger.warning(
                             f"Step {self._current_step_number}: verification failed: {e}"
                         )
@@ -888,7 +1043,7 @@ class CrawlerAgentService:
 
     def _create_exploration_goal(
         self, app_package: str, max_steps: int, exploration_objective: str | None = None
-    ) -> DroidRunGoal:
+    ) -> CrawlerGoal:
         """Create a goal for app exploration.
 
         Args:
@@ -897,7 +1052,7 @@ class CrawlerAgentService:
             exploration_objective: Optional specific exploration objective
 
         Returns:
-            DroidRunGoal for app exploration
+            CrawlerGoal for app exploration
         """
         if exploration_objective:
             description = f"Explore the {app_package} app. {exploration_objective}"
@@ -918,10 +1073,10 @@ class CrawlerAgentService:
             "The system runtime will terminate you automatically when the configured time or step limit is reached."
         )
 
-        return DroidRunGoal(
+        return CrawlerGoal(
             description=description,
             max_steps=max_steps,
-            reasoning=self.config_manager.get("droidrun_reasoning_mode", True),
+            reasoning=self.config_manager.get("crawler_reasoning_mode", True),
             app_package=app_package,
         )
 
@@ -932,8 +1087,8 @@ class CrawlerAgentService:
         max_steps: int = 15,
         exploration_objective: str | None = None,
         max_duration_seconds: int | None = None,
-    ) -> DroidRunResult:
-        """Execute an app exploration task using DroidRun agent.
+    ) -> CrawlerRunResult:
+        """Execute an app exploration task using internal Crawler agent.
 
         Args:
             run_id: Crawler run ID for logging
@@ -943,10 +1098,10 @@ class CrawlerAgentService:
             max_duration_seconds: Optional maximum duration in seconds
 
         Returns:
-            DroidRunResult with execution details
+            CrawlerRunResult with execution details
         """
         start_time = time.time()
-        goal: DroidRunGoal | None = None
+        goal: CrawlerGoal | None = None
 
         # Store target package for context pre-check (Plan 02)
         self._target_package = app_package
@@ -957,8 +1112,8 @@ class CrawlerAgentService:
 
         for attempt in range(max_crash_retries + 1):
             try:
-                await self._ensure_device_awake_before_droidrun()
-                await self._ensure_target_app_active_before_droidrun(app_package)
+                await self._ensure_device_awake_before_crawler()
+                await self._ensure_target_app_active_before_crawler(app_package)
 
                 # Initialize agent if needed
                 await self._initialize_agent(max_steps, target_package=app_package)
@@ -966,17 +1121,17 @@ class CrawlerAgentService:
                 # Create exploration goal
                 goal = self._create_exploration_goal(app_package, max_steps, exploration_objective)
 
-                # Log agent request
+                # Log agent interaction
                 self._log_agent_interaction(run_id, goal, None, None)
 
-                # Execute the goal using DroidRun agent
-                logger.info(f"Executing DroidRun agent goal: {goal.description[:100]}...")
+                # Execute the goal using internal Crawler agent
+                logger.info(f"Executing Crawler agent goal: {goal.description[:100]}...")
 
                 from mobile_crawler.domain.crawler_agent.agent.droid.crawler_agent import CrawlerAgent
 
-                self._crawler_agent = CrawlerAgent(goal=goal.description, config=self._droidrun_config)
+                self._crawler_agent = CrawlerAgent(goal=goal.description, config=self._crawler_agent_config)
 
-                # Wire observers to the DroidRun agent's state_provider and driver
+                # Wire observers to the Crawler agent's state_provider and driver
                 self._wire_observers_to_agent()
 
                 result = self._crawler_agent.run()
@@ -991,19 +1146,21 @@ class CrawlerAgentService:
                     self._current_handler = result
                     self._handler_loop = asyncio.get_running_loop()
 
-                    # Consume ToolExecutionEvent stream for step phase tracking
+                    # Consume workflow events for step phase timing and tracking
                     event_consumer_task = None
                     if self._step_phase_machine:
                         workflow_result = result
 
                         async def _consume_step_events(workflow_result=workflow_result):
-                            """Background task: consume DroidRun events and drive step phase machine."""
+                            """Background task: consume agent events and drive step phase metadata."""
                             try:
                                 from mobile_crawler.domain.crawler_agent.agent.common.events import ToolExecutionEvent
 
                                 async for event in workflow_result.stream_events():
                                     if isinstance(event, ToolExecutionEvent):
                                         await self._handle_tool_execution_event(event)
+                                    else:
+                                        self._buffer_workflow_timing(event)
                             except asyncio.CancelledError:
                                 pass
                             except Exception as e:
@@ -1016,7 +1173,7 @@ class CrawlerAgentService:
                             result = await asyncio.wait_for(result, timeout=max_duration_seconds)
                         except TimeoutError:
                             is_timeout = True
-                            logger.info(f"Max duration of {max_duration_seconds}s reached. Stopping DroidRun agent.")
+                            logger.info(f"Max duration of {max_duration_seconds}s reached. Stopping Crawler agent.")
                             await self._shutdown_active_workflow()
                     else:
                         result = await result
@@ -1035,7 +1192,7 @@ class CrawlerAgentService:
                             result = await asyncio.wait_for(task, timeout=max_duration_seconds)
                         except TimeoutError:
                             is_timeout = True
-                            logger.info(f"Max duration of {max_duration_seconds}s reached. Stopping DroidRun agent.")
+                            logger.info(f"Max duration of {max_duration_seconds}s reached. Stopping Crawler agent.")
                             if not task.done():
                                 task.cancel()
                                 try:
@@ -1047,7 +1204,7 @@ class CrawlerAgentService:
 
                 duration_ms = (time.time() - start_time) * 1000
 
-                # Convert DroidRun result to our format
+                # Convert agent result to our format
                 success = False
                 steps_completed = 0
                 error_message = None
@@ -1059,7 +1216,7 @@ class CrawlerAgentService:
                     steps_completed = int(getattr(result, "steps", 0) or 0)
                     reason = str(getattr(result, "reason", ""))
 
-                    # DroidRun returns success=False when max steps is reached, but this is normal completion.
+                    # Agent returns success=False when max steps is reached, but this is normal completion.
                     if not raw_success and self._is_max_step_completion_reason(reason):
                         success = True  # Reached max steps is successful completion
                         error_message = None
@@ -1074,7 +1231,7 @@ class CrawlerAgentService:
                     success = True
                     steps_completed = len(result)
 
-                # Extract action history from DroidRun agent's internal state
+                # Extract action history from Crawler agent's internal state
                 actions_taken = []
                 action_outcomes = []
                 if hasattr(self._crawler_agent, "shared_state"):
@@ -1091,7 +1248,7 @@ class CrawlerAgentService:
                 successful_count = sum(1 for outcome in action_outcomes if outcome is True)
                 failed_count = sum(1 for outcome in action_outcomes if outcome is False)
 
-                droid_result = DroidRunResult(
+                crawler_result = CrawlerRunResult(
                     success=success,
                     steps_completed=steps_completed,
                     actions_taken=actions_taken,
@@ -1110,7 +1267,7 @@ class CrawlerAgentService:
                     "success": success,
                     "steps_completed": steps_completed,
                     "actions_taken": actions_taken,
-                    "final_state": droid_result.final_state,
+                    "final_state": crawler_result.final_state,
                 }
                 self._log_agent_interaction(run_id, goal, log_result, None)
 
@@ -1118,13 +1275,13 @@ class CrawlerAgentService:
                     # Clear error message and override reason
                     error_msg_log = "Duration limit reached"
                     logger.info(
-                        f"DroidRun agent timed out cleanly: {droid_result.steps_completed} steps in {duration_ms:.1f}ms"
+                        f"Crawler agent timed out cleanly: {crawler_result.steps_completed} steps in {duration_ms:.1f}ms"
                     )
                 else:
                     logger.info(
-                        f"DroidRun agent completed: {droid_result.steps_completed} steps in {duration_ms:.1f}ms"
+                        f"Crawler agent completed: {crawler_result.steps_completed} steps in {duration_ms:.1f}ms"
                     )
-                return droid_result
+                return crawler_result
 
             except Exception as e:
                 duration_ms = (time.time() - start_time) * 1000
@@ -1165,8 +1322,8 @@ class CrawlerAgentService:
                 if goal is not None:
                     self._log_agent_interaction(run_id, goal, None, error_msg)
 
-                logger.error(f"DroidRun agent execution failed: {error_msg}")
-                return DroidRunResult(
+                logger.error(f"Crawler agent execution failed: {error_msg}")
+                return CrawlerRunResult(
                     success=False,
                     steps_completed=0,
                     actions_taken=[],
@@ -1179,7 +1336,7 @@ class CrawlerAgentService:
                 self._handler_loop = None
 
         # Should not reach here, but handle the case
-        return DroidRunResult(
+        return CrawlerRunResult(
             success=False,
             steps_completed=0,
             actions_taken=[],
@@ -1210,7 +1367,7 @@ class CrawlerAgentService:
 
     @staticmethod
     def _is_max_step_completion_reason(reason: str) -> bool:
-        """Return True when DroidRun ended normally at the configured step limit."""
+        """Return True when the agent ended normally at the configured step limit."""
         normalized = (reason or "").lower()
         return any(
             token in normalized
@@ -1224,7 +1381,7 @@ class CrawlerAgentService:
         )
 
     def _log_agent_interaction(
-        self, run_id: int, goal: DroidRunGoal | None, result: Any | None, error_message: str | None
+        self, run_id: int, goal: CrawlerGoal | None, result: Any | None, error_message: str | None
     ) -> None:
         """Log agent interaction to the database.
 
@@ -1263,13 +1420,13 @@ class CrawlerAgentService:
             interaction = AIInteraction(
                 id=None,
                 run_id=run_id,
-                step_number=1,  # DroidRun handles multiple steps internally
+                step_number=1,  # The agent handles multiple steps internally
                 timestamp=datetime.now(),
                 request_json=json.dumps(request_data) if request_data else None,
-                screenshot_path=None,  # DroidRun handles screenshots internally
+                screenshot_path=None,  # The agent handles screenshots internally
                 response_raw=json.dumps(response_data) if response_data else None,
                 response_parsed_json=json.dumps(response_data) if response_data else None,
-                tokens_input=None,  # Token counting handled by DroidRun
+                tokens_input=None,  # Token counting handled internally
                 tokens_output=None,
                 latency_ms=None,  # Will be calculated by calling code
                 success=error_message is None,
@@ -1317,18 +1474,18 @@ class CrawlerAgentService:
             },
         }
 
-    def convert_droidrun_actions_to_crawler_format(self, droidrun_actions: list[dict[str, Any]]) -> list[AIAction]:
-        """Convert DroidRun actions to crawler AIAction format.
+    def convert_agent_actions_to_crawler_format(self, agent_actions: list[dict[str, Any]]) -> list[AIAction]:
+        """Convert agent actions to crawler AIAction format.
 
         Args:
-            droidrun_actions: List of actions from DroidRun
+            agent_actions: List of actions from the agent
 
         Returns:
             List of AIAction objects
         """
         converted_actions = []
 
-        for action_data in droidrun_actions:
+        for action_data in agent_actions:
             try:
                 # Extract action details
                 action_type = action_data.get("action", "unknown")
@@ -1343,7 +1500,7 @@ class CrawlerAgentService:
                     # Create a small bounding box around the point
                     bounding_box = BoundingBox(top_left=(max(0, x - 10), max(0, y - 10)), bottom_right=(x + 10, y + 10))
 
-                # Map DroidRun action types to crawler action types
+                # Map agent action types to crawler action types
                 action_mapping = {
                     "click": "click",
                     "tap": "click",
@@ -1358,7 +1515,7 @@ class CrawlerAgentService:
                 # Create AIAction
                 ai_action = AIAction(
                     action=mapped_action,
-                    action_desc=description or f"DroidRun {action_type}",
+                    action_desc=description or f"Agent {action_type}",
                     target_bounding_box=bounding_box,
                     input_text=text,
                     reasoning=action_data.get("reasoning", ""),
@@ -1367,13 +1524,13 @@ class CrawlerAgentService:
                 converted_actions.append(ai_action)
 
             except Exception as e:
-                logger.warning(f"Failed to convert DroidRun action {action_data}: {e}")
+                logger.warning(f"Failed to convert agent action {action_data}: {e}")
                 continue
 
         return converted_actions
 
     async def cleanup(self) -> None:
-        """Cleanup DroidRun agent resources."""
+        """Cleanup agent resources."""
         await self._shutdown_active_workflow()
         if self._crawler_agent:
             try:
@@ -1461,7 +1618,7 @@ class CrawlerAgentService:
                 try:
                     await asyncio.wait_for(handler, timeout=5)
                 except TimeoutError:
-                    logger.warning("Timed out waiting for DroidRun workflow to finish")
+                    logger.warning("Timed out waiting for agent workflow to finish")
                 except asyncio.CancelledError:
                     # Ignore cancellation error that is expected when waiting for a cancelled task
                     pass
@@ -1470,13 +1627,13 @@ class CrawlerAgentService:
         except asyncio.CancelledError:
             pass
         except Exception as e:
-            logger.warning(f"Error while shutting down DroidRun workflow: {e}")
+            logger.warning(f"Error while shutting down agent workflow: {e}")
         finally:
             self._current_handler = None
             self._handler_loop = None
 
     def request_cancel(self) -> bool:
-        """Request cancellation of the active DroidRun workflow if available."""
+        """Request cancellation of the active agent workflow if available."""
         handler = self._current_handler
         loop = self._handler_loop
         if not handler or not loop:
@@ -1488,14 +1645,14 @@ class CrawlerAgentService:
 
         return False
 
-    async def analyze_ui_context(self, droidrun_tools, phone_state: dict[str, Any]) -> dict[str, Any]:
+    async def analyze_ui_context(self, agent_tools, phone_state: dict[str, Any]) -> dict[str, Any]:
         """Analyze UI context using OmniParser fallback.
 
-        This method can be called after DroidRun execution to log
+        This method can be called after agent execution to log
         OmniParser analysis for debugging/monitoring purposes.
 
         Args:
-            droidrun_tools: DroidRun tools instance
+            agent_tools: Agent tools instance
             phone_state: Current phone state
 
         Returns:
@@ -1505,7 +1662,7 @@ class CrawlerAgentService:
             return {}
 
         try:
-            context = await self._ui_context_manager.get_context(droidrun_tools, phone_state)
+            context = await self._ui_context_manager.get_context(agent_tools, phone_state)
             logger.info(
                 f"UI Context Analysis: source={context.get('source')}, "
                 f"a11y_count={len(context.get('a11y', []))}, "

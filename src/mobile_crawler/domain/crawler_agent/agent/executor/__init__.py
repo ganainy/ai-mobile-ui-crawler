@@ -2,7 +2,7 @@
 Executor Agent - Action execution workflow.
 """
 
-from mobile_crawler.domain.crawler_agent.agent.droid.events import ExecutorInputEvent, ExecutorResultEvent
+from mobile_crawler.domain.crawler_agent.agent.common.events import ExecutorInputEvent, ExecutorResultEvent
 from mobile_crawler.domain.crawler_agent.agent.executor.events import (
     ExecutorActionEvent,
     ExecutorActionResultEvent,

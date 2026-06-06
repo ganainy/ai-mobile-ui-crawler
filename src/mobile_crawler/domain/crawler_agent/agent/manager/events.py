@@ -14,7 +14,7 @@ from mobile_crawler.domain.crawler_agent.agent.usage import UsageResult
 class ManagerContextEvent(Event):
     """Context prepared, ready for LLM call."""
 
-    pass
+    app_card_load_ms: float | None = None
 
 
 class ManagerResponseEvent(Event):
@@ -22,6 +22,8 @@ class ManagerResponseEvent(Event):
 
     response: str
     usage: UsageResult | None = None
+    manager_llm_ms: float | None = None
+    validation_retries: list[dict] | None = None
 
 
 class ManagerPlanDetailsEvent(Event):

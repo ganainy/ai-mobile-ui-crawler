@@ -2,7 +2,7 @@
 
 This document explains how Mobile Crawler decides what to do during an app crawl, where time is spent, and which settings are the safest places to tune speed without damaging crawl quality too much.
 
-The old docs sometimes called the workflow class `DroidAgent`. The active internal workflow class is now `CrawlerAgent`, located at `src/mobile_crawler/domain/crawler_agent/agent/droid/crawler_agent.py`. Some older configuration names still contain `droidrun` because the runtime was originally internalized from DroidRun, but Mobile Crawler now uses the in-repo `crawler_agent` runtime.
+The active internal workflow class is now `CrawlerAgent`, located at `src/mobile_crawler/domain/crawler_agent/agent/droid/crawler_agent.py`. Mobile Crawler now uses the in-repo `crawler_agent` runtime and has transitioned to `crawler` prefixed configuration names.
 
 ## Runtime Ownership
 
@@ -28,7 +28,7 @@ The internal `crawler_agent` runtime owns exploration:
 - Tool registry and ADB-backed actions.
 - Shared per-run agent state.
 
-The handoff point is `CrawlerAgentService.execute_exploration_task()`. That service builds a `DroidConfig` object from Mobile Crawler settings, creates a `CrawlerAgent`, then runs the agent workflow.
+The handoff point is `CrawlerAgentService.execute_exploration_task()`. That service builds a `CrawlerConfig` object from Mobile Crawler settings, creates a `CrawlerAgent`, then runs the agent workflow.
 
 ## High-Level Flow
 
@@ -110,7 +110,7 @@ This mode is slower but usually better for complex tasks because the Manager can
 Before the first LLM decision, the service and runtime do setup work:
 
 1. `CrawlerAgentService` resolves provider/model/API-key settings.
-2. It builds `DroidConfig`.
+2. It builds `CrawlerConfig`.
 3. It wakes/unlocks the device if configured.
 4. It launches or verifies the target package.
 5. It initializes `CrawlerAgent`.

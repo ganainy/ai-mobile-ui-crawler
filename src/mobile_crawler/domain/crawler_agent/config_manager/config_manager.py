@@ -162,6 +162,7 @@ class ToolsConfig:
     omniparser_backend: str = "replicate"  # "replicate" or "local"
     omniparser_api_key: str = ""  # API key for Replicate
     omniparser_local_url: str = "http://localhost:8000"
+    omniparser_local_parse_timeout_seconds: int = 120
     omniparser_box_threshold: float = 0.05
     omniparser_a11y_threshold: int = 5  # Minimum a11y elements before triggering fallback
 
@@ -175,7 +176,7 @@ class CredentialsConfig:
 
 
 @dataclass
-class DroidConfig:
+class CrawlerConfig:
     """Complete Droidrun configuration schema."""
 
     agent: AgentConfig = field(default_factory=AgentConfig)
@@ -193,6 +194,7 @@ class DroidConfig:
     omniparser_backend: str = "replicate"
     omniparser_api_key: str = ""
     omniparser_local_url: str = "http://localhost:8000"
+    omniparser_local_parse_timeout_seconds: int = 120
     omniparser_box_threshold: float = 0.05
     omniparser_a11y_threshold: int = 5
     target_package: str | None = None
@@ -248,7 +250,7 @@ class DroidConfig:
         return result
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> DroidConfig:
+    def from_dict(cls, data: dict[str, Any]) -> CrawlerConfig:
         """Create config from dictionary."""
         # Parse LLM profiles
         llm_profiles = {}
@@ -323,13 +325,16 @@ class DroidConfig:
             omniparser_backend=data.get("omniparser_backend", "replicate"),
             omniparser_api_key=data.get("omniparser_api_key", ""),
             omniparser_local_url=data.get("omniparser_local_url", "http://localhost:8000"),
+            omniparser_local_parse_timeout_seconds=data.get(
+                "omniparser_local_parse_timeout_seconds", 120
+            ),
             omniparser_box_threshold=data.get("omniparser_box_threshold", 0.05),
             omniparser_a11y_threshold=data.get("omniparser_a11y_threshold", 5),
             target_package=data.get("target_package"),
         )
 
     @classmethod
-    def from_yaml(cls, path: str) -> DroidConfig:
+    def from_yaml(cls, path: str) -> CrawlerConfig:
         """
         Load config from YAML file.
 
@@ -337,7 +342,7 @@ class DroidConfig:
             path: Path to config file (relative to CWD or absolute)
 
         Returns:
-            DroidConfig instance
+            CrawlerConfig instance
 
         Raises:
             FileNotFoundError: If file doesn't exist

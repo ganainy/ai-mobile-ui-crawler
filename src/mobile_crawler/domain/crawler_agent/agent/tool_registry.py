@@ -8,6 +8,7 @@ from __future__ import annotations
 import inspect
 import json
 import logging
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -130,29 +131,33 @@ class ToolRegistry:
                     f"Unknown tool: {name}. " f"Available: {list(self.tools.keys())}"
                 ),
             )
-            self._emit_event(workflow_ctx, name, args, result)
+            self._emit_event(workflow_ctx, name, args, result, None)
             return result
 
         entry = self.tools[name]
+        start = time.perf_counter()
         try:
             if inspect.iscoroutinefunction(entry.fn):
                 result = await entry.fn(**args, ctx=ctx)
             else:
                 result = entry.fn(**args, ctx=ctx)
         except TypeError as e:
+            duration_ms = (time.perf_counter() - start) * 1000
             result = ActionResult(
                 success=False,
                 summary=f"Invalid arguments for {name}: {e}",
             )
-            self._emit_event(workflow_ctx, name, args, result)
+            self._emit_event(workflow_ctx, name, args, result, duration_ms)
             return result
         except Exception as e:
+            duration_ms = (time.perf_counter() - start) * 1000
             result = ActionResult(
                 success=False,
                 summary=f"Failed to execute {name}: {e}",
             )
-            self._emit_event(workflow_ctx, name, args, result)
+            self._emit_event(workflow_ctx, name, args, result, duration_ms)
             return result
+        duration_ms = (time.perf_counter() - start) * 1000
 
         # Normalise the return value into ActionResult
         if isinstance(result, ActionResult):
@@ -167,7 +172,7 @@ class ToolRegistry:
                 success=True, summary=str(result) if result else "Done"
             )
 
-        self._emit_event(workflow_ctx, name, args, action_result)
+        self._emit_event(workflow_ctx, name, args, action_result, duration_ms)
         return action_result
 
     @staticmethod
@@ -176,6 +181,7 @@ class ToolRegistry:
         name: str,
         args: dict[str, Any],
         result: ActionResult,
+        duration_ms: float | None,
     ) -> None:
         if workflow_ctx is None:
             return
@@ -187,6 +193,7 @@ class ToolRegistry:
                 tool_args=args,
                 success=result.success,
                 summary=result.summary,
+                duration_ms=duration_ms,
             )
         )
 

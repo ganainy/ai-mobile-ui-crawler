@@ -4,7 +4,7 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QTimer, Signal
-from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QMessageBox, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPushButton, QVBoxLayout, QWidget
 
 from mobile_crawler.domain.providers.registry import ProviderRegistry
 from mobile_crawler.domain.providers.vision_detector import VisionDetector
@@ -15,15 +15,15 @@ if TYPE_CHECKING:
 
 
 class AIModelSelector(QWidget):
-    """Widget for selecting AI provider and vision-capable model.
+    """Widget for selecting AI provider and model.
 
-    Provides provider dropdown and model list filtered to vision-capable.
+    Provides provider dropdown and searchable model list.
     Emits a signal when a model is selected.
     Persists last selected provider and model across sessions.
 
     Args:
         provider_registry: ProviderRegistry instance for fetching models
-        vision_detector: VisionDetector instance for filtering vision models
+        vision_detector: Legacy VisionDetector dependency kept for compatibility
         config_store: UserConfigStore instance for persisting provider/model selection
         parent: Parent widget
     """
@@ -36,7 +36,7 @@ class AIModelSelector(QWidget):
 
         Args:
             provider_registry: ProviderRegistry instance for fetching models
-            vision_detector: VisionDetector instance for filtering vision models
+            vision_detector: Legacy VisionDetector dependency kept for compatibility
             config_store: UserConfigStore instance for persisting provider/model selection
             parent: Parent widget
         """
@@ -47,6 +47,7 @@ class AIModelSelector(QWidget):
         self._current_provider: str = None
         self._current_model: str = None
         self._provider_models: dict[str, list[str]] = {}
+        self._provider_model_records: dict[str, list[dict]] = {}
         self._api_key_callback: Callable[[str], str] | None = None
         self._setup_ui()
         self._populate_providers()
@@ -103,8 +104,13 @@ class AIModelSelector(QWidget):
         layout.addLayout(provider_layout)
 
         # Model label
-        model_label = QLabel("Vision Model:")
+        model_label = QLabel("AI Model:")
         layout.addWidget(model_label)
+
+        self.model_search_input = QLineEdit()
+        self.model_search_input.setPlaceholderText("Search models...")
+        self.model_search_input.textChanged.connect(self._on_model_search_changed)
+        layout.addWidget(self.model_search_input)
 
         # Model dropdown
         self.model_combo = QComboBox()
@@ -157,11 +163,14 @@ class AIModelSelector(QWidget):
             self.status_label.setStyleSheet("color: gray; font-style: italic;")
             self._current_provider = None
             self._current_model = None
+            self.model_search_input.clear()
             self.model_combo.clear()
             self.model_combo.addItem("Select a model...", None)
             return
 
         self._current_provider = provider_id
+        self._current_model = None
+        self.model_search_input.clear()
         # Save provider to config store
         self._config_store.set_setting("last_ai_provider", provider_id, "string")
         self._update_model_list(provider_id)
@@ -234,31 +243,40 @@ class AIModelSelector(QWidget):
         self.provider_combo.setEnabled(False)
 
         # Create async operation
-        # Note: we pass provider and api_key as args/kwargs to the worker
-        self._model_thread = AsyncOperation(self.vision_detector.get_vision_models, args=(provider,), kwargs={'api_key': api_key})
+        self._model_thread = AsyncOperation(self._fetch_models, args=(provider, api_key))
         self._model_thread.result_ready.connect(lambda models: self._on_models_success(provider, models))
         self._model_thread.error_occurred.connect(self._on_models_error)
         self._model_thread.finished_signal.connect(self._on_models_finished)
         self._model_thread.start()
 
-    def _on_models_success(self, provider: str, vision_models: list):
-        """Handle successful model list retrieval."""
-        if vision_models:
-            # Build display entries with pricing (sorted alphabetically by id)
-            sorted_models = sorted(vision_models, key=lambda m: m.get('id', m.get('name', str(m))))
+    def _fetch_models(self, provider: str, api_key: str | None) -> list[dict]:
+        """Fetch all available models for a provider."""
+        if provider == "gemini":
+            return self.provider_registry.fetch_gemini_models(api_key or "")
+        if provider == "openrouter":
+            return self.provider_registry.fetch_openrouter_models(api_key or "")
+        if provider == "ollama":
+            return self.provider_registry.fetch_ollama_models()
+        raise ValueError(f"Unsupported provider: {provider}")
 
-            # Populate model combo box
-            self.model_combo.clear()
-            self.model_combo.addItem("Select a model...", None)
-            for model in sorted_models:
-                model_id = model.get('id', model.get('name', str(model)))
-                display_text = self._format_model_display(model_id, model)
-                self.model_combo.addItem(display_text, model_id)
+    def _on_models_success(self, provider: str, models: list):
+        """Handle successful model list retrieval."""
+        if models:
+            # Build display entries with pricing (sorted alphabetically by id)
+            sorted_models = sorted(models, key=lambda m: m.get('id', m.get('name', str(m))) if isinstance(m, dict) else str(m))
 
             # Store model ids for this provider
-            self._provider_models[provider] = [m.get('id', m.get('name', str(m))) for m in sorted_models]
+            self._provider_model_records[provider] = [
+                m if isinstance(m, dict) else {"id": str(m), "name": str(m)}
+                for m in sorted_models
+            ]
+            self._provider_models[provider] = [
+                m.get('id', m.get('name', str(m))) if isinstance(m, dict) else str(m)
+                for m in sorted_models
+            ]
+            self._populate_model_combo(provider)
 
-            self.status_label.setText(f"Found {len(sorted_models)} vision models")
+            self.status_label.setText(f"Found {len(sorted_models)} models")
             self.status_label.setStyleSheet("color: green; font-style: italic;")
 
             # Restore saved model selection if it matches this provider
@@ -269,10 +287,70 @@ class AIModelSelector(QWidget):
                         break
                 self._saved_model = None  # Clear after use
         else:
+            self._provider_model_records[provider] = []
+            self._provider_models[provider] = []
             self.model_combo.clear()
-            self.model_combo.addItem("No vision models available", None)
-            self.status_label.setText("No vision models available")
+            self.model_combo.addItem("No models available", None)
+            self.status_label.setText("No models available")
             self.status_label.setStyleSheet("color: red; font-style: italic;")
+
+    def _populate_model_combo(self, provider: str):
+        """Populate model dropdown from cached records and current search text."""
+        records = self._provider_model_records.get(provider, [])
+        query = self.model_search_input.text().strip().lower()
+
+        def matches(model: dict) -> bool:
+            if not query:
+                return True
+            model_id = str(model.get('id', model.get('name', '')))
+            display_text = self._format_model_display(model_id, model)
+            haystack = " ".join(
+                str(part)
+                for part in (
+                    model_id,
+                    model.get('name', ''),
+                    model.get('provider', ''),
+                    display_text,
+                )
+            ).lower()
+            return query in haystack
+
+        filtered = [model for model in records if matches(model)]
+        previous_model = self._current_model
+
+        self.model_combo.blockSignals(True)
+        self.model_combo.clear()
+        self.model_combo.addItem("Select a model...", None)
+        for model in filtered:
+            model_id = model.get('id', model.get('name', str(model)))
+            display_text = self._format_model_display(model_id, model)
+            self.model_combo.addItem(display_text, model_id)
+
+        if not filtered and query:
+            self.model_combo.addItem("No matching models", None)
+
+        if previous_model:
+            for i in range(self.model_combo.count()):
+                if self.model_combo.itemData(i) == previous_model:
+                    self.model_combo.setCurrentIndex(i)
+                    break
+        self.model_combo.blockSignals(False)
+
+    def _on_model_search_changed(self, _text: str):
+        """Filter loaded models by the search text."""
+        if not self._current_provider:
+            return
+        self._populate_model_combo(self._current_provider)
+        total = len(self._provider_model_records.get(self._current_provider, []))
+        visible = max(self.model_combo.count() - 1, 0)
+        if self.model_combo.findData(None) >= 0 and self.model_combo.itemText(1) == "No matching models":
+            visible = 0
+        if self.model_search_input.text().strip():
+            self.status_label.setText(f"Showing {visible} of {total} models")
+            self.status_label.setStyleSheet("color: gray; font-style: italic;")
+        elif total:
+            self.status_label.setText(f"Found {total} models")
+            self.status_label.setStyleSheet("color: green; font-style: italic;")
 
     def _on_models_error(self, error: str):
         """Handle model list retrieval error."""
@@ -290,7 +368,7 @@ class AIModelSelector(QWidget):
         """Refresh model list for current provider."""
         if self._current_provider:
             # Clear all cache to force fresh fetch
-            self.vision_detector._registry.clear_cache()
+            self.provider_registry.clear_cache()
             self._update_model_list(self._current_provider)
 
     def current_provider(self) -> str:
@@ -328,12 +406,14 @@ class AIModelSelector(QWidget):
             provider: Provider name
             model: Model name
         """
+        self._saved_model = model
+
         # First set provider
         self.set_provider(provider)
 
         # Then set model
         for i in range(self.model_combo.count()):
-            if self.model_combo.itemText(i) == model:
+            if self.model_combo.itemData(i) == model:
                 self.model_combo.setCurrentIndex(i)
                 break
 

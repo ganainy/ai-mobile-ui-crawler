@@ -19,6 +19,8 @@ from PySide6.QtWidgets import (
     QPushButton,
     QRadioButton,
     QScrollArea,
+    QTableWidget,
+    QTableWidgetItem,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -37,7 +39,8 @@ class AIInteractionItem(QWidget):
                  tokens_out: int | None, error_message: str | None,
                  prompt_preview: str, response_preview: str,
                  full_prompt: str, full_response: str,
-                 parsed_actions: list[dict], pending: bool = False, parent=None):
+                 parsed_actions: list[dict], pending: bool = False,
+                 timing_summary: dict | None = None, parent=None):
         """Initialize AI interaction item.
 
         Args:
@@ -70,6 +73,7 @@ class AIInteractionItem(QWidget):
         self.full_response = full_response
         self.parsed_actions = parsed_actions
         self.pending = pending
+        self.timing_summary = timing_summary or {}
 
         self.expanded = False
         self.list_item = None  # Will be set after creation
@@ -103,8 +107,11 @@ class AIInteractionItem(QWidget):
 
         # Metrics
         metrics_parts = []
+        step_duration_ms = self.timing_summary.get("total_step_duration_ms")
+        if step_duration_ms is not None:
+            metrics_parts.append(f"step {step_duration_ms / 1000:.1f}s")
         if self.latency_ms is not None:
-            metrics_parts.append(f"{self.latency_ms/1000:.1f}s")
+            metrics_parts.append(f"AI {self.latency_ms/1000:.1f}s")
         if self.tokens_in is not None and self.tokens_out is not None:
             metrics_parts.append(f"{self.tokens_in}→{self.tokens_out}")
         elif self.tokens_in is not None:
@@ -153,7 +160,8 @@ class StepDetailWidget(QWidget):
 
     def __init__(self, step_number: int, timestamp: datetime, success: bool,
                  full_prompt: str, full_response: str, parsed_actions: list[dict],
-                 error_message: str | None = None, screenshot_path: str | None = None, parent=None):
+                 error_message: str | None = None, screenshot_path: str | None = None,
+                 timing_data: dict | None = None, parent=None):
         """Initialize step detail widget.
 
         Args:
@@ -176,6 +184,7 @@ class StepDetailWidget(QWidget):
         self.parsed_actions = parsed_actions
         self.error_message = error_message
         self.screenshot_path = screenshot_path
+        self.timing_data = timing_data or {}
         self._setup_ui()
 
     def _setup_ui(self):
@@ -328,6 +337,10 @@ class StepDetailWidget(QWidget):
 
         scroll_layout.addLayout(top_row_layout)
 
+        timing_group = self._create_timing_group()
+        if timing_group:
+            scroll_layout.addWidget(timing_group)
+
         # BOTTOM ROW: Response (1/2) + Parsed Actions (1/2)
         bottom_row_layout = QHBoxLayout()
 
@@ -415,11 +428,59 @@ class StepDetailWidget(QWidget):
             scaled_pixmap = pixmap.scaledToWidth(200, Qt.TransformationMode.SmoothTransformation)
             self.screenshot_label.setPixmap(scaled_pixmap)
 
+    def _create_timing_group(self) -> QGroupBox | None:
+        """Create a timing breakdown section from step phase metadata."""
+        rows = self.timing_data.get("rows", [])
+        retries = self.timing_data.get("validation_retries", [])
+        if not rows and not retries:
+            return None
+
+        timing_group = QGroupBox("Timing Breakdown")
+        timing_layout = QVBoxLayout(timing_group)
+
+        if rows:
+            table = QTableWidget(len(rows), 4)
+            table.setHorizontalHeaderLabels(["Phase", "Metric", "Duration", "% Step"])
+            table.verticalHeader().setVisible(False)
+            table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+            table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
+            total_ms = self.timing_data.get("total_step_duration_ms") or 0.0
+
+            for row_idx, row in enumerate(rows):
+                duration_ms = row.get("duration_ms") or 0.0
+                pct = (duration_ms / total_ms * 100) if total_ms else 0.0
+                values = [
+                    row.get("phase", ""),
+                    row.get("metric", ""),
+                    f"{duration_ms:.0f} ms",
+                    f"{pct:.0f}%",
+                ]
+                for col_idx, value in enumerate(values):
+                    table.setItem(row_idx, col_idx, QTableWidgetItem(value))
+
+            table.resizeColumnsToContents()
+            timing_layout.addWidget(table)
+
+        if retries:
+            retry_text = QTextEdit()
+            retry_text.setReadOnly(True)
+            retry_text.setMaximumHeight(90)
+            lines = []
+            for retry in retries:
+                attempt = retry.get("attempt")
+                prefix = f"Attempt {attempt}: " if attempt is not None else ""
+                lines.append(f"{prefix}{retry.get('reason', 'Validation retry')}")
+            retry_text.setPlainText("\n".join(lines))
+            timing_layout.addWidget(QLabel(f"Manager validation retries: {len(retries)}"))
+            timing_layout.addWidget(retry_text)
+
+        return timing_group
+
 
 class AIMonitorPanel(QWidget):
     """Widget for monitoring AI interactions in real-time."""
 
-    show_step_details = Signal(int, datetime, bool, str, str, list, object, str)  # step_number, timestamp, success, prompt, response, actions, error_msg, screenshot_path
+    show_step_details = Signal(int, datetime, bool, str, str, list, object, str, object)  # step_number, timestamp, success, prompt, response, actions, error_msg, screenshot_path, timing_data
 
     def __init__(self, parent=None):
         """Initialize AI monitor panel.
@@ -430,7 +491,12 @@ class AIMonitorPanel(QWidget):
         super().__init__(parent)
         self._interactions = {}  # step_number -> interaction data
         self._filter_state = {"status": "all", "search": ""}
+        self._timing_provider = None
         self._setup_ui()
+
+    def set_timing_provider(self, provider) -> None:
+        """Set a callback returning phase transitions for (run_id, step_number)."""
+        self._timing_provider = provider
 
     @Slot(int, int, str)
     def add_screenshot_path(self, run_id: int, step_number: int, screenshot_path: str):
@@ -582,6 +648,10 @@ class AIMonitorPanel(QWidget):
         tokens_in = interaction.get("tokens_input")
         tokens_out = interaction.get("tokens_output")
         error_message = interaction.get("error_message")
+        timing_data = self._get_timing_data(
+            interaction.get("run_id"),
+            step_number,
+        )
 
         # Extract prompt and response previews
         request_data = interaction.get("request_data") or {}
@@ -661,7 +731,8 @@ class AIMonitorPanel(QWidget):
             full_prompt=prompt_text,
             full_response=full_response,
             parsed_actions=parsed_actions,
-            pending=pending
+            pending=pending,
+            timing_summary=timing_data,
         )
 
         # Create list item
@@ -695,6 +766,9 @@ class AIMonitorPanel(QWidget):
 
     def _determine_success(self, response_data: dict) -> bool:
         """Determine if AI response was successful."""
+        if isinstance(response_data.get("success"), bool):
+            return response_data["success"]
+
         # Has error? -> Failed
         if response_data.get("error_message"):
             return False
@@ -875,5 +949,61 @@ class AIMonitorPanel(QWidget):
             response_text,
             parsed_actions,
             error_message,
-            interaction.get("screenshot_path")
+            interaction.get("screenshot_path"),
+            self._get_timing_data(interaction.get("run_id"), step_number),
         )
+
+    def _get_timing_data(self, run_id: int | None, step_number: int) -> dict:
+        if not run_id or not self._timing_provider:
+            return {}
+        try:
+            transitions = self._timing_provider(run_id, step_number) or []
+        except Exception:
+            return {}
+        return _build_timing_breakdown(transitions)
+
+
+def _build_timing_breakdown(transitions) -> dict:
+    """Build UI timing rows from StepPhaseTransition-like objects."""
+    rows = []
+    validation_retries = []
+    total_step_duration_ms = 0.0
+
+    for transition in transitions:
+        phase = getattr(transition, "from_phase", "")
+        duration_ms = getattr(transition, "duration_ms", None)
+        if duration_ms is not None:
+            duration_ms = float(duration_ms)
+            total_step_duration_ms += duration_ms
+            rows.append(
+                {
+                    "phase": phase,
+                    "metric": "phase total",
+                    "duration_ms": duration_ms,
+                }
+            )
+
+        metadata_json = getattr(transition, "metadata_json", None)
+        if not metadata_json:
+            continue
+        try:
+            metadata = json.loads(metadata_json)
+        except (json.JSONDecodeError, TypeError):
+            continue
+
+        for metric, sub_duration_ms in (metadata.get("sub_phases") or {}).items():
+            rows.append(
+                {
+                    "phase": phase,
+                    "metric": metric,
+                    "duration_ms": float(sub_duration_ms),
+                }
+            )
+
+        validation_retries.extend(metadata.get("validation_retries") or [])
+
+    return {
+        "rows": rows,
+        "validation_retries": validation_retries,
+        "total_step_duration_ms": total_step_duration_ms or None,
+    }

@@ -8,6 +8,8 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_LOCAL_PARSE_TIMEOUT_SECONDS = 120
+
 
 class OmniParserBackend(Enum):
     REPLICATE = "replicate"
@@ -35,6 +37,7 @@ class OmniParserClient:
         backend: str = "replicate",
         api_key: str | None = None,
         local_url: str = "http://localhost:8000",
+        local_parse_timeout_seconds: int | float = DEFAULT_LOCAL_PARSE_TIMEOUT_SECONDS,
         box_threshold: float = 0.05,
     ):
         """Initialize OmniParser client.
@@ -43,11 +46,13 @@ class OmniParserClient:
             backend: "replicate" or "local"
             api_key: API key for Replicate (or set REPLICATE_API_KEY env var)
             local_url: URL for local OmniParser server
+            local_parse_timeout_seconds: Local server parse request timeout
             box_threshold: Minimum confidence threshold for element detection
         """
         self.backend = OmniParserBackend(backend)
         self._api_key = api_key or os.environ.get("REPLICATE_API_KEY")
         self.local_url = local_url
+        self.local_parse_timeout_seconds = max(1, float(local_parse_timeout_seconds))
         self.box_threshold = box_threshold
         logger.debug(
             f"OmniParser initialized: backend={backend}, has_api_key={bool(self._api_key)}"
@@ -258,36 +263,25 @@ class OmniParserClient:
         b64_image = base64.b64encode(image_bytes).decode("utf-8")
 
         try:
-            # Try /parse/ first (Microsoft format), fallback to /parse
+            payload = {
+                "base64_image": b64_image,
+                "box_threshold": self.box_threshold,
+            }
+
+            # Try /parse/ first (Microsoft format), fallback to /parse only
+            # when the endpoint is missing. Do not retry timed-out parses.
             parse_url = f"{self.local_url}/parse/"
-            try:
-                response = requests.post(
-                    parse_url,
-                    json={
-                        "base64_image": b64_image,
-                        "box_threshold": self.box_threshold,
-                    },
-                    timeout=30,
-                )
-                if response.status_code == 404:
-                    parse_url = f"{self.local_url}/parse"
-                    response = requests.post(
-                        parse_url,
-                        json={
-                            "base64_image": b64_image,
-                            "box_threshold": self.box_threshold,
-                        },
-                        timeout=30,
-                    )
-            except Exception:
+            response = requests.post(
+                parse_url,
+                json=payload,
+                timeout=self.local_parse_timeout_seconds,
+            )
+            if response.status_code == 404:
                 parse_url = f"{self.local_url}/parse"
                 response = requests.post(
                     parse_url,
-                    json={
-                        "base64_image": b64_image,
-                        "box_threshold": self.box_threshold,
-                    },
-                    timeout=30,
+                    json=payload,
+                    timeout=self.local_parse_timeout_seconds,
                 )
 
             if response.status_code != 200:
@@ -296,6 +290,13 @@ class OmniParserClient:
             result = response.json()
             return result.get("parsed_content_list", result.get("elements", []))
 
+        except requests.exceptions.Timeout:
+            logger.error(
+                "Local OmniParser parse timed out after %.0fs. "
+                "Increase omniparser_local_parse_timeout_seconds or use GPU acceleration.",
+                self.local_parse_timeout_seconds,
+            )
+            raise
         except requests.exceptions.RequestException as e:
             logger.error(f"Local OmniParser connection error: {e}")
             raise
@@ -331,6 +332,7 @@ def create_omni_parser_client(
     backend: str = "replicate",
     api_key: str | None = None,
     local_url: str = "http://localhost:8000",
+    local_parse_timeout_seconds: int | float = DEFAULT_LOCAL_PARSE_TIMEOUT_SECONDS,
     box_threshold: float = 0.05,
 ) -> OmniParserClient | None:
     """Factory function to create OmniParser client with error handling.
@@ -339,6 +341,7 @@ def create_omni_parser_client(
         backend: "replicate" or "local"
         api_key: API key for Replicate
         local_url: URL for local server
+        local_parse_timeout_seconds: Local server parse request timeout
         box_threshold: Detection threshold
 
     Returns:
@@ -349,6 +352,7 @@ def create_omni_parser_client(
             backend=backend,
             api_key=api_key,
             local_url=local_url,
+            local_parse_timeout_seconds=local_parse_timeout_seconds,
             box_threshold=box_threshold,
         )
         if client.is_available():

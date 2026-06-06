@@ -90,6 +90,12 @@
 4. `CrawlerLoop` delegates exploration to `CrawlerAgentService`, which wraps the internalized `crawler_agent` runtime.
 5. Final status/stats are persisted, then completion event is emitted (`src/mobile_crawler/core/crawler_loop.py:232`, `src/mobile_crawler/core/crawler_loop.py:246`).
 
+### Step Timing Diagnostics
+
+1. The internal `crawler_agent` workflows emit app-card, Manager LLM, Manager validation retry, Executor LLM, and tool execution timing fields on their existing workflow events.
+2. `CrawlerAgentService` buffers those workflow timings until each `ToolExecutionEvent` establishes the crawl step number, then writes sub-phase timing metadata into `step_phase_transitions.metadata_json` on the matching DECIDE, EXECUTE, or RECORD transition.
+3. The GUI mounts `AIMonitorPanel` beside the log viewer and uses `StepPhaseRepository.get_transitions_for_step()` to render per-step timing breakdowns and Manager validation retry reasons in the AI Monitor detail view.
+
 ### Secondary Flow: Report Generation
 
 1. UI/CLI requests report (`src/mobile_crawler/ui/widgets/run_history_view.py`, `src/mobile_crawler/cli/commands/report.py:10`).
@@ -143,7 +149,7 @@
 
 ## Current Runtime State
 
-- `src/mobile_crawler/domain/crawler_agent` is the active runtime namespace for `CrawlerAgent`, `DroidConfig`, drivers, UI state providers, OmniParser integration, macro replay, and telemetry support.
+- `src/mobile_crawler/domain/crawler_agent` is the active runtime namespace for `CrawlerAgent`, `CrawlerConfig`, drivers, UI state providers, OmniParser integration, macro replay, and telemetry support.
 - `src/mobile_crawler/domain/crawler_agent_service.py` exposes `CrawlerAgentService`, the Mobile Crawler adapter around that internal runtime.
 - UI settings are organized around General, AI Crawler, API Keys, and Integrations tabs.
 - App test credentials include address, email, and phone fields that are included in the agent prompt when configured.

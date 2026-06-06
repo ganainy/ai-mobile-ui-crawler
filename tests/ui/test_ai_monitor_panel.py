@@ -1,10 +1,23 @@
 """Tests for AI monitor panel widget."""
 
 
-import pytest
-from PySide6.QtWidgets import QApplication
+from dataclasses import dataclass
 
-from mobile_crawler.ui.widgets.ai_monitor_panel import AIMonitorPanel
+import pytest
+from PySide6.QtWidgets import QApplication, QGroupBox, QTableWidget
+
+from mobile_crawler.ui.widgets.ai_monitor_panel import (
+    AIMonitorPanel,
+    StepDetailWidget,
+    _build_timing_breakdown,
+)
+
+
+@dataclass
+class TransitionStub:
+    from_phase: str
+    duration_ms: float | None
+    metadata_json: str | None = None
 
 
 @pytest.fixture
@@ -157,3 +170,54 @@ def test_clear_resets_all_entries(ai_monitor_panel):
     assert ai_monitor_panel._filter_state["search"] == ""
     assert ai_monitor_panel.status_filter.currentText() == "All"
     assert ai_monitor_panel.search_input.text() == ""
+
+
+def test_build_timing_breakdown_extracts_sub_phases_and_retries():
+    """Test timing breakdown parses phase totals, sub-phases, and retries."""
+    transitions = [
+        TransitionStub(
+            from_phase="decide",
+            duration_ms=1200.0,
+            metadata_json=(
+                '{"sub_phases": {"manager_llm_ms": 800.0, "executor_llm_ms": 300.0}, '
+                '"validation_retries": [{"reason": "Missing plan tag", "attempt": 1}]}'
+            ),
+        ),
+        TransitionStub(
+            from_phase="execute",
+            duration_ms=500.0,
+            metadata_json='{"sub_phases": {"tool_execution_ms": 350.0, "after_action_wait_ms": 100.0}}',
+        ),
+    ]
+
+    breakdown = _build_timing_breakdown(transitions)
+
+    assert breakdown["total_step_duration_ms"] == 1700.0
+    assert {"phase": "decide", "metric": "manager_llm_ms", "duration_ms": 800.0} in breakdown["rows"]
+    assert {"phase": "execute", "metric": "after_action_wait_ms", "duration_ms": 100.0} in breakdown["rows"]
+    assert breakdown["validation_retries"][0]["reason"] == "Missing plan tag"
+
+
+def test_step_detail_widget_renders_timing_group(app):
+    """Test StepDetailWidget can render timing data with Qt table widgets."""
+    widget = StepDetailWidget(
+        step_number=1,
+        timestamp=__import__("datetime").datetime.now(),
+        success=True,
+        full_prompt="{}",
+        full_response="{}",
+        parsed_actions=[],
+        timing_data={
+            "total_step_duration_ms": 1000.0,
+            "rows": [
+                {"phase": "decide", "metric": "manager_llm_ms", "duration_ms": 700.0},
+            ],
+            "validation_retries": [{"reason": "Missing plan tag", "attempt": 1}],
+        },
+    )
+
+    groups = widget.findChildren(QGroupBox)
+    assert any(group.title() == "Timing Breakdown" for group in groups)
+    table = widget.findChild(QTableWidget)
+    assert table is not None
+    assert table.rowCount() == 1

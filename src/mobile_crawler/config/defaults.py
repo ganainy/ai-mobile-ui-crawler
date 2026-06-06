@@ -76,25 +76,26 @@ DEFAULTS: dict[str, Any] = {
     # HTTP request timeout for MobSF API calls (in seconds)
     "mobsf_request_timeout": 300,  # 5 minutes for large report downloads
     # Test credentials
-    # DroidRun Agent Integration settings
-    # Enable DroidRun's advanced AI agent system for multi-step planning
-    "use_droidrun_agent": True,
-    # Wake/unlock preflight before launching the target app or DroidRun
+    # Crawler Agent Integration settings
+    # Enable the internalized crawler-agent system for multi-step planning
+    "use_crawler_agent": True,
+    # Wake/unlock preflight before launching the target app or crawler
     "pre_crawl_wake_device": True,
     "pre_crawl_unlock_swipe": True,
     "pre_crawl_wake_timeout_seconds": 5.0,
     # Use reasoning mode for complex planning (vs direct execution)
-    "droidrun_reasoning_mode": True,
-    # Maximum planning/execution cycles for DroidRun agent
-    "droidrun_max_cycles": 5,
+    "crawler_reasoning_mode": True,
+    # Maximum planning/execution cycles for crawler agent
+    "crawler_max_cycles": 5,
     # Agent streaming output (for real-time updates)
-    "droidrun_streaming": False,
-    # DroidRun agent retry count for failed operations
-    "droidrun_retry_count": 2,
+    "crawler_streaming": False,
+    # Crawler agent retry count for failed operations
+    "crawler_retry_count": 2,
     # UI parser strategy: accessibility-first with OmniParser fallback
     "ui_parser_mode": "boost",
     "omniparser_backend": "replicate",
     "omniparser_local_url": "http://localhost:8000",
+    "omniparser_local_parse_timeout_seconds": 120,
     "omniparser_box_threshold": 0.05,
     "omniparser_cache_ttl_days": 30,
     "omniparser_a11y_ratio_threshold": 0.5,

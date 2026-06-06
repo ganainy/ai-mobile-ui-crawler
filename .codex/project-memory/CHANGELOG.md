@@ -2,6 +2,181 @@
 
 Durable agent-maintained memory for `E:\VS-projects\mobile-crawler`. Newest entries first.
 
+## 2026-06-06 - Raised Local OmniParser Parse Timeout
+
+Files touched:
+- `src/mobile_crawler/config/defaults.py`
+- `src/mobile_crawler/domain/crawler_agent/tools/omniparser_client.py`
+- `src/mobile_crawler/domain/omni_parser_client.py`
+- `src/mobile_crawler/domain/crawler_agent/tools/ui/provider.py`
+- `src/mobile_crawler/domain/crawler_agent/config_manager/config_manager.py`
+- `src/mobile_crawler/domain/crawler_agent/agent/droid/crawler_agent.py`
+- `src/mobile_crawler/domain/crawler_agent_service.py`
+- `src/mobile_crawler/ui/main_window.py`
+- `src/mobile_crawler/ui/widgets/settings_panel.py`
+- `tests/domain/test_omniparser_local_timeout.py`
+- `tests/domain/test_crawler_agent_service.py`
+- `tests/ui/test_settings_panel.py`
+- `tests/ui/test_main_window.py`
+- `tests/config/test_defaults.py`
+- `README.md`
+- `docs/readmes/local-omniparser-setup.md`
+- `.codex/project-memory/CHANGELOG.md`
+
+What changed:
+- Added `omniparser_local_parse_timeout_seconds` with a 120 second default.
+- Wired the timeout from defaults, GUI settings, `ConfigManager`, `CrawlerAgentService`, `CrawlerConfig`, and `AndroidStateProvider` into the local OmniParser HTTP clients.
+- Updated local OmniParser clients to use `/parse/` first and fall back to `/parse` only on 404, avoiding duplicate parse work after a timeout.
+- Added clearer timeout logging that points to the configurable setting or GPU acceleration.
+
+Architecture impact:
+- Local OmniParser parse timeout is now a user-visible configuration value propagated through the crawler-agent runtime.
+
+Decisions:
+- Chose 120 seconds because local CPU OmniParser traces can take more than 40 seconds per screenshot.
+- Kept the probe timeout short; only the parse request timeout was raised.
+
+Validation:
+- `python -m ruff check src\mobile_crawler\domain\crawler_agent\tools\omniparser_client.py src\mobile_crawler\domain\omni_parser_client.py src\mobile_crawler\domain\crawler_agent\tools\ui\provider.py src\mobile_crawler\domain\crawler_agent\config_manager\config_manager.py src\mobile_crawler\domain\crawler_agent\agent\droid\crawler_agent.py src\mobile_crawler\domain\crawler_agent_service.py src\mobile_crawler\ui\main_window.py src\mobile_crawler\ui\widgets\settings_panel.py tests\domain\test_omniparser_local_timeout.py tests\domain\test_crawler_agent_service.py tests\ui\test_settings_panel.py tests\ui\test_main_window.py tests\config\test_defaults.py` passed.
+- `pytest tests\domain\test_omniparser_local_timeout.py tests\config\test_defaults.py tests\ui\test_settings_panel.py tests\ui\test_main_window.py tests\domain\test_crawler_agent_service.py` passed: 105 tests.
+
+Docs updated:
+- `README.md`
+- `docs/readmes/local-omniparser-setup.md`
+- `.codex/project-memory/CHANGELOG.md`
+
+Follow-ups:
+- Existing unrelated worktree changes remain present.
+
+## 2026-06-06 - Restored Crawler Agent Event And Stats Compatibility
+
+Files touched:
+- `src/mobile_crawler/domain/crawler_agent/agent/common/events.py`
+- `src/mobile_crawler/ui/main_window.py`
+- `.codex/project-memory/CHANGELOG.md`
+
+What changed:
+- Restored crawler-agent coordination event classes in `agent.common.events`, including `ResultEvent`, `ManagerInputEvent`, `ExecutorInputEvent`, and related finalization/result events.
+- Fixed the Python logging stats parser to call the available progress parser.
+- Preserved both `_parse_droidrun_progress` and `_parse_crawler_agent_progress` names so existing tests and newer call sites work.
+
+Architecture impact:
+- Restores the prior internal import contract where shared crawler-agent coordination events are importable from `agent.common.events`.
+
+Decisions:
+- Defined the compatibility events directly in `common.events` instead of re-exporting from `agent.droid.events` to avoid a circular import through `agent.droid.__init__`.
+
+Validation:
+- `python -m ruff check src\mobile_crawler\domain\crawler_agent\agent\common\events.py src\mobile_crawler\ui\main_window.py tests\ui\test_stats_pipeline.py tests\ui\test_main_window.py` passed.
+- `pytest tests\ui\test_stats_pipeline.py tests\ui\test_main_window.py` passed: 54 tests.
+- Import check for `ResultEvent`, `ExecutorInputEvent`, `ManagerInputEvent`, `ToolExecutionEvent`, and `CrawlerAgent` passed.
+
+Docs updated:
+- `.codex/project-memory/CHANGELOG.md`
+
+Follow-ups:
+- None.
+
+## 2026-06-06 - Wired Root ICO To GUI And Taskbar
+
+Files touched:
+- `src/mobile_crawler/ui/main_window.py`
+- `tests/ui/test_main_window.py`
+- `.codex/project-memory/CHANGELOG.md`
+
+What changed:
+- Centralized GUI icon resolution to the root `crawler_logo.ico`.
+- Applied that icon to both `QApplication` and `MainWindow`.
+- Set a Windows AppUserModelID before creating the Qt app so the Windows taskbar can use the application icon.
+
+Architecture impact:
+- None. This is a GUI startup/window configuration change.
+
+Decisions:
+- Used `E:\VS-projects\mobile-crawler\crawler_logo.ico` via a path resolved from `main_window.py` instead of the older Qt resource/package-local icon path.
+
+Validation:
+- `python -m ruff check src\mobile_crawler\ui\main_window.py tests\ui\test_main_window.py` passed.
+- `pytest tests\ui\test_main_window.py` passed: 6 tests.
+
+Docs updated:
+- `.codex/project-memory/CHANGELOG.md`
+
+Follow-ups:
+- None.
+
+## 2026-06-06 - Made AI Model Selector Searchable
+
+Files touched:
+- `src/mobile_crawler/ui/widgets/ai_model_selector.py`
+- `tests/ui/test_ai_model_selector.py`
+- `specs/001-wire-gui-widgets/spec.md`
+- `.codex/project-memory/CHANGELOG.md`
+
+What changed:
+- Renamed the selector label from "Vision Model" to "AI Model".
+- Added a model search field that filters the loaded dropdown entries.
+- Changed the selector to fetch all provider models from `ProviderRegistry` instead of filtering through `VisionDetector.get_vision_models()`.
+
+Architecture impact:
+- None. This is a GUI selector behavior change using existing provider registry fetch APIs.
+
+Decisions:
+- Kept the `VisionDetector` constructor dependency for compatibility with existing `MainWindow` construction, but stopped using it to filter the selector list.
+- Left inactive `PreCrawlValidator` vision-capability logic unchanged because it is not wired into the active GUI start path.
+
+Validation:
+- `python -m ruff check src\mobile_crawler\ui\widgets\ai_model_selector.py tests\ui\test_ai_model_selector.py` passed.
+- `pytest tests\ui\test_ai_model_selector.py` passed: 25 tests.
+
+Docs updated:
+- `specs/001-wire-gui-widgets/spec.md`
+- `.codex/project-memory/CHANGELOG.md`
+
+Follow-ups:
+- If `PreCrawlValidator` is reintroduced into the active start path, update its model validation to match the all-model selector behavior.
+
+## 2026-06-06 - Added Step Timing Metrics To AI Monitor
+
+Files touched:
+- `src/mobile_crawler/domain/crawler_agent_service.py`
+- `src/mobile_crawler/domain/crawler_agent/agent/common/events.py`
+- `src/mobile_crawler/domain/crawler_agent/agent/manager/events.py`
+- `src/mobile_crawler/domain/crawler_agent/agent/manager/manager_agent.py`
+- `src/mobile_crawler/domain/crawler_agent/agent/executor/events.py`
+- `src/mobile_crawler/domain/crawler_agent/agent/executor/executor_agent.py`
+- `src/mobile_crawler/domain/crawler_agent/agent/tool_registry.py`
+- `src/mobile_crawler/ui/main_window.py`
+- `src/mobile_crawler/ui/widgets/ai_monitor_panel.py`
+- `tests/domain/test_crawler_agent_service.py`
+- `tests/ui/test_ai_monitor_panel.py`
+- `docs/ARCHITECTURE.md`
+- `.codex/project-memory/CHANGELOG.md`
+
+What changed:
+- Added per-step diagnostic timing capture for app-card load, Manager LLM, Manager validation retries, Executor LLM, tool execution, adaptive wait, and verification.
+- Persisted sub-phase timing and validation retry context in existing `step_phase_transitions.metadata_json` rows.
+- Mounted the AI Monitor as a GUI tab beside Logs and added timing summaries plus detail-view timing breakdowns.
+
+Architecture impact:
+- `CrawlerAgentService` now buffers internal workflow timing events and maps them onto DECIDE, EXECUTE, and RECORD phase transition metadata.
+- `AIMonitorPanel` queries `StepPhaseRepository` for per-step phase transitions when rendering timing details.
+
+Decisions:
+- Reused `metadata_json` instead of adding a database migration because the phase transition table already stores structured transition context.
+- Kept existing phase enum/state-machine semantics and represented requested granularity as sub-phase metadata.
+
+Validation:
+- `python -m ruff check src\mobile_crawler\ui\main_window.py src\mobile_crawler\ui\widgets\ai_monitor_panel.py src\mobile_crawler\domain\crawler_agent_service.py src\mobile_crawler\domain\crawler_agent\agent\common\events.py src\mobile_crawler\domain\crawler_agent\agent\manager\events.py src\mobile_crawler\domain\crawler_agent\agent\manager\manager_agent.py src\mobile_crawler\domain\crawler_agent\agent\executor\events.py src\mobile_crawler\domain\crawler_agent\agent\executor\executor_agent.py src\mobile_crawler\domain\crawler_agent\agent\tool_registry.py tests\domain\test_crawler_agent_service.py tests\ui\test_ai_monitor_panel.py tests\ui\test_main_window.py` passed.
+- `pytest tests\domain\test_crawler_agent_service.py tests\ui\test_ai_monitor_panel.py tests\ui\test_main_window.py` passed: 62 tests.
+
+Docs updated:
+- `docs/ARCHITECTURE.md`
+- `.codex/project-memory/CHANGELOG.md`
+
+Follow-ups:
+- Existing unrelated worktree changes remain present, including `CLAUDE.md` deletion and modified docs under `docs/readmes/`.
+
 ## Current Snapshot - 2026-06-04
 
 Project state:

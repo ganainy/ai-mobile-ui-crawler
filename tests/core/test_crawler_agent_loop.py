@@ -1,4 +1,4 @@
-"""Tests for DroidRun-backed crawler loop wrapper."""
+"""Tests for internalized crawler-agent-backed crawler loop wrapper."""
 
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -25,11 +25,11 @@ class TestListener:
         self.events.append(("error", run_id, step_number, str(error)))
 
 
-def test_droidrun_wrapper_happy_path():
+def test_crawler_agent_wrapper_happy_path():
     config_manager = Mock()
     config_manager.get.side_effect = lambda key, default=None: {
         "max_crawl_steps": 3,
-        "droidrun_streaming": False,
+        "crawler_streaming": False,
         "exploration_objective": None,
     }.get(key, default)
 

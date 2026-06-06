@@ -92,6 +92,9 @@ class TestMainWindowConfig:
         window.settings_panel.get_pcapdroid_api_key.return_value = "pcap-key"
         window.settings_panel.get_mobsf_api_url.return_value = ""
         window.settings_panel.get_ui_parser_mode.return_value = "boost"
+        window.settings_panel.get_omniparser_backend.return_value = "local"
+        window.settings_panel.get_omniparser_local_url.return_value = "http://localhost:8000"
+        window.settings_panel.get_omniparser_local_parse_timeout_seconds.return_value = 180
         window.settings_panel.get_replicate_api_key.return_value = ""
         window.settings_panel.get_exploration_objective.return_value = ""
 
@@ -105,6 +108,7 @@ class TestMainWindowConfig:
 
         config_manager.set.assert_any_call("enable_traffic_capture", True)
         config_manager.set.assert_any_call("pcapdroid_tls_decryption", True)
+        config_manager.set.assert_any_call("omniparser_local_parse_timeout_seconds", 180)
 
 
 class TestMainWindowLayout:
@@ -212,13 +216,24 @@ class TestMainWindowLayout:
 class TestRunFunction:
     """Tests for current GUI entrypoint behavior."""
 
+    def test_gui_icon_path_uses_root_ico(self):
+        """The GUI should use the root crawler_logo.ico asset."""
+        from mobile_crawler.ui.main_window import _get_gui_icon_path
+
+        icon_path = _get_gui_icon_path()
+
+        assert icon_path.endswith("crawler_logo.ico")
+        assert "mobile-crawler" in icon_path
+
     @patch("mobile_crawler.ui.main_window.QApplication")
     @patch("mobile_crawler.ui.main_window.MainWindow")
     @patch("mobile_crawler.ui.main_window.QIcon")
+    @patch("mobile_crawler.ui.main_window._set_windows_app_user_model_id")
     @patch("mobile_crawler.ui.main_window.sys.exit")
     def test_run_shows_window_maximized_and_exits_with_app_code(
         self,
         mock_exit,
+        mock_set_app_id,
         mock_qicon,
         mock_window,
         mock_qapp,
@@ -235,7 +250,10 @@ class TestRunFunction:
 
         run()
 
+        mock_set_app_id.assert_called_once()
         mock_qapp.assert_called_once()
+        mock_qapp_instance.setWindowIcon.assert_called_once_with(mock_qicon.return_value)
+        assert mock_qicon.call_args.args[0].endswith("crawler_logo.ico")
         mock_window.assert_called_once()
         mock_window_instance.showMaximized.assert_called_once()
         mock_exit.assert_called_once_with(42)
