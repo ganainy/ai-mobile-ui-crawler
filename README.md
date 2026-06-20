@@ -49,10 +49,10 @@ Startup helper:
 
 ## Current Project State
 
-- The active agent runtime is internalized in `src/mobile_crawler/domain/crawler_agent`; the old external DroidRun path is not the active runtime source.
+- The canonical repository is `https://github.com/ganainy/ai-mobile-ui-crawler`.
 - The canonical architecture document is `docs/ARCHITECTURE.md`.
 - Completed planning files have been removed. Keep future durable state in this README, `docs/ARCHITECTURE.md`, active `specs/*` documents, and `.codex/project-memory/CHANGELOG.md`.
-- Recent UI settings work added AI Crawler tabs, local/Replicate OmniParser backend settings, app test credential fields for address/email/phone, a reset button for the exploration objective, and tighter spin-box steps for crawl limits.
+- Recent UI settings work added AI Crawler tabs, local/Replicate OmniParser backend settings, a remote OmniParser warm-up button, app test credential fields for address/email/phone, a reset button for the exploration objective, and tighter spin-box steps for crawl limits.
 - `AGENTS.md` is currently absent from the workspace. If project-wide agent instructions are recreated, keep them concise and aligned with `.codex/project-memory/CHANGELOG.md`.
 
 ## Requirements
@@ -320,6 +320,8 @@ The `ui_parser_mode` setting controls which UI source the agent uses:
 - `accessibility`: use accessibility data only.
 
 When OmniParser is used, the agent converts OmniParser bounding boxes into indexed UI elements with tap-ready bounds before presenting them to the LLM agent. Local OmniParser parses use `/parse/` by default, fall back to `/parse` only when needed, and honor `omniparser_local_parse_timeout_seconds` (120 seconds by default for slower CPU inference).
+
+For the Replicate backend, the Settings panel includes a **Warm Up Remote OmniParser** button in the UI Parser section. It sends a mock screenshot to the same Replicate OmniParser model used by crawls, runs in the background, and reports completion or failure in the UI.
 
 ## Project Boundaries
 

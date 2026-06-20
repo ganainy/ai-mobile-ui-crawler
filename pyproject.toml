@@ -79,6 +79,11 @@ arize = [
 mobile-crawler-cli = "mobile_crawler.cli.main:run"
 mobile-crawler-gui = "mobile_crawler.ui.main_window:run"
 
+[project.urls]
+Homepage = "https://github.com/ganainy/ai-mobile-ui-crawler"
+Repository = "https://github.com/ganainy/ai-mobile-ui-crawler"
+Issues = "https://github.com/ganainy/ai-mobile-ui-crawler/issues"
+
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["mobile_crawler*"]
