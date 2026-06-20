@@ -400,20 +400,23 @@ class ADBActionExecutor:
         # Wait for focus
         time.sleep(0.5)
 
-        # Clear existing text (send Ctrl+A then delete)
-        self._execute_adb_command(['shell', 'input', 'keyevent', 'KEYCODE_MOVE_END'])
-        time.sleep(0.2)
-        self._execute_adb_command(['shell', 'input', 'keyevent', 'KEYCODE_CTRL_LEFT'])
-        self._execute_adb_command(['shell', 'input', 'keyevent', 'KEYCODE_A'])
-        self._execute_adb_command(['shell', 'input', 'keyevent', 'KEYCODE_DEL'])
+        # Clear existing text by moving cursor to end and sending DEL key events in a single command
+        keycodes = ["123"] + ["67"] * 100  # KEYCODE_MOVE_END = 123, KEYCODE_DEL = 67
+        self._execute_adb_command(['shell', 'input', 'keyevent'] + keycodes)
         time.sleep(0.2)
 
         # Send the text
         # Escape special characters for shell
-        escaped_text = text.replace('"', '\\"').replace("'", "\\'").replace(' ', '%s')
+        escaped_text = (
+            text.replace('\\', '\\\\')
+            .replace('"', '\\"')
+            .replace('$', '\\$')
+            .replace('`', '\\`')
+            .replace(' ', '%s')
+        )
 
         text_success, text_output, text_duration = self._execute_adb_command([
-            'shell', 'input', 'text', escaped_text
+            'shell', 'input', 'text', f'"{escaped_text}"'
         ])
 
         total_duration = tap_duration + text_duration

@@ -219,6 +219,13 @@ class CrawlerAgent(Workflow):
         # Initialize MCP manager (connections made lazily in start_handler)
         self.mcp_manager = None
 
+        # Initialize StateGraphTracker
+        if not self._using_external_agent:
+            from mobile_crawler.domain.state_graph import StateGraphTracker
+            self.state_graph_tracker = StateGraphTracker(run_id=0)
+        else:
+            self.state_graph_tracker = None
+
         # Only load LLMs for native Droidrun agents
         if not self._using_external_agent:
             if llms is None:
@@ -510,6 +517,7 @@ class CrawlerAgent(Workflow):
             self.manager_agent.registry = self.registry
             self.manager_agent.save_trajectory = self.config.logging.save_trajectory
             self.manager_agent.standard_tool_names = self.standard_tool_names
+            self.manager_agent.state_graph_tracker = self.state_graph_tracker
             self.executor_agent.registry = self.registry
             self.executor_agent.action_ctx = self.action_ctx
 

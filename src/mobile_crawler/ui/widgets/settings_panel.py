@@ -1,5 +1,8 @@
 """Settings panel widget for mobile-crawler GUI."""
 
+import os
+import threading
+import time
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import Signal
@@ -50,6 +53,7 @@ class SettingsPanel(QWidget):
 
     # Signal emitted when settings are saved
     settings_saved = Signal()  # type: ignore
+    omniparser_warmup_finished = Signal(bool, str, float)  # type: ignore
 
     def __init__(self, config_store: "UserConfigStore", parent=None):
         """Initialize settings panel widget.
@@ -60,7 +64,9 @@ class SettingsPanel(QWidget):
         """
         super().__init__(parent)
         self._config_store = config_store
+        self._omniparser_warmup_thread: threading.Thread | None = None
         self._setup_ui()
+        self.omniparser_warmup_finished.connect(self._on_omniparser_warmup_finished)
         self._load_settings()
 
     def _setup_ui(self):
@@ -186,7 +192,7 @@ class SettingsPanel(QWidget):
         self.test_username_input.setText("testuser")
         credentials_layout.addLayout(field_layout)
 
-        field_layout, self.test_password_input = create_credential_field("Test Password:", "Enter test password", True)
+        field_layout, self.test_password_input = create_credential_field("Test Password:", "Enter test password")
         self.test_password_input.setText("Password123")
         credentials_layout.addLayout(field_layout)
 
@@ -442,11 +448,28 @@ class SettingsPanel(QWidget):
         self.replicate_container.setLayout(replicate_layout)
         parser_layout.addWidget(self.replicate_container)
 
+        self.replicate_warmup_container = QWidget()
+        warmup_layout = QHBoxLayout()
+        warmup_layout.setContentsMargins(0, 0, 0, 0)
+        self.omniparser_warmup_button = QPushButton("Warm Up Remote OmniParser")
+        self.omniparser_warmup_button.setToolTip(
+            "Send a mock screenshot to Replicate OmniParser so a cold backend is ready before crawling."
+        )
+        self.omniparser_warmup_button.clicked.connect(self._start_omniparser_warmup)
+        warmup_layout.addWidget(self.omniparser_warmup_button)
+        self.omniparser_warmup_status_label = QLabel("Idle")
+        self.omniparser_warmup_status_label.setStyleSheet("color: #666; font-size: 11px;")
+        self.omniparser_warmup_status_label.setWordWrap(True)
+        warmup_layout.addWidget(self.omniparser_warmup_status_label, 1)
+        self.replicate_warmup_container.setLayout(warmup_layout)
+        parser_layout.addWidget(self.replicate_warmup_container)
+
         # Toggle visibility based on selected backend
         def toggle_omniparser_backend(backend):
             self.local_url_container.setVisible(backend == "local")
             self.local_timeout_container.setVisible(backend == "local")
             self.replicate_container.setVisible(backend == "replicate")
+            self.replicate_warmup_container.setVisible(backend == "replicate")
 
         self.omniparser_backend_combo.currentTextChanged.connect(toggle_omniparser_backend)
         # Initialize default state
@@ -750,6 +773,7 @@ class SettingsPanel(QWidget):
         self.local_url_container.setVisible(omniparser_backend == "local")
         self.local_timeout_container.setVisible(omniparser_backend == "local")
         self.replicate_container.setVisible(omniparser_backend == "replicate")
+        self.replicate_warmup_container.setVisible(omniparser_backend == "replicate")
 
         replicate_key = self._config_store.get_setting("replicate_api_key", default="")
         if replicate_key:
@@ -966,6 +990,61 @@ class SettingsPanel(QWidget):
         except Exception as e:
             # Show error message
             QMessageBox.critical(self, "Error Saving Settings", f"Failed to save settings: {e}")
+
+    def _start_omniparser_warmup(self) -> None:
+        """Start a background warm-up call for the Replicate OmniParser backend."""
+        if self.omniparser_backend_combo.currentText() != "replicate":
+            self.omniparser_warmup_status_label.setText("Select the Replicate backend to warm up the remote model.")
+            return
+
+        api_key = self.get_replicate_api_key() or os.environ.get("REPLICATE_API_KEY", "")
+        if not api_key:
+            self.omniparser_warmup_status_label.setText("Replicate API key is required for remote warm-up.")
+            QMessageBox.warning(
+                self,
+                "Missing Replicate API Key",
+                "Enter a Replicate API key before warming up the remote OmniParser backend.",
+            )
+            return
+
+        self.omniparser_warmup_button.setEnabled(False)
+        self.omniparser_warmup_status_label.setText("Warming up remote OmniParser...")
+
+        box_threshold = float(self._config_store.get_setting("omniparser_box_threshold", default=0.05))
+        self._omniparser_warmup_thread = threading.Thread(
+            target=self._run_omniparser_warmup,
+            args=(api_key, box_threshold),
+            daemon=True,
+        )
+        self._omniparser_warmup_thread.start()
+
+    def _run_omniparser_warmup(self, api_key: str, box_threshold: float) -> None:
+        started_at = time.perf_counter()
+        try:
+            from mobile_crawler.domain.omniparser_warmup import warm_up_remote_omniparser
+
+            elements = warm_up_remote_omniparser(api_key=api_key, box_threshold=box_threshold)
+            elapsed = time.perf_counter() - started_at
+            self.omniparser_warmup_finished.emit(
+                True,
+                f"Remote OmniParser warm-up complete in {elapsed:.1f}s ({len(elements)} elements).",
+                elapsed,
+            )
+        except Exception as exc:
+            elapsed = time.perf_counter() - started_at
+            self.omniparser_warmup_finished.emit(
+                False,
+                f"Remote OmniParser warm-up failed after {elapsed:.1f}s: {exc}",
+                elapsed,
+            )
+
+    def _on_omniparser_warmup_finished(self, success: bool, message: str, _elapsed_seconds: float) -> None:
+        self.omniparser_warmup_button.setEnabled(True)
+        self.omniparser_warmup_status_label.setText(message)
+        if success:
+            QMessageBox.information(self, "OmniParser Warm-Up Complete", message)
+        else:
+            QMessageBox.warning(self, "OmniParser Warm-Up Failed", message)
 
     def get_gemini_api_key(self) -> str:
         """Get the current Gemini API key value.

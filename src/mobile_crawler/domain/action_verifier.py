@@ -4,6 +4,7 @@ Compares pre-action and post-action UI state to confirm
 the expected transition occurred.
 """
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -52,7 +53,13 @@ class ActionVerifier:
     change the UI and are verified leniently.
     """
 
-    def __init__(self, state_provider: StateProvider, driver: Driver):
+    def __init__(
+        self,
+        state_provider: StateProvider,
+        driver: Driver,
+        latest_state_provider: Callable[[], Any] | None = None,
+        expensive_state_capture: bool | None = None,
+    ):
         """
         Args:
             state_provider: Object with async get_state() returning UIState
@@ -61,8 +68,14 @@ class ActionVerifier:
         """
         self.state_provider = state_provider
         self.driver = driver
+        self.latest_state_provider = latest_state_provider
+        self.expensive_state_capture = (
+            expensive_state_capture
+            if expensive_state_capture is not None
+            else getattr(state_provider, "ui_parser_mode", None) == "omniparser"
+        )
 
-    async def capture_pre_state(self) -> dict[str, Any]:
+    async def capture_pre_state(self, *, allow_live_capture: bool = True) -> dict[str, Any]:
         """Capture UI state before action.
 
         Returns:
@@ -70,8 +83,17 @@ class ActionVerifier:
             element_count (int). Returns empty dict on error.
         """
         try:
-            ui_state = await self.state_provider.get_state()
+            ui_state = self.latest_state_provider() if self.latest_state_provider else None
+            if ui_state is None and allow_live_capture and not self.expensive_state_capture:
+                ui_state = await self.state_provider.get_state()
             current_app = await self.driver._get_current_app()
+            if ui_state is None:
+                return {
+                    "package": current_app or "",
+                    "ui_text_hash": None,
+                    "element_count": 0,
+                    "parsed_state_deferred": True,
+                }
             formatted_text = getattr(ui_state, "formatted_text", "")
             elements = getattr(ui_state, "elements", [])
 
@@ -107,7 +129,9 @@ class ActionVerifier:
                 details="pre_state unavailable, skipping verification",
             )
 
-        post_state = await self.capture_pre_state()
+        post_state = await self.capture_pre_state(
+            allow_live_capture=not self.expensive_state_capture
+        )
 
         if not post_state:
             return VerificationResult(
@@ -119,6 +143,19 @@ class ActionVerifier:
 
         package_changed = pre_state.get("package") != post_state.get("package")
         ui_changed = pre_state.get("ui_text_hash") != post_state.get("ui_text_hash")
+
+        if post_state.get("parsed_state_deferred"):
+            details = (
+                f"pre_pkg={pre_state.get('package', '?')} "
+                f"post_pkg={post_state.get('package', '?')} "
+                "parsed_state_deferred=True"
+            )
+            return VerificationResult(
+                verified=True,
+                package_changed=package_changed,
+                ui_tree_changed=False,
+                details=details,
+            )
 
         # Navigation actions MUST change state
         # Non-navigation actions MAY change state

@@ -183,10 +183,16 @@ class AndroidStateProvider(StateProvider):
         self._omni_initialized = False
 
     async def get_state(self) -> UIState:
+        state_started = time.perf_counter()
         await self._ensure_target_package_active()
 
         # Get screenshot via driver (ADB, no Portal needed)
+        screenshot_started = time.perf_counter()
         screenshot_bytes = await self._capture_screenshot_with_retry()
+        logger.debug(
+            "State capture screenshot took %.1fms",
+            (time.perf_counter() - screenshot_started) * 1000,
+        )
 
         # Get device context
         device_context = {}
@@ -217,7 +223,10 @@ class AndroidStateProvider(StateProvider):
 
         elif self.ui_parser_mode == "omniparser":
             # Mode 2: Always use OmniParser (ignore a11y, no fallback)
-            omni_tree = await self._get_omni_parser_elements(screenshot_bytes)
+            omni_tree = await self._get_omni_parser_elements(
+                screenshot_bytes,
+                caller_label="get_state:omniparser",
+            )
             if omni_tree:
                 omni_source = "omni"
                 logger.info(f"Using OmniParser only ({len(omni_tree)} elements)")
@@ -231,7 +240,10 @@ class AndroidStateProvider(StateProvider):
             else:
                 # A11y sparse - try OmniParser
                 try:
-                    omni_tree = await self._get_omni_parser_elements(screenshot_bytes)
+                    omni_tree = await self._get_omni_parser_elements(
+                        screenshot_bytes,
+                        caller_label="get_state:boost",
+                    )
                     if omni_tree:
                         omni_source = "omni"
                         logger.info(f"Using OmniParser boost ({len(omni_tree)} elements)")
@@ -249,7 +261,16 @@ class AndroidStateProvider(StateProvider):
             filtered, phone_state, omni_tree=omni_tree
         )
 
-        return self._ui_cls(
+        # Compute layout hash for unique state identification
+        layout_hash = None
+        try:
+            from mobile_crawler.domain.state_graph import StateGraphTracker
+            tracker = StateGraphTracker(run_id=0)
+            layout_hash = tracker.compute_layout_hash(elements)
+        except Exception as hash_err:
+            logger.warning(f"Failed to compute layout hash in StateProvider: {hash_err}")
+
+        ui_state = self._ui_cls(
             elements=elements,
             formatted_text=formatted_text,
             focused_text=focused_text,
@@ -259,7 +280,17 @@ class AndroidStateProvider(StateProvider):
             use_normalized=self.use_normalized,
             omni_tree=omni_tree,
             omni_source=omni_source,
+            layout_hash=layout_hash,
         )
+        ui_state.capture_timing_ms = round((time.perf_counter() - state_started) * 1000, 3)
+        logger.debug(
+            "State capture completed in %.1fms (mode=%s, source=%s, elements=%s)",
+            ui_state.capture_timing_ms,
+            self.ui_parser_mode,
+            omni_source,
+            len(elements) if elements else 0,
+        )
+        return ui_state
 
     async def _ensure_target_package_active(self) -> None:
         """Verify target app before screenshots or OmniParser state parsing."""
@@ -339,7 +370,9 @@ class AndroidStateProvider(StateProvider):
         raise RuntimeError("Failed to capture UI screenshot after retries") from last_error
 
     async def _get_omni_parser_elements(
-        self, screenshot_bytes: bytes = None
+        self,
+        screenshot_bytes: bytes = None,
+        caller_label: str = "unknown",
     ) -> list[dict[str, Any]]:
         """Get UI elements using OmniParser vision model."""
         if not self._omni_initialized:
@@ -354,7 +387,15 @@ class AndroidStateProvider(StateProvider):
             screenshot_bytes = await self.driver.screenshot()
 
         # Parse with OmniParser
-        return self._omni_client.parse(screenshot_bytes)
+        parse_started = time.perf_counter()
+        try:
+            return self._omni_client.parse(screenshot_bytes)
+        finally:
+            logger.debug(
+                "OmniParser parse call '%s' took %.1fms",
+                caller_label,
+                (time.perf_counter() - parse_started) * 1000,
+            )
 
     def _init_omni_parser(self) -> None:
         """Initialize OmniParser client."""

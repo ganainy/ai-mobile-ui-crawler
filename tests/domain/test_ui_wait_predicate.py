@@ -169,3 +169,20 @@ class TestUIWaitPredicate:
         assert result is False
         # Should have polled only a few times given 50ms timeout
         assert call_count <= 5
+
+    @pytest.mark.asyncio
+    async def test_expensive_vision_mode_does_not_poll_get_state(self, mock_state_provider):
+        """OmniParser mode uses a cheap settle delay instead of repeated state parsing."""
+        current_app_provider = AsyncMock(return_value="com.example.app")
+        predicate = UIWaitPredicate(
+            state_provider=mock_state_provider,
+            config=AdaptiveWaitConfig(config_manager=None),
+            current_app_provider=current_app_provider,
+            expensive_state_polling=True,
+        )
+
+        result = await predicate.wait_for_ui_settled("tap", timeout_ms=10)
+
+        assert result is True
+        mock_state_provider.get_state.assert_not_awaited()
+        current_app_provider.assert_awaited_once()

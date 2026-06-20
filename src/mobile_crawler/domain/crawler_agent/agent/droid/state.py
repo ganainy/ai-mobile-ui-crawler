@@ -113,6 +113,8 @@ class CrawlerAgentState(BaseModel):
     # ========================================================================
     custom_variables: dict = Field(default_factory=dict)
     output_dir: str = ""
+    loop_warning: str = ""
+    loop_hint: str = ""
 
     # ========================================================================
     # Methods for action functions

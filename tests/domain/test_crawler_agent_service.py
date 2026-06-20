@@ -443,6 +443,62 @@ class TestCrawlerAgentServiceHandleToolExecution:
         assert StepPhase.CHECKPOINT in calls
         assert StepPhase.CAPTURE in calls
 
+    def test_ui_dump_validation_uses_shared_state_without_live_get_state(self, crawler_agent_service):
+        mock_machine = Mock()
+        crawler_agent_service._step_phase_machine = mock_machine
+        crawler_agent_service._context_capture = None
+        crawler_agent_service._action_verifier = None
+        crawler_agent_service._ui_wait_predicate = None
+        crawler_agent_service._current_step_number = 0
+
+        mock_validator = Mock()
+        mock_validator.validate_ui_dump_with_retry = AsyncMock(
+            return_value=Mock(is_valid=True, error=None, element_count=1)
+        )
+        crawler_agent_service._ui_dump_validator = mock_validator
+
+        mock_agent = Mock()
+        mock_agent.shared_state = Mock(a11y_tree=[{"index": 1}], formatted_device_state="Button")
+        mock_agent.state_provider = Mock()
+        mock_agent.state_provider.get_state = AsyncMock()
+        crawler_agent_service._crawler_agent = mock_agent
+
+        event = Mock(tool_name="tap", success=True, duration_ms=None)
+        asyncio.run(crawler_agent_service._handle_tool_execution_event(event))
+
+        getter = mock_validator.validate_ui_dump_with_retry.await_args.args[0]
+        assert asyncio.run(getter()) == [{"index": 1}]
+        mock_agent.state_provider.get_state.assert_not_awaited()
+
+    def test_ui_dump_validation_accepts_live_uistate_elements(self, crawler_agent_service):
+        mock_machine = Mock()
+        crawler_agent_service._step_phase_machine = mock_machine
+        crawler_agent_service._context_capture = None
+        crawler_agent_service._action_verifier = None
+        crawler_agent_service._ui_wait_predicate = None
+        crawler_agent_service._current_step_number = 0
+
+        mock_validator = Mock()
+        mock_validator.validate_ui_dump_with_retry = AsyncMock(
+            return_value=Mock(is_valid=True, error=None, element_count=1)
+        )
+        crawler_agent_service._ui_dump_validator = mock_validator
+
+        live_state = Mock()
+        live_state.elements = [{"index": 7}]
+        mock_agent = Mock()
+        mock_agent.shared_state = Mock(a11y_tree=[])
+        mock_agent.state_provider = Mock()
+        mock_agent.state_provider.get_state = AsyncMock(return_value=live_state)
+        crawler_agent_service._crawler_agent = mock_agent
+
+        event = Mock(tool_name="tap", success=True, duration_ms=None)
+        asyncio.run(crawler_agent_service._handle_tool_execution_event(event))
+
+        getter = mock_validator.validate_ui_dump_with_retry.await_args.args[0]
+        assert asyncio.run(getter()) == [{"index": 7}]
+        mock_agent.state_provider.get_state.assert_awaited()
+
 
 class TestCrawlerAgentServiceErrorHandling:
     """Tests for error handling."""

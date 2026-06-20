@@ -95,18 +95,20 @@ class AndroidDriver(DeviceDriver):
         await self.ensure_connected()
 
         if clear:
-            # Clear existing text by selecting all and deleting
-            await self.device.shell("input keyevent KEYCODE_MOVE_END")
-            # Select all (might need multiple Ctrl+A)
-            await self.device.shell("input keyevent KEYCODE_CTRL_A")
-            await self.device.shell("input keyevent KEYCODE_DEL")
+            # Clear existing text by moving cursor to end and sending DEL key events in a single command
+            keycodes = ["123"] + ["67"] * 100  # KEYCODE_MOVE_END = 123, KEYCODE_DEL = 67
+            await self.device.shell(f"input keyevent {' '.join(keycodes)}")
 
         # Escape special characters for shell
-        # Replace " with \" and ' with '
-        escaped_text = text.replace('"', '\\"')
+        escaped_text = (
+            text.replace('\\', '\\\\')
+            .replace('"', '\\"')
+            .replace('$', '\\$')
+            .replace('`', '\\`')
+            .replace(' ', '%s')
+        )
 
-        # Use ADB input text - this is more reliable than shell input
-        # For special characters, we use Unicode input method
+        # Use ADB input text
         await self.device.shell(f'input text "{escaped_text}"')
         return True
 

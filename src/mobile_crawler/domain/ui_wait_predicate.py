@@ -6,6 +6,7 @@ with polling-based waits that check UI state readiness.
 import asyncio
 import logging
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -121,6 +122,9 @@ class UIWaitPredicate:
         self,
         state_provider: StateProvider,
         config: AdaptiveWaitConfig | None = None,
+        latest_state_provider: Callable[[], Any] | None = None,
+        current_app_provider: Callable[[], Awaitable[str]] | None = None,
+        expensive_state_polling: bool | None = None,
     ):
         """
         Args:
@@ -130,6 +134,13 @@ class UIWaitPredicate:
         """
         self.state_provider = state_provider
         self.config = config or AdaptiveWaitConfig()
+        self.latest_state_provider = latest_state_provider
+        self.current_app_provider = current_app_provider
+        self.expensive_state_polling = (
+            expensive_state_polling
+            if expensive_state_polling is not None
+            else getattr(state_provider, "ui_parser_mode", None) == "omniparser"
+        )
 
     async def wait_for_ui_settled(
         self,
@@ -154,8 +165,28 @@ class UIWaitPredicate:
         timeout = (timeout_ms if timeout_ms is not None else profile.timeout_ms) / 1000.0
         poll_interval = profile.poll_interval_s
 
+        if self.expensive_state_polling:
+            await asyncio.sleep(min(timeout, max(0.2, poll_interval)))
+            if self.current_app_provider:
+                try:
+                    current_app = await self.current_app_provider()
+                    logger.debug(
+                        "UI settle used cheap current-app check for %s: current_app=%s",
+                        action_type,
+                        current_app or "",
+                    )
+                except Exception as e:
+                    logger.debug(f"Cheap current-app check failed after {action_type}: {e}")
+            else:
+                logger.debug(
+                    "UI settle used fixed settle delay for %s because state polling is expensive",
+                    action_type,
+                )
+            return True
+
         deadline = time.monotonic() + timeout
-        prev_text: str | None = None
+        latest_state = self.latest_state_provider() if self.latest_state_provider else None
+        prev_text: str | None = getattr(latest_state, "formatted_text", None)
         poll_count = 0
 
         while time.monotonic() < deadline:

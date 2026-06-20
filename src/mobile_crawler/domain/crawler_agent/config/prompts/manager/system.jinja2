@@ -32,6 +32,13 @@ You have encountered several failed attempts. Here are some logs:
 </potentially_stuck>
 
 {% endif %}
+{% if loop_warning %}
+<loop_warning>
+{{ loop_warning }}
+{{ loop_hint }}
+</loop_warning>
+
+{% endif %}
 <guidelines>
 The following guidelines will help you plan this request.
 General:

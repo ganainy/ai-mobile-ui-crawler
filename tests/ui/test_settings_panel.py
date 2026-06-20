@@ -253,6 +253,86 @@ class TestAPIKeyInputs:
         panel.openrouter_api_key_input.setText("test-key-456")
         assert panel.get_openrouter_api_key() == "test-key-456"
 
+    def test_remote_omniparser_warmup_controls_exist(self, qt_app, mock_config_store):
+        """Test that Replicate OmniParser warm-up controls exist."""
+        panel = _create_settings_panel(mock_config_store)
+        assert hasattr(panel, "omniparser_warmup_button")
+        assert panel.omniparser_warmup_button.text() == "Warm Up Remote OmniParser"
+        assert panel.omniparser_warmup_status_label.text() == "Idle"
+
+    def test_remote_omniparser_warmup_visibility_follows_backend(self, qt_app, mock_config_store):
+        """Warm-up controls are only shown for the remote Replicate backend."""
+        panel = _create_settings_panel(mock_config_store)
+
+        panel.omniparser_backend_combo.setCurrentText("local")
+        assert panel.replicate_warmup_container.isHidden()
+
+        panel.omniparser_backend_combo.setCurrentText("replicate")
+        assert not panel.replicate_warmup_container.isHidden()
+
+    def test_remote_omniparser_warmup_requires_api_key(self, qt_app, mock_config_store, monkeypatch):
+        """Warm-up should not start without a Replicate API key."""
+        panel = _create_settings_panel(mock_config_store)
+        warnings = []
+
+        def mock_warning(parent, title, message):
+            warnings.append((title, message))
+
+        monkeypatch.setattr(QMessageBox, "warning", mock_warning)
+        panel.replicate_api_key_input.clear()
+
+        panel._start_omniparser_warmup()
+
+        assert warnings
+        assert "Replicate API key is required" in panel.omniparser_warmup_status_label.text()
+        assert panel.omniparser_warmup_button.isEnabled()
+
+    def test_remote_omniparser_warmup_starts_background_worker(
+        self, qt_app, mock_config_store, monkeypatch
+    ):
+        """Warm-up should disable the button and start a background worker."""
+        panel = _create_settings_panel(mock_config_store)
+        panel.replicate_api_key_input.setText("replicate-key")
+        started = {}
+
+        class FakeThread:
+            def __init__(self, target, args, daemon):
+                started["target"] = target
+                started["args"] = args
+                started["daemon"] = daemon
+
+            def start(self):
+                started["started"] = True
+
+        monkeypatch.setattr("mobile_crawler.ui.widgets.settings_panel.threading.Thread", FakeThread)
+
+        panel._start_omniparser_warmup()
+
+        assert started["started"]
+        assert started["daemon"] is True
+        assert started["args"] == ("replicate-key", 0.05)
+        assert not panel.omniparser_warmup_button.isEnabled()
+        assert panel.omniparser_warmup_status_label.text() == "Warming up remote OmniParser..."
+
+    def test_remote_omniparser_warmup_finished_updates_status(
+        self, qt_app, mock_config_store, monkeypatch
+    ):
+        """Warm-up completion should re-enable the button and notify the user."""
+        panel = _create_settings_panel(mock_config_store)
+        panel.omniparser_warmup_button.setEnabled(False)
+        messages = []
+
+        def mock_information(parent, title, message):
+            messages.append((title, message))
+
+        monkeypatch.setattr(QMessageBox, "information", mock_information)
+
+        panel._on_omniparser_warmup_finished(True, "Remote OmniParser warm-up complete in 1.2s.", 1.2)
+
+        assert panel.omniparser_warmup_button.isEnabled()
+        assert panel.omniparser_warmup_status_label.text() == "Remote OmniParser warm-up complete in 1.2s."
+        assert messages == [("OmniParser Warm-Up Complete", "Remote OmniParser warm-up complete in 1.2s.")]
+
 
 class TestCrawlLimitInputs:
     """Tests for crawl limit input fields."""

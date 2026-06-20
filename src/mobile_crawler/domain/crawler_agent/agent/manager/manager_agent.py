@@ -214,6 +214,8 @@ class ManagerAgent(Workflow):
             "variables": self.shared_state.custom_variables,
             "output_schema": output_schema,
             "platform": self.shared_state.platform,
+            "loop_warning": self.shared_state.loop_warning,
+            "loop_hint": self.shared_state.loop_hint,
         }
 
         custom_prompt = self.prompt_resolver.get_prompt("manager_system")
@@ -422,6 +424,39 @@ class ManagerAgent(Workflow):
         # Get and format device state
         ui_state = await self.state_provider.get_state()
         self.action_ctx.ui = ui_state
+
+        # State transition graph and loop detection
+        if hasattr(self, "state_graph_tracker") and self.state_graph_tracker is not None:
+            current_hash = ui_state.layout_hash
+            if current_hash:
+                step_num = self.shared_state.step_number
+                pkg = ui_state.phone_state.get("packageName", "Unknown")
+                act = ui_state.phone_state.get("currentApp", "Unknown")
+
+                if self.state_graph_tracker.history:
+                    from_hash = self.state_graph_tracker.history[-1]
+                    last_action = self.shared_state.last_action
+                    if last_action:
+                        self.state_graph_tracker.record_transition(
+                            from_hash, current_hash, last_action, step_num
+                        )
+
+                self.state_graph_tracker.record_state(current_hash, step_num, pkg, act)
+
+                if self.state_graph_tracker.detect_loop(window_size=4):
+                    hint = self.state_graph_tracker.get_loop_recovery_hint(current_hash, ui_state.elements)
+                    self.shared_state.loop_warning = (
+                        "A navigation loop has been detected! You are visiting the same screens repeatedly."
+                    )
+                    self.shared_state.loop_hint = hint
+                    logger.warning(
+                        f"Loop detected! Warning: {self.shared_state.loop_warning}, Hint: {self.shared_state.loop_hint}"
+                    )
+                else:
+                    self.shared_state.loop_warning = ""
+                    self.shared_state.loop_hint = ""
+
+                self.state_graph_tracker.save()
 
         # Update shared state (previous ← current, current ← new)
         self.shared_state.previous_formatted_device_state = (

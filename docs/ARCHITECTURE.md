@@ -152,7 +152,8 @@
 - `src/mobile_crawler/domain/crawler_agent` is the active runtime namespace for `CrawlerAgent`, `CrawlerConfig`, drivers, UI state providers, OmniParser integration, macro replay, and telemetry support.
 - `src/mobile_crawler/domain/crawler_agent_service.py` exposes `CrawlerAgentService`, the Mobile Crawler adapter around that internal runtime.
 - UI settings are organized around General, AI Crawler, API Keys, and Integrations tabs.
-- App test credentials include address, email, and phone fields that are included in the agent prompt when configured.
+- App test credentials include address, email, and phone fields that are matched contextually via `ContextAwareInputDictionary` to supply realistic inputs to the prompt builder.
+- FSM state tracking via `StateGraphTracker` records structural layout XML hashes (excluding dynamic clock/battery elements) to build a state transition graph, detect loops, and supply recovery hints.
 - Parser settings support `boost`, `omniparser`, and `accessibility` modes, with OmniParser backend selection between Replicate and a local FastAPI server.
 - Completed planning docs are intentionally removed; durable architecture state lives in this file.
 

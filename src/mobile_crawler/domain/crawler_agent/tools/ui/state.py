@@ -26,6 +26,7 @@ class UIState:
         use_normalized: bool = False,
         omni_tree: list[dict[str, Any]] | None = None,
         omni_source: str | None = None,
+        layout_hash: str | None = None,
     ) -> None:
         self.elements = elements
         self.formatted_text = formatted_text
@@ -38,6 +39,7 @@ class UIState:
         # OmniParser integration
         self.omni_tree = omni_tree  # Vision-based UI elements from OmniParser
         self.omni_source = omni_source  # "a11y", "omni", or "merged"
+        self.layout_hash = layout_hash
 
     # -- element lookup ------------------------------------------------------
 

@@ -2,6 +2,189 @@
 
 Durable agent-maintained memory for `E:\VS-projects\mobile-crawler`. Newest entries first.
 
+## 2026-06-06 - Fixed Text Input and Field Clearing Bugs
+
+Files touched:
+- `src/mobile_crawler/domain/crawler_agent/tools/driver/android.py`
+- `src/mobile_crawler/domain/adb_action_executor.py`
+- `src/mobile_crawler/domain/crawler_agent/agent/utils/actions.py`
+- `tests/domain/test_android_driver_input.py`
+- `.codex/project-memory/CHANGELOG.md`
+
+What changed:
+- Removed invalid keyevents (`KEYCODE_CTRL_A`, `KEYCODE_CTRL_LEFT`) and replaced them with a chained `KEYCODE_MOVE_END` + 100 `KEYCODE_DEL` events command executed in a single shell invocation in both `AndroidDriver` and `ADBActionExecutor` for clearing fields.
+- Added a 0.5-second async sleep in `type_text` in `actions.py` after tapping a field to allow the device keyboard animations and layout shifts to settle.
+- Escaped special shell characters (`\`, `"`, `$`, `` ` ``) and mapped spaces to `%s` in `AndroidDriver` and `ADBActionExecutor` input text commands to support special characters.
+- Created `test_android_driver_input.py` to unit-test text input, robust clearing, and special character escaping on the driver.
+
+Architecture impact:
+- None. Improved reliability of raw ADB typing actions.
+
+Decisions:
+- Standardized text clearing using a chained sequence of backspaces instead of relying on unreliable keyevent shortcut emulation.
+
+Validation:
+- Added new driver unit tests `test_android_driver_input.py`. Run output pending user approval to run tests.
+
+## 2026-06-06 - Implemented AI Crawler Navigation Improvements
+
+Files touched:
+- `src/mobile_crawler/domain/crawler_agent/agent/droid/crawler_agent.py`
+- `src/mobile_crawler/domain/crawler_agent/agent/manager/manager_agent.py`
+- `src/mobile_crawler/domain/crawler_agent/agent/manager/stateless_manager_agent.py`
+- `src/mobile_crawler/domain/crawler_agent/config/prompts/manager/system.jinja2`
+- `src/mobile_crawler/domain/crawler_agent_service.py`
+- `docs/ARCHITECTURE.md`
+- `.codex/project-memory/CHANGELOG.md`
+
+What changed:
+- Wired `StateGraphTracker` initialization inside `CrawlerAgent.__init__` and start handlers.
+- Modified `prepare_context()` in `ManagerAgent` and `StatelessManagerAgent` to record screen state structural layout hashes, log transitions, detect repeating loops, and generate recovery hints.
+- Updated system prompt builders to inject `loop_warning` and `loop_hint` variables into LLM reasoning contexts.
+- Updated `system.jinja2` manager prompt template to render loop warnings and instructions when stuck.
+- Updated `_create_exploration_goal` in `CrawlerAgentService` to read `guided_scenarios` from configuration and inject them as subgoals.
+
+Architecture impact:
+- The agent planning/manager layer now utilizes an FSM transition graph to detect navigation loops and guide recovery actions dynamically.
+
+Decisions:
+- Hashed structural properties (className, resourceId, bounds, and stable text) while filtering out dynamic battery/clock status elements.
+- Re-wired uncommitted predicate and timing optimizations to maintain compatibility.
+
+Validation:
+- Tested FSM state tracking, layout hashing, loop warnings, and input dictionary generators with targeted unit tests (`test_state_graph.py`, `test_input_dictionary.py`, `test_prompt_builder.py`, `test_crawler_agent_service.py`).
+- All 18 navigation unit tests and all 52 agent service integration tests passed successfully.
+
+## 2026-06-06 - Created AI Crawler Navigation Improvement Plan
+
+Files touched:
+- `docs/PLAN-crawler-navigation.md`
+- `.codex/project-memory/CHANGELOG.md`
+
+What changed:
+- Created a comprehensive project plan under `docs/PLAN-crawler-navigation.md` detailing improvements to the crawler's AI harness for navigation.
+- The plan outlines the Hybrid Explorer strategy, Layout XML Hashing for FSM state tracking, and a Context-Aware Input Dictionary for form filling.
+
+Architecture impact:
+- None. Plan-only stage.
+
+Decisions:
+- User selected Option C (Hybrid Explorer), Option B (Layout XML Hashing), and Option A (Context-Aware Input Dictionary) during the Socratic Gate check.
+
+Validation:
+- Plan file validated for structure compliance. No code tests run.
+
+Docs updated:
+- `docs/PLAN-crawler-navigation.md`
+- `.codex/project-memory/CHANGELOG.md`
+
+Follow-ups:
+- Obtain user confirmation to execute the plan via `/create` or `/enhance` to implement the three target modules.
+
+## 2026-06-06 - Added Remote OmniParser Warm-Up Button
+
+Files touched:
+- `src/mobile_crawler/domain/omniparser_warmup.py`
+- `src/mobile_crawler/ui/widgets/settings_panel.py`
+- `tests/domain/test_omniparser_warmup.py`
+- `tests/ui/test_settings_panel.py`
+- `README.md`
+- `docs/ARCHITECTURE.md`
+- `.codex/project-memory/CHANGELOG.md`
+
+What changed:
+- Added a Settings panel button under UI Parser that warms the Replicate OmniParser backend before a crawl.
+- The button sends a mock screenshot through the active crawler-agent OmniParser client/model path, runs on a background thread, disables while running, and updates the UI with success or failure.
+- Added a small domain helper to create the mock screenshot and call the remote Replicate backend.
+
+Architecture impact:
+- Settings UI now has a pre-crawl remote parser warm-up workflow that depends on `domain/omniparser_warmup.py` and the active `domain/crawler_agent/tools/omniparser_client.py` client.
+
+Decisions:
+- Kept warm-up scoped to the Replicate backend because local OmniParser has its own server lifecycle and health checks.
+- Used the current unsaved Replicate API key field value first, with `REPLICATE_API_KEY` as fallback, so users can warm the backend before saving settings.
+
+Validation:
+- `python -m ruff check src\mobile_crawler\ui\widgets\settings_panel.py src\mobile_crawler\domain\omniparser_warmup.py tests\ui\test_settings_panel.py tests\domain\test_omniparser_warmup.py` passed.
+- `pytest tests\domain\test_omniparser_warmup.py tests\ui\test_settings_panel.py` passed: 42 tests.
+
+Docs updated:
+- `README.md`
+- `docs/ARCHITECTURE.md`
+- `.codex/project-memory/CHANGELOG.md`
+
+Follow-ups:
+- Smoke-test the warm-up button with a real Replicate API key to confirm cold-start timing and message wording.
+
+## 2026-06-06 - Implemented Crawl Duration Improvements
+
+Files touched:
+- `src/mobile_crawler/domain/crawler_agent/tools/driver/android.py`
+- `src/mobile_crawler/domain/crawler_agent/tools/ui/provider.py`
+- `src/mobile_crawler/domain/crawler_agent_service.py`
+- `src/mobile_crawler/domain/ui_wait_predicate.py`
+- `src/mobile_crawler/domain/action_verifier.py`
+- `src/mobile_crawler/domain/crawler_agent/agent/droid/crawler_agent.py`
+- `tests/domain/test_android_driver_screenshot.py`
+- `tests/domain/test_ui_wait_predicate.py`
+- `tests/domain/test_action_verifier.py`
+- `tests/domain/test_crawler_agent_service.py`
+- `tests/domain/test_crawler_agent_finalize.py`
+- `.codex/project-memory/CHANGELOG.md`
+
+What changed:
+- Replaced Android screenshot capture internals with a locked crawler-owned path that tries `adb exec-out screencap -p`, validates PNG bytes with Pillow, converts to JPEG, and falls back to unique `/data/local/tmp/mobile-crawler-*.png` files with best-effort deletion.
+- Changed UI dump validation to use the latest `shared_state.a11y_tree` before any live state read and to accept live `UIState.elements` when a read is still needed.
+- Added cached/latest-state hooks to `UIWaitPredicate` and `ActionVerifier`; OmniParser mode now avoids repeated post-action `get_state()` polling and defers parsed-state verification to the next manager capture.
+- Skipped final parsed UI-state capture on max-step completion when trajectory saving does not require it, while preserving final screenshot capture for vision/tracing/streaming needs.
+- Added timing logs for screenshot capture, state capture, live validation reads, and OmniParser parse calls.
+
+Architecture impact:
+- Post-action synchronization now distinguishes expensive vision-only state polling from cheap accessibility-style polling while keeping user-selected parser mode unchanged.
+- Android screenshot capture no longer depends on `async_adbutils.screenshot_bytes()` temp-file behavior.
+
+Decisions:
+- Kept explicit `omniparser` mode supported and did not force `boost`.
+- In expensive parser mode, action verification treats parsed post-state as deferred instead of causing an extra OmniParser parse; the next Manager capture remains authoritative.
+
+Validation:
+- `python -m ruff check src\mobile_crawler\domain\crawler_agent\tools\driver\android.py src\mobile_crawler\domain\crawler_agent\tools\ui\provider.py src\mobile_crawler\domain\crawler_agent_service.py src\mobile_crawler\domain\ui_wait_predicate.py src\mobile_crawler\domain\action_verifier.py src\mobile_crawler\domain\crawler_agent\agent\droid\crawler_agent.py tests\domain\test_android_driver_screenshot.py tests\domain\test_crawler_agent_service.py tests\domain\test_ui_wait_predicate.py tests\domain\test_action_verifier.py tests\domain\test_crawler_agent_finalize.py` passed.
+- `pytest tests\domain\test_ui_wait_predicate.py tests\domain\test_action_verifier.py tests\domain\test_crawler_agent_service.py tests\domain\test_android_driver_screenshot.py tests\domain\test_crawler_agent_finalize.py` passed: 83 tests.
+
+Docs updated:
+- `.codex/project-memory/CHANGELOG.md`
+
+Follow-ups:
+- Confirm screenshot fallback against a real device/emulator when available; unit tests and installed `async_adbutils` API inspection cover the code path shape.
+
+## 2026-06-06 - Added 5-Step Crawl Duration Analysis
+
+Files touched:
+- `docs/readmes/crawl-duration-5-step-analysis.md`
+- `.codex/project-memory/CHANGELOG.md`
+
+What changed:
+- Added and then updated a Markdown report analyzing why 5-step OmniParser crawls took about 534.5 seconds locally and about 192.1 seconds through Replicate.
+- Identified vision-only `omniparser` mode, repeated OmniParser state captures, adaptive wait/verification state reads, UI dump validation type mismatch, reasoning mode, final post-limit UI capture, and screenshot capture instability as contributors.
+- Added a suggested fix for the Replicate-run screenshot errors: replace/wrap `async_adbutils.device.screenshot_bytes()` with a locked crawler-owned `exec-out screencap -p` path and unique remote-path fallback.
+
+Architecture impact:
+- None. Analysis-only documentation update.
+
+Decisions:
+- Kept the report under `docs/readmes/` because it is an operational runtime analysis and tuning reference.
+
+Validation:
+- Documentation-only update; no code tests run.
+
+Docs updated:
+- `docs/readmes/crawl-duration-5-step-analysis.md`
+- `.codex/project-memory/CHANGELOG.md`
+
+Follow-ups:
+- Consider code changes to avoid duplicate OmniParser parses during validation/wait/finalization.
+- Consider replacing the Android screenshot capture path to avoid repeated `/data/local/tmp/adbutils-tmp*.png` failures.
+
 ## 2026-06-06 - Raised Local OmniParser Parse Timeout
 
 Files touched:

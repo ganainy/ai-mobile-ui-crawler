@@ -109,6 +109,8 @@ async def type_text(
         if index != -1:
             x, y = ctx.ui.get_element_coords(index)
             await ctx.driver.tap(x, y)
+            # Give the system time to focus the input field, bring up keyboard, and settle any scroll/layout animation
+            await asyncio.sleep(0.5)
 
         success = await ctx.driver.input_text(text, clear)
         if success:
@@ -269,6 +271,8 @@ async def type_secret(
         if index != -1:
             x, y = ctx.ui.get_element_coords(index)
             await ctx.driver.tap(x, y)
+            # Give the system time to focus the input field, bring up keyboard, and settle any scroll/layout animation
+            await asyncio.sleep(0.5)
 
         ok = await ctx.driver.input_text(secret_value)
         if ok:

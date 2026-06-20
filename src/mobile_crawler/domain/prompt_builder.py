@@ -91,6 +91,27 @@ class PromptBuilder:
             total_unique_screens=total_unique_screens
         )
 
+        # Match input suggestions using ContextAwareInputDictionary
+        if ocr_grounding:
+            try:
+                from mobile_crawler.domain.input_dictionary import ContextAwareInputDictionary
+                input_dict = ContextAwareInputDictionary(self.config_manager)
+                for el in ocr_grounding:
+                    is_input_field = False
+                    class_name = str(el.get("className") or el.get("type") or "").lower()
+                    resource_id = str(el.get("resourceId") or "").lower()
+
+                    if "edittext" in class_name or "edit" in resource_id or "input" in resource_id or "search" in resource_id or "search" in class_name:
+                        is_input_field = True
+                    elif class_name == "omni_element" and el.get("type") == "text":
+                        is_input_field = True
+
+                    if is_input_field or el.get("type") == "text":
+                        el["suggested_input"] = input_dict.get_suggested_input(el)
+            except Exception as e:
+                import logging
+                logging.getLogger("crawler_agent").warning(f"Failed to match suggested inputs in PromptBuilder: {e}")
+
         # Format the user prompt
         prompt_data = {
             "screenshot": screenshot_b64,

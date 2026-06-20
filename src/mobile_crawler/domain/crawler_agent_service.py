@@ -567,14 +567,39 @@ class CrawlerAgentService:
         driver = getattr(self._crawler_agent, "driver", None)
 
         if state_provider:
+            def latest_state():
+                action_ctx = getattr(self._crawler_agent, "action_ctx", None)
+                latest = getattr(action_ctx, "ui", None) if action_ctx else None
+                if latest is not None:
+                    return latest
+                shared_state = getattr(self._crawler_agent, "shared_state", None)
+                if shared_state and getattr(shared_state, "a11y_tree", None):
+                    state = type("LatestUIState", (), {})()
+                    state.elements = shared_state.a11y_tree
+                    state.formatted_text = getattr(shared_state, "formatted_device_state", "")
+                    state.phone_state = getattr(shared_state, "phone_state", {})
+                    return state
+                return None
+
+            async def current_app():
+                if driver and hasattr(driver, "_get_current_app"):
+                    return await driver._get_current_app()
+                return ""
+
+            expensive_state_polling = getattr(state_provider, "ui_parser_mode", None) == "omniparser"
             self._ui_wait_predicate = UIWaitPredicate(
                 state_provider=state_provider,
                 config=AdaptiveWaitConfig(self.config_manager),
+                latest_state_provider=latest_state,
+                current_app_provider=current_app if driver else None,
+                expensive_state_polling=expensive_state_polling,
             )
             if driver:
                 self._action_verifier = ActionVerifier(
                     state_provider=state_provider,
                     driver=driver,
+                    latest_state_provider=latest_state,
+                    expensive_state_capture=expensive_state_polling,
                 )
 
         # Wire DeviceContextCapture for app-switch detection (Plan 02)
@@ -880,28 +905,39 @@ class CrawlerAgentService:
         if skip_reason is None and self._ui_dump_validator:
             try:
                 async def get_ui_data():
-                    """Get fresh UI data from crawler_agent's state."""
-                    # 1. Try a11y_tree from state_provider.get_state() (live fetch)
-                    if self._crawler_agent and hasattr(self._crawler_agent, "state_provider"):
-                        state_provider = self._crawler_agent.state_provider
-                        if state_provider and hasattr(state_provider, "get_state"):
-                            try:
-                                state = await state_provider.get_state()
-                                if state and isinstance(state, dict):
-                                    a11y = state.get("a11y_tree")
-                                    if a11y:
-                                        return a11y
-                            except Exception:
-                                pass
-
-                    # 2. Fall back to shared_state.a11y_tree - this is where the agent writes
-                    #    OmniParser results
+                    """Get UI data without triggering duplicate expensive parser work."""
+                    # 1. Prefer shared_state.a11y_tree, where Manager/FastAgent stores
+                    #    the latest already-parsed UIState.elements.
                     if self._crawler_agent:
                         shared_state = getattr(self._crawler_agent, "shared_state", None)
                         if shared_state:
                             a11y = getattr(shared_state, "a11y_tree", None)
                             if a11y:
                                 return a11y
+
+                    # 2. Fall back to a live read only when no parsed shared state exists.
+                    #    Handle both UIState objects and dict-style raw states.
+                    if self._crawler_agent and hasattr(self._crawler_agent, "state_provider"):
+                        state_provider = self._crawler_agent.state_provider
+                        if state_provider and hasattr(state_provider, "get_state"):
+                            try:
+                                live_started = time.perf_counter()
+                                state = await state_provider.get_state()
+                                self._add_sub_phase_timing(
+                                    "ui_dump_live_state_capture_ms",
+                                    (time.perf_counter() - live_started) * 1000,
+                                    parent_phase=StepPhase.CAPTURE,
+                                )
+                                if state and hasattr(state, "elements"):
+                                    elements = getattr(state, "elements", None)
+                                    if elements:
+                                        return elements
+                                if state and isinstance(state, dict):
+                                    a11y = state.get("a11y_tree")
+                                    if a11y:
+                                        return a11y
+                            except Exception:
+                                pass
 
                     return None
 
@@ -1054,15 +1090,29 @@ class CrawlerAgentService:
         Returns:
             CrawlerGoal for app exploration
         """
-        if exploration_objective:
-            description = f"Explore the {app_package} app. {exploration_objective}"
-        else:
+        guided = self.config_manager.get("guided_scenarios", [])
+        if guided and isinstance(guided, list):
             description = (
-                f"Explore the {app_package} app systematically. "
-                f"Navigate through different screens, interact with UI elements, "
-                f"and discover the app's functionality. Focus on user flows like "
-                f"registration, login, main features, and settings."
+                f"Explore the {app_package} app. "
+                "You MUST follow these Guided Subgoals in order before starting general exploration:\n"
             )
+            for i, step in enumerate(guided, 1):
+                description += f"Subgoal {i}: {step}\n"
+
+            if exploration_objective:
+                description += f"\nAfter completing the guided subgoals, focus on the following objective: {exploration_objective}\n"
+            else:
+                description += "\nAfter completing the guided subgoals, continue exploring the app to discover other features.\n"
+        else:
+            if exploration_objective:
+                description = f"Explore the {app_package} app. {exploration_objective}"
+            else:
+                description = (
+                    f"Explore the {app_package} app systematically. "
+                    f"Navigate through different screens, interact with UI elements, "
+                    f"and discover the app's functionality. Focus on user flows like "
+                    f"registration, login, main features, and settings."
+                )
 
         # Force continuous exploration by disabling self-termination
         description += (

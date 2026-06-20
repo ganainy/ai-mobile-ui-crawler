@@ -113,3 +113,45 @@ class TestActionVerifier:
         result = await verifier.verify({}, "click")
         assert result.verified is True
         assert "unavailable" in result.details
+
+    @pytest.mark.asyncio
+    async def test_capture_pre_state_uses_latest_state_without_live_get_state(
+        self, mock_state_provider, mock_driver
+    ):
+        """Cached Manager state is used as pre-state in expensive parser mode."""
+        latest_state = _make_ui_state("cached", [1, 2])
+        mock_driver._get_current_app.return_value = "com.example.app"
+        verifier = ActionVerifier(
+            state_provider=mock_state_provider,
+            driver=mock_driver,
+            latest_state_provider=lambda: latest_state,
+            expensive_state_capture=True,
+        )
+
+        state = await verifier.capture_pre_state()
+
+        assert state["element_count"] == 2
+        assert state["ui_text_hash"] == hash("cached")
+        mock_state_provider.get_state.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_verify_expensive_mode_defers_post_parsed_state(
+        self, mock_state_provider, mock_driver
+    ):
+        """Post-action verification avoids a second OmniParser parse in expensive mode."""
+        mock_driver._get_current_app.return_value = "com.example.app"
+        verifier = ActionVerifier(
+            state_provider=mock_state_provider,
+            driver=mock_driver,
+            latest_state_provider=lambda: None,
+            expensive_state_capture=True,
+        )
+
+        result = await verifier.verify(
+            {"package": "com.example.app", "ui_text_hash": hash("old"), "element_count": 1},
+            "tap",
+        )
+
+        assert result.verified is True
+        assert "parsed_state_deferred=True" in result.details
+        mock_state_provider.get_state.assert_not_awaited()
