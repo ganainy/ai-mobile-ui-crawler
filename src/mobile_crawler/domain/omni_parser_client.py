@@ -141,7 +141,7 @@ class OmniParserClient:
                 return key
         except Exception:
             pass
-        key = os.environ.get("REPLICATE_API_KEY")
+        key = os.environ.get("REPLICATE_API_KEY") or os.environ.get("REPLICATE_API_TOKEN")
         if key:
             return key
         return None

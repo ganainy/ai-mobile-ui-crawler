@@ -1155,11 +1155,11 @@ class MainWindow(QMainWindow):
 
         Validates API keys and updates start button state.
         """
-        # Update control availability based on DroidRun setting
+        # Update control availability based on crawler-agent setting
         if self.control_panel:
-            droidrun_enabled = self.settings_panel.get_enable_droidrun_agent()
-            self.control_panel.set_step_by_step_available(not droidrun_enabled)
-            self.control_panel.set_pause_available(not droidrun_enabled)
+            crawler_agent_enabled = self.settings_panel.get_enable_crawler_agent()
+            self.control_panel.set_step_by_step_available(not crawler_agent_enabled)
+            self.control_panel.set_pause_available(not crawler_agent_enabled)
 
         # Validate API keys based on selected provider
         if self._ai_provider:

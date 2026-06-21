@@ -359,6 +359,12 @@ Default values live in `src/mobile_crawler/config/defaults.py`. Notable defaults
 
 API keys can come from persisted secrets/settings or environment variables. `CrawlerAgentService` resolves provider keys and passes them into crawler-agent LLM profiles.
 
+Telemetry key configuration:
+
+- `CRAWLER_POSTHOG_PROJECT_API_KEY`: PostHog project key used by crawler-agent telemetry.
+- `DROIDRUN_POSTHOG_PROJECT_API_KEY`: legacy fallback key name retained for compatibility.
+- `DROIDRUN_TELEMETRY_ENABLED`: telemetry on/off switch (`true` by default when key is present).
+
 ## Data Organization
 
 `SessionFolderManager` creates per-run folders under the app data directory's `output_data` folder by default:

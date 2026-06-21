@@ -151,7 +151,7 @@ class AndroidStateProvider(StateProvider):
         use_normalized: bool = False,
         stealth: bool = False,
         ui_cls: type[UIState] | None = None,
-        ui_parser_mode: str = "boost",  # "boost", "omniparser", or "accessibility"
+        ui_parser_mode: str = "omniparser",  # "boost", "omniparser", or "accessibility"
         omniparser_backend: str = "replicate",
         omniparser_api_key: str | None = None,
         omniparser_local_url: str = "http://localhost:8000",
@@ -404,13 +404,21 @@ class AndroidStateProvider(StateProvider):
         try:
             from mobile_crawler.domain.crawler_agent.tools.omniparser_client import create_omni_parser_client
 
-            # Use provided API key, or fall back to environment variable
-            api_key = self.omniparser_api_key or os.environ.get("REPLICATE_API_KEY", "")
+            # Use provided API key, or fall back to environment variables
+            # Check both REPLICATE_API_KEY (our canonical name) and
+            # REPLICATE_API_TOKEN (Replicate SDK's native name)
+            api_key = (
+                self.omniparser_api_key
+                or os.environ.get("REPLICATE_API_KEY")
+                or os.environ.get("REPLICATE_API_TOKEN")
+                or ""
+            )
 
             logger.debug(
                 f"Initializing OmniParser: backend={self.omniparser_backend}, "
                 f"omniparser_api_key={bool(self.omniparser_api_key)}, "
                 f"env_REPLICATE_API_KEY={bool(os.environ.get('REPLICATE_API_KEY'))}, "
+                f"env_REPLICATE_API_TOKEN={bool(os.environ.get('REPLICATE_API_TOKEN'))}, "
                 f"final_api_key={bool(api_key)}"
             )
             self._omni_client = create_omni_parser_client(

@@ -91,13 +91,16 @@ DEFAULTS: dict[str, Any] = {
     "crawler_streaming": False,
     # Crawler agent retry count for failed operations
     "crawler_retry_count": 2,
-    # UI parser strategy: accessibility-first with OmniParser fallback
-    "ui_parser_mode": "boost",
+    # UI parser strategy: OmniParser (vision) as primary mode
+    "ui_parser_mode": "omniparser",
     "omniparser_backend": "replicate",
     "omniparser_local_url": "http://localhost:8000",
     "omniparser_local_parse_timeout_seconds": 120,
     "omniparser_box_threshold": 0.05,
     "omniparser_cache_ttl_days": 30,
+    # Note: omniparser_a11y_threshold (int=5, in CrawlerConfig) controls the
+    # minimum element count before OmniParser fallback kicks in (boost mode).
+    # The ratio below is reserved for future ratio-based heuristics.
     "omniparser_a11y_ratio_threshold": 0.5,
     # Adaptive wait profiles for UI synchronization (replaces fixed sleeps)
     "wait_default_timeout_ms": 3000,

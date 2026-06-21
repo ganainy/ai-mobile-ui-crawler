@@ -566,7 +566,7 @@ async def ensure_portal_ready(
         if not success:
             raise RuntimeError(
                 f"Portal auto-setup failed ({reason}). "
-                "Run 'droidrun doctor' for diagnostics."
+                "Verify portal setup on the device and review mobile-crawler logs for diagnostics."
             )
         # After install, accessibility is already enabled by setup_portal
         return
@@ -580,7 +580,7 @@ async def ensure_portal_ready(
                 raise RuntimeError(
                     "Could not enable Portal accessibility service. "
                     "Please enable it manually in device settings, "
-                    "or run 'droidrun setup'."
+                    "or reinstall/re-enable the portal app on the device."
                 )
             # Wait for the service process to start and become responsive
             await _wait_for_portal_service(device)
@@ -590,7 +590,7 @@ async def ensure_portal_ready(
         except Exception as e:
             raise RuntimeError(
                 f"Failed to enable accessibility service: {e}. "
-                "Run 'droidrun doctor' for diagnostics."
+                "Verify portal setup on the device and review mobile-crawler logs for diagnostics."
             ) from e
 
 

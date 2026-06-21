@@ -14,6 +14,12 @@ def _png_bytes() -> bytes:
     return output.getvalue()
 
 
+def _jpeg_bytes() -> bytes:
+    output = io.BytesIO()
+    Image.new("RGB", (2, 2), color=(255, 0, 0)).save(output, format="JPEG")
+    return output.getvalue()
+
+
 def _driver() -> AndroidDriver:
     driver = AndroidDriver(serial="emulator-5554")
     driver._connected = True
@@ -22,67 +28,52 @@ def _driver() -> AndroidDriver:
 
 
 @pytest.mark.asyncio
-async def test_screenshot_exec_out_png_converts_to_jpeg():
+async def test_screenshot_png_converts_to_jpeg():
+    """PNG screenshots from device.screenshot_bytes() are converted to JPEG."""
     driver = _driver()
+    driver.device.screenshot_bytes = AsyncMock(return_value=_png_bytes())
 
-    with patch.object(driver, "_capture_png_exec_out", AsyncMock(return_value=_png_bytes())):
-        result = await driver.screenshot()
+    result = await driver.screenshot()
 
-    assert result[:2] == b"\xff\xd8"
+    assert result[:2] == b"\xff\xd8"  # JPEG magic bytes
 
 
 @pytest.mark.asyncio
-async def test_screenshot_invalid_png_retries_with_fresh_capture():
+async def test_screenshot_invalid_data_retries_then_succeeds():
+    """Corrupted PNG (bad magic but PIL fails) triggers a retry, then succeeds."""
     driver = _driver()
-    captures = AsyncMock(side_effect=[b"not a png", _png_bytes()])
+    # Valid PNG magic bytes but truncated/corrupted body → PIL.verify() raises
+    corrupted = b"\x89PNG\r\n\x1a\n" + b"\x00" * 20
+    driver.device.screenshot_bytes = AsyncMock(
+        side_effect=[corrupted, _png_bytes()]
+    )
 
-    with patch.object(driver, "_capture_png_exec_out", captures):
-        result = await driver.screenshot()
+    result = await driver.screenshot()
 
     assert result[:2] == b"\xff\xd8"
-    assert captures.await_count == 2
+    assert driver.device.screenshot_bytes.await_count == 2
 
 
 @pytest.mark.asyncio
-async def test_screenshot_remote_fallback_uses_unique_paths_and_deletes():
+async def test_screenshot_jpeg_passthrough():
+    """Already-JPEG screenshots pass through without re-encoding."""
     driver = _driver()
-    driver.device.shell = AsyncMock()
-    driver.device.sync.read_bytes = AsyncMock(side_effect=[b"bad", _png_bytes()])
+    jpeg = _jpeg_bytes()
+    driver.device.screenshot_bytes = AsyncMock(return_value=jpeg)
 
-    with patch.object(driver, "_capture_png_exec_out", AsyncMock(side_effect=RuntimeError("exec-out failed"))):
-        result = await driver.screenshot()
+    result = await driver.screenshot()
 
-    assert result[:2] == b"\xff\xd8"
-    screencap_paths = [
-        call.args[0].split()[-1]
-        for call in driver.device.shell.await_args_list
-        if call.args and call.args[0].startswith("screencap -p ")
-    ]
-    delete_paths = [
-        call.args[0].split()[-1]
-        for call in driver.device.shell.await_args_list
-        if call.args and call.args[0].startswith("rm -f ")
-    ]
-    assert len(screencap_paths) == 2
-    assert len(set(screencap_paths)) == 2
-    assert delete_paths == screencap_paths
+    assert result == jpeg
 
 
 @pytest.mark.asyncio
-async def test_concurrent_screenshot_calls_are_serialized_by_lock():
+async def test_screenshot_string_result_encoded_to_bytes():
+    """String results from screenshot_bytes() are encoded to bytes."""
     driver = _driver()
-    active = 0
-    max_active = 0
+    # Simulate a device that returns a string (some adb libs do this)
+    driver.device.screenshot_bytes = AsyncMock(return_value="not real image data")
 
-    async def capture():
-        nonlocal active, max_active
-        active += 1
-        max_active = max(max_active, active)
-        await asyncio.sleep(0.01)
-        active -= 1
-        return _png_bytes()
+    # Should not crash; the non-PNG string gets encoded and returned as-is
+    result = await driver.screenshot()
 
-    with patch.object(driver, "_capture_png_exec_out", capture):
-        await asyncio.gather(driver.screenshot(), driver.screenshot(), driver.screenshot())
-
-    assert max_active == 1
+    assert isinstance(result, bytes)

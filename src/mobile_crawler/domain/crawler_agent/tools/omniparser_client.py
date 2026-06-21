@@ -50,7 +50,10 @@ class OmniParserClient:
             box_threshold: Minimum confidence threshold for element detection
         """
         self.backend = OmniParserBackend(backend)
-        self._api_key = api_key or os.environ.get("REPLICATE_API_KEY")
+        # Check both env var names for backward compatibility:
+        # REPLICATE_API_KEY (our canonical name) and
+        # REPLICATE_API_TOKEN (Replicate SDK's native name)
+        self._api_key = api_key or os.environ.get("REPLICATE_API_KEY") or os.environ.get("REPLICATE_API_TOKEN")
         self.local_url = local_url
         self.local_parse_timeout_seconds = max(1, float(local_parse_timeout_seconds))
         self.box_threshold = box_threshold
@@ -91,13 +94,17 @@ class OmniParserClient:
             raise ImportError("replicate package required: pip install replicate") from e
 
         if not self._api_key:
-            raise ValueError("Replicate API key not configured. Set REPLICATE_API_KEY env var.")
+            raise ValueError(
+                "Replicate API key not configured. Set REPLICATE_API_KEY "
+                "(or REPLICATE_API_TOKEN) env var."
+            )
 
         # Debug: check image format
         logger.debug(f"Image bytes: {len(image_bytes)} bytes, header: {image_bytes[:20]}")
 
-        # Set environment variable for the new Replicate client
+        # Set BOTH env var names so any Replicate SDK consumer finds the token
         os.environ["REPLICATE_API_TOKEN"] = self._api_key
+        os.environ["REPLICATE_API_KEY"] = self._api_key
 
         try:
             # Validate image with Pillow first

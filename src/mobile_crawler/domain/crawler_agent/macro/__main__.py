@@ -1,7 +1,7 @@
 """
 Entry point for running Droidrun macro CLI as a module.
 
-Usage: python -m droidrun.macro <command>
+Usage: python -m mobile_crawler.domain.crawler_agent.macro <command>
 """
 
 from mobile_crawler.domain.crawler_agent.macro.cli import macro_cli

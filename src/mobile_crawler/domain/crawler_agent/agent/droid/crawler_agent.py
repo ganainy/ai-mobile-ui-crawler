@@ -358,7 +358,8 @@ class CrawlerAgent(Workflow):
                 raise ValueError(
                     f"External agent '{agent_name}' not found.\n"
                     "No external agents are currently installed.\n"
-                    "Run: droidrun run --help  to see available agents."
+                    "Add an agent module under mobile_crawler.domain.crawler_agent.agent.external "
+                    "and see project docs for external agent usage."
                 )
 
             # Resolve config — missing section is fine, agent may use DEFAULT_CONFIG or env vars

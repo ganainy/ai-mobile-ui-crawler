@@ -89,13 +89,11 @@ def _setup_phoenix_tracing() -> bool:
     except ImportError:
         logger.warning(
             "⚠️  Arize Phoenix is not installed.\n"
-            "    To enable Phoenix integration, install with:\n"
-            "    • If installed via tool: `uv tool install droidrun[phoenix]`"
-            "    • If installed via pip: `uv pip install droidrun[phoenix]`\n"
+            "    To enable Phoenix integration, install the optional Arize dependencies.\n"
         )
         return False
 
-    endpoint = os.getenv("PHOENIX_URL", "http://0.0.0.0:6006")
+    endpoint = os.getenv("PHOENIX_URL") or os.getenv("phoenix_url") or "http://localhost:6006"
     if not _check_phoenix_reachable(endpoint):
         logger.warning(
             f"⚠️  Phoenix server is not reachable at {endpoint}. "
@@ -206,9 +204,7 @@ def _setup_langfuse_tracing(
     except ImportError as e:
         logger.warning(
             "⚠️  Langfuse dependencies are not installed.\n"
-            "    To enable Langfuse integration, install with:\n"
-            "    • If installed via tool: `uv tool install droidrun[langfuse]`\n"
-            "    • If installed via pip: `uv pip install droidrun[langfuse]`\n"
+            "    To enable Langfuse integration, install the required Langfuse/OpenTelemetry packages.\n"
             f"    Missing: {e.name if hasattr(e, 'name') else str(e)}\n"
         )
 

@@ -11,18 +11,22 @@ import os
 from pathlib import Path
 from uuid import UUID, uuid4
 
+
+class MockPosthog:
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def capture(self, *args, **kwargs):
+        pass
+
+    def flush(self, *args, **kwargs):
+        pass
+
 try:
     from posthog import Posthog
     POSTHOG_AVAILABLE = True
 except ImportError:
     POSTHOG_AVAILABLE = False
-    class MockPosthog:
-        def __init__(self, *args, **kwargs):
-            pass
-        def capture(self, *args, **kwargs):
-            pass
-        def flush(self, *args, **kwargs):
-            pass
     Posthog = MockPosthog
 
 from mobile_crawler.domain.crawler_agent.telemetry.events import TelemetryEvent
@@ -30,19 +34,38 @@ from mobile_crawler.domain.crawler_agent.telemetry.events import TelemetryEvent
 logger = logging.getLogger("crawler_agent-telemetry")
 droidrun_logger = logging.getLogger("crawler_agent")
 
-PROJECT_API_KEY = "phc_XyD3HKIsetZeRkmnfaBughs8fXWYArSUFc30C0HmRiO"
+PROJECT_API_KEY_ENV = "CRAWLER_POSTHOG_PROJECT_API_KEY"
+LEGACY_PROJECT_API_KEY_ENV = "DROIDRUN_POSTHOG_PROJECT_API_KEY"
 HOST = "https://eu.i.posthog.com"
 USER_ID_PATH = Path.home() / ".droidrun" / "user_id"
 RUN_ID = str(uuid4())
 
 TELEMETRY_ENABLED_MESSAGE = "Anonymized telemetry enabled. See https://docs.droidrun.ai/v3/guides/telemetry for more information."
 TELEMETRY_DISABLED_MESSAGE = "🛑 Anonymized telemetry disabled. Consider setting the DROIDRUN_TELEMETRY_ENABLED environment variable to 'true' to enable telemetry and help us improve Droidrun."
-
-posthog = Posthog(
-    project_api_key=PROJECT_API_KEY,
-    host=HOST,
-    disable_geoip=False,
+TELEMETRY_MISSING_KEY_MESSAGE = (
+    "Telemetry disabled because PostHog project API key is not set. "
+    "Set CRAWLER_POSTHOG_PROJECT_API_KEY to enable telemetry."
 )
+
+
+def _get_project_api_key() -> str | None:
+    api_key = os.environ.get(PROJECT_API_KEY_ENV) or os.environ.get(LEGACY_PROJECT_API_KEY_ENV)
+    return api_key.strip() if api_key else None
+
+
+def _build_posthog_client() -> Posthog | MockPosthog:
+    api_key = _get_project_api_key()
+    if not POSTHOG_AVAILABLE or not api_key:
+        return MockPosthog()
+
+    return Posthog(
+        project_api_key=api_key,
+        host=HOST,
+        disable_geoip=False,
+    )
+
+
+posthog = _build_posthog_client()
 
 
 def is_telemetry_enabled():
@@ -55,6 +78,11 @@ def is_telemetry_enabled():
     """
     if not POSTHOG_AVAILABLE:
         return False
+
+    if not _get_project_api_key():
+        logger.debug("Telemetry disabled: missing PostHog project API key")
+        return False
+
     telemetry_enabled = os.environ.get("DROIDRUN_TELEMETRY_ENABLED", "true")
     enabled = telemetry_enabled.lower() in ["true", "1", "yes", "y"]
     logger.debug(f"Telemetry enabled: {enabled}")
@@ -67,7 +95,10 @@ def print_telemetry_message():
 
     Displays enabled or disabled message based on DROIDRUN_TELEMETRY_ENABLED setting.
     """
-    if is_telemetry_enabled():
+    if not _get_project_api_key():
+        droidrun_logger.debug(TELEMETRY_MISSING_KEY_MESSAGE)
+
+    elif is_telemetry_enabled():
         droidrun_logger.debug(TELEMETRY_ENABLED_MESSAGE)
 
     else:

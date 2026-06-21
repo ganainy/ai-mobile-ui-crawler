@@ -755,7 +755,7 @@ class SettingsPanel(QWidget):
         self.crawler_retry_count_input.setValue(crawler_retry_count)
 
         # Load UI parser mode and Replicate API key
-        ui_parser_mode = self._config_store.get_setting("ui_parser_mode", default="boost")
+        ui_parser_mode = self._config_store.get_setting("ui_parser_mode", default="omniparser")
         self.ui_parser_mode_combo.setCurrentText(ui_parser_mode)
 
         omniparser_backend = self._config_store.get_setting("omniparser_backend", default="replicate")
@@ -997,7 +997,12 @@ class SettingsPanel(QWidget):
             self.omniparser_warmup_status_label.setText("Select the Replicate backend to warm up the remote model.")
             return
 
-        api_key = self.get_replicate_api_key() or os.environ.get("REPLICATE_API_KEY", "")
+        api_key = (
+            self.get_replicate_api_key()
+            or os.environ.get("REPLICATE_API_KEY")
+            or os.environ.get("REPLICATE_API_TOKEN")
+            or ""
+        )
         if not api_key:
             self.omniparser_warmup_status_label.setText("Replicate API key is required for remote warm-up.")
             QMessageBox.warning(

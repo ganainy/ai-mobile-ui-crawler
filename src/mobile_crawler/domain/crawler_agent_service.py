@@ -232,7 +232,7 @@ class CrawlerAgentService:
                 "serial": self.device_id,
                 "auto_setup": False,  # We handle device setup separately
             },
-            "ui_parser_mode": self.config_manager.get("ui_parser_mode", "boost"),
+            "ui_parser_mode": self.config_manager.get("ui_parser_mode", "omniparser"),
             "omniparser_backend": self.config_manager.get("omniparser_backend", "replicate"),
             "omniparser_api_key": resolve_api_key("replicate_api_key", ["REPLICATE_API_KEY"]) or "",
             "omniparser_local_url": self.config_manager.get(
@@ -244,10 +244,11 @@ class CrawlerAgentService:
             "target_package": target_package,
         }
 
-        # Set Replicate API key in environment for the agent
+        # Set Replicate API key in environment (both names) for the agent
         replicate_key = config["omniparser_api_key"]
         if replicate_key:
             os.environ["REPLICATE_API_KEY"] = replicate_key
+            os.environ["REPLICATE_API_TOKEN"] = replicate_key
 
         config["llm_profiles"] = {
             "manager": {"provider": droid_provider, "model": ai_model, "temperature": 0.1, "kwargs": {"max_tokens": 2048}},
@@ -256,7 +257,10 @@ class CrawlerAgentService:
             "app_opener": {"provider": droid_provider, "model": ai_model, "temperature": 0.0, "kwargs": {"max_tokens": 512}},
             "structured_output": {"provider": droid_provider, "model": ai_model, "temperature": 0.0, "kwargs": {"max_tokens": 1024}},
         }
-        config["telemetry"] = {"enabled": False}  # PostHog telemetry always off
+        # Telemetry: respect explicit config setting; default off since the
+        # PostHog project key is no longer bundled with the app.
+        telemetry_enabled = self.config_manager.get("crawler_telemetry_enabled", False)
+        config["telemetry"] = {"enabled": bool(telemetry_enabled)}
 
         # Configure Tracing (Arize Phoenix / Langfuse)
         enable_tracing = self.config_manager.get("enable_tracing", False)
