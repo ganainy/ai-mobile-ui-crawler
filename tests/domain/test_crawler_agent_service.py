@@ -111,23 +111,17 @@ class TestCrawlerAgentServiceInitialization:
 
     def test_max_step_reason_is_normal_completion(self):
         """CrawlerAgent max-step reasons should not be treated as crawl errors."""
-        assert CrawlerAgentService._is_max_step_completion_reason(
-            "Reached max step count of 1 steps"
-        )
-        assert CrawlerAgentService._is_max_step_completion_reason(
-            "Reached maximum steps"
-        )
-        assert not CrawlerAgentService._is_max_step_completion_reason(
-            "Unable to locate target app"
-        )
+        assert CrawlerAgentService._is_max_step_completion_reason("Reached max step count of 1 steps")
+        assert CrawlerAgentService._is_max_step_completion_reason("Reached maximum steps")
+        assert not CrawlerAgentService._is_max_step_completion_reason("Unable to locate target app")
 
 
 class TestCrawlerAgentServiceStepTracking:
     """Tests for step tracking functionality."""
 
-    @patch('mobile_crawler.domain.crawler_agent_service.StepPhaseStateMachine')
-    @patch('mobile_crawler.domain.crawler_agent_service.StepPhaseRepository')
-    @patch('mobile_crawler.infrastructure.database.DatabaseManager')
+    @patch("mobile_crawler.domain.crawler_agent_service.StepPhaseStateMachine")
+    @patch("mobile_crawler.domain.crawler_agent_service.StepPhaseRepository")
+    @patch("mobile_crawler.infrastructure.database.DatabaseManager")
     def test_begin_step_tracking_creates_state_machine(
         self, mock_db_class, mock_repo_class, mock_machine_class, crawler_agent_service
     ):
@@ -148,9 +142,9 @@ class TestCrawlerAgentServiceStepTracking:
         mock_machine_class.assert_called_once()
         mock_machine.add_listener.assert_called_once()
 
-    @patch('mobile_crawler.domain.crawler_agent_service.StepPhaseStateMachine')
-    @patch('mobile_crawler.domain.crawler_agent_service.StepPhaseRepository')
-    @patch('mobile_crawler.infrastructure.database.DatabaseManager')
+    @patch("mobile_crawler.domain.crawler_agent_service.StepPhaseStateMachine")
+    @patch("mobile_crawler.domain.crawler_agent_service.StepPhaseRepository")
+    @patch("mobile_crawler.infrastructure.database.DatabaseManager")
     def test_begin_step_tracking_wires_repository(
         self, mock_db_class, mock_repo_class, mock_machine_class, crawler_agent_service
     ):
@@ -169,9 +163,11 @@ class TestCrawlerAgentServiceStepTracking:
 
     def test_begin_step_tracking_without_callback(self, crawler_agent_service):
         """Test begin_step_tracking works without emit callback."""
-        with patch('mobile_crawler.domain.crawler_agent_service.StepPhaseStateMachine') as mock_machine_class, \
-             patch('mobile_crawler.domain.crawler_agent_service.StepPhaseRepository'), \
-             patch('mobile_crawler.infrastructure.database.DatabaseManager'):
+        with (
+            patch("mobile_crawler.domain.crawler_agent_service.StepPhaseStateMachine") as mock_machine_class,
+            patch("mobile_crawler.domain.crawler_agent_service.StepPhaseRepository"),
+            patch("mobile_crawler.infrastructure.database.DatabaseManager"),
+        ):
             mock_machine = Mock()
             mock_machine_class.return_value = mock_machine
             crawler_agent_service.begin_step_tracking(run_id=1)
@@ -225,7 +221,11 @@ class TestCrawlerAgentServicePhaseTransition:
 
         emit_callback.assert_called_once_with(
             "on_step_phase_transition",
-            42, 5, "capture", "decide", 2000.0,
+            42,
+            5,
+            "capture",
+            "decide",
+            2000.0,
         )
 
     def test_on_phase_transition_without_emit_callback(self, crawler_agent_service):
@@ -259,12 +259,8 @@ class TestCrawlerAgentServicePhaseTransition:
         mock_machine.get_phase_duration.return_value = 0.25
         crawler_agent_service._step_phase_machine = mock_machine
 
-        crawler_agent_service._add_sub_phase_timing(
-            "manager_llm_ms", 1234.5678, parent_phase=StepPhase.DECIDE
-        )
-        crawler_agent_service._add_validation_retry(
-            "Missing plan tag", parent_phase=StepPhase.DECIDE, attempt=1
-        )
+        crawler_agent_service._add_sub_phase_timing("manager_llm_ms", 1234.5678, parent_phase=StepPhase.DECIDE)
+        crawler_agent_service._add_validation_retry("Missing plan tag", parent_phase=StepPhase.DECIDE, attempt=1)
 
         crawler_agent_service._on_phase_transition(StepPhase.DECIDE, StepPhase.EXECUTE)
 
@@ -280,9 +276,7 @@ class TestCrawlerAgentServicePhaseTransition:
             "app_card_load_ms": 10.0,
             "manager_llm_ms": 20.0,
             "executor_llm_ms": 30.0,
-            "validation_retries": [
-                {"reason": "Missing plan tag", "timestamp": "2026-06-06T00:00:00", "attempt": 1}
-            ],
+            "validation_retries": [{"reason": "Missing plan tag", "timestamp": "2026-06-06T00:00:00", "attempt": 1}],
         }
 
         crawler_agent_service._apply_pending_step_timing()
@@ -317,11 +311,13 @@ class TestCrawlerAgentServiceWireObservers:
         crawler_agent_service._crawler_agent = mock_agent
         crawler_agent_service._target_package = "com.example.app"
 
-        with patch('mobile_crawler.domain.crawler_agent_service.UIWaitPredicate') as mock_wait, \
-             patch('mobile_crawler.domain.crawler_agent_service.ActionVerifier') as mock_verifier, \
-             patch('mobile_crawler.domain.crawler_agent_service.DeviceContextCapture') as mock_ctx, \
-             patch('mobile_crawler.domain.crawler_agent_service.AppSwitchRecovery') as mock_recovery, \
-             patch('mobile_crawler.domain.adb_action_executor.ADBActionExecutor'):
+        with (
+            patch("mobile_crawler.domain.crawler_agent_service.UIWaitPredicate") as mock_wait,
+            patch("mobile_crawler.domain.crawler_agent_service.ActionVerifier") as mock_verifier,
+            patch("mobile_crawler.domain.crawler_agent_service.DeviceContextCapture") as mock_ctx,
+            patch("mobile_crawler.domain.crawler_agent_service.AppSwitchRecovery") as mock_recovery,
+            patch("mobile_crawler.domain.adb_action_executor.ADBActionExecutor"),
+        ):
             crawler_agent_service._wire_observers_to_agent()
             mock_wait.assert_called_once()
             mock_verifier.assert_called_once()
@@ -337,11 +333,13 @@ class TestCrawlerAgentServiceWireObservers:
         crawler_agent_service._crawler_agent = mock_agent
         crawler_agent_service._target_package = "com.example.app"
 
-        with patch('mobile_crawler.domain.crawler_agent_service.UIWaitPredicate') as mock_wait, \
-             patch('mobile_crawler.domain.crawler_agent_service.ActionVerifier') as mock_verifier, \
-             patch('mobile_crawler.domain.crawler_agent_service.DeviceContextCapture'), \
-             patch('mobile_crawler.domain.crawler_agent_service.AppSwitchRecovery'), \
-             patch('mobile_crawler.domain.adb_action_executor.ADBActionExecutor'):
+        with (
+            patch("mobile_crawler.domain.crawler_agent_service.UIWaitPredicate") as mock_wait,
+            patch("mobile_crawler.domain.crawler_agent_service.ActionVerifier") as mock_verifier,
+            patch("mobile_crawler.domain.crawler_agent_service.DeviceContextCapture"),
+            patch("mobile_crawler.domain.crawler_agent_service.AppSwitchRecovery"),
+            patch("mobile_crawler.domain.adb_action_executor.ADBActionExecutor"),
+        ):
             crawler_agent_service._wire_observers_to_agent()
             mock_wait.assert_called_once()
             mock_verifier.assert_not_called()
@@ -510,6 +508,31 @@ class TestCrawlerAgentServiceErrorHandling:
         assert crawler_agent_service._is_app_crash_error("Accessibility node info error")
         assert not crawler_agent_service._is_app_crash_error("Normal timeout")
 
+    def test_is_app_crash_error_rejects_transient_closed(self, crawler_agent_service):
+        """The bare 'closed' error from Replicate must NOT look like an app crash.
+
+        Regression test for PLAN-update-prompt-fix: a dropped Replicate
+        streaming connection surfaces as just "closed" and previously could
+        be confused with a real crash. We must not relaunch the app for it.
+        """
+        assert not crawler_agent_service._is_app_crash_error("closed")
+        assert not crawler_agent_service._is_app_crash_error("httpx.RemoteProtocolError: Server disconnected")
+        assert not crawler_agent_service._is_app_crash_error("OmniParser Replicate error: connection closed")
+
+    def test_is_transient_network_error_detects_replicate_drops(self, crawler_agent_service):
+        """_is_transient_network_error flags UI-parser/network failures."""
+        assert crawler_agent_service._is_transient_network_error("closed")
+        assert crawler_agent_service._is_transient_network_error("RemoteProtocolError: Server disconnected")
+        assert crawler_agent_service._is_transient_network_error("Read timed out")
+        assert crawler_agent_service._is_transient_network_error("OmniParser Replicate error: closed")
+        assert crawler_agent_service._is_transient_network_error("Connection reset")
+
+    def test_is_transient_network_error_rejects_real_crashes(self, crawler_agent_service):
+        """Real crash indicators are NOT transient UI-parser failures."""
+        assert not crawler_agent_service._is_transient_network_error("No active window found")
+        assert not crawler_agent_service._is_transient_network_error("Accessibility node info error")
+        assert not crawler_agent_service._is_transient_network_error("")
+
     def test_create_exploration_goal(self, crawler_agent_service):
         """Test _create_exploration_goal creates correct goal."""
         goal = crawler_agent_service._create_exploration_goal("com.example.app", 10)
@@ -518,11 +541,23 @@ class TestCrawlerAgentServiceErrorHandling:
         assert "com.example.app" in goal.description
         assert "continuous exploration" in goal.description.lower()
 
+    def test_create_exploration_goal_includes_dialog_dismissal(self, crawler_agent_service):
+        """Goal must instruct the LLM to dismiss update/blocking dialogs.
+
+        Regression test for PLAN-update-prompt-fix: the crawler used to stall
+        on Google Play update prompts. The prompt now explicitly tells the
+        agent to click X/Skip/Later/Not now.
+        """
+        goal = crawler_agent_service._create_exploration_goal("com.example.app", 10)
+        description_lower = goal.description.lower()
+        assert "blocking dialog" in description_lower
+        assert "update" in description_lower
+        # Must name at least one common dismiss affordance
+        assert any(token in description_lower for token in ("skip", "later", "not now", "x'"))
+
     def test_create_exploration_goal_with_objective(self, crawler_agent_service):
         """Test _create_exploration_goal includes exploration objective."""
-        goal = crawler_agent_service._create_exploration_goal(
-            "com.example.app", 10, "test login flow"
-        )
+        goal = crawler_agent_service._create_exploration_goal("com.example.app", 10, "test login flow")
         assert "test login flow" in goal.description
 
     def test_log_agent_interaction_without_repo(self, crawler_agent_service):
@@ -646,9 +681,7 @@ class TestCrawlerAgentServiceConfig:
         assert "telemetry" in config
         assert config["telemetry"]["enabled"] is False
 
-    def test_get_crawler_agent_config_includes_omniparser_timeout(
-        self, crawler_agent_service, mock_config_manager
-    ):
+    def test_get_crawler_agent_config_includes_omniparser_timeout(self, crawler_agent_service, mock_config_manager):
         """Test local OmniParser parse timeout is passed to crawler-agent config."""
         config = crawler_agent_service._get_crawler_agent_config()
         assert config["omniparser_local_url"] == "http://localhost:8000"
@@ -668,11 +701,15 @@ class TestCrawlerAgentServiceTargetPreflight:
         async def target_preflight(app_package):
             order.append(f"target:{app_package}")
 
-        with patch.object(crawler_agent_service, "_ensure_device_awake_before_crawler", side_effect=wake_preflight), \
-             patch.object(crawler_agent_service, "_ensure_target_app_active_before_crawler", side_effect=target_preflight), \
-             patch.object(crawler_agent_service, "_initialize_agent", new=AsyncMock()), \
-             patch.object(crawler_agent_service, "_log_agent_interaction"), \
-             patch.dict(sys.modules, self._fake_crawler_agent_modules(success=True)):
+        with (
+            patch.object(crawler_agent_service, "_ensure_device_awake_before_crawler", side_effect=wake_preflight),
+            patch.object(
+                crawler_agent_service, "_ensure_target_app_active_before_crawler", side_effect=target_preflight
+            ),
+            patch.object(crawler_agent_service, "_initialize_agent", new=AsyncMock()),
+            patch.object(crawler_agent_service, "_log_agent_interaction"),
+            patch.dict(sys.modules, self._fake_crawler_agent_modules(success=True)),
+        ):
             crawler_agent_service._crawler_agent_config = Mock()
             result = await crawler_agent_service.execute_exploration_task(
                 run_id=1,
@@ -693,11 +730,15 @@ class TestCrawlerAgentServiceTargetPreflight:
         fake_modules = self._fake_crawler_agent_modules(success=True)
         fake_agent = fake_modules["mobile_crawler.domain.crawler_agent.agent.droid.crawler_agent"].CrawlerAgent
 
-        with patch("mobile_crawler.domain.adb_action_executor.ADBActionExecutor", return_value=mock_adb), \
-             patch.object(crawler_agent_service, "_ensure_target_app_active_before_crawler", new=AsyncMock()) as target_preflight, \
-             patch.object(crawler_agent_service, "_initialize_agent", new=AsyncMock()), \
-             patch.object(crawler_agent_service, "_log_agent_interaction"), \
-             patch.dict(sys.modules, fake_modules):
+        with (
+            patch("mobile_crawler.domain.adb_action_executor.ADBActionExecutor", return_value=mock_adb),
+            patch.object(
+                crawler_agent_service, "_ensure_target_app_active_before_crawler", new=AsyncMock()
+            ) as target_preflight,
+            patch.object(crawler_agent_service, "_initialize_agent", new=AsyncMock()),
+            patch.object(crawler_agent_service, "_log_agent_interaction"),
+            patch.dict(sys.modules, fake_modules),
+        ):
             result = await crawler_agent_service.execute_exploration_task(
                 run_id=1,
                 app_package="com.example.app",
@@ -714,10 +755,12 @@ class TestCrawlerAgentServiceTargetPreflight:
         mock_adb = Mock()
         mock_adb.get_current_package.return_value = "com.example.app"
 
-        with patch("mobile_crawler.domain.adb_action_executor.ADBActionExecutor", return_value=mock_adb), \
-             patch.object(crawler_agent_service, "_initialize_agent", new=AsyncMock()), \
-             patch.object(crawler_agent_service, "_log_agent_interaction"), \
-             patch.dict(sys.modules, self._fake_crawler_agent_modules(success=True)):
+        with (
+            patch("mobile_crawler.domain.adb_action_executor.ADBActionExecutor", return_value=mock_adb),
+            patch.object(crawler_agent_service, "_initialize_agent", new=AsyncMock()),
+            patch.object(crawler_agent_service, "_log_agent_interaction"),
+            patch.dict(sys.modules, self._fake_crawler_agent_modules(success=True)),
+        ):
             crawler_agent_service._crawler_agent_config = Mock()
             result = await crawler_agent_service.execute_exploration_task(
                 run_id=1,
@@ -738,10 +781,12 @@ class TestCrawlerAgentServiceTargetPreflight:
             target="com.example.app",
         )
 
-        with patch("mobile_crawler.domain.adb_action_executor.ADBActionExecutor", return_value=mock_adb), \
-             patch.object(crawler_agent_service, "_initialize_agent", new=AsyncMock()), \
-             patch.object(crawler_agent_service, "_log_agent_interaction"), \
-             patch.dict(sys.modules, self._fake_crawler_agent_modules(success=True)):
+        with (
+            patch("mobile_crawler.domain.adb_action_executor.ADBActionExecutor", return_value=mock_adb),
+            patch.object(crawler_agent_service, "_initialize_agent", new=AsyncMock()),
+            patch.object(crawler_agent_service, "_log_agent_interaction"),
+            patch.dict(sys.modules, self._fake_crawler_agent_modules(success=True)),
+        ):
             crawler_agent_service._crawler_agent_config = Mock()
             result = await crawler_agent_service.execute_exploration_task(
                 run_id=1,
@@ -758,16 +803,20 @@ class TestCrawlerAgentServiceTargetPreflight:
         mock_adb.get_current_package.return_value = "com.example.app"
 
         fake_modules = self._fake_crawler_agent_modules(success=True)
-        agent_instance = fake_modules["mobile_crawler.domain.crawler_agent.agent.droid.crawler_agent"].CrawlerAgent.return_value
+        agent_instance = fake_modules[
+            "mobile_crawler.domain.crawler_agent.agent.droid.crawler_agent"
+        ].CrawlerAgent.return_value
 
         async def _run_list_result():
             return [{"action": "tap"}]
 
         agent_instance.run.side_effect = _run_list_result
 
-        with patch("mobile_crawler.domain.adb_action_executor.ADBActionExecutor", return_value=mock_adb), \
-             patch.object(crawler_agent_service, "_initialize_agent", new=AsyncMock()), \
-             patch.dict(sys.modules, fake_modules):
+        with (
+            patch("mobile_crawler.domain.adb_action_executor.ADBActionExecutor", return_value=mock_adb),
+            patch.object(crawler_agent_service, "_initialize_agent", new=AsyncMock()),
+            patch.dict(sys.modules, fake_modules),
+        ):
             crawler_agent_service._crawler_agent_config = Mock()
             result = await crawler_agent_service.execute_exploration_task(
                 run_id=1,
@@ -792,10 +841,12 @@ class TestCrawlerAgentServiceTargetPreflight:
         fake_modules = self._fake_crawler_agent_modules(success=True)
         fake_agent = fake_modules["mobile_crawler.domain.crawler_agent.agent.droid.crawler_agent"].CrawlerAgent
 
-        with patch("mobile_crawler.domain.adb_action_executor.ADBActionExecutor", return_value=mock_adb), \
-             patch.object(crawler_agent_service, "_initialize_agent", new=AsyncMock()), \
-             patch.object(crawler_agent_service, "_log_agent_interaction"), \
-             patch.dict(sys.modules, fake_modules):
+        with (
+            patch("mobile_crawler.domain.adb_action_executor.ADBActionExecutor", return_value=mock_adb),
+            patch.object(crawler_agent_service, "_initialize_agent", new=AsyncMock()),
+            patch.object(crawler_agent_service, "_log_agent_interaction"),
+            patch.dict(sys.modules, fake_modules),
+        ):
             result = await crawler_agent_service.execute_exploration_task(
                 run_id=1,
                 app_package="com.example.app",
@@ -824,7 +875,9 @@ class TestCrawlerAgentServiceTargetPreflight:
         return {
             "mobile_crawler.domain.crawler_agent": types.ModuleType("mobile_crawler.domain.crawler_agent"),
             "mobile_crawler.domain.crawler_agent.agent": types.ModuleType("mobile_crawler.domain.crawler_agent.agent"),
-            "mobile_crawler.domain.crawler_agent.agent.droid": types.ModuleType("mobile_crawler.domain.crawler_agent.agent.droid"),
+            "mobile_crawler.domain.crawler_agent.agent.droid": types.ModuleType(
+                "mobile_crawler.domain.crawler_agent.agent.droid"
+            ),
             "mobile_crawler.domain.crawler_agent.agent.droid.crawler_agent": crawler_agent_module,
         }
 
@@ -840,7 +893,7 @@ class TestCrawlerAgentServiceLogging:
         original_propagate = droid_logger.propagate
 
         try:
-            with patch('mobile_crawler.domain.crawler_agent_service.CrawlerLogHandler') as mock_handler_class:
+            with patch("mobile_crawler.domain.crawler_agent_service.CrawlerLogHandler") as mock_handler_class:
                 mock_handler = Mock()
                 mock_handler_class.return_value = mock_handler
                 crawler_agent_service.configure_run_logging(1, log_dir, emit_debug, True)
@@ -859,7 +912,7 @@ class TestCrawlerAgentServiceLogging:
         original_propagate = droid_logger.propagate
 
         try:
-            with patch('mobile_crawler.domain.crawler_agent_service.CrawlerLogHandler') as mock_handler_class:
+            with patch("mobile_crawler.domain.crawler_agent_service.CrawlerLogHandler") as mock_handler_class:
                 mock_handler = Mock()
                 mock_handler_class.return_value = mock_handler
                 crawler_agent_service.configure_run_logging(1, log_dir, emit_debug, True)

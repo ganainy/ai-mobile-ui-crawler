@@ -3,12 +3,82 @@
 import base64
 import logging
 import os
+import time
 from enum import Enum
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_LOCAL_PARSE_TIMEOUT_SECONDS = 120
+
+# Transient error substrings that justify a retry of the Replicate call.
+# These come from httpx.RemoteProtocolError ("Server disconnected"),
+# h11.ProtocolError ("Connection closed"), websockets, or Replicate SDK
+# wrappers that re-raise with a bare "closed" message. None of these
+# indicate a problem with the input image — only the transport.
+_TRANSIENT_REPLICATE_ERROR_TOKENS = (
+    "closed",
+    "remote protocol error",
+    "server disconnected",
+    "connection reset",
+    "connection aborted",
+    "connectionerror",
+    "read timeout",
+    "timed out",
+    "temporarily unavailable",
+    "service unavailable",
+    "bad gateway",
+    "gateway timeout",
+    "503",
+    "504",
+    "502",
+    "retry",
+    "overloaded",
+    "capacity",
+)
+
+DEFAULT_REPLICATE_MAX_RETRIES = 3
+DEFAULT_REPLICATE_RETRY_INITIAL_DELAY = 1.0
+DEFAULT_REPLICATE_RETRY_BACKOFF_FACTOR = 2.0
+DEFAULT_REPLICATE_RETRY_MAX_DELAY = 15.0
+
+
+def _is_transient_replicate_error(error: BaseException) -> bool:
+    """Return True when an exception looks like a transient transport failure.
+
+    The Replicate SDK hides httpx/h11 errors behind generic messages; the most
+    common one we've seen in production is the bare string "closed" raised
+    after ~30-40s when the upstream model server drops the streaming
+    connection. We match case-insensitively against the exception message and
+    the names of known network exception types.
+    """
+    message = (str(error) or "").lower()
+    if any(token in message for token in _TRANSIENT_REPLICATE_ERROR_TOKENS):
+        return True
+
+    # Walk the cause chain — Replicate often wraps the real error.
+    causes: list[BaseException] = []
+    cause = error.__cause__ or error.__context__
+    while cause and cause not in causes:
+        causes.append(cause)
+        cause = cause.__cause__ or cause.__context__
+
+    type_names = " ".join(type(c).__name__.lower() for c in [error, *causes])
+    if any(
+        needle in type_names
+        for needle in (
+            "remoteprotocolerror",
+            "protocolerror",
+            "connectionerror",
+            "connectionreset",
+            "connectionaborted",
+            "timeout",
+            "readtimeout",
+        )
+    ):
+        return True
+
+    return False
 
 
 class OmniParserBackend(Enum):
@@ -57,9 +127,7 @@ class OmniParserClient:
         self.local_url = local_url
         self.local_parse_timeout_seconds = max(1, float(local_parse_timeout_seconds))
         self.box_threshold = box_threshold
-        logger.debug(
-            f"OmniParser initialized: backend={backend}, has_api_key={bool(self._api_key)}"
-        )
+        logger.debug(f"OmniParser initialized: backend={backend}, has_api_key={bool(self._api_key)}")
 
     def parse(self, image_bytes: bytes) -> list[dict[str, Any]]:
         """Parse screenshot using OmniParser.
@@ -95,8 +163,7 @@ class OmniParserClient:
 
         if not self._api_key:
             raise ValueError(
-                "Replicate API key not configured. Set REPLICATE_API_KEY "
-                "(or REPLICATE_API_TOKEN) env var."
+                "Replicate API key not configured. Set REPLICATE_API_KEY " "(or REPLICATE_API_TOKEN) env var."
             )
 
         # Debug: check image format
@@ -114,9 +181,7 @@ class OmniParserClient:
                 from PIL import Image
 
                 img = Image.open(io.BytesIO(image_bytes))
-                logger.debug(
-                    f"PIL detected format: {img.format}, mode: {img.mode}, size: {img.size}"
-                )
+                logger.debug(f"PIL detected format: {img.format}, mode: {img.mode}, size: {img.size}")
                 # Convert to RGB JPEG
                 if img.mode != "RGB":
                     img = img.convert("RGB")
@@ -138,18 +203,11 @@ class OmniParserClient:
                 # Use new Replicate client API with file path
                 client = replicate.Client()
 
-                logger.debug("About to call client.run()")
-                try:
-                    output = client.run(
-                        "microsoft/omniparser-v2:49cf3d41b8d3aca1360514e83be4c97131ce8f0d99abfc365526d8384caa88df",
-                        input={
-                            "image": open(tmp_path, "rb"),
-                            "box_threshold": self.box_threshold,
-                        },
-                    )
-                except Exception as run_err:
-                    logger.error(f"client.run() failed: {run_err}")
-                    raise
+                # Open the temp file once and reuse the handle across retries.
+                # Seeking back to 0 between attempts lets the SDK re-upload the
+                # same bytes without re-opening (and leaking) file descriptors.
+                with open(tmp_path, "rb") as image_handle:
+                    output = self._run_replicate_with_retry(client, image_handle)
 
                 logger.debug(f"client.run() succeeded, output type: {type(output)}")
 
@@ -255,6 +313,84 @@ class OmniParserClient:
         except Exception as e:
             logger.error(f"Replicate API error: {e}")
             raise RuntimeError(f"OmniParser Replicate error: {e}") from e
+
+    def _run_replicate_with_retry(self, client: Any, image_handle: Any) -> Any:
+        """Call ``client.run`` with retry/backoff for transient transport errors.
+
+        Replicate streams OmniParser predictions over a long-lived HTTP
+        connection. When the upstream model server drops the stream (e.g. the
+        bare ``closed`` error from ``httpx.RemoteProtocolError`` /
+        ``h11.ProtocolError``), the request can be safely retried because the
+        OmniParser model is stateless with respect to individual screenshots.
+
+        Non-transient errors (auth failures, 4xx, malformed input) propagate
+        immediately so the caller can surface them.
+
+        Args:
+            client: A ``replicate.Client`` instance (or test double).
+            image_handle: An already-open binary file handle for the screenshot
+                JPEG. The handle is rewound to position 0 before each attempt
+                so retries can re-read the same bytes. The caller owns the
+                handle's lifecycle (i.e. is responsible for closing it).
+        """
+        model = "microsoft/omniparser-v2:" "49cf3d41b8d3aca1360514e83be4c97131ce8f0d99abfc365526d8384caa88df"
+
+        max_retries = DEFAULT_REPLICATE_MAX_RETRIES
+        delay = DEFAULT_REPLICATE_RETRY_INITIAL_DELAY
+        max_delay = DEFAULT_REPLICATE_RETRY_MAX_DELAY
+        last_error: Exception | None = None
+
+        for attempt in range(1, max_retries + 1):
+            try:
+                logger.debug(
+                    "Calling Replicate client.run() (attempt %s/%s)",
+                    attempt,
+                    max_retries,
+                )
+                # Rewind so retries upload the full image again, not a
+                # truncated tail from wherever the previous attempt left the
+                # read cursor.
+                try:
+                    image_handle.seek(0)
+                except Exception:
+                    pass
+
+                return client.run(
+                    model,
+                    input={
+                        "image": image_handle,
+                        "box_threshold": self.box_threshold,
+                    },
+                )
+            except Exception as run_err:
+                last_error = run_err
+                if not _is_transient_replicate_error(run_err):
+                    logger.error("client.run() failed (non-transient): %s", run_err)
+                    raise
+
+                if attempt >= max_retries:
+                    logger.error(
+                        "client.run() failed after %s attempts: %s",
+                        attempt,
+                        run_err,
+                    )
+                    raise
+
+                sleep_for = min(delay, max_delay)
+                logger.warning(
+                    "Replicate transient error on attempt %s/%s: %s. " "Retrying in %.1fs.",
+                    attempt,
+                    max_retries,
+                    run_err,
+                    sleep_for,
+                )
+                time.sleep(sleep_for)
+                delay *= DEFAULT_REPLICATE_RETRY_BACKOFF_FACTOR
+
+        # Defensive: should be unreachable because the loop either returns or
+        # re-raises, but keeps the type checker happy.
+        assert last_error is not None
+        raise last_error
 
     def _parse_local(self, image_bytes: bytes) -> list[dict[str, Any]]:
         """Parse using local OmniParser server.

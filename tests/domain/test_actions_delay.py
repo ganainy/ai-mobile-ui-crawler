@@ -1,11 +1,10 @@
 """Tests for type_text and type_secret focus delay behavior."""
 
-import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from mobile_crawler.domain.crawler_agent.agent.utils.actions import type_text, type_secret
+from mobile_crawler.domain.crawler_agent.agent.utils.actions import type_secret, type_text
 
 
 def _make_ctx(index: int = 0, secret_value: str | None = None):

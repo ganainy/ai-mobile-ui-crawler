@@ -235,9 +235,7 @@ class CrawlerAgentService:
             "ui_parser_mode": self.config_manager.get("ui_parser_mode", "omniparser"),
             "omniparser_backend": self.config_manager.get("omniparser_backend", "replicate"),
             "omniparser_api_key": resolve_api_key("replicate_api_key", ["REPLICATE_API_KEY"]) or "",
-            "omniparser_local_url": self.config_manager.get(
-                "omniparser_local_url", "http://localhost:8000"
-            ),
+            "omniparser_local_url": self.config_manager.get("omniparser_local_url", "http://localhost:8000"),
             "omniparser_local_parse_timeout_seconds": self.config_manager.get(
                 "omniparser_local_parse_timeout_seconds", 120
             ),
@@ -251,11 +249,36 @@ class CrawlerAgentService:
             os.environ["REPLICATE_API_TOKEN"] = replicate_key
 
         config["llm_profiles"] = {
-            "manager": {"provider": droid_provider, "model": ai_model, "temperature": 0.1, "kwargs": {"max_tokens": 2048}},
-            "executor": {"provider": droid_provider, "model": ai_model, "temperature": 0.0, "kwargs": {"max_tokens": 512}},
-            "fast_agent": {"provider": droid_provider, "model": ai_model, "temperature": 0.0, "kwargs": {"max_tokens": 1024}},
-            "app_opener": {"provider": droid_provider, "model": ai_model, "temperature": 0.0, "kwargs": {"max_tokens": 512}},
-            "structured_output": {"provider": droid_provider, "model": ai_model, "temperature": 0.0, "kwargs": {"max_tokens": 1024}},
+            "manager": {
+                "provider": droid_provider,
+                "model": ai_model,
+                "temperature": 0.1,
+                "kwargs": {"max_tokens": 2048},
+            },
+            "executor": {
+                "provider": droid_provider,
+                "model": ai_model,
+                "temperature": 0.0,
+                "kwargs": {"max_tokens": 512},
+            },
+            "fast_agent": {
+                "provider": droid_provider,
+                "model": ai_model,
+                "temperature": 0.0,
+                "kwargs": {"max_tokens": 1024},
+            },
+            "app_opener": {
+                "provider": droid_provider,
+                "model": ai_model,
+                "temperature": 0.0,
+                "kwargs": {"max_tokens": 512},
+            },
+            "structured_output": {
+                "provider": droid_provider,
+                "model": ai_model,
+                "temperature": 0.0,
+                "kwargs": {"max_tokens": 1024},
+            },
         }
         # Telemetry: respect explicit config setting; default off since the
         # PostHog project key is no longer bundled with the app.
@@ -397,8 +420,7 @@ class CrawlerAgentService:
             return
 
         logger.info(
-            "Target app is not active before crawler startup "
-            "(current=%s, target=%s). Launching target app.",
+            "Target app is not active before crawler startup " "(current=%s, target=%s). Launching target app.",
             current_package,
             app_package,
         )
@@ -427,8 +449,7 @@ class CrawlerAgentService:
                 return
 
             logger.warning(
-                "Target app preflight verification failed on attempt %s/%s "
-                "(current=%s, target=%s)",
+                "Target app preflight verification failed on attempt %s/%s " "(current=%s, target=%s)",
                 attempt,
                 attempts,
                 current_package,
@@ -437,8 +458,7 @@ class CrawlerAgentService:
 
         detail = f"last_error={last_error}" if last_error else f"current_package={current_package}"
         raise RuntimeError(
-            f"Unable to open target app '{app_package}' before crawler startup after "
-            f"{attempts} attempts ({detail})"
+            f"Unable to open target app '{app_package}' before crawler startup after " f"{attempts} attempts ({detail})"
         )
 
     async def _ensure_device_awake_before_crawler(self) -> None:
@@ -538,13 +558,14 @@ class CrawlerAgentService:
 
         # Initialize repository for persistence
         from mobile_crawler.infrastructure.database import DatabaseManager
+
         db_manager = DatabaseManager()
         self._step_phase_repository = StepPhaseRepository(db_manager)
 
         # Initialize wait predicate and verifier (lazy -- will be fully wired
         # when crawler_agent provides state_provider/driver)
         self._ui_wait_predicate = None  # Wired after agent init
-        self._action_verifier = None    # Wired after agent init
+        self._action_verifier = None  # Wired after agent init
 
         # Context guardrails (Plan 02: UI dump validation + app mismatch detection)
         self._context_capture: DeviceContextCapture | None = None
@@ -571,6 +592,7 @@ class CrawlerAgentService:
         driver = getattr(self._crawler_agent, "driver", None)
 
         if state_provider:
+
             def latest_state():
                 action_ctx = getattr(self._crawler_agent, "action_ctx", None)
                 latest = getattr(action_ctx, "ui", None) if action_ctx else None
@@ -624,8 +646,7 @@ class CrawlerAgentService:
                 context_capture=self._context_capture,
             )
             logger.info(
-                f"DeviceContextCapture and AppSwitchRecovery wired with "
-                f"target_package={self._target_package}"
+                f"DeviceContextCapture and AppSwitchRecovery wired with " f"target_package={self._target_package}"
             )
 
         # Set after_sleep_action to 0.0 to disable internal fixed delay
@@ -846,10 +867,7 @@ class CrawlerAgentService:
             parent_phase=StepPhase.EXECUTE,
         )
 
-        logger.debug(
-            f"Step {self._current_step_number}: tool={tool_name} "
-            f"success={success}"
-        )
+        logger.debug(f"Step {self._current_step_number}: tool={tool_name} " f"success={success}")
 
         # --- Context pre-check (D-02): compare package against target ---
         skip_reason = None
@@ -888,8 +906,7 @@ class CrawlerAgentService:
                             # Record transition with abort metadata
                             self._step_phase_machine.transition_to(StepPhase.CHECKPOINT)
                             raise FatalError(
-                                f"Aborting: {len(attempts)} consecutive app-switch "
-                                f"recovery failures",
+                                f"Aborting: {len(attempts)} consecutive app-switch " f"recovery failures",
                                 context=ErrorContext(run_id=self._current_run_id),
                             )
                     else:
@@ -901,13 +918,12 @@ class CrawlerAgentService:
                         )
                         skip_reason = StepSkipReason.TARGET_APP_MISMATCH
             except Exception as e:
-                logger.warning(
-                    f"Step {self._current_step_number}: context capture failed: {e}"
-                )
+                logger.warning(f"Step {self._current_step_number}: context capture failed: {e}")
 
         # --- UI dump validation (D-03): check parseable and non-empty ---
         if skip_reason is None and self._ui_dump_validator:
             try:
+
                 async def get_ui_data():
                     """Get UI data without triggering duplicate expensive parser work."""
                     # 1. Prefer shared_state.a11y_tree, where Manager/FastAgent stores
@@ -959,24 +975,21 @@ class CrawlerAgentService:
                 # The agent may not have state_provider in all execution paths
 
             except Exception as e:
-                logger.warning(
-                    f"Step {self._current_step_number}: UI dump validation error: {e}"
-                )
+                logger.warning(f"Step {self._current_step_number}: UI dump validation error: {e}")
 
         # --- Execute phase transitions ---
         try:
             if skip_reason is not None:
                 # Skip DECIDE/EXECUTE — go CAPTURE -> CHECKPOINT with skip metadata
-                metadata = json.dumps({
-                    "skip_reason": skip_reason.value,
-                    "package": getattr(self._current_device_context, "package", ""),
-                    "activity": getattr(self._current_device_context, "activity", ""),
-                })
-
-                logger.info(
-                    f"Step {self._current_step_number}: skipping DECIDE/EXECUTE "
-                    f"due to {skip_reason.value}"
+                metadata = json.dumps(
+                    {
+                        "skip_reason": skip_reason.value,
+                        "package": getattr(self._current_device_context, "package", ""),
+                        "activity": getattr(self._current_device_context, "activity", ""),
+                    }
                 )
+
+                logger.info(f"Step {self._current_step_number}: skipping DECIDE/EXECUTE " f"due to {skip_reason.value}")
 
                 # CAPTURE -> CHECKPOINT (skip DECIDE, EXECUTE, RECORD)
                 self._step_phase_machine.transition_to(StepPhase.CHECKPOINT)
@@ -1018,9 +1031,7 @@ class CrawlerAgentService:
                             f"pkg={pre_state.get('package', '?')}"
                         )
                     except Exception as e:
-                        logger.warning(
-                            f"Step {self._current_step_number}: pre_state capture failed: {e}"
-                        )
+                        logger.warning(f"Step {self._current_step_number}: pre_state capture failed: {e}")
 
                 # Wait for UI to settle after action
                 if self._ui_wait_predicate:
@@ -1032,10 +1043,7 @@ class CrawlerAgentService:
                         parent_phase=StepPhase.EXECUTE,
                     )
                     if not settled:
-                        logger.debug(
-                            f"UI did not settle after {tool_name} "
-                            f"(step {self._current_step_number})"
-                        )
+                        logger.debug(f"UI did not settle after {tool_name} " f"(step {self._current_step_number})")
 
                 # EXECUTE -> RECORD
                 self._step_phase_machine.transition_to(StepPhase.RECORD)
@@ -1044,9 +1052,7 @@ class CrawlerAgentService:
                 if self._action_verifier and pre_state:
                     try:
                         self._start_sub_phase("verification")
-                        verification = await self._action_verifier.verify(
-                            pre_state, tool_name
-                        )
+                        verification = await self._action_verifier.verify(pre_state, tool_name)
                         self._end_sub_phase(
                             "verification",
                             metadata_key="verification_ms",
@@ -1062,9 +1068,7 @@ class CrawlerAgentService:
                             metadata_key="verification_ms",
                             parent_phase=StepPhase.RECORD,
                         )
-                        logger.warning(
-                            f"Step {self._current_step_number}: verification failed: {e}"
-                        )
+                        logger.warning(f"Step {self._current_step_number}: verification failed: {e}")
 
                 # RECORD -> CHECKPOINT
                 self._step_phase_machine.transition_to(StepPhase.CHECKPOINT)
@@ -1073,13 +1077,9 @@ class CrawlerAgentService:
                 self._step_phase_machine.transition_to(StepPhase.CAPTURE)
 
         except ValueError as e:
-            logger.warning(
-                f"Invalid phase transition at step {self._current_step_number}: {e}"
-            )
+            logger.warning(f"Invalid phase transition at step {self._current_step_number}: {e}")
         except Exception as e:
-            logger.warning(
-                f"Phase transition error at step {self._current_step_number}: {e}"
-            )
+            logger.warning(f"Phase transition error at step {self._current_step_number}: {e}")
 
     def _create_exploration_goal(
         self, app_package: str, max_steps: int, exploration_objective: str | None = None
@@ -1106,7 +1106,9 @@ class CrawlerAgentService:
             if exploration_objective:
                 description += f"\nAfter completing the guided subgoals, focus on the following objective: {exploration_objective}\n"
             else:
-                description += "\nAfter completing the guided subgoals, continue exploring the app to discover other features.\n"
+                description += (
+                    "\nAfter completing the guided subgoals, continue exploring the app to discover other features.\n"
+                )
         else:
             if exploration_objective:
                 description = f"Explore the {app_package} app. {exploration_objective}"
@@ -1125,6 +1127,20 @@ class CrawlerAgentService:
             "Do not stop even if you think you have fully explored the app or completed the objective. "
             "Instead, keep exploring new screens, revisiting areas with different inputs, or checking edge cases. "
             "The system runtime will terminate you automatically when the configured time or step limit is reached."
+        )
+
+        # Proactively dismiss blocking dialogs (e.g. Google Play update prompts)
+        # that would otherwise stall the crawl. The LLM must clear these before
+        # continuing real exploration.
+        description += (
+            "\n\nBLOCKING DIALOG HANDLING: Many apps show a Google Play update prompt, "
+            "'Update App' dialog, rate-the-app popup, onboarding splash, or a "
+            "'What's new' modal on startup. If you encounter ANY of these blocking "
+            "dialogs, IMMEDIATELY locate and click the dismiss affordance — the 'X' "
+            "icon, 'Skip', 'Later', 'Not now', 'No thanks', or 'Close' button — to "
+            "dismiss it and continue crawling. Never get stuck on an update/install "
+            "screen; never accept an in-place update. Once dismissed, continue "
+            "exploring the actual app."
         )
 
         return CrawlerGoal(
@@ -1164,7 +1180,18 @@ class CrawlerAgentService:
         max_crash_retries = 2
         crash_retry_delay = 3.0  # seconds to wait after relaunch
 
-        for attempt in range(max_crash_retries + 1):
+        # Transient UI-parser / network failure recovery settings.
+        # Transient errors (e.g. Replicate "closed" connection drops) should
+        # NOT relaunch the app — the device and screenshot are fine, only the
+        # transport dropped. Give them their own retry budget so they don't
+        # burn crash-retry slots. See PLAN-update-prompt-fix.
+        max_transient_retries = int(self.config_manager.get("crawler_transient_retries", 3) or 3)
+        transient_retry_delay = 2.0  # seconds between transient retries
+
+        crash_attempt = 0
+        transient_attempt = 0
+
+        while True:
             try:
                 await self._ensure_device_awake_before_crawler()
                 await self._ensure_target_app_active_before_crawler(app_package)
@@ -1341,11 +1368,32 @@ class CrawlerAgentService:
                 duration_ms = (time.time() - start_time) * 1000
                 error_msg = str(e)
 
+                # Check if error is a transient UI-parser / network failure.
+                # Transient errors are checked BEFORE app-crash detection so
+                # that a "closed" / Replicate connection drop is never
+                # misclassified as an app crash and never triggers a relaunch.
+                is_transient = self._is_transient_network_error(error_msg)
+
                 # Check if error indicates app crash
                 is_app_crash = self._is_app_crash_error(error_msg)
 
-                if is_app_crash and attempt < max_crash_retries:
-                    logger.warning(f"App crash detected (attempt {attempt + 1}/{max_crash_retries}): {error_msg}")
+                if is_transient and transient_attempt < max_transient_retries:
+                    transient_attempt += 1
+                    logger.warning(
+                        f"Transient UI-parser/network error detected "
+                        f"(retry {transient_attempt}/{max_transient_retries}): "
+                        f"{error_msg}. Retrying without app relaunch in "
+                        f"{transient_retry_delay}s."
+                    )
+                    await asyncio.sleep(transient_retry_delay)
+                    # Reset start_time so duration reflects only the
+                    # successful attempt, not the failed attempts.
+                    start_time = time.time()
+                    continue
+
+                if is_app_crash and crash_attempt < max_crash_retries:
+                    crash_attempt += 1
+                    logger.warning(f"App crash detected (attempt {crash_attempt}/{max_crash_retries}): {error_msg}")
 
                     # Attempt to relaunch the app
                     try:
@@ -1389,16 +1437,6 @@ class CrawlerAgentService:
                 self._current_handler = None
                 self._handler_loop = None
 
-        # Should not reach here, but handle the case
-        return CrawlerRunResult(
-            success=False,
-            steps_completed=0,
-            actions_taken=[],
-            final_state={},
-            error_message="Max crash retries exceeded",
-            total_duration_ms=(time.time() - start_time) * 1000,
-        )
-
     def _is_app_crash_error(self, error_message: str) -> bool:
         """Check if error message indicates an app crash.
 
@@ -1417,7 +1455,67 @@ class CrawlerAgentService:
         ]
 
         error_lower = error_message.lower()
+
+        # Bail out early for transient UI-parser / network failures. These
+        # must NOT be classified as app crashes because relaunching the app
+        # does nothing to fix a dropped Replicate connection — it just wastes
+        # a crash-retry slot and masks the real problem. See PLAN-update-prompt-fix.
+        if self._is_transient_network_error(error_message):
+            return False
+
         return any(indicator.lower() in error_lower for indicator in crash_indicators)
+
+    # Substrings that indicate a transient UI-parser/network failure rather
+    # than an actual device/app crash. When present, the caller should retry
+    # the crawl step WITHOUT relaunching the app.
+    _TRANSIENT_ERROR_TOKENS = (
+        "closed",
+        "remoteprotocolerror",
+        "server disconnected",
+        "server disconnected)",
+        "connection closed",
+        "connection reset",
+        "connection aborted",
+        "connectionerror",
+        "read timeout",
+        "timed out",
+        "timeout",
+        "temporarily unavailable",
+        "service unavailable",
+        "bad gateway",
+        "gateway timeout",
+        "overloaded",
+        "capacity",
+        "retry",
+        "omniparser replicate error",
+        "replicate api error",
+        "omniparser",
+    )
+
+    def _is_transient_network_error(self, error_message: str) -> bool:
+        """Check if an error message looks like a transient UI-parser/network failure.
+
+        Transient failures include:
+        - ``httpx.RemoteProtocolError`` raised by the Replicate streaming
+          connection (often surfaced as the bare string ``"closed"`` after
+          ~30-40s)
+        - Replicate/OmniParser-wrapped variants ("OmniParser Replicate error: ...")
+        - Generic timeouts and connection resets
+
+        These should trigger a retry of the crawl step WITHOUT relaunching
+        the target app, because the device is healthy and the screenshot
+        payload is unchanged.
+
+        Args:
+            error_message: Error message to check
+
+        Returns:
+            True if the error appears transient and retryable.
+        """
+        if not error_message:
+            return False
+        error_lower = error_message.lower()
+        return any(token in error_lower for token in self._TRANSIENT_ERROR_TOKENS)
 
     @staticmethod
     def _is_max_step_completion_reason(reason: str) -> bool:

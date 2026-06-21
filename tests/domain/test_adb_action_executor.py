@@ -598,3 +598,66 @@ class TestADBActionExecutorDelay:
 
         # Should have called sleep because not enough time elapsed
         mock_sleep.assert_called_once()
+
+
+class TestADBActionExecutorReconnection:
+    """Tests for automatic wireless ADB reconnection."""
+
+    @patch('mobile_crawler.domain.adb_action_executor.time.sleep')
+    @patch('mobile_crawler.domain.adb_action_executor.subprocess.run')
+    def test_reconnect_success_on_device_not_found(self, mock_subprocess, mock_sleep, executor):
+        """Test that if a command fails with 'device not found', it reconnects and retries."""
+        # 1st call to subprocess.run (original command): returns "device not found" error
+        # 2nd call to subprocess.run (adb connect): returns success
+        # 3rd call to subprocess.run (retry command): returns success
+        mock_subprocess.side_effect = [
+            Mock(returncode=1, stdout="", stderr="adb.exe: device 'test_device' not found"),
+            Mock(returncode=0, stdout="connected to test_device:5555", stderr=""),
+            Mock(returncode=0, stdout="Physical size: 1080x1920", stderr="")
+        ]
+
+        # Call a method that triggers an ADB command, e.g. _get_screen_size()
+        width, height = executor._get_screen_size()
+
+        assert width == 1080
+        assert height == 1920
+        # Check calls:
+        # 1. original command (shell wm size)
+        # 2. reconnect (adb connect test_device)
+        # 3. retry original command (shell wm size)
+        assert mock_subprocess.call_count == 3
+
+        # Verify first call args
+        first_call_args = mock_subprocess.call_args_list[0][0][0]
+        assert first_call_args == ['adb', '-s', 'test_device', 'shell', 'wm', 'size']
+
+        # Verify reconnect call args
+        second_call_args = mock_subprocess.call_args_list[1][0][0]
+        assert second_call_args == ['adb', 'connect', 'test_device']
+
+        # Verify retry call args
+        third_call_args = mock_subprocess.call_args_list[2][0][0]
+        assert third_call_args == ['adb', '-s', 'test_device', 'shell', 'wm', 'size']
+
+        # Verify connection settle sleep
+        mock_sleep.assert_called_with(1.0)
+
+    @patch('mobile_crawler.domain.adb_action_executor.time.sleep')
+    @patch('mobile_crawler.domain.adb_action_executor.subprocess.run')
+    def test_reconnect_failure_still_fails(self, mock_subprocess, mock_sleep, executor):
+        """Test that if reconnect and retry still fail, it returns failure."""
+        # 1st call: returns "device offline"
+        # 2nd call: adb connect fails
+        # 3rd call: retry fails
+        mock_subprocess.side_effect = [
+            Mock(returncode=1, stdout="", stderr="error: device offline"),
+            Mock(returncode=1, stdout="", stderr="cannot connect to test_device"),
+            Mock(returncode=1, stdout="", stderr="error: device offline")
+        ]
+
+        # Let's call _execute_adb_command directly
+        success, output, _ = executor._execute_adb_command(['shell', 'ls'])
+
+        assert success is False
+        assert output == "error: device offline"
+        assert mock_subprocess.call_count == 3

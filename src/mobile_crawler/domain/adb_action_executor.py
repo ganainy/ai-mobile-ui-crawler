@@ -75,6 +75,47 @@ class ADBActionExecutor:
             if result.returncode == 0:
                 return True, result.stdout.strip(), duration_ms
             else:
+                stderr_lower = result.stderr.lower()
+                if "device" in stderr_lower and ("not found" in stderr_lower or "offline" in stderr_lower):
+                    logger.warning(
+                        f"Wireless ADB connection drop detected: {result.stderr.strip()}. "
+                        f"Attempting reconnection to device {self.device_id}..."
+                    )
+
+                    # Attempt connection recovery
+                    reconnect_cmd = ['adb', 'connect', self.device_id]
+                    try:
+                        reconnect_result = subprocess.run(
+                            reconnect_cmd,
+                            capture_output=True,
+                            text=True,
+                            timeout=timeout
+                        )
+                        logger.info(
+                            f"ADB reconnection output for {self.device_id}: "
+                            f"stdout={reconnect_result.stdout.strip()}, stderr={reconnect_result.stderr.strip()}"
+                        )
+                        # Brief sleep to allow connection to settle
+                        time.sleep(1.0)
+                    except Exception as re_err:
+                        logger.error(f"Failed to execute reconnection command: {re_err}")
+
+                    # Retry the original command once
+                    logger.info(f"Retrying original command: {' '.join(full_command)}")
+                    retry_result = subprocess.run(
+                        full_command,
+                        capture_output=True,
+                        text=True,
+                        timeout=timeout
+                    )
+                    duration_ms = (time.time() - start_time) * 1000
+                    if retry_result.returncode == 0:
+                        logger.info("Successfully recovered connection and executed ADB command.")
+                        return True, retry_result.stdout.strip(), duration_ms
+                    else:
+                        logger.error(f"Retry failed after reconnection attempt: {retry_result.stderr.strip()}")
+                        return False, retry_result.stderr.strip(), duration_ms
+
                 return False, result.stderr.strip(), duration_ms
 
         except subprocess.TimeoutExpired:

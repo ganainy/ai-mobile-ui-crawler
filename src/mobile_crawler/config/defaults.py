@@ -91,6 +91,9 @@ DEFAULTS: dict[str, Any] = {
     "crawler_streaming": False,
     # Crawler agent retry count for failed operations
     "crawler_retry_count": 2,
+    # Retries for transient UI-parser/network failures (e.g. Replicate "closed"
+    # connection). These do NOT trigger an app relaunch, only a step retry.
+    "crawler_transient_retries": 3,
     # UI parser strategy: OmniParser (vision) as primary mode
     "ui_parser_mode": "omniparser",
     "omniparser_backend": "replicate",

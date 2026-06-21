@@ -11,6 +11,8 @@ import os
 from pathlib import Path
 from uuid import UUID, uuid4
 
+from mobile_crawler.domain.crawler_agent.telemetry.events import TelemetryEvent
+
 
 class MockPosthog:
     def __init__(self, *args, **kwargs):
@@ -28,8 +30,6 @@ try:
 except ImportError:
     POSTHOG_AVAILABLE = False
     Posthog = MockPosthog
-
-from mobile_crawler.domain.crawler_agent.telemetry.events import TelemetryEvent
 
 logger = logging.getLogger("crawler_agent-telemetry")
 droidrun_logger = logging.getLogger("crawler_agent")

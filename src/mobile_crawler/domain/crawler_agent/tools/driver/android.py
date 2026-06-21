@@ -10,6 +10,7 @@ import asyncio
 import logging
 import os
 import re
+import subprocess
 from typing import Any
 
 from async_adbutils import adb
@@ -73,11 +74,56 @@ class AndroidDriver(DeviceDriver):
         if not self._connected:
             await self.connect()
 
+    async def _handle_connection_drop(self, exception: Exception) -> bool:
+        """Attempt to recover from a connection drop.
+
+        Returns:
+            True if reconnection succeeded and retry can be attempted, False otherwise.
+        """
+        err_msg = str(exception).lower()
+        if any(word in err_msg for word in ["device", "offline", "connection", "closed", "reset", "timeout"]):
+            logger.warning(
+                f"AndroidDriver detected connection drop: {exception}. "
+                f"Attempting to reconnect serial {self._serial}..."
+            )
+            self._connected = False
+
+            if self._serial:
+                try:
+                    proc = await asyncio.create_subprocess_exec(
+                        'adb', 'connect', self._serial,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE
+                    )
+                    stdout, stderr = await proc.communicate()
+                    logger.info(
+                        f"AndroidDriver adb connect stdout: {stdout.decode().strip()}, "
+                        f"stderr: {stderr.decode().strip()}"
+                    )
+                    await asyncio.sleep(1.0)
+                except Exception as re_err:
+                    logger.error(f"Failed to execute adb connect in AndroidDriver: {re_err}")
+
+            try:
+                await self.connect()
+                logger.info("AndroidDriver successfully reconnected to device.")
+                return True
+            except Exception as conn_err:
+                logger.error(f"AndroidDriver reconnection failed: {conn_err}")
+                return False
+        return False
+
     # -- input actions -------------------------------------------------------
 
     async def tap(self, x: int, y: int) -> None:
-        await self.ensure_connected()
-        await self.device.click(x, y)
+        try:
+            await self.ensure_connected()
+            await self.device.click(x, y)
+        except Exception as e:
+            if await self._handle_connection_drop(e):
+                await self.device.click(x, y)
+            else:
+                raise
 
     async def swipe(
         self,
@@ -87,40 +133,71 @@ class AndroidDriver(DeviceDriver):
         y2: int,
         duration_ms: float = 1000,
     ) -> None:
-        await self.ensure_connected()
-        await self.device.swipe(x1, y1, x2, y2, float(duration_ms / 1000))
-        await asyncio.sleep(duration_ms / 1000)
+        try:
+            await self.ensure_connected()
+            await self.device.swipe(x1, y1, x2, y2, float(duration_ms / 1000))
+            await asyncio.sleep(duration_ms / 1000)
+        except Exception as e:
+            if await self._handle_connection_drop(e):
+                await self.device.swipe(x1, y1, x2, y2, float(duration_ms / 1000))
+                await asyncio.sleep(duration_ms / 1000)
+            else:
+                raise
 
     async def input_text(self, text: str, clear: bool = False) -> bool:
-        await self.ensure_connected()
+        try:
+            await self.ensure_connected()
 
-        if clear:
-            # Clear existing text by moving cursor to end and sending DEL key events in a single command
-            keycodes = ["123"] + ["67"] * 100  # KEYCODE_MOVE_END = 123, KEYCODE_DEL = 67
-            await self.device.shell(f"input keyevent {' '.join(keycodes)}")
+            if clear:
+                # Clear existing text by moving cursor to end and sending DEL key events in a single command
+                keycodes = ["123"] + ["67"] * 100  # KEYCODE_MOVE_END = 123, KEYCODE_DEL = 67
+                await self.device.shell(f"input keyevent {' '.join(keycodes)}")
 
-        # Escape special characters for shell
-        escaped_text = (
-            text.replace('\\', '\\\\')
-            .replace('"', '\\"')
-            .replace('$', '\\$')
-            .replace('`', '\\`')
-            .replace(' ', '%s')
-        )
+            # Escape special characters for shell
+            escaped_text = (
+                text.replace('\\', '\\\\')
+                .replace('"', '\\"')
+                .replace('$', '\\$')
+                .replace('`', '\\`')
+                .replace(' ', '%s')
+            )
 
-        # Use ADB input text
-        await self.device.shell(f'input text "{escaped_text}"')
-        return True
+            # Use ADB input text
+            await self.device.shell(f'input text "{escaped_text}"')
+            return True
+        except Exception as e:
+            if await self._handle_connection_drop(e):
+                escaped_text = (
+                    text.replace('\\', '\\\\')
+                    .replace('"', '\\"')
+                    .replace('$', '\\$')
+                    .replace('`', '\\`')
+                    .replace(' ', '%s')
+                )
+                if clear:
+                    keycodes = ["123"] + ["67"] * 100
+                    await self.device.shell(f"input keyevent {' '.join(keycodes)}")
+                await self.device.shell(f'input text "{escaped_text}"')
+                return True
+            else:
+                raise
 
     async def press_button(self, button: str) -> None:
-        await self.ensure_connected()
-        button_lower = button.lower()
-        if button_lower not in self.supported_buttons:
-            raise ValueError(
-                f"Button '{button}' not supported. "
-                f"Supported: {', '.join(sorted(self.supported_buttons))}"
-            )
-        await self.device.keyevent(self._BUTTON_KEYCODES[button_lower])
+        try:
+            await self.ensure_connected()
+            button_lower = button.lower()
+            if button_lower not in self.supported_buttons:
+                raise ValueError(
+                    f"Button '{button}' not supported. "
+                    f"Supported: {', '.join(sorted(self.supported_buttons))}"
+                )
+            await self.device.keyevent(self._BUTTON_KEYCODES[button_lower])
+        except Exception as e:
+            if not isinstance(e, ValueError) and await self._handle_connection_drop(e):
+                button_lower = button.lower()
+                await self.device.keyevent(self._BUTTON_KEYCODES[button_lower])
+            else:
+                raise
 
     async def drag(
         self,
@@ -261,6 +338,8 @@ class AndroidDriver(DeviceDriver):
                     max_screenshot_attempts,
                     e,
                 )
+                if await self._handle_connection_drop(e):
+                    continue
                 if attempt < max_screenshot_attempts:
                     await asyncio.sleep(0.2 * attempt)
                 else:
@@ -283,15 +362,26 @@ class AndroidDriver(DeviceDriver):
         With OmniParser mode, this returns an empty a11y tree since we're
         not using Portal. The provider will use screenshot + OmniParser instead.
         """
-        await self.ensure_connected()
-        # Return minimal state - actual UI parsing done by OmniParser
-        return {
-            "a11y_tree": [],  # Empty - using OmniParser instead
-            "phone_state": {
-                "currentApp": await self._get_current_app(),
-            },
-            "device_context": await self._get_device_context(),
-        }
+        try:
+            await self.ensure_connected()
+            return {
+                "a11y_tree": [],  # Empty - using OmniParser instead
+                "phone_state": {
+                    "currentApp": await self._get_current_app(),
+                },
+                "device_context": await self._get_device_context(),
+            }
+        except Exception as e:
+            if await self._handle_connection_drop(e):
+                return {
+                    "a11y_tree": [],
+                    "phone_state": {
+                        "currentApp": await self._get_current_app(),
+                    },
+                    "device_context": await self._get_device_context(),
+                }
+            else:
+                raise
 
     async def _get_current_app(self) -> str:
         """Get currently focused app package."""
@@ -322,6 +412,13 @@ class AndroidDriver(DeviceDriver):
         return {"screen_bounds": {"width": 1080, "height": 1920}}
 
     async def get_date(self) -> str:
-        await self.ensure_connected()
-        result = await self.device.shell("date")
-        return result.strip()
+        try:
+            await self.ensure_connected()
+            result = await self.device.shell("date")
+            return result.strip()
+        except Exception as e:
+            if await self._handle_connection_drop(e):
+                result = await self.device.shell("date")
+                return result.strip()
+            else:
+                raise

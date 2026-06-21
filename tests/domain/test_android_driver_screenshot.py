@@ -1,6 +1,5 @@
-import asyncio
 import io
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 from PIL import Image
