@@ -50,6 +50,7 @@ class _FakeSelector(QWidget):
         self.device_selected = _Connectable()
         self.app_selected = _Connectable()
         self.settings_saved = _Connectable()
+        self.omniparser_keepalive_pinged = _Connectable()
 
     def set_api_key_callback(self, _callback):
         pass
@@ -109,6 +110,36 @@ class TestMainWindowConfig:
         config_manager.set.assert_any_call("enable_traffic_capture", True)
         config_manager.set.assert_any_call("pcapdroid_tls_decryption", True)
         config_manager.set.assert_any_call("omniparser_local_parse_timeout_seconds", 180)
+
+
+class TestOmniparserKeepAliveWiring:
+    """Tests that MainWindow pauses/resumes and stops the OmniParser keep-alive timer."""
+
+    def test_update_crawl_ui_state_toggles_keepalive(self):
+        window = MainWindow.__new__(MainWindow)
+        window.control_panel = None
+        window.device_selector = Mock()
+        window.app_selector = Mock()
+        window.ai_selector = Mock()
+        window.settings_panel = Mock()
+
+        window._update_crawl_ui_state(running=True)
+        window.settings_panel.set_crawl_running.assert_called_with(True)
+
+        window._update_crawl_ui_state(running=False)
+        window.settings_panel.set_crawl_running.assert_called_with(False)
+
+    def test_close_event_stops_keepalive(self):
+        window = MainWindow.__new__(MainWindow)
+        window.settings_panel = Mock()
+        window._crawler_loop = None
+        window._crawler_worker = None
+
+        event = Mock()
+        window.closeEvent(event)
+
+        window.settings_panel.stop_keepalive.assert_called_once()
+        event.accept.assert_called_once()
 
 
 class TestMainWindowLayout:

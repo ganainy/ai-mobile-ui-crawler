@@ -5,7 +5,7 @@ import threading
 import time
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import QTimer, Signal
 from PySide6.QtWidgets import (
     QButtonGroup,
     QCheckBox,
@@ -53,7 +53,7 @@ class SettingsPanel(QWidget):
 
     # Signal emitted when settings are saved
     settings_saved = Signal()  # type: ignore
-    omniparser_warmup_finished = Signal(bool, str, float)  # type: ignore
+    omniparser_keepalive_pinged = Signal(bool, str, float)  # type: ignore
 
     def __init__(self, config_store: "UserConfigStore", parent=None):
         """Initialize settings panel widget.
@@ -64,9 +64,13 @@ class SettingsPanel(QWidget):
         """
         super().__init__(parent)
         self._config_store = config_store
-        self._omniparser_warmup_thread: threading.Thread | None = None
+        self._keepalive_timer = QTimer(self)
+        self._keepalive_timer.timeout.connect(self._on_keepalive_tick)
+        self._keepalive_thread: threading.Thread | None = None
+        self._keepalive_in_flight = False
+        self._crawl_running = False
         self._setup_ui()
-        self.omniparser_warmup_finished.connect(self._on_omniparser_warmup_finished)
+        self.omniparser_keepalive_pinged.connect(self._on_keepalive_pinged)
         self._load_settings()
 
     def _setup_ui(self):
@@ -448,28 +452,40 @@ class SettingsPanel(QWidget):
         self.replicate_container.setLayout(replicate_layout)
         parser_layout.addWidget(self.replicate_container)
 
-        self.replicate_warmup_container = QWidget()
-        warmup_layout = QHBoxLayout()
-        warmup_layout.setContentsMargins(0, 0, 0, 0)
-        self.omniparser_warmup_button = QPushButton("Warm Up Remote OmniParser")
-        self.omniparser_warmup_button.setToolTip(
-            "Send a mock screenshot to Replicate OmniParser so a cold backend is ready before crawling."
+        # Automatic keep-alive for the Replicate backend
+        self.replicate_keepalive_container = QWidget()
+        keepalive_layout = QHBoxLayout()
+        keepalive_layout.setContentsMargins(0, 0, 0, 0)
+        self.omniparser_keepalive_checkbox = QCheckBox("Keep Replicate OmniParser warm automatically")
+        self.omniparser_keepalive_checkbox.setToolTip(
+            "Periodically send a mock screenshot to Replicate OmniParser so the backend "
+            "never fully cold-starts while this app is open."
         )
-        self.omniparser_warmup_button.clicked.connect(self._start_omniparser_warmup)
-        warmup_layout.addWidget(self.omniparser_warmup_button)
-        self.omniparser_warmup_status_label = QLabel("Idle")
-        self.omniparser_warmup_status_label.setStyleSheet("color: #666; font-size: 11px;")
-        self.omniparser_warmup_status_label.setWordWrap(True)
-        warmup_layout.addWidget(self.omniparser_warmup_status_label, 1)
-        self.replicate_warmup_container.setLayout(warmup_layout)
-        parser_layout.addWidget(self.replicate_warmup_container)
+        self.omniparser_keepalive_checkbox.toggled.connect(self._apply_keepalive_state)
+        keepalive_layout.addWidget(self.omniparser_keepalive_checkbox)
+        keepalive_layout.addWidget(QLabel("every"))
+        self.omniparser_keepalive_interval_input = QSpinBox()
+        self.omniparser_keepalive_interval_input.setRange(1, 30)
+        self.omniparser_keepalive_interval_input.setValue(3)
+        self.omniparser_keepalive_interval_input.setSuffix(" min")
+        self.omniparser_keepalive_interval_input.valueChanged.connect(self._apply_keepalive_state)
+        keepalive_layout.addWidget(self.omniparser_keepalive_interval_input)
+        self.replicate_keepalive_container.setLayout(keepalive_layout)
+        parser_layout.addWidget(self.replicate_keepalive_container)
+
+        self.omniparser_keepalive_status_label = QLabel("Keep-alive: idle")
+        self.omniparser_keepalive_status_label.setStyleSheet("color: #666; font-size: 11px;")
+        self.omniparser_keepalive_status_label.setWordWrap(True)
+        parser_layout.addWidget(self.omniparser_keepalive_status_label)
 
         # Toggle visibility based on selected backend
         def toggle_omniparser_backend(backend):
             self.local_url_container.setVisible(backend == "local")
             self.local_timeout_container.setVisible(backend == "local")
             self.replicate_container.setVisible(backend == "replicate")
-            self.replicate_warmup_container.setVisible(backend == "replicate")
+            self.replicate_keepalive_container.setVisible(backend == "replicate")
+            self.omniparser_keepalive_status_label.setVisible(backend == "replicate")
+            self._apply_keepalive_state()
 
         self.omniparser_backend_combo.currentTextChanged.connect(toggle_omniparser_backend)
         # Initialize default state
@@ -773,11 +789,20 @@ class SettingsPanel(QWidget):
         self.local_url_container.setVisible(omniparser_backend == "local")
         self.local_timeout_container.setVisible(omniparser_backend == "local")
         self.replicate_container.setVisible(omniparser_backend == "replicate")
-        self.replicate_warmup_container.setVisible(omniparser_backend == "replicate")
 
         replicate_key = self._config_store.get_setting("replicate_api_key", default="")
         if replicate_key:
             self.replicate_api_key_input.setText(replicate_key)
+
+        keepalive_enabled = self._config_store.get_setting("omniparser_keepalive_enabled", default=True)
+        self.omniparser_keepalive_checkbox.setChecked(bool(keepalive_enabled))
+
+        keepalive_interval = self._config_store.get_setting("omniparser_keepalive_interval_minutes", default=3)
+        self.omniparser_keepalive_interval_input.setValue(int(keepalive_interval))
+
+        self.replicate_keepalive_container.setVisible(omniparser_backend == "replicate")
+        self.omniparser_keepalive_status_label.setVisible(omniparser_backend == "replicate")
+        self._apply_keepalive_state()
 
         # Load exploration objective (pre-fill with default if not customized)
         exploration_objective = self._config_store.get_setting("exploration_objective", default="")
@@ -949,6 +974,15 @@ class SettingsPanel(QWidget):
             else:
                 self._config_store.delete_setting("replicate_api_key")
 
+            # Save OmniParser keep-alive settings
+            keepalive_enabled = self.omniparser_keepalive_checkbox.isChecked()
+            self._config_store.set_setting("omniparser_keepalive_enabled", keepalive_enabled, "bool")
+
+            keepalive_interval = self.omniparser_keepalive_interval_input.value()
+            self._config_store.set_setting(
+                "omniparser_keepalive_interval_minutes", keepalive_interval, "int"
+            )
+
             # Save exploration objective
             exploration_objective = self.exploration_objective_input.toPlainText().strip()
             if exploration_objective:
@@ -991,10 +1025,29 @@ class SettingsPanel(QWidget):
             # Show error message
             QMessageBox.critical(self, "Error Saving Settings", f"Failed to save settings: {e}")
 
-    def _start_omniparser_warmup(self) -> None:
-        """Start a background warm-up call for the Replicate OmniParser backend."""
+    def _apply_keepalive_state(self) -> None:
+        """Start/stop the automatic OmniParser keep-alive timer based on current state."""
+        should_run = (
+            self.omniparser_keepalive_checkbox.isChecked()
+            and self.omniparser_backend_combo.currentText() == "replicate"
+            and not self._crawl_running
+        )
+        if should_run:
+            was_active = self._keepalive_timer.isActive()
+            interval_ms = self.omniparser_keepalive_interval_input.value() * 60_000
+            self._keepalive_timer.start(interval_ms)
+            if not was_active:
+                # Ping immediately on enable instead of waiting a full interval,
+                # so the status label reflects reality right away.
+                self._on_keepalive_tick()
+        else:
+            self._keepalive_timer.stop()
+
+    def _on_keepalive_tick(self) -> None:
+        """Send one background keep-alive ping to Replicate OmniParser, if due."""
+        if self._keepalive_in_flight or self._crawl_running:
+            return
         if self.omniparser_backend_combo.currentText() != "replicate":
-            self.omniparser_warmup_status_label.setText("Select the Replicate backend to warm up the remote model.")
             return
 
         api_key = (
@@ -1004,52 +1057,44 @@ class SettingsPanel(QWidget):
             or ""
         )
         if not api_key:
-            self.omniparser_warmup_status_label.setText("Replicate API key is required for remote warm-up.")
-            QMessageBox.warning(
-                self,
-                "Missing Replicate API Key",
-                "Enter a Replicate API key before warming up the remote OmniParser backend.",
-            )
+            self.omniparser_keepalive_status_label.setText("Keep-alive: skipped (no Replicate API key)")
             return
 
-        self.omniparser_warmup_button.setEnabled(False)
-        self.omniparser_warmup_status_label.setText("Warming up remote OmniParser...")
-
+        self._keepalive_in_flight = True
         box_threshold = float(self._config_store.get_setting("omniparser_box_threshold", default=0.05))
-        self._omniparser_warmup_thread = threading.Thread(
-            target=self._run_omniparser_warmup,
+        self._keepalive_thread = threading.Thread(
+            target=self._run_keepalive_ping,
             args=(api_key, box_threshold),
             daemon=True,
         )
-        self._omniparser_warmup_thread.start()
+        self._keepalive_thread.start()
 
-    def _run_omniparser_warmup(self, api_key: str, box_threshold: float) -> None:
+    def _run_keepalive_ping(self, api_key: str, box_threshold: float) -> None:
         started_at = time.perf_counter()
         try:
             from mobile_crawler.domain.omniparser_warmup import warm_up_remote_omniparser
 
-            elements = warm_up_remote_omniparser(api_key=api_key, box_threshold=box_threshold)
+            warm_up_remote_omniparser(api_key=api_key, box_threshold=box_threshold)
             elapsed = time.perf_counter() - started_at
-            self.omniparser_warmup_finished.emit(
-                True,
-                f"Remote OmniParser warm-up complete in {elapsed:.1f}s ({len(elements)} elements).",
-                elapsed,
-            )
+            self.omniparser_keepalive_pinged.emit(True, f"Keep-alive: ok ({elapsed:.1f}s)", elapsed)
         except Exception as exc:
             elapsed = time.perf_counter() - started_at
-            self.omniparser_warmup_finished.emit(
-                False,
-                f"Remote OmniParser warm-up failed after {elapsed:.1f}s: {exc}",
-                elapsed,
-            )
+            self.omniparser_keepalive_pinged.emit(False, f"Keep-alive: failed ({exc})", elapsed)
+        finally:
+            self._keepalive_in_flight = False
 
-    def _on_omniparser_warmup_finished(self, success: bool, message: str, _elapsed_seconds: float) -> None:
-        self.omniparser_warmup_button.setEnabled(True)
-        self.omniparser_warmup_status_label.setText(message)
-        if success:
-            QMessageBox.information(self, "OmniParser Warm-Up Complete", message)
-        else:
-            QMessageBox.warning(self, "OmniParser Warm-Up Failed", message)
+    def _on_keepalive_pinged(self, _success: bool, message: str, _elapsed_seconds: float) -> None:
+        timestamp = time.strftime("%H:%M:%S")
+        self.omniparser_keepalive_status_label.setText(f"{message} at {timestamp}")
+
+    def set_crawl_running(self, running: bool) -> None:
+        """Pause/resume the OmniParser keep-alive timer around an active crawl."""
+        self._crawl_running = running
+        self._apply_keepalive_state()
+
+    def stop_keepalive(self) -> None:
+        """Stop the OmniParser keep-alive timer, e.g. on application shutdown."""
+        self._keepalive_timer.stop()
 
     def get_gemini_api_key(self) -> str:
         """Get the current Gemini API key value.

@@ -855,6 +855,9 @@ class MainWindow(QMainWindow):
             if hasattr(widget, "setEnabled"):
                 widget.setEnabled(not running)
 
+        if self.settings_panel:
+            self.settings_panel.set_crawl_running(running)
+
     def _show_error(self, title: str, message: str) -> None:
         """Show error dialog.
 
@@ -1035,6 +1038,7 @@ class MainWindow(QMainWindow):
         # Connect signals for left panel
         self.ai_selector.model_selected.connect(self._on_model_selected)
         self.settings_panel.settings_saved.connect(self._on_settings_saved)
+        self.settings_panel.omniparser_keepalive_pinged.connect(self._on_omniparser_keepalive_pinged)
         self.device_selector.device_selected.connect(self._on_device_selected)
         self.app_selector.app_selected.connect(self._on_app_selected)
 
@@ -1280,6 +1284,11 @@ class MainWindow(QMainWindow):
         ]
         for name in silent_loggers:
             logging.getLogger(name).setLevel(logging.WARNING)
+
+    def _on_omniparser_keepalive_pinged(self, success: bool, message: str, _elapsed_seconds: float) -> None:
+        """Log the result of each automatic OmniParser keep-alive ping."""
+        level = LogLevel.INFO if success else LogLevel.WARNING
+        self._append_clean_log(level, message, "omniparser_keepalive")
 
     def _append_clean_log(self, level: LogLevel, message: str, logger_name: str = "") -> None:
         """Clean a log message and append it to the UI if it remains relevant."""
@@ -1591,6 +1600,9 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         """Handle window close event."""
         try:
+            if self.settings_panel:
+                self.settings_panel.stop_keepalive()
+
             # Stop crawler if running
             if self._crawler_loop:
                 self._crawler_loop.stop()

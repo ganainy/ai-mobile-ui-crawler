@@ -24,6 +24,16 @@ def qt_app():
     yield app
 
 
+@pytest.fixture(autouse=True)
+def _no_replicate_env(monkeypatch):
+    """Keep-alive is enabled by default, so every panel construction fires an
+    immediate ping attempt. Without a Replicate key it's a harmless no-op, but
+    clear these so a developer's local shell env can never make a test spawn
+    a real network call."""
+    monkeypatch.delenv("REPLICATE_API_KEY", raising=False)
+    monkeypatch.delenv("REPLICATE_API_TOKEN", raising=False)
+
+
 class MockConfigStore:
     """Mock config store for testing without circular import."""
 
@@ -252,87 +262,6 @@ class TestAPIKeyInputs:
         panel = _create_settings_panel(mock_config_store)
         panel.openrouter_api_key_input.setText("test-key-456")
         assert panel.get_openrouter_api_key() == "test-key-456"
-
-    def test_remote_omniparser_warmup_controls_exist(self, qt_app, mock_config_store):
-        """Test that Replicate OmniParser warm-up controls exist."""
-        panel = _create_settings_panel(mock_config_store)
-        assert hasattr(panel, "omniparser_warmup_button")
-        assert panel.omniparser_warmup_button.text() == "Warm Up Remote OmniParser"
-        assert panel.omniparser_warmup_status_label.text() == "Idle"
-
-    def test_remote_omniparser_warmup_visibility_follows_backend(self, qt_app, mock_config_store):
-        """Warm-up controls are only shown for the remote Replicate backend."""
-        panel = _create_settings_panel(mock_config_store)
-
-        panel.omniparser_backend_combo.setCurrentText("local")
-        assert panel.replicate_warmup_container.isHidden()
-
-        panel.omniparser_backend_combo.setCurrentText("replicate")
-        assert not panel.replicate_warmup_container.isHidden()
-
-    def test_remote_omniparser_warmup_requires_api_key(self, qt_app, mock_config_store, monkeypatch):
-        """Warm-up should not start without a Replicate API key."""
-        panel = _create_settings_panel(mock_config_store)
-        warnings = []
-
-        def mock_warning(parent, title, message):
-            warnings.append((title, message))
-
-        monkeypatch.setattr(QMessageBox, "warning", mock_warning)
-        panel.replicate_api_key_input.clear()
-
-        panel._start_omniparser_warmup()
-
-        assert warnings
-        assert "Replicate API key is required" in panel.omniparser_warmup_status_label.text()
-        assert panel.omniparser_warmup_button.isEnabled()
-
-    def test_remote_omniparser_warmup_starts_background_worker(
-        self, qt_app, mock_config_store, monkeypatch
-    ):
-        """Warm-up should disable the button and start a background worker."""
-        panel = _create_settings_panel(mock_config_store)
-        panel.replicate_api_key_input.setText("replicate-key")
-        started = {}
-
-        class FakeThread:
-            def __init__(self, target, args, daemon):
-                started["target"] = target
-                started["args"] = args
-                started["daemon"] = daemon
-
-            def start(self):
-                started["started"] = True
-
-        monkeypatch.setattr("mobile_crawler.ui.widgets.settings_panel.threading.Thread", FakeThread)
-
-        panel._start_omniparser_warmup()
-
-        assert started["started"]
-        assert started["daemon"] is True
-        assert started["args"] == ("replicate-key", 0.05)
-        assert not panel.omniparser_warmup_button.isEnabled()
-        assert panel.omniparser_warmup_status_label.text() == "Warming up remote OmniParser..."
-
-    def test_remote_omniparser_warmup_finished_updates_status(
-        self, qt_app, mock_config_store, monkeypatch
-    ):
-        """Warm-up completion should re-enable the button and notify the user."""
-        panel = _create_settings_panel(mock_config_store)
-        panel.omniparser_warmup_button.setEnabled(False)
-        messages = []
-
-        def mock_information(parent, title, message):
-            messages.append((title, message))
-
-        monkeypatch.setattr(QMessageBox, "information", mock_information)
-
-        panel._on_omniparser_warmup_finished(True, "Remote OmniParser warm-up complete in 1.2s.", 1.2)
-
-        assert panel.omniparser_warmup_button.isEnabled()
-        assert panel.omniparser_warmup_status_label.text() == "Remote OmniParser warm-up complete in 1.2s."
-        assert messages == [("OmniParser Warm-Up Complete", "Remote OmniParser warm-up complete in 1.2s.")]
-
 
 class TestCrawlLimitInputs:
     """Tests for crawl limit input fields."""
@@ -625,3 +554,198 @@ class TestSettingsPersistence:
         panel._on_save_clicked()
 
         assert mock_config_store.get_secret_plaintext("mobsf_api_key") == "legacy-key"
+
+
+class TestOmniparserKeepAlive:
+    """Tests for automatic Replicate OmniParser keep-alive pinging."""
+
+    def test_keepalive_controls_exist(self, qt_app, mock_config_store):
+        panel = _create_settings_panel(mock_config_store)
+        assert hasattr(panel, "omniparser_keepalive_checkbox")
+        assert panel.omniparser_keepalive_interval_input.value() == 3
+
+    def test_keepalive_enabled_by_default(self, qt_app, mock_config_store):
+        """A fresh install should keep Replicate OmniParser warm without opt-in."""
+        panel = _create_settings_panel(mock_config_store)
+        assert panel.omniparser_keepalive_checkbox.isChecked()
+        assert panel._keepalive_timer.isActive()
+
+    def test_keepalive_can_be_disabled_and_persists(self, qt_app, mock_config_store, monkeypatch):
+        panel = _create_settings_panel(mock_config_store)
+        panel.omniparser_keepalive_checkbox.setChecked(False)
+        assert not panel._keepalive_timer.isActive()
+
+        monkeypatch.setattr(QMessageBox, "information", lambda *a, **k: None)
+        panel._on_save_clicked()
+
+        panel2 = _create_settings_panel(mock_config_store)
+        assert not panel2.omniparser_keepalive_checkbox.isChecked()
+        assert not panel2._keepalive_timer.isActive()
+
+    def test_keepalive_visibility_follows_backend(self, qt_app, mock_config_store):
+        panel = _create_settings_panel(mock_config_store)
+        panel.omniparser_backend_combo.setCurrentText("local")
+        assert panel.replicate_keepalive_container.isHidden()
+
+        panel.omniparser_backend_combo.setCurrentText("replicate")
+        assert not panel.replicate_keepalive_container.isHidden()
+
+    def test_enabling_checkbox_starts_timer_for_replicate_backend(self, qt_app, mock_config_store):
+        panel = _create_settings_panel(mock_config_store)
+        panel.omniparser_backend_combo.setCurrentText("replicate")
+        panel.omniparser_keepalive_checkbox.setChecked(False)
+        panel.omniparser_keepalive_interval_input.setValue(5)
+
+        panel.omniparser_keepalive_checkbox.setChecked(True)
+
+        assert panel._keepalive_timer.isActive()
+        assert panel._keepalive_timer.interval() == 5 * 60_000
+
+    def test_checkbox_has_no_effect_for_local_backend(self, qt_app, mock_config_store):
+        panel = _create_settings_panel(mock_config_store)
+        panel.omniparser_backend_combo.setCurrentText("local")
+
+        assert not panel._keepalive_timer.isActive()
+        panel.omniparser_keepalive_checkbox.setChecked(False)
+        panel.omniparser_keepalive_checkbox.setChecked(True)
+
+        assert not panel._keepalive_timer.isActive()
+
+    def test_crawl_running_pauses_timer(self, qt_app, mock_config_store):
+        panel = _create_settings_panel(mock_config_store)
+        panel.omniparser_backend_combo.setCurrentText("replicate")
+        panel.omniparser_keepalive_checkbox.setChecked(True)
+        assert panel._keepalive_timer.isActive()
+
+        panel.set_crawl_running(True)
+        assert not panel._keepalive_timer.isActive()
+
+        panel.set_crawl_running(False)
+        assert panel._keepalive_timer.isActive()
+
+    def test_stop_keepalive_stops_timer(self, qt_app, mock_config_store):
+        panel = _create_settings_panel(mock_config_store)
+        panel.omniparser_backend_combo.setCurrentText("replicate")
+        panel.omniparser_keepalive_checkbox.setChecked(True)
+        assert panel._keepalive_timer.isActive()
+
+        panel.stop_keepalive()
+        assert not panel._keepalive_timer.isActive()
+
+    def test_tick_skips_without_api_key(self, qt_app, mock_config_store, monkeypatch):
+        panel = _create_settings_panel(mock_config_store)
+        panel.omniparser_backend_combo.setCurrentText("replicate")
+        panel.replicate_api_key_input.clear()
+        monkeypatch.delenv("REPLICATE_API_KEY", raising=False)
+        monkeypatch.delenv("REPLICATE_API_TOKEN", raising=False)
+
+        called = []
+        monkeypatch.setattr(
+            "mobile_crawler.ui.widgets.settings_panel.threading.Thread",
+            lambda *a, **k: called.append((a, k)),
+        )
+
+        panel._on_keepalive_tick()
+
+        assert not called
+        assert "no Replicate API key" in panel.omniparser_keepalive_status_label.text()
+
+    def test_tick_skips_during_crawl(self, qt_app, mock_config_store, monkeypatch):
+        panel = _create_settings_panel(mock_config_store)
+        panel.omniparser_backend_combo.setCurrentText("replicate")
+        panel.replicate_api_key_input.setText("replicate-key")
+        panel._crawl_running = True
+
+        called = []
+        monkeypatch.setattr(
+            "mobile_crawler.ui.widgets.settings_panel.threading.Thread",
+            lambda *a, **k: called.append((a, k)),
+        )
+
+        panel._on_keepalive_tick()
+
+        assert not called
+
+    def test_tick_skips_for_local_backend(self, qt_app, mock_config_store, monkeypatch):
+        panel = _create_settings_panel(mock_config_store)
+        panel.omniparser_backend_combo.setCurrentText("local")
+        panel.replicate_api_key_input.setText("replicate-key")
+
+        called = []
+        monkeypatch.setattr(
+            "mobile_crawler.ui.widgets.settings_panel.threading.Thread",
+            lambda *a, **k: called.append((a, k)),
+        )
+
+        panel._on_keepalive_tick()
+
+        assert not called
+
+    def test_tick_skips_while_in_flight(self, qt_app, mock_config_store, monkeypatch):
+        panel = _create_settings_panel(mock_config_store)
+        panel.omniparser_backend_combo.setCurrentText("replicate")
+        panel.replicate_api_key_input.setText("replicate-key")
+        panel._keepalive_in_flight = True
+
+        called = []
+        monkeypatch.setattr(
+            "mobile_crawler.ui.widgets.settings_panel.threading.Thread",
+            lambda *a, **k: called.append((a, k)),
+        )
+
+        panel._on_keepalive_tick()
+
+        assert not called
+
+    def test_tick_starts_background_ping(self, qt_app, mock_config_store, monkeypatch):
+        panel = _create_settings_panel(mock_config_store)
+        panel.omniparser_backend_combo.setCurrentText("replicate")
+        panel.replicate_api_key_input.setText("replicate-key")
+        started = {}
+
+        class FakeThread:
+            def __init__(self, target, args, daemon):
+                started["target"] = target
+                started["args"] = args
+                started["daemon"] = daemon
+
+            def start(self):
+                started["started"] = True
+
+        monkeypatch.setattr("mobile_crawler.ui.widgets.settings_panel.threading.Thread", FakeThread)
+
+        panel._on_keepalive_tick()
+
+        assert started["started"]
+        assert started["daemon"] is True
+        assert started["args"] == ("replicate-key", 0.05)
+        assert panel._keepalive_in_flight is True
+
+    def test_pinged_updates_status_without_dialog(self, qt_app, mock_config_store, monkeypatch):
+        panel = _create_settings_panel(mock_config_store)
+        panel._keepalive_in_flight = True
+
+        dialogs = []
+        monkeypatch.setattr(QMessageBox, "information", lambda *a, **k: dialogs.append(a))
+        monkeypatch.setattr(QMessageBox, "warning", lambda *a, **k: dialogs.append(a))
+
+        panel._on_keepalive_pinged(True, "Keep-alive: ok (0.5s)", 0.5)
+
+        assert not dialogs
+        assert panel.omniparser_keepalive_status_label.text().startswith("Keep-alive: ok (0.5s) at ")
+
+    def test_keepalive_settings_persist(self, qt_app, mock_config_store, monkeypatch):
+        panel = _create_settings_panel(mock_config_store)
+        panel.omniparser_keepalive_checkbox.setChecked(True)
+        panel.omniparser_keepalive_interval_input.setValue(7)
+
+        monkeypatch.setattr(QMessageBox, "information", lambda *a, **k: None)
+
+        panel._on_save_clicked()
+
+        assert mock_config_store.get_setting("omniparser_keepalive_enabled") is True
+        assert mock_config_store.get_setting("omniparser_keepalive_interval_minutes") == 7
+
+        panel2 = _create_settings_panel(mock_config_store)
+        assert panel2.omniparser_keepalive_checkbox.isChecked()
+        assert panel2.omniparser_keepalive_interval_input.value() == 7
