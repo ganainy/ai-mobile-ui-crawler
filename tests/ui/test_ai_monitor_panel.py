@@ -204,9 +204,16 @@ def test_step_detail_widget_renders_timing_group(app):
         step_number=1,
         timestamp=__import__("datetime").datetime.now(),
         success=True,
-        full_prompt="{}",
-        full_response="{}",
-        parsed_actions=[],
+        calls=[
+            {
+                "label": "Call",
+                "success": True,
+                "error_message": None,
+                "prompt_text": "{}",
+                "response_text": "{}",
+                "parsed_actions": [],
+            }
+        ],
         timing_data={
             "total_step_duration_ms": 1000.0,
             "rows": [

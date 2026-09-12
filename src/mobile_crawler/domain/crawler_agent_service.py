@@ -1,6 +1,7 @@
 """Internal crawler-agent service integration for Mobile Crawler."""
 
 import asyncio
+import base64
 import json
 import logging
 import os
@@ -17,6 +18,11 @@ from mobile_crawler.domain.context_guard import (
     StepSkipReason,
     UIDumpValidator,
 )
+from mobile_crawler.domain.crawler_agent.agent.common.events import ToolExecutionEvent
+from mobile_crawler.domain.crawler_agent.agent.droid.events import AppOpenerResponseEvent
+from mobile_crawler.domain.crawler_agent.agent.executor.events import ExecutorResponseEvent
+from mobile_crawler.domain.crawler_agent.agent.fast_agent.events import FastAgentResponseEvent
+from mobile_crawler.domain.crawler_agent.agent.manager.events import ManagerResponseEvent
 from mobile_crawler.domain.errors import ErrorContext, FatalError
 from mobile_crawler.domain.models import AIAction, BoundingBox
 from mobile_crawler.domain.stats_collector_span_processor import OTEL_AVAILABLE, StatsCollectorSpanProcessor
@@ -166,6 +172,12 @@ class CrawlerAgentService:
         self._action_verifier: ActionVerifier | None = None
         self._current_run_id: int | None = None
         self._current_step_number: int = 0
+        # Dedicated counter for AI Monitor step numbering (Fix 5). Advanced on each
+        # new decide cycle (Manager/AppOpener/FastAgent response) instead of reusing
+        # `self._current_step_number + 1`, so numbering stays monotonic even when a
+        # cycle aborts mid-way and no ToolExecutionEvent ever fires to advance the
+        # tool-level counter.
+        self._ai_call_step_number: int = 0
         self._emit_step_phase_event = None  # Callback to CrawlerLoop._emit_event
         self._sub_phase_starts: dict[str, float] = {}
         self._phase_metadata: dict[str, dict[str, Any]] = {}
@@ -536,6 +548,7 @@ class CrawlerAgentService:
         self,
         run_id: int,
         emit_step_phase_event=None,
+        screenshots_dir: str | None = None,
     ) -> None:
         """Initialize step phase tracking for a run.
 
@@ -544,13 +557,17 @@ class CrawlerAgentService:
             emit_step_phase_event: Callback to emit phase transition events
                                     to CrawlerLoop listeners. Signature:
                                     (method_name, *args) -> None
+            screenshots_dir: Directory to write per-step screenshots (for AI Monitor panel).
         """
         self._current_run_id = run_id
         self._current_step_number = 0
+        self._ai_call_step_number = 0
         self._emit_step_phase_event = emit_step_phase_event
         self._sub_phase_starts = {}
         self._phase_metadata = {}
         self._pending_step_timing = {}
+        self._screenshots_dir = screenshots_dir
+        self._screenshot_written: set[tuple[int, int]] = set()  # (run_id, step_number)
 
         # Initialize step phase machine with a listener that persists transitions
         self._step_phase_machine = StepPhaseStateMachine()
@@ -1081,6 +1098,153 @@ class CrawlerAgentService:
         except Exception as e:
             logger.warning(f"Phase transition error at step {self._current_step_number}: {e}")
 
+    async def _handle_ai_interaction_event(self, event) -> None:
+        """Handle AI interaction events (Manager/Executor/FastAgent/AppOpener responses).
+
+        Extracts prompt/response/screenshot from each event, writes screenshot to disk,
+        emits AI Monitor signals, and persists to ai_interactions table with real step numbers.
+        """
+        if not isinstance(
+            event, (ManagerResponseEvent, ExecutorResponseEvent, FastAgentResponseEvent, AppOpenerResponseEvent)
+        ):
+            return
+
+        # Step number: advance the dedicated AI-call counter once per decide cycle
+        # (Manager decision, AppOpener sub-decision, or FastAgent call). Mid-cycle
+        # events (Executor response for the same step) reuse the current value so
+        # the step's Manager and Executor stay grouped under one number.
+        #
+        # We deliberately do NOT derive from `self._current_step_number + 1`: that
+        # counter only advances in _handle_tool_execution_event, which fires AFTER
+        # these response events. If a cycle aborts between the Executor's response
+        # and the tool actually running, no ToolExecutionEvent is emitted, the tool
+        # counter never advances, and the next cycle would recompute the SAME number.
+        # The dedicated counter is self-contained and immune to that (Fix 5).
+        if isinstance(event, (ManagerResponseEvent, AppOpenerResponseEvent, FastAgentResponseEvent)):
+            self._ai_call_step_number += 1
+        step_number = self._ai_call_step_number
+
+        # Extract common fields
+        screenshot_bytes = None
+        prompt_text = None
+        raw_response = None
+        usage = None
+        latency_ms = None
+        actions = []
+        success = True  # Default for events without explicit success field
+        error_message = None
+
+        if isinstance(event, ManagerResponseEvent):
+            screenshot_bytes = getattr(event, "screenshot", None)
+            system_prompt = getattr(event, "system_prompt", None) or ""
+            user_prompt = getattr(event, "user_prompt_text", None) or ""
+            prompt_text = f"System:\n{system_prompt}\n\nUser:\n{user_prompt}"
+            raw_response = event.response
+            usage = event.usage
+            latency_ms = getattr(event, "manager_llm_ms", None)
+            success = getattr(event, "success", True)
+            error_message = getattr(event, "error", None)
+        elif isinstance(event, ExecutorResponseEvent):
+            screenshot_bytes = getattr(event, "screenshot", None)
+            prompt_text = getattr(event, "prompt_text", None)
+            raw_response = event.response
+            usage = event.usage
+            latency_ms = getattr(event, "executor_llm_ms", None)
+            success = getattr(event, "success", True)
+            error_message = getattr(event, "error", None)
+            # Use already-parsed result from event (Fix 8: single parse, not double)
+            parsed = event.parsed_action
+            if parsed:
+                actions = [
+                    {
+                        "action": parsed.get("action", ""),
+                        "reasoning": parsed.get("thought", ""),
+                        "description": parsed.get("description", ""),
+                    }
+                ]
+            else:
+                actions = []
+        elif isinstance(event, FastAgentResponseEvent):
+            screenshot_bytes = getattr(event, "screenshot", None)
+            prompt_text = getattr(event, "prompt_text", None)
+            raw_response = getattr(event, "raw_response", None) or event.thought
+            usage = event.usage
+            latency_ms = getattr(event, "fast_agent_llm_ms", None)
+            success = getattr(event, "success", True)
+            error_message = getattr(event, "error", None)
+        elif isinstance(event, AppOpenerResponseEvent):
+            prompt_text = event.prompt
+            raw_response = event.response
+            usage = None
+            latency_ms = None
+            success = event.success
+            error_message = None if success else event.summary
+
+        # Write screenshot to disk once per (run_id, step_number)
+        screenshot_path = None
+        if screenshot_bytes and self._screenshots_dir:
+            screenshot_key = (self._current_run_id, step_number)
+            if screenshot_key not in self._screenshot_written:
+                os.makedirs(self._screenshots_dir, exist_ok=True)
+                screenshot_path = os.path.join(self._screenshots_dir, f"step_{step_number:04d}.png")
+                try:
+                    with open(screenshot_path, "wb") as f:
+                        f.write(screenshot_bytes)
+                    self._screenshot_written.add(screenshot_key)
+                except Exception as e:
+                    logger.warning(f"Failed to write screenshot for step {step_number}: {e}")
+                    screenshot_path = None
+
+        # Build request_data matching ai_monitor_panel.py's expected shape
+        screenshot_b64 = base64.b64encode(screenshot_bytes).decode("utf-8") if screenshot_bytes else ""
+        request_data = {"user_prompt": json.dumps({"text": prompt_text or "", "screenshot": screenshot_b64})}
+
+        # Build response_data
+        tokens_input = usage.request_tokens if usage else None
+        tokens_output = usage.response_tokens if usage else None
+        response_data = {
+            "response": raw_response or "",
+            "tokens_input": tokens_input,
+            "tokens_output": tokens_output,
+            "latency_ms": latency_ms,
+            "actions": actions,
+            "success": success,
+            "error_message": error_message,
+        }
+
+        # Emit signals to UI (on_ai_request_sent, on_ai_response_received, on_screenshot_captured)
+        if self._emit_step_phase_event:
+            try:
+                self._emit_step_phase_event("on_ai_request_sent", self._current_run_id, step_number, request_data)
+                self._emit_step_phase_event("on_ai_response_received", self._current_run_id, step_number, response_data)
+                if screenshot_path:
+                    self._emit_step_phase_event("on_screenshot_captured", self._current_run_id, step_number, screenshot_path)
+            except Exception as e:
+                logger.warning(f"Failed to emit AI interaction events: {e}")
+
+        # Persist to ai_interactions table
+        if self.ai_interaction_repository:
+            try:
+                interaction = AIInteraction(
+                    id=None,
+                    run_id=self._current_run_id,
+                    step_number=step_number,
+                    timestamp=datetime.now(),
+                    request_json=json.dumps(request_data),
+                    screenshot_path=screenshot_path,
+                    response_raw=raw_response,
+                    response_parsed_json=json.dumps({"actions": actions}) if actions else None,
+                    tokens_input=tokens_input,
+                    tokens_output=tokens_output,
+                    latency_ms=latency_ms,
+                    success=success,
+                    error_message=error_message,
+                    retry_count=0,
+                )
+                self.ai_interaction_repository.create_ai_interaction(interaction)
+            except Exception as e:
+                logger.warning(f"Failed to persist AI interaction for step {step_number}: {e}")
+
     def _create_exploration_goal(
         self, app_package: str, max_steps: int, exploration_objective: str | None = None
     ) -> CrawlerGoal:
@@ -1235,13 +1399,12 @@ class CrawlerAgentService:
                         async def _consume_step_events(workflow_result=workflow_result):
                             """Background task: consume agent events and drive step phase metadata."""
                             try:
-                                from mobile_crawler.domain.crawler_agent.agent.common.events import ToolExecutionEvent
-
                                 async for event in workflow_result.stream_events():
                                     if isinstance(event, ToolExecutionEvent):
                                         await self._handle_tool_execution_event(event)
                                     else:
                                         self._buffer_workflow_timing(event)
+                                        await self._handle_ai_interaction_event(event)
                             except asyncio.CancelledError:
                                 pass
                             except Exception as e:

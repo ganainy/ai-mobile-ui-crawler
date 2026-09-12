@@ -23,6 +23,16 @@ class FastAgentResponseEvent(Event):
     code: str | None = None
     usage: UsageResult | None = None
 
+    # Real AI Monitor fields (populated at handle_llm_input; no behavior change)
+    raw_response: str | None = None
+    prompt_text: str | None = None
+    screenshot: bytes | None = None
+    fast_agent_llm_ms: float | None = None
+
+    # Success/error signals for AI Monitor panel status indicators
+    success: bool = True
+    error: str | None = None
+
 
 class FastAgentToolCallEvent(Event):
     """Tool calls ready to execute."""

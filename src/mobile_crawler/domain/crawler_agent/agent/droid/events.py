@@ -83,6 +83,16 @@ class ExternalUserMessageDroppedEvent(Event):
 # ============================================================================
 
 
+class AppOpenerResponseEvent(Event):
+    """AppOpener workflow produced an LLM result (for AI Monitor)."""
+
+    success: bool
+    package_name: str | None
+    prompt: str
+    response: str
+    summary: str
+
+
 class FinalizeEvent(Event):
     """Trigger finalization."""
 

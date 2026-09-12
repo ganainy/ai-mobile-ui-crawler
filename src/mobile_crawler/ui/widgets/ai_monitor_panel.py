@@ -19,14 +19,79 @@ from PySide6.QtWidgets import (
     QPushButton,
     QRadioButton,
     QScrollArea,
+    QStackedWidget,
     QTableWidget,
     QTableWidgetItem,
     QTextEdit,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
 from .json_tree_widget import JsonTreeWidget
+
+
+def _extract_prompt_text(request_data: dict) -> str:
+    """Pull the prompt text out of a request_data dict (shape produced by the crawler service)."""
+    if "user_prompt" in request_data:
+        return request_data["user_prompt"]
+    if "prompt" in request_data:
+        return request_data["prompt"]
+    return ""
+
+
+def _extract_response_text(response_data: dict) -> str:
+    """Pull the raw response text out of a response_data dict."""
+    if "response" in response_data:
+        return response_data["response"]
+    if "raw_response" in response_data:
+        return response_data["raw_response"]
+    if "parsed_response" in response_data:
+        return response_data["parsed_response"]
+    return ""
+
+
+def _extract_parsed_actions(response_data: dict) -> list[dict]:
+    """Pull the parsed actions list out of a response_data dict, if any."""
+    if response_data.get("actions"):
+        return response_data["actions"]
+    if "parsed_response" in response_data:
+        try:
+            parsed = json.loads(response_data["parsed_response"])
+            if isinstance(parsed, dict) and "actions" in parsed:
+                return parsed["actions"]
+            if isinstance(parsed, list):
+                return parsed
+        except (json.JSONDecodeError, KeyError):
+            pass
+    return []
+
+
+class CollapsibleSection(QWidget):
+    """A titled section that can be expanded/collapsed by clicking its header."""
+
+    def __init__(self, title: str, content: QWidget, collapsed: bool = True, parent=None):
+        super().__init__(parent)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        self.toggle_button = QToolButton()
+        self.toggle_button.setStyleSheet("QToolButton { border: none; font-weight: bold; }")
+        self.toggle_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.toggle_button.setCheckable(True)
+        self.toggle_button.setChecked(not collapsed)
+        self.toggle_button.setArrowType(Qt.ArrowType.DownArrow if not collapsed else Qt.ArrowType.RightArrow)
+        self.toggle_button.setText(f" {title}")
+        self.toggle_button.clicked.connect(self._on_toggled)
+        layout.addWidget(self.toggle_button)
+
+        self.content = content
+        self.content.setVisible(not collapsed)
+        layout.addWidget(self.content)
+
+    def _on_toggled(self, checked: bool) -> None:
+        self.content.setVisible(checked)
+        self.toggle_button.setArrowType(Qt.ArrowType.DownArrow if checked else Qt.ArrowType.RightArrow)
 
 
 class AIInteractionItem(QWidget):
@@ -156,33 +221,51 @@ class AIInteractionItem(QWidget):
 
 
 class StepDetailWidget(QWidget):
-    """Widget for displaying detailed step information in a tab."""
+    """Widget for displaying detailed step information in a tab.
+
+    Result-first layout: Screenshot + Result (parsed action, reasoning, raw
+    response) are shown up top. Prompt Data and Timing Breakdown are demoted
+    to collapsed sections below, since they're supporting detail rather than
+    the primary "what did the AI do" story.
+
+    A step may involve multiple AI calls (e.g. Manager plan, then Executor
+    action) — `calls` carries all of them, and a selector lets the viewer
+    switch between their Result/Prompt views when there's more than one.
+    """
 
     def __init__(self, step_number: int, timestamp: datetime, success: bool,
-                 full_prompt: str, full_response: str, parsed_actions: list[dict],
-                 error_message: str | None = None, screenshot_path: str | None = None,
+                 calls: list[dict], default_index: int = 0,
+                 screenshot_path: str | None = None,
                  timing_data: dict | None = None, parent=None):
         """Initialize step detail widget.
 
         Args:
             step_number: Step number
             timestamp: When interaction occurred
-            success: Whether interaction succeeded
-            full_prompt: Complete prompt text
-            full_response: Complete response text
-            parsed_actions: Parsed action details
-            error_message: Error message if failed
+            success: Whether the step overall succeeded (AND of all its calls)
+            calls: List of {label, success, error_message, prompt_text,
+                response_text, parsed_actions} dicts, one per AI call made
+                during this step, in order
+            default_index: Which call to show first (the most relevant one)
             screenshot_path: Optional path to screenshot file
+            timing_data: Step-level timing breakdown data
             parent: Parent widget
         """
         super().__init__(parent)
         self.step_number = step_number
         self.timestamp = timestamp
         self.success = success
-        self.full_prompt = full_prompt
-        self.full_response = full_response
-        self.parsed_actions = parsed_actions
-        self.error_message = error_message
+        self.calls = calls or [
+            {
+                "label": "Call",
+                "success": success,
+                "error_message": None,
+                "prompt_text": "",
+                "response_text": "",
+                "parsed_actions": [],
+            }
+        ]
+        self.default_index = default_index if 0 <= default_index < len(self.calls) else 0
         self.screenshot_path = screenshot_path
         self.timing_data = timing_data or {}
         self._setup_ui()
@@ -210,53 +293,151 @@ class StepDetailWidget(QWidget):
         scroll_content = QWidget()
         scroll_layout = QVBoxLayout(scroll_content)
 
-        # Try to extract screenshot for display, but keep rest of prompt data for JsonTreeWidget
-        screenshot_pixmap = None
-        prompt_json_data = self.full_prompt
+        # ---- Top tier (always visible): Screenshot + Result ----
+        top_row_layout = QHBoxLayout()
+
+        screenshot_group = self._build_screenshot_group()
+        top_row_layout.addWidget(screenshot_group, 1)
+
+        result_container_layout = QVBoxLayout()
+
+        self.result_stack = QStackedWidget()
+        self.prompt_stack = QStackedWidget()
+        for call in self.calls:
+            self.result_stack.addWidget(self._build_result_page(call))
+            self.prompt_stack.addWidget(self._build_prompt_tree(call))
+        self.result_stack.setCurrentIndex(self.default_index)
+        self.prompt_stack.setCurrentIndex(self.default_index)
+
+        if len(self.calls) > 1:
+            selector_layout = QHBoxLayout()
+            selector_layout.addWidget(QLabel("Call:"))
+            self.call_selector = QComboBox()
+            for call in self.calls:
+                self.call_selector.addItem(call.get("label", "Call"))
+            self.call_selector.setCurrentIndex(self.default_index)
+            self.call_selector.currentIndexChanged.connect(self._on_call_selected)
+            selector_layout.addWidget(self.call_selector)
+            selector_layout.addStretch()
+            result_container_layout.addLayout(selector_layout)
+        else:
+            self.call_selector = None
+
+        result_group = QGroupBox("Result")
+        result_group_layout = QVBoxLayout(result_group)
+        result_group_layout.addWidget(self.result_stack)
+        result_container_layout.addWidget(result_group)
+
+        top_row_layout.addLayout(result_container_layout, 2)
+        scroll_layout.addLayout(top_row_layout)
+
+        # ---- Bottom tier (collapsed by default): Prompt + Timing ----
+        prompt_section = CollapsibleSection("Prompt sent", self.prompt_stack, collapsed=True)
+        scroll_layout.addWidget(prompt_section)
+
+        timing_group = self._create_timing_group()
+        if timing_group:
+            timing_section = CollapsibleSection("Timing breakdown", timing_group, collapsed=True)
+            scroll_layout.addWidget(timing_section)
+
+        scroll.setWidget(scroll_content)
+        layout.addWidget(scroll)
+
+    def _on_call_selected(self, index: int) -> None:
+        """Switch the Result/Prompt views to the selected call."""
+        self.result_stack.setCurrentIndex(index)
+        self.prompt_stack.setCurrentIndex(index)
+
+    def _build_result_page(self, call: dict) -> QWidget:
+        """Build one page of the Result stack for a single AI call."""
+        page = QWidget()
+        page_layout = QVBoxLayout(page)
+        page_layout.setContentsMargins(0, 0, 0, 0)
+
+        if call.get("error_message"):
+            error_label = QLabel(f"Error: {call['error_message']}")
+            error_label.setStyleSheet("color: red; font-weight: bold;")
+            error_label.setWordWrap(True)
+            page_layout.addWidget(error_label)
+
+        parsed_actions = call.get("parsed_actions") or []
+        if parsed_actions:
+            actions_text = ""
+            for action in parsed_actions:
+                actions_text += f"• Action: {action.get('action', 'unknown')}\n"
+                if action.get('action_desc'):
+                    actions_text += f"  Description: {action['action_desc']}\n"
+                elif action.get('description'):
+                    actions_text += f"  Description: {action['description']}\n"
+
+                # Check for label_id OR target_bounding_box
+                label_id = action.get('label_id')
+                bbox = action.get('target_bounding_box')
+
+                if label_id is not None:
+                    actions_text += f"  Label ID: {label_id}\n"
+                elif bbox:
+                    tl = bbox.get('top_left')
+                    br = bbox.get('bottom_right')
+                    if tl and br and len(tl) >= 2 and len(br) >= 2:
+                        actions_text += f"  Target: [{tl[0]}, {tl[1]}] → [{br[0]}, {br[1]}]\n"
+                    else:
+                        actions_text += f"  Target: {bbox}\n"
+
+                if action.get('input_text'):
+                    actions_text += f"  Input: {action['input_text']}\n"
+                if action.get('reasoning'):
+                    actions_text += f"  Reasoning: {action['reasoning']}\n"
+                actions_text += "\n"
+
+            actions_display = QTextEdit()
+            actions_display.setPlainText(actions_text.strip())
+            actions_display.setReadOnly(True)
+            page_layout.addWidget(actions_display)
+        else:
+            no_actions_label = QLabel("No parsed actions available")
+            no_actions_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            no_actions_label.setStyleSheet("color: #666; font-style: italic;")
+            page_layout.addWidget(no_actions_label)
+
+        response_tree = JsonTreeWidget(call.get("response_text") or "")
+        raw_response_section = CollapsibleSection("Raw response", response_tree, collapsed=True)
+        page_layout.addWidget(raw_response_section)
+
+        return page
+
+    def _build_prompt_tree(self, call: dict) -> QWidget:
+        """Build one page of the Prompt stack for a single AI call."""
+        full_prompt = call.get("prompt_text") or ""
+        prompt_json_data = full_prompt
 
         try:
-            prompt_data = json.loads(self.full_prompt)
+            prompt_data = json.loads(full_prompt)
             if isinstance(prompt_data, dict):
-                # Handle nested structure from AIInteractionService
-                # request_data = {"system_prompt": "...", "user_prompt": "{json string}"}
                 actual_prompt_data = prompt_data
                 if 'user_prompt' in prompt_data:
-                    # Parse the nested user_prompt JSON string
                     try:
                         actual_prompt_data = json.loads(prompt_data['user_prompt'])
                     except (json.JSONDecodeError, TypeError):
                         actual_prompt_data = prompt_data
 
-                # Extract screenshot if present
-                screenshot_b64 = actual_prompt_data.get('screenshot', '')
-                if screenshot_b64 and len(screenshot_b64) > 100:
-                    try:
-                        if screenshot_b64.startswith('data:image'):
-                            screenshot_b64 = screenshot_b64.split(',', 1)[1]
-                        image_data = base64.b64decode(screenshot_b64)
-                        pixmap = QPixmap()
-                        if pixmap.loadFromData(image_data):
-                            screenshot_pixmap = pixmap
-                    except Exception:
-                        pass
-
-                # Create a version of data without the huge base64 screenshot for the tree view
                 prompt_json_data = actual_prompt_data.copy() if isinstance(actual_prompt_data, dict) else actual_prompt_data
                 if isinstance(prompt_json_data, dict) and 'screenshot' in prompt_json_data:
                     prompt_json_data['screenshot'] = "[Image displayed on left]"
         except (json.JSONDecodeError, TypeError):
-            # Not JSON, handle large base64 if needed
-            if len(self.full_prompt) > 1000 and all(c in 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=' for c in self.full_prompt.replace('\n', '').replace('\r', '').replace(' ', '')):
+            if len(full_prompt) > 1000 and all(
+                c in 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/='
+                for c in full_prompt.replace('\n', '').replace('\r', '').replace(' ', '')
+            ):
                 prompt_json_data = "[Large base64 data - not displayed]"
 
-        # TOP ROW: Screenshot (1/3) + Prompt Data (2/3)
-        top_row_layout = QHBoxLayout()
+        return JsonTreeWidget(prompt_json_data)
 
-        # Screenshot section (1/3 width)
+    def _build_screenshot_group(self) -> QGroupBox:
+        """Build the Screenshot group (Annotated/OCR toggle), shared across calls for this step."""
         screenshot_group = QGroupBox("Screenshot")
         self.screenshot_layout = QVBoxLayout(screenshot_group)
 
-        # Add toggle buttons
         toggle_layout = QHBoxLayout()
         self.annotated_radio = QRadioButton("Annotated")
         self.ocr_radio = QRadioButton("OCR")
@@ -272,47 +453,69 @@ class StepDetailWidget(QWidget):
         toggle_layout.addStretch()
         self.screenshot_layout.addLayout(toggle_layout)
 
-        # Store pixmaps for toggling
         self.orig_pixmap = None
         self.annotated_pixmap = None
         self.ocr_pixmap = None
 
-        # Load screenshot - prioritize file path if available
+        screenshot_pixmap = None
         if self.screenshot_path and os.path.exists(self.screenshot_path):
             pixmap = QPixmap(self.screenshot_path)
             if not pixmap.isNull():
                 screenshot_pixmap = pixmap
 
+        if not screenshot_pixmap:
+            # Fallback: look for a base64 screenshot embedded in any call's prompt
+            for call in self.calls:
+                prompt_text = call.get("prompt_text") or ""
+                try:
+                    prompt_data = json.loads(prompt_text)
+                except (json.JSONDecodeError, TypeError):
+                    continue
+                if not isinstance(prompt_data, dict):
+                    continue
+                actual = prompt_data
+                if 'user_prompt' in prompt_data:
+                    try:
+                        actual = json.loads(prompt_data['user_prompt'])
+                    except (json.JSONDecodeError, TypeError):
+                        actual = prompt_data
+                screenshot_b64 = actual.get('screenshot', '') if isinstance(actual, dict) else ''
+                if screenshot_b64 and len(screenshot_b64) > 100:
+                    try:
+                        if screenshot_b64.startswith('data:image'):
+                            screenshot_b64 = screenshot_b64.split(',', 1)[1]
+                        image_data = base64.b64decode(screenshot_b64)
+                        pixmap = QPixmap()
+                        if pixmap.loadFromData(image_data):
+                            screenshot_pixmap = pixmap
+                            break
+                    except Exception:
+                        pass
+
+        if self.screenshot_path and os.path.exists(self.screenshot_path):
+            base, ext = os.path.splitext(self.screenshot_path)
+
+            annotated_path = f"{base}_annotated{ext}"
+            if os.path.exists(annotated_path):
+                pixmap = QPixmap(annotated_path)
+                if not pixmap.isNull():
+                    self.annotated_pixmap = pixmap
+
+            grounded_path = f"{base}_grounded{ext}"
+            if os.path.exists(grounded_path):
+                pixmap = QPixmap(grounded_path)
+                if not pixmap.isNull():
+                    self.ocr_pixmap = pixmap
+
         if screenshot_pixmap:
             self.orig_pixmap = screenshot_pixmap
 
-            # Load images from disk if available to avoid re-implementing drawing logic
-            # Annotated view (Actions)
-            if self.screenshot_path:
-                base, ext = os.path.splitext(self.screenshot_path)
-
-                # 1. Annotated Actions
-                annotated_path = f"{base}_annotated{ext}"
-                if os.path.exists(annotated_path):
-                    pixmap = QPixmap(annotated_path)
-                    if not pixmap.isNull():
-                        self.annotated_pixmap = pixmap
-
-                # 2. Grounded OCR
-                grounded_path = f"{base}_grounded{ext}"
-                if os.path.exists(grounded_path):
-                    pixmap = QPixmap(grounded_path)
-                    if not pixmap.isNull():
-                        self.ocr_pixmap = pixmap
-
-            # Fallbacks for runtime reliability
             if not self.annotated_pixmap:
                 self.annotated_pixmap = screenshot_pixmap
             if not self.ocr_pixmap:
                 self.ocr_pixmap = screenshot_pixmap
 
             self.screenshot_label = QLabel()
-            # Initial display: Annotated
             scaled_pixmap = self.annotated_pixmap.scaledToWidth(200, Qt.TransformationMode.SmoothTransformation)
             self.screenshot_label.setPixmap(scaled_pixmap)
             self.screenshot_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -326,93 +529,7 @@ class StepDetailWidget(QWidget):
             self.ocr_radio.setEnabled(False)
 
         self.screenshot_layout.addStretch()
-        top_row_layout.addWidget(screenshot_group, 1)  # 1/3 stretch factor
-
-        # Prompt Data section (2/3 width)
-        prompt_group = QGroupBox("Prompt Data")
-        prompt_layout = QVBoxLayout(prompt_group)
-        self.prompt_tree = JsonTreeWidget(prompt_json_data)
-        prompt_layout.addWidget(self.prompt_tree)
-        top_row_layout.addWidget(prompt_group, 2)  # 2/3 stretch factor
-
-        scroll_layout.addLayout(top_row_layout)
-
-        timing_group = self._create_timing_group()
-        if timing_group:
-            scroll_layout.addWidget(timing_group)
-
-        # BOTTOM ROW: Response (1/2) + Parsed Actions (1/2)
-        bottom_row_layout = QHBoxLayout()
-
-        # Response section (1/2 width)
-        response_group = QGroupBox("Response")
-        response_layout = QVBoxLayout(response_group)
-        self.response_tree = JsonTreeWidget(self.full_response)
-        response_layout.addWidget(self.response_tree)
-        bottom_row_layout.addWidget(response_group, 1)
-
-        # Actions section (1/2 width)
-        if self.parsed_actions:
-            actions_group = QGroupBox("Parsed Actions")
-            actions_layout = QVBoxLayout(actions_group)
-            actions_text = ""
-            for action in self.parsed_actions:
-                actions_text += f"• Action: {action.get('action', 'unknown')}\n"
-                if 'action_desc' in action:
-                    actions_text += f"  Description: {action['action_desc']}\n"
-
-                # Check for label_id OR target_bounding_box
-                label_id = action.get('label_id')
-                bbox = action.get('target_bounding_box')
-
-                if label_id is not None:
-                    actions_text += f"  Label ID: {label_id}\n"
-                elif bbox:
-                    # Sanity check for bbox content
-                    tl = bbox.get('top_left')
-                    br = bbox.get('bottom_right')
-                    if tl and br and len(tl) >= 2 and len(br) >= 2:
-                        actions_text += f"  Target: [{tl[0]}, {tl[1]}] → [{br[0]}, {br[1]}]\n"
-                    else:
-                        actions_text += f"  Target: {bbox}\n"
-
-                if 'input_text' in action and action['input_text']:
-                    actions_text += f"  Input: {action['input_text']}\n"
-                if 'reasoning' in action:
-                    actions_text += f"  Reasoning: {action['reasoning']}\n"
-                actions_text += "\n"
-
-
-            actions_display = QTextEdit()
-            actions_display.setPlainText(actions_text.strip())
-            actions_display.setReadOnly(True)
-            actions_layout.addWidget(actions_display)
-            bottom_row_layout.addWidget(actions_group, 1)
-        else:
-            # Empty placeholder if no actions
-            no_actions_group = QGroupBox("Parsed Actions")
-            no_actions_layout = QVBoxLayout(no_actions_group)
-            no_actions_label = QLabel("No parsed actions available")
-            no_actions_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            no_actions_label.setStyleSheet("color: #666; font-style: italic;")
-            no_actions_layout.addWidget(no_actions_label)
-            bottom_row_layout.addWidget(no_actions_group, 1)
-
-        scroll_layout.addLayout(bottom_row_layout)
-
-        # Error message (if any)
-        if self.error_message:
-            error_group = QGroupBox("Error")
-            error_layout = QVBoxLayout(error_group)
-            error_text = QTextEdit()
-            error_text.setPlainText(self.error_message)
-            error_text.setReadOnly(True)
-            error_text.setStyleSheet("color: red;")
-            error_layout.addWidget(error_text)
-            scroll_layout.addWidget(error_group)
-
-        scroll.setWidget(scroll_content)
-        layout.addWidget(scroll)
+        return screenshot_group
 
     def _on_toggle_changed(self, button):
         """Handle screenshot viewer toggle change."""
@@ -478,9 +595,18 @@ class StepDetailWidget(QWidget):
 
 
 class AIMonitorPanel(QWidget):
-    """Widget for monitoring AI interactions in real-time."""
+    """Widget for monitoring AI interactions in real-time.
 
-    show_step_details = Signal(int, datetime, bool, str, str, list, object, str, object)  # step_number, timestamp, success, prompt, response, actions, error_msg, screenshot_path, timing_data
+    A crawl step can involve multiple AI calls (e.g. Manager plan, then
+    Executor action). Each call is tracked individually in `_calls` so none
+    of them get overwritten, but the visible list shows exactly one row per
+    step (`_interactions`, keyed by step_number) — its preview reflects the
+    most relevant completed call for that step (the latest one with an
+    actual parsed action, since that's "what the AI did").
+    """
+
+    show_step_details = Signal(int, datetime, bool, list, int, str, object)
+    # step_number, timestamp, overall_success, calls, default_index, screenshot_path, timing_data
 
     def __init__(self, parent=None):
         """Initialize AI monitor panel.
@@ -489,7 +615,11 @@ class AIMonitorPanel(QWidget):
             parent: Parent widget
         """
         super().__init__(parent)
-        self._interactions = {}  # step_number -> interaction data
+        self._interactions = {}  # step_number -> aggregated row data
+        self._calls = {}  # call_key -> single AI call's request/response data
+        self._calls_by_step = {}  # step_number -> ordered list of call_keys
+        self._pending_by_step = {}  # step_number -> list of call_keys awaiting a response
+        self._call_seq = 0
         self._filter_state = {"status": "all", "search": ""}
         self._timing_provider = None
         self._setup_ui()
@@ -571,97 +701,154 @@ class AIMonitorPanel(QWidget):
     def add_request(self, run_id: int, step_number: int, request_data: dict):
         """Add a pending AI request.
 
+        A step may receive several of these (one per sub-agent call); each
+        gets its own tracked call slot, but they render as a single list row.
+
         Args:
             run_id: Run ID
             step_number: Step number
             request_data: Request data dictionary
         """
-        # Initialize or update existing entry (to preserve screenshot_path if already set)
-        if step_number not in self._interactions:
-            self._interactions[step_number] = {
-                "run_id": run_id,
-                "step_number": step_number,
-                "timestamp": datetime.now(),
-                "response_data": None,
-                "success": None,
-                "error_message": None,
-                "_response_updated": False
-            }
+        call_key = f"{step_number}:{self._call_seq}"
+        self._call_seq += 1
+        self._calls[call_key] = {
+            "run_id": run_id,
+            "timestamp": datetime.now(),
+            "request_data": request_data,
+            "response_data": None,
+            "success": None,
+            "error_message": None,
+            "_response_updated": False,
+        }
+        self._calls_by_step.setdefault(step_number, []).append(call_key)
+        self._pending_by_step.setdefault(step_number, []).append(call_key)
 
-        # Update request data and ensure basic fields are set
-        interaction = self._interactions[step_number]
-        interaction["run_id"] = run_id
-        interaction["request_data"] = request_data
-
-        # If timestamp was just a placeholder, update it to actual request time
-        if "timestamp" not in interaction:
-            interaction["timestamp"] = datetime.now()
-
-        # Create pending list item
-        self._add_list_item(step_number, pending=True)
+        self._recompute_step_aggregate(run_id, step_number)
+        self._sync_list_item(step_number)
 
     @Slot(int, int, dict)
     def add_response(self, run_id: int, step_number: int, response_data: dict):
         """Complete an AI interaction with response data.
+
+        Correlates to the oldest still-pending call for this step (the
+        producer emits request→response synchronously per call, in order,
+        so FIFO always resolves to the right one).
 
         Args:
             run_id: Run ID
             step_number: Step number
             response_data: Response data dictionary
         """
-        if step_number not in self._interactions:
-            return
+        pending_keys = self._pending_by_step.get(step_number)
+        call_key = pending_keys.pop(0) if pending_keys else None
 
-        interaction = self._interactions[step_number]
+        if call_key is None or call_key not in self._calls:
+            # Defensive: a response arrived without a tracked pending request.
+            call_key = f"{step_number}:{self._call_seq}"
+            self._call_seq += 1
+            self._calls[call_key] = {
+                "run_id": run_id,
+                "timestamp": datetime.now(),
+                "request_data": {},
+                "response_data": None,
+                "success": None,
+                "error_message": None,
+                "_response_updated": False,
+            }
+            self._calls_by_step.setdefault(step_number, []).append(call_key)
+
+        call = self._calls[call_key]
 
         # Skip if already updated with full data and this is just a summary
         is_full = self._is_full_response(response_data)
-        if interaction.get("_response_updated") and not is_full:
+        if call.get("_response_updated") and not is_full:
             return
 
-        # Update interaction with response
-        interaction["response_data"] = response_data
-        interaction["success"] = self._determine_success(response_data)
-        interaction["error_message"] = response_data.get("error_message")
-
+        call["run_id"] = run_id
+        call["response_data"] = response_data
+        call["success"] = self._determine_success(response_data)
+        call["error_message"] = response_data.get("error_message")
         if is_full:
-            interaction["_response_updated"] = True
+            call["_response_updated"] = True
 
-        # Update or replace list item
-        self._update_list_item(step_number)
+        self._recompute_step_aggregate(run_id, step_number)
+        self._sync_list_item(step_number)
 
-    def _add_list_item(self, step_number: int, pending: bool = False):
-        """Add or update list item for step.
+    def _recompute_step_aggregate(self, run_id: int, step_number: int) -> None:
+        """Recompute the step's single list-row summary from all its calls so far.
+
+        Preview prefers the latest completed call with an actual parsed
+        action (Executor/FastAgent) over a plan-only call (Manager) — that's
+        "what the AI did", which matters more than the raw plan. Overall
+        success is the AND of every completed call for the step.
+        """
+        call_keys = self._calls_by_step.get(step_number, [])
+        calls = [self._calls[k] for k in call_keys if k in self._calls]
+        if not calls:
+            return
+
+        latest = calls[-1]
+        pending = latest.get("response_data") is None
+        completed = [c for c in calls if c.get("response_data") is not None]
+
+        preview = None
+        for c in reversed(completed):
+            if _extract_parsed_actions(c.get("response_data") or {}):
+                preview = c
+                break
+        if preview is None and completed:
+            preview = completed[-1]
+
+        success = all(c.get("success") for c in completed) if completed else False
+
+        interaction = self._interactions.setdefault(
+            step_number, {"step_number": step_number, "timestamp": calls[0]["timestamp"]}
+        )
+        interaction["run_id"] = run_id
+        interaction["step_number"] = step_number
+        interaction["request_data"] = latest.get("request_data") or {}
+        interaction["response_data"] = preview.get("response_data") if preview else None
+        interaction["success"] = success
+        interaction["error_message"] = preview.get("error_message") if preview else None
+        interaction["_pending"] = pending
+
+    def _sync_list_item(self, step_number: int) -> None:
+        """Append the step's row if it's new, otherwise refresh it in place."""
+        interaction = self._interactions.get(step_number)
+        if interaction is None:
+            return
+        if interaction.get("_list_item") is None:
+            self._add_list_item(step_number)
+        else:
+            self._refresh_list_item(step_number)
+
+    def _add_list_item(self, step_number: int):
+        """Create the list item for a step from its current aggregated data.
 
         Args:
             step_number: Step number
-            pending: Whether this is a pending request
         """
         interaction = self._interactions.get(step_number)
         if not interaction:
             return
 
-        # Create item data
         timestamp = interaction["timestamp"]
+        pending = interaction.get("_pending", False)
         success = interaction.get("success", False) if not pending else False
-        latency_ms = interaction.get("latency_ms")
-        tokens_in = interaction.get("tokens_input")
-        tokens_out = interaction.get("tokens_output")
         error_message = interaction.get("error_message")
         timing_data = self._get_timing_data(
             interaction.get("run_id"),
             step_number,
         )
 
-        # Extract prompt and response previews
         request_data = interaction.get("request_data") or {}
         response_data = interaction.get("response_data") or {}
 
-        prompt_text = ""
-        if "user_prompt" in request_data:
-            prompt_text = request_data["user_prompt"]
-        elif "prompt" in request_data:
-            prompt_text = request_data["prompt"]
+        latency_ms = response_data.get("latency_ms")
+        tokens_in = response_data.get("tokens_input")
+        tokens_out = response_data.get("tokens_output")
+
+        prompt_text = _extract_prompt_text(request_data)
 
         # Filter base64 from prompt preview
         prompt_preview_text = prompt_text
@@ -681,28 +868,8 @@ class AIMonitorPanel(QWidget):
         except (json.JSONDecodeError, TypeError):
             pass
 
-        # Parse actions if available
-        parsed_actions = []
-        if "actions" in response_data:
-            parsed_actions = response_data["actions"]
-        elif "parsed_response" in response_data:
-            try:
-                parsed = json.loads(response_data["parsed_response"])
-                if isinstance(parsed, dict) and "actions" in parsed:
-                    parsed_actions = parsed["actions"]
-                elif isinstance(parsed, list):
-                    parsed_actions = parsed
-            except (json.JSONDecodeError, KeyError):
-                pass
-
-        # Extract full response text
-        full_response = ""
-        if "response" in response_data:
-            full_response = response_data["response"]
-        elif "raw_response" in response_data:
-            full_response = response_data["raw_response"]
-        elif "parsed_response" in response_data:
-            full_response = response_data["parsed_response"]
+        parsed_actions = _extract_parsed_actions(response_data)
+        full_response = _extract_response_text(response_data)
 
         # Create response preview
         response_preview_text = full_response
@@ -789,8 +956,8 @@ class AIMonitorPanel(QWidget):
         # Default to False
         return False
 
-    def _update_list_item(self, step_number: int):
-        """Update existing list item with response data.
+    def _refresh_list_item(self, step_number: int):
+        """Remove and re-add the list item for a step from its current aggregated data.
 
         Args:
             step_number: Step number
@@ -815,8 +982,8 @@ class AIMonitorPanel(QWidget):
             if old_widget:
                 old_widget.deleteLater()
 
-        # Add updated item (not pending anymore)
-        self._add_list_item(step_number, pending=False)
+        # Add updated item
+        self._add_list_item(step_number)
 
     def _on_status_filter_changed(self, status_text: str):
         """Handle status filter change.
@@ -885,6 +1052,10 @@ class AIMonitorPanel(QWidget):
     def _on_clear_clicked(self):
         """Handle clear button click."""
         self._interactions.clear()
+        self._calls.clear()
+        self._calls_by_step.clear()
+        self._pending_by_step.clear()
+        self._call_seq = 0
         self.interactions_list.clear()
         self._filter_state = {"status": "all", "search": ""}
         self.status_filter.setCurrentText("All")
@@ -897,58 +1068,62 @@ class AIMonitorPanel(QWidget):
     def _on_show_details(self, step_number: int):
         """Handle show details request for a step.
 
+        Gathers every AI call made for this step (not just one), so the
+        detail dialog can present all of them (e.g. Manager's plan and the
+        Executor's action) rather than only the last one.
+
         Args:
             step_number: Step number to show details for
         """
-        interaction = self._interactions.get(step_number)
-        if not interaction:
+        call_keys = self._calls_by_step.get(step_number, [])
+        if not call_keys:
             return
 
-        # Extract all data needed for detail view
-        timestamp = interaction["timestamp"]
-        success = interaction.get("success", False)
-        error_message = interaction.get("error_message")
+        label_counts: dict[str, int] = {}
+        calls_payload = []
+        for key in call_keys:
+            call = self._calls.get(key)
+            if not call:
+                continue
+            request_data = call.get("request_data") or {}
+            response_data = call.get("response_data") or {}
+            parsed_actions = _extract_parsed_actions(response_data)
 
-        request_data = interaction.get("request_data") or {}
-        response_data = interaction.get("response_data") or {}
+            base_label = "Action" if parsed_actions else "Plan"
+            label_counts[base_label] = label_counts.get(base_label, 0) + 1
+            count = label_counts[base_label]
+            label = base_label if count == 1 else f"{base_label} {count}"
 
-        prompt_text = ""
-        if "user_prompt" in request_data:
-            prompt_text = request_data["user_prompt"]
-        elif "prompt" in request_data:
-            prompt_text = request_data["prompt"]
+            calls_payload.append({
+                "label": label,
+                "success": call.get("success", False),
+                "error_message": call.get("error_message"),
+                "prompt_text": _extract_prompt_text(request_data),
+                "response_text": _extract_response_text(response_data),
+                "parsed_actions": parsed_actions,
+            })
 
-        response_text = ""
-        if "response" in response_data:
-            response_text = response_data["response"]
-        elif "raw_response" in response_data:
-            response_text = response_data["raw_response"]
-        elif "parsed_response" in response_data:
-            response_text = response_data["parsed_response"]
+        if not calls_payload:
+            return
 
-        # Parse actions if available
-        parsed_actions = []
-        if "actions" in response_data:
-            parsed_actions = response_data["actions"]
-        elif "parsed_response" in response_data:
-            try:
-                parsed = json.loads(response_data["parsed_response"])
-                if isinstance(parsed, dict) and "actions" in parsed:
-                    parsed_actions = parsed["actions"]
-                elif isinstance(parsed, list):
-                    parsed_actions = parsed
-            except (json.JSONDecodeError, KeyError):
-                pass
+        # Default to the last call with an actual parsed action (that's the
+        # one the viewer cares about first); fall back to the last call.
+        default_index = len(calls_payload) - 1
+        for i in range(len(calls_payload) - 1, -1, -1):
+            if calls_payload[i]["parsed_actions"]:
+                default_index = i
+                break
 
-        # Emit signal with all data
+        interaction = self._interactions.get(step_number, {})
+        overall_success = interaction.get("success", False)
+        timestamp = interaction.get("timestamp", datetime.now())
+
         self.show_step_details.emit(
             step_number,
             timestamp,
-            success,
-            prompt_text,
-            response_text,
-            parsed_actions,
-            error_message,
+            overall_success,
+            calls_payload,
+            default_index,
             interaction.get("screenshot_path"),
             self._get_timing_data(interaction.get("run_id"), step_number),
         )

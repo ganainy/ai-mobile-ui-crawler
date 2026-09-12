@@ -25,6 +25,15 @@ class ManagerResponseEvent(Event):
     manager_llm_ms: float | None = None
     validation_retries: list[dict] | None = None
 
+    # Real AI Monitor fields (populated at get_response; no behavior change)
+    system_prompt: str | None = None
+    user_prompt_text: str | None = None
+    screenshot: bytes | None = None
+
+    # Success/error signals for AI Monitor panel status indicators
+    success: bool = True
+    error: str | None = None
+
 
 class ManagerPlanDetailsEvent(Event):
     """Plan parsed and ready (internal event with full details)."""

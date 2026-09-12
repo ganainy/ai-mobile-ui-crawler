@@ -9,6 +9,7 @@ import asyncio
 import copy
 import logging
 import os
+import time
 from typing import TYPE_CHECKING, Optional
 
 from llama_index.core.base.llms.types import ChatMessage, ImageBlock, TextBlock
@@ -341,11 +342,13 @@ class FastAgent(Workflow):
                         )
                     )
 
-        # Call LLM
+        # Call LLM (timed for AI Monitor latency metric)
         logger.info("FastAgent response:", extra={"color": "yellow"})
+        llm_start = time.perf_counter()
         response = await acall_with_retries(
             self.llm, messages_to_send, stream=self.agent_config.streaming
         )
+        fast_agent_llm_ms = (time.perf_counter() - llm_start) * 1000
 
         if response is None:
             return FastAgentEndEvent(
@@ -385,10 +388,21 @@ class FastAgent(Workflow):
         # Update unified state
         self.shared_state.last_thought = thought
 
+        # Extract prompt text for AI Monitor (last user message)
+        prompt_text = None
+        for msg in reversed(messages_to_send):
+            if msg.role == "user":
+                prompt_text = msg.content
+                break
+
         event = FastAgentResponseEvent(
             thought=thought,
             code=tool_calls_xml,
             usage=usage,
+            raw_response=response_text,
+            prompt_text=prompt_text,
+            screenshot=screenshot,
+            fast_agent_llm_ms=fast_agent_llm_ms,
         )
         ctx.write_event_to_stream(event)
         return event

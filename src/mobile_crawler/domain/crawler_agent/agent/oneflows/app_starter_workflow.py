@@ -94,20 +94,46 @@ Choose the most appropriate app based on the description. Return the package nam
             result_json = json.loads(json_str)
             package_name = result_json["package"]
         except (json.JSONDecodeError, KeyError, ValueError) as e:
+            error_msg = f"Error parsing LLM response: {e}. Response: {response_text}"
             return StopEvent(
-                result=f"Error parsing LLM response: {e}. Response: {response_text}"
+                result={
+                    "success": False,
+                    "package_name": None,
+                    "prompt": prompt,
+                    "response": response_text,
+                    "summary": error_msg,
+                }
             )
 
         if not package_name:
             logger.warning(f"No matching app found for: {app_description}")
+            summary = f"Could not open app: no installed app matches '{app_description}'"
             return StopEvent(
-                result=f"Could not open app: no installed app matches '{app_description}'"
+                result={
+                    "success": False,
+                    "package_name": None,
+                    "prompt": prompt,
+                    "response": response_text,
+                    "summary": summary,
+                }
             )
 
         logger.info(f"Starting app {package_name}")
         result = await self.driver.start_app(package_name)
 
-        return StopEvent(result=result)
+        # Check for driver failure (AndroidDriver/IosDriver return "Failed..." strings)
+        failed = isinstance(result, str) and result.lower().startswith("failed")
+        summary = result if isinstance(result, str) else f"Started {package_name}"
+
+        return StopEvent(
+            result={
+                "success": not failed,
+                "package_name": package_name,
+                "prompt": prompt,
+                "response": response_text,
+                "summary": summary,
+            }
+        )
 
 
 # Example usage

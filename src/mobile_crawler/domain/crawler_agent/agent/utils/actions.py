@@ -197,6 +197,36 @@ async def open_app(text: str, *, ctx: "ActionContext") -> ActionResult:
     result = await workflow.run(app_description=text)
     await asyncio.sleep(1)
 
+    # AppStarter returns a dict {success, package_name, prompt, response, summary}
+    if isinstance(result, dict):
+        pkg = result.get("package_name")
+        response_text = result.get("response") or ""
+        summary = result.get("summary") or ""
+        success = bool(result.get("success"))
+
+        # Emit an AppOpenerResponseEvent onto the outer CrawlerAgent stream for
+        # the AI Monitor panel (no new plumbing needed — consumers already
+        # iterate the outer handler's stream events).
+        try:
+            from mobile_crawler.domain.crawler_agent.agent.droid.events import AppOpenerResponseEvent
+
+            wf_ctx = getattr(ctx, "workflow_ctx", None)
+            if wf_ctx is not None:
+                wf_ctx.write_event_to_stream(
+                    AppOpenerResponseEvent(
+                        success=success,
+                        package_name=pkg,
+                        prompt=result.get("prompt") or "",
+                        response=response_text,
+                        summary=summary,
+                    )
+                )
+        except Exception as e:
+            logger.debug(f"Failed to emit AppOpenerResponseEvent: {e}")
+
+        return ActionResult(success=success, summary=summary)
+
+    # Legacy string result path (pre-dict AppStarter)
     if isinstance(result, str) and "could not open app" in result.lower():
         return ActionResult(success=False, summary=result)
     return ActionResult(success=True, summary=str(result))

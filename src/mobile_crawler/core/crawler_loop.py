@@ -172,6 +172,7 @@ class CrawlerLoop:
             self._crawler_agent_service.begin_step_tracking(
                 run_id=run_id,
                 emit_step_phase_event=self._emit_event,
+                screenshots_dir=self.session_folder_manager.get_subfolder(run, "screenshots"),
             )
 
             logs_dir = self.session_folder_manager.get_subfolder(run, "logs")

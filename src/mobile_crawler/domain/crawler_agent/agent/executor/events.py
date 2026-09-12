@@ -24,6 +24,19 @@ class ExecutorResponseEvent(Event):
     usage: UsageResult | None = None
     executor_llm_ms: float | None = None
 
+    # Real AI Monitor fields (populated at get_response; no behavior change)
+    prompt_text: str | None = None
+    screenshot: bytes | None = None
+
+    # Success/error signals for AI Monitor panel status indicators
+    success: bool = True
+    error: str | None = None
+
+    # Already-parsed response (dict with 'thought'/'action'/'description') so
+    # consumers like the AI Monitor and process_response don't re-parse the raw
+    # text. None on the early-failure path (empty LLM response).
+    parsed_action: dict | None = None
+
 
 class ExecutorActionEvent(Event):
     """Action parsed, ready to execute."""

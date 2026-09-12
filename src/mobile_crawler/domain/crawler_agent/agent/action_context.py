@@ -28,6 +28,7 @@ class ActionContext:
         app_opener_llm=None,
         credential_manager: CredentialManager | None = None,
         streaming: bool = False,
+        workflow_ctx=None,
     ) -> None:
         self.driver = driver
         self.ui = ui  # refreshed each step before tool execution
@@ -36,3 +37,4 @@ class ActionContext:
         self.app_opener_llm = app_opener_llm
         self.credential_manager = credential_manager
         self.streaming = streaming
+        self.workflow_ctx = workflow_ctx  # For emitting events from nested workflows

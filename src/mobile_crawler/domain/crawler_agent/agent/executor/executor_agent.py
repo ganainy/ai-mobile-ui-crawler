@@ -156,6 +156,10 @@ class ExecutorAgent(Workflow):
         # Get messages from context
         messages = await ctx.store.get("executor_messages")
 
+        # Prompt text + screenshot for AI Monitor (collected once, used on all paths)
+        prompt_text = messages[0].content if messages else None
+        screenshot = self.shared_state.screenshot
+
         try:
             logger.info("Executor response:", extra={"color": "green"})
             llm_start = time.perf_counter()
@@ -175,6 +179,10 @@ class ExecutorAgent(Workflow):
                 response=error_response,
                 usage=None,
                 executor_llm_ms=None,
+                prompt_text=prompt_text,
+                screenshot=screenshot,
+                success=False,
+                error=str(e),
             )
             ctx.write_event_to_stream(event)
             return event
@@ -188,10 +196,22 @@ class ExecutorAgent(Workflow):
         except Exception as e:
             logger.warning(f"Could not get usage: {e}")
 
+        # Parse response once here (Fix 8) so consumers read parsed_action instead
+        # of re-parsing the raw text. Keep it best-effort: parse failure doesn't
+        # block the event from emitting; process_response will handle the error.
+        parsed_action = None
+        try:
+            parsed_action = parse_executor_response(response_text)
+        except Exception as e:
+            logger.warning(f"Failed to parse executor response in get_response: {e}")
+
         event = ExecutorResponseEvent(
             response=response_text,
             usage=usage,
             executor_llm_ms=executor_llm_ms,
+            prompt_text=prompt_text,
+            screenshot=screenshot,
+            parsed_action=parsed_action,
         )
         ctx.write_event_to_stream(event)
         return event
@@ -206,7 +226,9 @@ class ExecutorAgent(Workflow):
         response_text = ev.response
 
         try:
-            parsed = parse_executor_response(response_text)
+            # Prefer the result already parsed at get_response (single-parse,
+            # Fix 8); fall back to parsing here when it's absent (failure path).
+            parsed = ev.parsed_action if ev.parsed_action is not None else parse_executor_response(response_text)
         except Exception as e:
             logger.error(f"❌ Failed to parse executor response: {e}")
             return ExecutorActionEvent(

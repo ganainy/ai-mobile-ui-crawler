@@ -562,11 +562,22 @@ class ManagerAgent(Workflow):
 
         output, validation_retries = await self._validate_and_retry(messages, output)
 
+        # Extract user prompt text for AI Monitor (last user message before any
+        # injected context so consumers render the real intent text)
+        user_prompt_text = None
+        for msg in messages:
+            if msg.role == MessageRole.USER:
+                user_prompt_text = msg.content
+                break
+
         event = ManagerResponseEvent(
             response=output,
             usage=usage,
             manager_llm_ms=manager_llm_ms,
             validation_retries=validation_retries,
+            system_prompt=system_prompt,
+            user_prompt_text=user_prompt_text,
+            screenshot=screenshot,
         )
         ctx.write_event_to_stream(event)
         return event

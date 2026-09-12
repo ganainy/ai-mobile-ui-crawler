@@ -509,6 +509,7 @@ class CrawlerAgent(Workflow):
             app_opener_llm=self.app_opener_llm,
             credential_manager=self.credential_manager,
             streaming=self.config.agent.streaming,
+            workflow_ctx=ctx,  # outer CrawlerAgent ctx for emitting AppOpener events
         )
 
         # ── 5. Wire up sub-agents ─────────────────────────────────────
