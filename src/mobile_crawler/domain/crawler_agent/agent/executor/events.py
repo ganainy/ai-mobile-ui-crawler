@@ -32,6 +32,11 @@ class ExecutorResponseEvent(Event):
     success: bool = True
     error: str | None = None
 
+    # Whether vision was enabled for this call — when False, no screenshot was
+    # ever captured/sent by design (a text-based UI description was used
+    # instead), so the AI Monitor should say "not needed" rather than "missing"
+    vision_enabled: bool = True
+
     # Already-parsed response (dict with 'thought'/'action'/'description') so
     # consumers like the AI Monitor and process_response don't re-parse the raw
     # text. None on the early-failure path (empty LLM response).

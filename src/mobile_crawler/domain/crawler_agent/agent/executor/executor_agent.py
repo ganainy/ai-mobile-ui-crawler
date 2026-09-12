@@ -183,6 +183,7 @@ class ExecutorAgent(Workflow):
                 screenshot=screenshot,
                 success=False,
                 error=str(e),
+                vision_enabled=self.vision,
             )
             ctx.write_event_to_stream(event)
             return event
@@ -212,6 +213,7 @@ class ExecutorAgent(Workflow):
             prompt_text=prompt_text,
             screenshot=screenshot,
             parsed_action=parsed_action,
+            vision_enabled=self.vision,
         )
         ctx.write_event_to_stream(event)
         return event

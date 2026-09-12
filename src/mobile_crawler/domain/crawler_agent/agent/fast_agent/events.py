@@ -33,6 +33,11 @@ class FastAgentResponseEvent(Event):
     success: bool = True
     error: str | None = None
 
+    # Whether vision was enabled for this call — when False, no screenshot was
+    # ever captured/sent by design (a text-based UI description was used
+    # instead), so the AI Monitor should say "not needed" rather than "missing"
+    vision_enabled: bool = True
+
 
 class FastAgentToolCallEvent(Event):
     """Tool calls ready to execute."""

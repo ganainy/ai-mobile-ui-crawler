@@ -578,6 +578,7 @@ class ManagerAgent(Workflow):
             system_prompt=system_prompt,
             user_prompt_text=user_prompt_text,
             screenshot=screenshot,
+            vision_enabled=self.vision,
         )
         ctx.write_event_to_stream(event)
         return event

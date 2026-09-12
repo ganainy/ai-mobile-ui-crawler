@@ -403,6 +403,7 @@ class FastAgent(Workflow):
             prompt_text=prompt_text,
             screenshot=screenshot,
             fast_agent_llm_ms=fast_agent_llm_ms,
+            vision_enabled=self.vision,
         )
         ctx.write_event_to_stream(event)
         return event

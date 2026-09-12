@@ -1133,6 +1133,9 @@ class CrawlerAgentService:
         actions = []
         success = True  # Default for events without explicit success field
         error_message = None
+        # AppOpener never captures a screenshot (pure text/package-matching call),
+        # so vision is never applicable there regardless of any config flag.
+        vision_enabled = False
 
         if isinstance(event, ManagerResponseEvent):
             screenshot_bytes = getattr(event, "screenshot", None)
@@ -1144,6 +1147,7 @@ class CrawlerAgentService:
             latency_ms = getattr(event, "manager_llm_ms", None)
             success = getattr(event, "success", True)
             error_message = getattr(event, "error", None)
+            vision_enabled = getattr(event, "vision_enabled", True)
         elif isinstance(event, ExecutorResponseEvent):
             screenshot_bytes = getattr(event, "screenshot", None)
             prompt_text = getattr(event, "prompt_text", None)
@@ -1152,6 +1156,7 @@ class CrawlerAgentService:
             latency_ms = getattr(event, "executor_llm_ms", None)
             success = getattr(event, "success", True)
             error_message = getattr(event, "error", None)
+            vision_enabled = getattr(event, "vision_enabled", True)
             # Use already-parsed result from event (Fix 8: single parse, not double)
             parsed = event.parsed_action
             if parsed:
@@ -1172,6 +1177,7 @@ class CrawlerAgentService:
             latency_ms = getattr(event, "fast_agent_llm_ms", None)
             success = getattr(event, "success", True)
             error_message = getattr(event, "error", None)
+            vision_enabled = getattr(event, "vision_enabled", True)
         elif isinstance(event, AppOpenerResponseEvent):
             prompt_text = event.prompt
             raw_response = event.response
@@ -1210,6 +1216,7 @@ class CrawlerAgentService:
             "actions": actions,
             "success": success,
             "error_message": error_message,
+            "vision_enabled": vision_enabled,
         }
 
         # Emit signals to UI (on_ai_request_sent, on_ai_response_received, on_screenshot_captured)

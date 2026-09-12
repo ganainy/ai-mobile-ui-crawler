@@ -1,8 +1,10 @@
 """AI Monitor Panel widget for displaying AI interactions in real-time."""
 
 import base64
+import html
 import json
 import os
+import re
 from datetime import datetime
 
 from PySide6.QtCore import Qt, QTimer, Signal, Slot
@@ -65,6 +67,72 @@ def _extract_parsed_actions(response_data: dict) -> list[dict]:
         except (json.JSONDecodeError, KeyError):
             pass
     return []
+
+
+_JSON_FENCE_RE = re.compile(r"```json\s*(.*?)```", re.DOTALL | re.IGNORECASE)
+
+
+def _extract_embedded_json(raw_text: str):
+    """Find and parse a JSON blob within a larger text response, if any.
+
+    Many raw responses (e.g. the Manager's <thought>/<plan>/```json block)
+    aren't valid JSON as a whole, which used to make JsonTreeWidget fall back
+    to a single table row with an empty key and the entire blob crammed into
+    the value cell. Split the two apart instead: return the surrounding plain
+    text (JSON portion removed) and the parsed JSON object, so each can be
+    rendered appropriately.
+
+    Returns:
+        (plain_text, parsed_json) — parsed_json is None if nothing
+        JSON-shaped was found; plain_text is the original text unchanged
+        in that case.
+    """
+    if not raw_text:
+        return raw_text, None
+
+    stripped = raw_text.strip()
+    try:
+        return "", json.loads(stripped)
+    except (json.JSONDecodeError, TypeError):
+        pass
+
+    match = _JSON_FENCE_RE.search(raw_text)
+    if match:
+        try:
+            parsed = json.loads(match.group(1).strip())
+        except (json.JSONDecodeError, TypeError):
+            return raw_text, None
+        plain_text = (raw_text[: match.start()] + raw_text[match.end():]).strip()
+        return plain_text, parsed
+
+    return raw_text, None
+
+
+_JSON_TOKEN_RE = re.compile(
+    r'(?P<key>"(?:\\.|[^"\\])*"(?=\s*:))'
+    r'|(?P<string>"(?:\\.|[^"\\])*")'
+    r'|(?P<bool>\btrue\b|\bfalse\b|\bnull\b)'
+    r'|(?P<number>-?\d+\.?\d*)'
+)
+
+_JSON_TOKEN_COLORS = {
+    "key": "#9cdcfe",
+    "string": "#ce9178",
+    "bool": "#569cd6",
+    "number": "#b5cea8",
+}
+
+
+def _json_to_html(obj) -> str:
+    """Pretty-print a JSON-able object as syntax-colored HTML for a QTextEdit."""
+    text = json.dumps(obj, indent=2, ensure_ascii=False)
+
+    def _colorize(m: re.Match) -> str:
+        color = _JSON_TOKEN_COLORS[m.lastgroup]
+        return f'<span style="color:{color};">{html.escape(m.group())}</span>'
+
+    colored = _JSON_TOKEN_RE.sub(_colorize, text)
+    return f'<pre style="font-family:monospace; white-space:pre-wrap; margin:0;">{colored}</pre>'
 
 
 class CollapsibleSection(QWidget):
@@ -400,11 +468,50 @@ class StepDetailWidget(QWidget):
             no_actions_label.setStyleSheet("color: #666; font-style: italic;")
             page_layout.addWidget(no_actions_label)
 
-        response_tree = JsonTreeWidget(call.get("response_text") or "")
-        raw_response_section = CollapsibleSection("Raw response", response_tree, collapsed=True)
+        raw_response_section = CollapsibleSection(
+            "Raw response", self._build_raw_response_widget(call.get("response_text") or ""), collapsed=True
+        )
         page_layout.addWidget(raw_response_section)
 
         return page
+
+    @staticmethod
+    def _build_raw_response_widget(response_text: str) -> QWidget:
+        """Render a raw response as plain text plus any embedded JSON, colored.
+
+        Many raw responses aren't valid JSON as a whole (e.g. the Manager's
+        <thought>/<plan>/```json block) — showing them through a plain
+        key/value tree used to produce one row with an empty key and the
+        entire blob crammed into the value cell. Split the two apart: plain
+        text stays plain text, and any embedded JSON gets pretty-printed
+        with syntax coloring so its fields are easy to see.
+        """
+        container = QWidget()
+        container_layout = QVBoxLayout(container)
+        container_layout.setContentsMargins(0, 0, 0, 0)
+
+        plain_text, embedded_json = _extract_embedded_json(response_text)
+
+        if plain_text:
+            text_display = QTextEdit()
+            text_display.setPlainText(plain_text)
+            text_display.setReadOnly(True)
+            container_layout.addWidget(text_display)
+
+        if embedded_json is not None:
+            if plain_text:
+                container_layout.addWidget(QLabel("Parsed JSON:"))
+            json_display = QTextEdit()
+            json_display.setReadOnly(True)
+            json_display.setHtml(_json_to_html(embedded_json))
+            container_layout.addWidget(json_display)
+        elif not plain_text:
+            empty_label = QLabel("No response text")
+            empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            empty_label.setStyleSheet("color: #666; font-style: italic;")
+            container_layout.addWidget(empty_label)
+
+        return container
 
     def _build_prompt_tree(self, call: dict) -> QWidget:
         """Build one page of the Prompt stack for a single AI call."""
@@ -423,7 +530,11 @@ class StepDetailWidget(QWidget):
 
                 prompt_json_data = actual_prompt_data.copy() if isinstance(actual_prompt_data, dict) else actual_prompt_data
                 if isinstance(prompt_json_data, dict) and 'screenshot' in prompt_json_data:
-                    prompt_json_data['screenshot'] = "[Image displayed on left]"
+                    screenshot_value = prompt_json_data['screenshot']
+                    if screenshot_value and len(screenshot_value) > 100:
+                        prompt_json_data['screenshot'] = "[Image displayed on left]"
+                    else:
+                        prompt_json_data['screenshot'] = "(none sent for this call)"
         except (json.JSONDecodeError, TypeError):
             if len(full_prompt) > 1000 and all(
                 c in 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/='
@@ -521,7 +632,17 @@ class StepDetailWidget(QWidget):
             self.screenshot_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self.screenshot_layout.addWidget(self.screenshot_label)
         else:
-            no_screenshot_label = QLabel("No screenshot available")
+            # Vision may simply be disabled for every call in this step, in
+            # which case there was never a screenshot to send — that's a
+            # deliberate config choice (a text-based UI description was used
+            # instead), not a missing/failed capture. Say so plainly rather
+            # than reading as a bug.
+            vision_used = any(call.get("vision_enabled", True) for call in self.calls)
+            if vision_used:
+                message = "No screenshot available"
+            else:
+                message = "Screenshot not needed — vision is disabled for this step;\na text-based UI description was sent instead"
+            no_screenshot_label = QLabel(message)
             no_screenshot_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             no_screenshot_label.setStyleSheet("color: #666; font-style: italic;")
             self.screenshot_layout.addWidget(no_screenshot_label)
@@ -1101,6 +1222,7 @@ class AIMonitorPanel(QWidget):
                 "prompt_text": _extract_prompt_text(request_data),
                 "response_text": _extract_response_text(response_data),
                 "parsed_actions": parsed_actions,
+                "vision_enabled": response_data.get("vision_enabled", True),
             })
 
         if not calls_payload:
