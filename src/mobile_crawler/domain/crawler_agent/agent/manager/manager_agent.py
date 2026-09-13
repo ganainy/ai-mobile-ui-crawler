@@ -397,29 +397,31 @@ class ManagerAgent(Workflow):
         """Gather context and prepare manager prompt."""
         logger.debug("💬 Preparing manager context...")
 
-        # Capture screenshot if needed
+        # Always capture — even with vision off, the screenshot is still
+        # needed for the Statistics/AI Monitor "reference only" display.
         screenshot = None
-        if self.vision or self._stream_screenshots or self.save_trajectory != "none":
-            try:
-                screenshot = await self.action_ctx.driver.screenshot()
+        try:
+            _screenshot_start = time.perf_counter()
+            screenshot = await self.action_ctx.driver.screenshot()
+            _screenshot_ms = (time.perf_counter() - _screenshot_start) * 1000
 
-                if screenshot:
-                    ctx.write_event_to_stream(ScreenshotEvent(screenshot=screenshot))
-                    parent_span = trace.get_current_span()
-                    record_langfuse_screenshot(
-                        screenshot,
-                        parent_span=parent_span,
-                        screenshots_enabled=bool(
-                            self.tracing_config
-                            and self.tracing_config.langfuse_screenshots
-                        ),
-                        vision_enabled=self.vision,
-                    )
-                    logger.debug("📸 Screenshot captured for Manager")
-            except DeviceDisconnectedError:
-                raise
-            except Exception as e:
-                logger.warning(f"Failed to capture screenshot: {e}")
+            if screenshot:
+                ctx.write_event_to_stream(ScreenshotEvent(screenshot=screenshot, duration_ms=_screenshot_ms))
+                parent_span = trace.get_current_span()
+                record_langfuse_screenshot(
+                    screenshot,
+                    parent_span=parent_span,
+                    screenshots_enabled=bool(
+                        self.tracing_config
+                        and self.tracing_config.langfuse_screenshots
+                    ),
+                    vision_enabled=self.vision,
+                )
+                logger.debug("📸 Screenshot captured for Manager")
+        except DeviceDisconnectedError:
+            raise
+        except Exception as e:
+            logger.warning(f"Failed to capture screenshot: {e}")
 
         # Get and format device state
         ui_state = await self.state_provider.get_state()
@@ -465,6 +467,7 @@ class ManagerAgent(Workflow):
         self.shared_state.formatted_device_state = ui_state.formatted_text
         self.shared_state.focused_text = ui_state.focused_text
         self.shared_state.a11y_tree = ui_state.elements
+        self.shared_state.omniparser_ms = getattr(ui_state, "omniparser_ms", None)
         self.shared_state.phone_state = ui_state.phone_state
 
         # Update package/activity tracking
@@ -579,6 +582,9 @@ class ManagerAgent(Workflow):
             user_prompt_text=user_prompt_text,
             screenshot=screenshot,
             vision_enabled=self.vision,
+            elements=self.shared_state.a11y_tree,
+            loop_detected=bool(self.shared_state.loop_warning),
+            omniparser_ms=self.shared_state.omniparser_ms,
         )
         ctx.write_event_to_stream(event)
         return event

@@ -181,9 +181,11 @@ class AndroidStateProvider(StateProvider):
         # OmniParser client (initialized lazily)
         self._omni_client = None
         self._omni_initialized = False
+        self._last_omniparser_ms: float | None = None
 
     async def get_state(self) -> UIState:
         state_started = time.perf_counter()
+        self._last_omniparser_ms = None
         await self._ensure_target_package_active()
 
         # Get screenshot via driver (ADB, no Portal needed)
@@ -283,6 +285,7 @@ class AndroidStateProvider(StateProvider):
             layout_hash=layout_hash,
         )
         ui_state.capture_timing_ms = round((time.perf_counter() - state_started) * 1000, 3)
+        ui_state.omniparser_ms = self._last_omniparser_ms
         logger.debug(
             "State capture completed in %.1fms (mode=%s, source=%s, elements=%s)",
             ui_state.capture_timing_ms,
@@ -391,10 +394,11 @@ class AndroidStateProvider(StateProvider):
         try:
             return self._omni_client.parse(screenshot_bytes)
         finally:
+            self._last_omniparser_ms = (time.perf_counter() - parse_started) * 1000
             logger.debug(
                 "OmniParser parse call '%s' took %.1fms",
                 caller_label,
-                (time.perf_counter() - parse_started) * 1000,
+                self._last_omniparser_ms,
             )
 
     def _init_omni_parser(self) -> None:

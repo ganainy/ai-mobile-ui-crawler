@@ -34,6 +34,7 @@ class CrawlerAgentState(BaseModel):
     formatted_device_state: str = ""  # Text description for prompts
     focused_text: str = ""  # Text in focused input field
     a11y_tree: list[dict] = Field(default_factory=list)  # Raw accessibility tree
+    omniparser_ms: float | None = None  # OmniParser call duration, when it ran this step
     phone_state: dict = Field(default_factory=dict)  # Package, activity, etc.
     screenshot: str | bytes | None = None  # Current screenshot
     width: int = 0

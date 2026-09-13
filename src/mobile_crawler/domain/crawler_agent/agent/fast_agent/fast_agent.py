@@ -243,30 +243,32 @@ class FastAgent(Workflow):
         self.shared_state.step_number += 1
         logger.info(f"🔄 Step {self.shared_state.step_number}/{self.max_steps}")
 
-        # Capture screenshot if needed
+        # Always capture — even with vision off, the screenshot is still
+        # needed for the Statistics/AI Monitor "reference only" display.
         screenshot = None
-        if self.vision or self._stream_screenshots or self.save_trajectory != "none":
-            try:
-                screenshot = await self.action_ctx.driver.screenshot()
+        try:
+            _screenshot_start = time.perf_counter()
+            screenshot = await self.action_ctx.driver.screenshot()
+            _screenshot_ms = (time.perf_counter() - _screenshot_start) * 1000
 
-                if screenshot:
-                    ctx.write_event_to_stream(ScreenshotEvent(screenshot=screenshot))
-                    parent_span = trace.get_current_span()
-                    record_langfuse_screenshot(
-                        screenshot,
-                        parent_span=parent_span,
-                        screenshots_enabled=bool(
-                            self.tracing_config
-                            and self.tracing_config.langfuse_screenshots
-                        ),
-                        vision_enabled=self.vision,
-                    )
-                    await ctx.store.set("screenshot", screenshot)
-                    logger.debug("📸 Screenshot captured for FastAgent")
-            except DeviceDisconnectedError:
-                raise
-            except Exception as e:
-                logger.warning(f"Failed to capture screenshot: {e}")
+            if screenshot:
+                ctx.write_event_to_stream(ScreenshotEvent(screenshot=screenshot, duration_ms=_screenshot_ms))
+                parent_span = trace.get_current_span()
+                record_langfuse_screenshot(
+                    screenshot,
+                    parent_span=parent_span,
+                    screenshots_enabled=bool(
+                        self.tracing_config
+                        and self.tracing_config.langfuse_screenshots
+                    ),
+                    vision_enabled=self.vision,
+                )
+                await ctx.store.set("screenshot", screenshot)
+                logger.debug("📸 Screenshot captured for FastAgent")
+        except DeviceDisconnectedError:
+            raise
+        except Exception as e:
+            logger.warning(f"Failed to capture screenshot: {e}")
 
         # Get device state
         try:
@@ -280,6 +282,7 @@ class FastAgent(Workflow):
             self.shared_state.formatted_device_state = ui_state.formatted_text
             self.shared_state.focused_text = ui_state.focused_text
             self.shared_state.a11y_tree = ui_state.elements
+            self.shared_state.omniparser_ms = getattr(ui_state, "omniparser_ms", None)
             self.shared_state.phone_state = ui_state.phone_state
 
             # Extract and store package/app name
@@ -404,6 +407,8 @@ class FastAgent(Workflow):
             screenshot=screenshot,
             fast_agent_llm_ms=fast_agent_llm_ms,
             vision_enabled=self.vision,
+            elements=self.shared_state.a11y_tree,
+            omniparser_ms=self.shared_state.omniparser_ms,
         )
         ctx.write_event_to_stream(event)
         return event

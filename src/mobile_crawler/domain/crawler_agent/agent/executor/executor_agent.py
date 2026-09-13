@@ -184,6 +184,7 @@ class ExecutorAgent(Workflow):
                 success=False,
                 error=str(e),
                 vision_enabled=self.vision,
+                elements=self.shared_state.a11y_tree,
             )
             ctx.write_event_to_stream(event)
             return event
@@ -214,6 +215,7 @@ class ExecutorAgent(Workflow):
             screenshot=screenshot,
             parsed_action=parsed_action,
             vision_enabled=self.vision,
+            elements=self.shared_state.a11y_tree,
         )
         ctx.write_event_to_stream(event)
         return event

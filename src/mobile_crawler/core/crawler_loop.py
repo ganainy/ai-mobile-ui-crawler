@@ -422,6 +422,19 @@ class CrawlerLoop:
                 if result.report_path:
                     details.append(f"PDF report: {result.report_path}")
                 self._emit_event("on_debug_log", run_id, 0, " | ".join(details))
+
+                # Feed security scorecard into the runtime stats collector
+                scorecard = result.security_score
+                if isinstance(scorecard, dict):
+                    score = scorecard.get("score") or scorecard.get("security_score") or 0.0
+                    high = int(scorecard.get("high") or 0)
+                    # MobSF's scorecard API uses "warning"/"info" for medium/low severity
+                    # (see mobsf_parser.py's JsonMobSFParser, which hits the same quirk).
+                    medium = int(scorecard.get("warning") or scorecard.get("medium") or 0)
+                    low = int(scorecard.get("info") or scorecard.get("low") or 0)
+                    self._emit_event(
+                        "on_mobsf_finished", run_id, float(score), high, medium, low
+                    )
             else:
                 self._emit_event(
                     "on_debug_log",

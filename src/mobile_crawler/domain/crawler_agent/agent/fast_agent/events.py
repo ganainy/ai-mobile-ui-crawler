@@ -38,6 +38,15 @@ class FastAgentResponseEvent(Event):
     # instead), so the AI Monitor should say "not needed" rather than "missing"
     vision_enabled: bool = True
 
+    # Indexed UI elements from the accessibility tree / OmniParser for this
+    # step's screenshot — carried through so the overlay renderer can display
+    # them in the Statistics panel and AI Monitor's Show Details view.
+    elements: list[dict] | None = None
+
+    # OmniParser call duration for this step's state fetch, when OmniParser
+    # actually ran (a11y fallback / omniparser-only mode); None otherwise.
+    omniparser_ms: float | None = None
+
 
 class FastAgentToolCallEvent(Event):
     """Tool calls ready to execute."""

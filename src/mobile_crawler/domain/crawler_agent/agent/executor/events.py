@@ -42,6 +42,11 @@ class ExecutorResponseEvent(Event):
     # text. None on the early-failure path (empty LLM response).
     parsed_action: dict | None = None
 
+    # Indexed UI elements from the accessibility tree / OmniParser for this
+    # step's screenshot — carried through so the overlay renderer can display
+    # them in the Statistics panel and AI Monitor's Show Details view.
+    elements: list[dict] | None = None
+
 
 class ExecutorActionEvent(Event):
     """Action parsed, ready to execute."""

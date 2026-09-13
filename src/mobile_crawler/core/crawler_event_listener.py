@@ -9,7 +9,10 @@ from mobile_crawler.domain.models import ActionResult
 class CrawlerEventListener(ABC):
     """Protocol for listening to crawler events."""
 
-    @abstractmethod
+    def on_mobsf_finished(self, run_id: int, security_score: float, high_issues: int, medium_issues: int, low_issues: int) -> None:
+        """Called when MobSF static analysis completes for a run."""
+        return None
+
     def on_crawl_started(self, run_id: int, target_package: str) -> None:
         """Called when a crawl starts."""
         pass
@@ -122,6 +125,18 @@ class CrawlerEventListener(ABC):
 
     def on_recovery_exhausted(self, run_id: int, step_number: int, attempts: int, message: str) -> None:
         """Called when all recovery attempts are exhausted."""
+        return None
+
+    def on_omniparser_timing(
+        self, run_id: int, step_number: int, duration_ms: float, element_count: int
+    ) -> None:
+        """Called after an OmniParser vision-parsing call completes for a step's state fetch."""
+        return None
+
+    def on_action_timing(
+        self, run_id: int, step_number: int, action_type: str, success: bool, duration_ms: float
+    ) -> None:
+        """Called after a tool/action execution completes, with its wall-clock duration."""
         return None
 
     def on_step_phase_transition(

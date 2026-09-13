@@ -41,6 +41,8 @@ class QtSignalAdapter(QObject):
     # Timing signals
     ocr_completed = Signal(int, int, float, int)  # run_id, step, duration_ms, element_count
     screenshot_timing = Signal(int, int, float)   # run_id, step, duration_ms
+    action_timing = Signal(int, int, str, bool, float)  # run_id, step, action_type, success, duration_ms
+    omniparser_timing = Signal(int, int, float, int)  # run_id, step, duration_ms, element_count
 
     # Recovery signals (US Story 3)
     recovery_started = Signal(int, int, int)  # run_id, step, attempt
@@ -50,8 +52,15 @@ class QtSignalAdapter(QObject):
     # Step phase transition signal
     step_phase_transition = Signal(int, int, str, str, float)  # run_id, step, from_phase, to_phase, duration_ms
 
+    # MobSF static-analysis completed signal (run_id, security_score, high, medium, low)
+    mobsf_finished = Signal(int, float, int, int, int)
+
     # Python logging bridge signal (level_name, formatted_message)
     python_log = Signal(str, str)  # level_name (e.g. "DEBUG"), message
+
+    def on_mobsf_finished(self, run_id: int, security_score: float, high_issues: int, medium_issues: int, low_issues: int) -> None:
+        """Called when MobSF static analysis completes."""
+        self.mobsf_finished.emit(run_id, security_score, high_issues, medium_issues, low_issues)
 
     def on_crawl_started(self, run_id: int, target_package: str) -> None:
         """Called when a crawl starts."""
@@ -131,6 +140,18 @@ class QtSignalAdapter(QObject):
     def on_screenshot_timing(self, run_id: int, step_number: int, duration_ms: float) -> None:
         """Called after screenshot capture completes."""
         self.screenshot_timing.emit(run_id, step_number, duration_ms)
+
+    def on_action_timing(
+        self, run_id: int, step_number: int, action_type: str, success: bool, duration_ms: float
+    ) -> None:
+        """Called after a tool/action execution completes, with its wall-clock duration."""
+        self.action_timing.emit(run_id, step_number, action_type, success, duration_ms)
+
+    def on_omniparser_timing(
+        self, run_id: int, step_number: int, duration_ms: float, element_count: int
+    ) -> None:
+        """Called after an OmniParser vision-parsing call completes for a step's state fetch."""
+        self.omniparser_timing.emit(run_id, step_number, duration_ms, element_count)
 
     def on_recovery_started(self, run_id: int, step_number: int, attempt_number: int) -> None:
         """Called when a crash recovery attempt starts."""

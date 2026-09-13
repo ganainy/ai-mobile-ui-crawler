@@ -5,11 +5,13 @@ from typing import TYPE_CHECKING
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
+    QDialog,
     QHBoxLayout,
     QHeaderView,
     QLabel,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -20,6 +22,7 @@ if TYPE_CHECKING:
     from mobile_crawler.domain.report_generator import ReportGenerator
     from mobile_crawler.infrastructure.mobsf_manager import MobSFManager
     from mobile_crawler.infrastructure.run_repository import RunRepository
+    from mobile_crawler.infrastructure.run_stats_repository import RunStatsRepository
 
 
 class MobSFAnalysisWorker(QThread):
@@ -41,6 +44,130 @@ class MobSFAnalysisWorker(QThread):
             self.analysis_failed.emit(self._run.id, str(e))
 
 
+class RunStatsDialog(QDialog):
+    """Read-only dialog rendering a persisted run_stats record, grouped by section."""
+
+    def __init__(self, stats, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Run Statistics")
+        self.resize(560, 620)
+
+        layout = QVBoxLayout(self)
+
+        # Group definitions: (section title, list of (display label, attr name))
+        groups = [
+            ("Crawl Progress", [
+                ("Total Steps", "total_steps"),
+                ("Successful Steps", "successful_steps"),
+                ("Failed Steps", "failed_steps"),
+                ("Duration (s)", "crawl_duration_seconds"),
+                ("Avg Step (ms)", "avg_step_duration_ms"),
+            ]),
+            ("Screen Discovery", [
+                ("Unique Screens", "unique_screens_visited"),
+                ("Total Visits", "total_screen_visits"),
+                ("Deepest Depth", "deepest_navigation_depth"),
+                ("Unique Activities", "unique_activities_visited"),
+            ]),
+            ("Action Statistics", [
+                ("Actions By Type", "actions_by_type"),
+                ("Successful By Type", "successful_actions_by_type"),
+                ("Failed By Type", "failed_actions_by_type"),
+                ("Avg Duration (ms)", "avg_action_duration_ms"),
+                ("Min Duration (ms)", "min_action_duration_ms"),
+                ("Max Duration (ms)", "max_action_duration_ms"),
+            ]),
+            ("AI Performance", [
+                ("Total AI Calls", "total_ai_calls"),
+                ("Avg Response (ms)", "avg_ai_response_time_ms"),
+                ("Min Response (ms)", "min_ai_response_time_ms"),
+                ("Max Response (ms)", "max_ai_response_time_ms"),
+                ("Timeouts", "ai_timeout_count"),
+                ("Errors", "ai_error_count"),
+                ("Retries", "ai_retry_count"),
+                ("Invalid Responses", "invalid_response_count"),
+                ("Total Tokens", "total_ai_tokens_used"),
+                ("Vision Calls", "vision_call_count"),
+                ("Non-Vision Calls", "non_vision_call_count"),
+                ("AI Success By Type", "ai_success_by_type"),
+                ("AI Total By Type", "ai_total_by_type"),
+            ]),
+            ("Batching", [
+                ("Multi-Action Batches", "multi_action_batch_count"),
+                ("Single Actions", "single_action_count"),
+                ("Total Batch Actions", "total_batch_actions"),
+                ("Avg Batch Size", "avg_batch_size"),
+                ("Max Batch Size", "max_batch_size"),
+            ]),
+            ("Error & Recovery", [
+                ("Stuck Detections", "stuck_detection_count"),
+                ("Stuck Recoveries", "stuck_recovery_success"),
+                ("App Crashes", "app_crash_count"),
+                ("App Relaunches", "app_relaunch_count"),
+                ("Context Losses", "context_loss_count"),
+                ("Context Recoveries", "context_recovery_count"),
+                ("Avg Recovery (ms)", "avg_recovery_time_ms"),
+            ]),
+            ("Device & App", [
+                ("Device", "device_model"),
+                ("Android Version", "android_version"),
+                ("App Package", "app_package"),
+                ("App Version", "app_version"),
+            ]),
+            ("Network & Security", [
+                ("PCAP Size (bytes)", "pcap_file_size_bytes"),
+                ("PCAP Packets", "pcap_packet_count"),
+                ("MobSF Score", "mobsf_security_score"),
+                ("MobSF High", "mobsf_high_issues"),
+                ("MobSF Medium", "mobsf_medium_issues"),
+                ("MobSF Low", "mobsf_low_issues"),
+            ]),
+            ("Coverage", [
+                ("Transitions", "transition_count"),
+                ("Unique Transitions", "unique_transitions"),
+            ]),
+        ]
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        content = QWidget()
+        content_layout = QVBoxLayout(content)
+
+        from PySide6.QtWidgets import QGridLayout, QScrollArea
+
+        for title, rows in groups:
+            group = QGroupBox(title)
+            grid = QGridLayout(group)
+            for r, (label, attr) in enumerate(rows):
+                value = format_stat_value(getattr(stats, attr, None))
+                grid.addWidget(QLabel(f"<b>{label}</b>"), r, 0)
+                grid.addWidget(QLabel(value), r, 1)
+            content_layout.addWidget(group)
+
+        scroll.setWidget(content)
+        layout.addWidget(scroll)
+
+        close_btn = QPushButton("Close")
+        close_btn.clicked.connect(self.accept)
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+        btn_row.addWidget(close_btn)
+        layout.addLayout(btn_row)
+
+
+def format_stat_value(value) -> str:
+    """Format a stat value for display."""
+    if value is None:
+        return "—"
+    if isinstance(value, dict):
+        if not value:
+            return "—"
+        return ", ".join(f"{k}: {v}" for k, v in value.items())
+    if isinstance(value, float):
+        return f"{value:.1f}"
+    return str(value)
+
+
 class RunHistoryView(QWidget):
     """Widget for viewing and managing past crawl runs.
 
@@ -58,6 +185,7 @@ class RunHistoryView(QWidget):
         run_repository: "RunRepository",
         report_generator: "ReportGenerator",
         mobsf_manager: "MobSFManager",
+        run_stats_repository: "RunStatsRepository | None" = None,
         parent=None
     ):
         """Initialize run history view widget.
@@ -66,12 +194,14 @@ class RunHistoryView(QWidget):
             run_repository: RunRepository instance for fetching runs
             report_generator: ReportGenerator instance for generating reports
             mobsf_manager: MobSFManager instance for running MobSF analysis
+            run_stats_repository: Optional RunStatsRepository for the View Stats action
             parent: Parent widget
         """
         super().__init__(parent)
         self._run_repository = run_repository
         self._report_generator = report_generator
         self._mobsf_manager = mobsf_manager
+        self._run_stats_repository = run_stats_repository
         self._mobsf_worker = None
 
         self.setMinimumHeight(170)
@@ -142,6 +272,15 @@ class RunHistoryView(QWidget):
         self.mobsf_button.clicked.connect(self._on_mobsf_clicked)
         self.mobsf_button.setEnabled(False)
         buttons_layout.addWidget(self.mobsf_button)
+
+        # View Stats button
+        self.stats_button = QPushButton("View Stats")
+        self.stats_button.clicked.connect(self._on_view_stats_clicked)
+        self.stats_button.setEnabled(False)
+        self.stats_button.setToolTip("View detailed persisted statistics for the selected run")
+        if not self._run_stats_repository:
+            self.stats_button.hide()
+        buttons_layout.addWidget(self.stats_button)
 
         layout.addLayout(buttons_layout)
 
@@ -262,6 +401,28 @@ class RunHistoryView(QWidget):
         self.delete_button.setEnabled(has_selection)
         self.report_button.setEnabled(has_selection)
         self.mobsf_button.setEnabled(has_selection)
+        self.stats_button.setEnabled(has_selection)
+
+    def _on_view_stats_clicked(self):
+        """Open the run_stats detail dialog for the selected run."""
+        if not self._run_stats_repository:
+            return
+        run_id = self.get_selected_run_id()
+        if run_id is None:
+            return
+        stats = self._run_stats_repository.get_run_stats(run_id)
+        if stats is None:
+            QMessageBox.information(
+                self,
+                "Run Stats",
+                f"No persisted statistics found for run {run_id}.\n\n"
+                "Stats are saved when a crawl completes. Older runs (created before "
+                "this feature) will not have a record.",
+            )
+            return
+
+        dialog = RunStatsDialog(stats, parent=self)
+        dialog.exec()
 
     def _on_delete_clicked(self):
         """Handle delete button click."""

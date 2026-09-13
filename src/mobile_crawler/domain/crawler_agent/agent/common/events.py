@@ -75,6 +75,7 @@ class ResultEvent(StopEvent):
 
 class ScreenshotEvent(Event):
     screenshot: bytes
+    duration_ms: float | None = None
 
 
 class RecordUIStateEvent(Event):

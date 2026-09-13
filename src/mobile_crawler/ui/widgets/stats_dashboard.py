@@ -1,7 +1,8 @@
 """Statistics dashboard widget for mobile-crawler GUI."""
 
+import io
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QPixmap
 from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
@@ -11,6 +12,9 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from PIL import Image
+
+from mobile_crawler.domain.element_overlay_renderer import ElementOverlayRenderer
 
 
 def _make_section_label(text: str) -> QLabel:
@@ -36,6 +40,8 @@ class StatsDashboard(QWidget):
         super().__init__(parent)
         self._max_steps = 100
         self._max_duration_seconds = 300
+        self._overlay_renderer = ElementOverlayRenderer()
+        self._tool_calls_applicable = True
         self._setup_ui()
 
     # ------------------------------------------------------------------
@@ -63,6 +69,30 @@ class StatsDashboard(QWidget):
         grid.setVerticalSpacing(4)
 
         row = 0
+
+        # ── Screenshot ──────────────────────────────────────
+        grid.addWidget(_make_section_label("Screenshot"), row, 0, 1, 2)
+        row += 1
+
+        self.screenshot_label = QLabel()
+        self.screenshot_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.screenshot_label.setStyleSheet("border: 1px solid #333;")
+        self.screenshot_label.setFixedSize(200, 355)  # Approx 9:16 aspect ratio
+        self.screenshot_label.setText("No screenshot yet")
+        grid.addWidget(self.screenshot_label, row, 0, 1, 2)
+        row += 1
+
+        self.screenshot_hint_label = QLabel(
+            "For reference only — not necessarily what was sent to the AI this step."
+        )
+        self.screenshot_hint_label.setWordWrap(True)
+        self.screenshot_hint_label.setStyleSheet("color: #888; font-size: 9px; font-style: italic;")
+        self.screenshot_hint_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        grid.addWidget(self.screenshot_hint_label, row, 0, 1, 2)
+        row += 1
+
+        grid.addWidget(_make_separator(), row, 0, 1, 2)
+        row += 1
 
         # ── Crawl Progress ──────────────────────────────────────
         grid.addWidget(_make_section_label("Crawl Progress"), row, 0, 1, 2)
@@ -150,6 +180,51 @@ class StatsDashboard(QWidget):
         grid.addWidget(_make_separator(), row, 0, 1, 2)
         row += 1
 
+        # ── Screen Discovery ──────────────────────────────────────
+        grid.addWidget(_make_section_label("Screen Discovery"), row, 0, 1, 2)
+        row += 1
+
+        self.unique_screens_label = QLabel("Unique Screens: —")
+        grid.addWidget(self.unique_screens_label, row, 0)
+
+        self.total_visits_label = QLabel("Total Visits: —")
+        grid.addWidget(self.total_visits_label, row, 1)
+        row += 1
+
+        self.screens_per_min_label = QLabel("Screens/min: —")
+        grid.addWidget(self.screens_per_min_label, row, 0, 1, 2)
+        row += 1
+
+        self.revisit_ratio_label = QLabel("Revisit Ratio: —")
+        grid.addWidget(self.revisit_ratio_label, row, 0, 1, 2)
+        row += 1
+
+        grid.addWidget(_make_separator(), row, 0, 1, 2)
+        row += 1
+
+        # ── Timing ────────────────────────────────────────────────
+        grid.addWidget(_make_section_label("Timing"), row, 0, 1, 2)
+        row += 1
+
+        self.ocr_avg_label = QLabel("Avg OCR: n/a (OCR not used)")
+        self.ocr_avg_label.setStyleSheet("color: #888;")
+        grid.addWidget(self.ocr_avg_label, row, 0, 1, 2)
+        row += 1
+
+        self.action_avg_label = QLabel("Avg Action: —")
+        grid.addWidget(self.action_avg_label, row, 0)
+
+        self.screenshot_avg_label = QLabel("Avg Screenshot: —")
+        grid.addWidget(self.screenshot_avg_label, row, 1)
+        row += 1
+
+        self.omniparser_avg_label = QLabel("Avg OmniParser: —")
+        grid.addWidget(self.omniparser_avg_label, row, 0, 1, 2)
+        row += 1
+
+        grid.addWidget(_make_separator(), row, 0, 1, 2)
+        row += 1
+
         # ── Duration ─────────────────────────────────────────────
         grid.addWidget(_make_section_label("Duration"), row, 0, 1, 2)
         row += 1
@@ -189,6 +264,15 @@ class StatsDashboard(QWidget):
             self.step_progress_bar.setRange(0, self._max_steps)
             self.step_progress_bar.setFormat(f"%v / {self._max_steps} steps")
 
+    def set_tool_calls_applicable(self, applicable: bool):
+        """Set whether the tool-calls-per-step metric applies to this crawl mode.
+
+        When False (non-CrawlerAgent modes that don't produce tool-call
+        telemetry), the dashboard renders "n/a" instead of "—" so the metric
+        reads as "not applicable" rather than "not available".
+        """
+        self._tool_calls_applicable = bool(applicable)
+
     def update_stats(
         self,
         total_steps: int = 0,
@@ -203,6 +287,7 @@ class StatsDashboard(QWidget):
         ocr_avg_ms: float = 0.0,
         action_avg_ms: float = 0.0,
         screenshot_avg_ms: float = 0.0,
+        omniparser_avg_ms: float = 0.0,
         last_action: str = "",
         step_progress: str = "",
         success_rate: float = 0.0,
@@ -266,8 +351,45 @@ class StatsDashboard(QWidget):
         # ── Duration ─────────────────────────────────────────
         self.duration_label.setText(f"Elapsed: {duration_seconds:.0f}s")
 
+        # ── Screen Discovery ─────────────────────────────────
+        if unique_screens > 0 or total_visits > 0:
+            self.unique_screens_label.setText(f"Unique Screens: {unique_screens}")
+            self.total_visits_label.setText(f"Total Visits: {total_visits}")
+            if screens_per_minute > 0:
+                self.screens_per_min_label.setText(f"Screens/min: {screens_per_minute:.1f}")
+            else:
+                self.screens_per_min_label.setText("Screens/min: —")
+        else:
+            self.unique_screens_label.setText("Unique Screens: —")
+            self.total_visits_label.setText("Total Visits: —")
+            self.screens_per_min_label.setText("Screens/min: —")
+            self.revisit_ratio_label.setText("Revisit Ratio: —")
+
+        # ── Timing ─────────────────────────────────────────
+        # ocr_avg_ms is accepted for caller compatibility but not displayed:
+        # OCR grounding isn't part of the live pipeline (OmniParser/a11y tree
+        # are used instead), so it's always inapplicable rather than "no data
+        # yet" — the label says so explicitly instead of showing "—".
+
+        if action_avg_ms > 0:
+            self.action_avg_label.setText(f"Avg Action: {action_avg_ms:.0f} ms")
+        else:
+            self.action_avg_label.setText("Avg Action: —")
+
+        if screenshot_avg_ms > 0:
+            self.screenshot_avg_label.setText(f"Avg Screenshot: {screenshot_avg_ms:.0f} ms")
+        else:
+            self.screenshot_avg_label.setText("Avg Screenshot: —")
+
+        if omniparser_avg_ms > 0:
+            self.omniparser_avg_label.setText(f"Avg OmniParser: {omniparser_avg_ms:.0f} ms")
+        else:
+            self.omniparser_avg_label.setText("Avg OmniParser: —")
+
         # ── Tool Metrics ─────────────────────────────────────
-        if tool_calls_per_step > 0:
+        if not self._tool_calls_applicable:
+            self.tool_calls_per_step_label.setText("Calls/Step: n/a")
+        elif tool_calls_per_step > 0:
             self.tool_calls_per_step_label.setText(f"Calls/Step: {tool_calls_per_step:.1f}")
         else:
             self.tool_calls_per_step_label.setText("Calls/Step: —")
@@ -280,7 +402,66 @@ class StatsDashboard(QWidget):
         """Reset all statistics to initial state."""
         self.placeholder_label.setVisible(True)
         self.stats_content.setVisible(False)
+        self.screenshot_label.clear()
+        self.screenshot_label.setText("No screenshot yet")
+        self.screenshot_hint_label.setText(
+            "For reference only — not necessarily what was sent to the AI this step."
+        )
+        self.unique_screens_label.setText("Unique Screens: —")
+        self.total_visits_label.setText("Total Visits: —")
+        self.screens_per_min_label.setText("Screens/min: —")
+        self.ocr_avg_label.setText("Avg OCR: n/a (OCR not used)")
+        self.action_avg_label.setText("Avg Action: —")
+        self.screenshot_avg_label.setText("Avg Screenshot: —")
+        self.omniparser_avg_label.setText("Avg OmniParser: —")
         self.update_stats(total_steps=0, successful_steps=0, failed_steps=0, duration_seconds=0.0)
+
+    def update_screenshot(self, screenshot_path: str | None, elements: list[dict] | None, vision_enabled: bool):
+        """Update the screenshot display with optional element overlay.
+
+        Args:
+            screenshot_path: Path to the screenshot file, or None if no screenshot
+            elements: List of UI elements to overlay (with 'index' and 'bounds'), or None
+            vision_enabled: Whether vision was enabled for this step
+        """
+        if not screenshot_path:
+            self.screenshot_label.clear()
+            self.screenshot_label.setText("No screenshot yet")
+            return
+
+        try:
+            # Load screenshot as PIL image
+            pil_image = Image.open(screenshot_path)
+
+            # Render overlay if elements are available
+            if elements:
+                pil_image = self._overlay_renderer.render(pil_image, elements)
+
+            # Convert PIL image to QPixmap via in-memory buffer
+            buffer = io.BytesIO()
+            pil_image.save(buffer, format="PNG")
+            buffer.seek(0)
+            pixmap = QPixmap()
+            pixmap.loadFromData(buffer.read())
+
+            # Scale to fit the label
+            scaled = pixmap.scaledToWidth(200, Qt.TransformationMode.SmoothTransformation)
+            self.screenshot_label.setPixmap(scaled)
+
+            # Update hint text
+            if not vision_enabled:
+                self.screenshot_hint_label.setText(
+                    "Vision disabled this step — shown for reference; "
+                    "a text description was sent to the AI instead."
+                )
+            else:
+                self.screenshot_hint_label.setText(
+                    "For reference only — not necessarily what was sent to the AI this step."
+                )
+
+        except Exception as e:
+            self.screenshot_label.clear()
+            self.screenshot_label.setText(f"Error loading screenshot: {e}")
 
     def get_total_steps(self) -> int:
         text = self.total_steps_label.text()

@@ -5,6 +5,8 @@ StatelessManagerAgent - Stateless planning agent that rebuilds context each turn
 from __future__ import annotations
 
 import logging
+import time
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 from llama_index.core.llms.llm import LLM
@@ -114,9 +116,10 @@ class StatelessManagerAgent(Workflow):
 
     async def _validate_and_retry(
         self, messages: list[dict], initial_response: str
-    ) -> str:
+    ) -> tuple[str, list[dict]]:
         output = initial_response
         parsed = parse_manager_response(output)
+        validation_retries: list[dict] = []
 
         max_retries = 3
         retry_count = 0
@@ -150,6 +153,13 @@ class StatelessManagerAgent(Workflow):
 
             if error_message:
                 retry_count += 1
+                validation_retries.append(
+                    {
+                        "reason": error_message.splitlines()[0],
+                        "timestamp": datetime.now().isoformat(),
+                        "attempt": retry_count,
+                    }
+                )
                 logger.warning(
                     f"Manager response invalid (retry {retry_count}/{max_retries}): {error_message}"
                 )
@@ -167,35 +177,45 @@ class StatelessManagerAgent(Workflow):
                     parsed = parse_manager_response(output)
                 except Exception as e:
                     logger.error(f"LLM retry failed: {e}")
+                    validation_retries.append(
+                        {
+                            "reason": f"LLM retry failed: {e}",
+                            "timestamp": datetime.now().isoformat(),
+                            "attempt": retry_count,
+                        }
+                    )
                     break
 
-        return output
+        return output, validation_retries
 
     @step
     async def prepare_context(
         self, ctx: Context, ev: StartEvent
     ) -> ManagerContextEvent:
+        # Always capture — even with vision off, the screenshot is still
+        # needed for the Statistics/AI Monitor "reference only" display.
         screenshot = None
-        if self.vision or self.save_trajectory != "none":
-            try:
-                screenshot = await self.action_ctx.driver.screenshot()
+        try:
+            _screenshot_start = time.perf_counter()
+            screenshot = await self.action_ctx.driver.screenshot()
+            _screenshot_ms = (time.perf_counter() - _screenshot_start) * 1000
 
-                if screenshot:
-                    ctx.write_event_to_stream(ScreenshotEvent(screenshot=screenshot))
-                    parent_span = trace.get_current_span()
-                    record_langfuse_screenshot(
-                        screenshot,
-                        parent_span=parent_span,
-                        screenshots_enabled=bool(
-                            self.tracing_config
-                            and self.tracing_config.langfuse_screenshots
-                        ),
-                        vision_enabled=self.vision,
-                    )
-            except DeviceDisconnectedError:
-                raise
-            except Exception as e:
-                logger.warning(f"Failed to capture screenshot: {e}")
+            if screenshot:
+                ctx.write_event_to_stream(ScreenshotEvent(screenshot=screenshot, duration_ms=_screenshot_ms))
+                parent_span = trace.get_current_span()
+                record_langfuse_screenshot(
+                    screenshot,
+                    parent_span=parent_span,
+                    screenshots_enabled=bool(
+                        self.tracing_config
+                        and self.tracing_config.langfuse_screenshots
+                    ),
+                    vision_enabled=self.vision,
+                )
+        except DeviceDisconnectedError:
+            raise
+        except Exception as e:
+            logger.warning(f"Failed to capture screenshot: {e}")
 
         ui_state = await self.state_provider.get_state()
         self.action_ctx.ui = ui_state
@@ -239,6 +259,7 @@ class StatelessManagerAgent(Workflow):
         self.shared_state.formatted_device_state = ui_state.formatted_text
         self.shared_state.focused_text = ui_state.focused_text
         self.shared_state.a11y_tree = ui_state.elements
+        self.shared_state.omniparser_ms = getattr(ui_state, "omniparser_ms", None)
         self.shared_state.phone_state = ui_state.phone_state
 
         self.shared_state.update_current_app(
@@ -284,9 +305,16 @@ class StatelessManagerAgent(Workflow):
         except Exception as e:
             logger.warning(f"Could not get usage: {e}")
 
-        output = await self._validate_and_retry(messages, output)
+        output, validation_retries = await self._validate_and_retry(messages, output)
 
-        event = ManagerResponseEvent(response=output, usage=usage)
+        event = ManagerResponseEvent(
+            response=output,
+            usage=usage,
+            elements=self.shared_state.a11y_tree,
+            loop_detected=bool(self.shared_state.loop_warning),
+            validation_retries=validation_retries,
+            omniparser_ms=self.shared_state.omniparser_ms,
+        )
         ctx.write_event_to_stream(event)
         return event
 

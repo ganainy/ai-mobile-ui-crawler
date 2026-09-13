@@ -3,6 +3,7 @@
 import base64
 import html
 import json
+import logging
 import os
 import re
 from datetime import datetime
@@ -11,6 +12,7 @@ from PySide6.QtCore import Qt, QTimer, Signal, Slot
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
     QButtonGroup,
+    QCheckBox,
     QComboBox,
     QGroupBox,
     QHBoxLayout,
@@ -30,7 +32,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+import io
+from PIL import Image
+from mobile_crawler.domain.element_overlay_renderer import ElementOverlayRenderer
 from .json_tree_widget import JsonTreeWidget
+
+logger = logging.getLogger(__name__)
 
 
 def _extract_prompt_text(request_data: dict) -> str:
@@ -545,28 +552,22 @@ class StepDetailWidget(QWidget):
         return JsonTreeWidget(prompt_json_data)
 
     def _build_screenshot_group(self) -> QGroupBox:
-        """Build the Screenshot group (Annotated/OCR toggle), shared across calls for this step."""
+        """Build the Screenshot group with element overlay checkbox."""
         screenshot_group = QGroupBox("Screenshot")
         self.screenshot_layout = QVBoxLayout(screenshot_group)
+        self._overlay_renderer = ElementOverlayRenderer()
 
+        # Checkbox to toggle element labels
         toggle_layout = QHBoxLayout()
-        self.annotated_radio = QRadioButton("Annotated")
-        self.ocr_radio = QRadioButton("OCR")
-        self.annotated_radio.setChecked(True)
-
-        self.toggle_group = QButtonGroup(self)
-        self.toggle_group.addButton(self.annotated_radio)
-        self.toggle_group.addButton(self.ocr_radio)
-        self.toggle_group.buttonClicked.connect(self._on_toggle_changed)
-
-        toggle_layout.addWidget(self.annotated_radio)
-        toggle_layout.addWidget(self.ocr_radio)
+        self.show_labels_checkbox = QCheckBox("Show element labels")
+        self.show_labels_checkbox.setChecked(True)
+        self.show_labels_checkbox.stateChanged.connect(self._on_toggle_changed)
+        toggle_layout.addWidget(self.show_labels_checkbox)
         toggle_layout.addStretch()
         self.screenshot_layout.addLayout(toggle_layout)
 
         self.orig_pixmap = None
-        self.annotated_pixmap = None
-        self.ocr_pixmap = None
+        self.overlaid_pixmap = None
 
         screenshot_pixmap = None
         if self.screenshot_path and os.path.exists(self.screenshot_path):
@@ -603,40 +604,60 @@ class StepDetailWidget(QWidget):
                     except Exception:
                         pass
 
-        if self.screenshot_path and os.path.exists(self.screenshot_path):
-            base, ext = os.path.splitext(self.screenshot_path)
-
-            annotated_path = f"{base}_annotated{ext}"
-            if os.path.exists(annotated_path):
-                pixmap = QPixmap(annotated_path)
-                if not pixmap.isNull():
-                    self.annotated_pixmap = pixmap
-
-            grounded_path = f"{base}_grounded{ext}"
-            if os.path.exists(grounded_path):
-                pixmap = QPixmap(grounded_path)
-                if not pixmap.isNull():
-                    self.ocr_pixmap = pixmap
-
         if screenshot_pixmap:
             self.orig_pixmap = screenshot_pixmap
 
-            if not self.annotated_pixmap:
-                self.annotated_pixmap = screenshot_pixmap
-            if not self.ocr_pixmap:
-                self.ocr_pixmap = screenshot_pixmap
+            # Use the first call that has ui_elements captured (added alongside
+            # request_data by crawler_agent_service.py, not nested in prompt_text)
+            elements = None
+            for call in self.calls:
+                if call.get("ui_elements"):
+                    elements = call["ui_elements"]
+                    break
+
+            # Render overlay if elements available
+            if elements:
+                # Name the actual source in the checkbox label so it's clear
+                # what's being shown — OmniParser only kicks in as a fallback
+                # when the accessibility tree is sparse; otherwise the labels
+                # come from the plain a11y tree.
+                first = elements[0] if isinstance(elements[0], dict) else {}
+                source_label = "OmniParser" if first.get("source") == "omni" else "Accessibility tree"
+                self.show_labels_checkbox.setText(f"Show element labels ({source_label})")
+                try:
+                    # Convert QPixmap to PIL Image
+                    buffer = io.BytesIO()
+                    screenshot_pixmap.save(buffer, "PNG")
+                    buffer.seek(0)
+                    pil_image = Image.open(buffer)
+
+                    # Render overlay
+                    overlaid_pil = self._overlay_renderer.render(pil_image, elements)
+
+                    # Convert back to QPixmap
+                    out_buffer = io.BytesIO()
+                    overlaid_pil.save(out_buffer, format="PNG")
+                    out_buffer.seek(0)
+                    overlaid_pixmap = QPixmap()
+                    overlaid_pixmap.loadFromData(out_buffer.read())
+                    self.overlaid_pixmap = overlaid_pixmap
+                except Exception as e:
+                    logger.warning(f"Failed to render element-label overlay: {e}", exc_info=True)
+                    self.overlaid_pixmap = screenshot_pixmap
+            else:
+                # No elements data — disable checkbox and show plain screenshot
+                self.overlaid_pixmap = screenshot_pixmap
+                self.show_labels_checkbox.setEnabled(False)
 
             self.screenshot_label = QLabel()
-            scaled_pixmap = self.annotated_pixmap.scaledToWidth(200, Qt.TransformationMode.SmoothTransformation)
+            # Show overlaid by default if available
+            display_pixmap = self.overlaid_pixmap if self.show_labels_checkbox.isChecked() else self.orig_pixmap
+            scaled_pixmap = display_pixmap.scaledToWidth(200, Qt.TransformationMode.SmoothTransformation)
             self.screenshot_label.setPixmap(scaled_pixmap)
             self.screenshot_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self.screenshot_layout.addWidget(self.screenshot_label)
         else:
-            # Vision may simply be disabled for every call in this step, in
-            # which case there was never a screenshot to send — that's a
-            # deliberate config choice (a text-based UI description was used
-            # instead), not a missing/failed capture. Say so plainly rather
-            # than reading as a bug.
+            # No screenshot available
             vision_used = any(call.get("vision_enabled", True) for call in self.calls)
             if vision_used:
                 message = "No screenshot available"
@@ -646,25 +667,23 @@ class StepDetailWidget(QWidget):
             no_screenshot_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             no_screenshot_label.setStyleSheet("color: #666; font-style: italic;")
             self.screenshot_layout.addWidget(no_screenshot_label)
-            self.annotated_radio.setEnabled(False)
-            self.ocr_radio.setEnabled(False)
+            self.show_labels_checkbox.setEnabled(False)
 
         self.screenshot_layout.addStretch()
         return screenshot_group
 
-    def _on_toggle_changed(self, button):
-        """Handle screenshot viewer toggle change."""
-        if not self.orig_pixmap:
+    def _on_toggle_changed(self):
+        """Handle element labels checkbox toggle."""
+        if not self.orig_pixmap or not self.overlaid_pixmap:
             return
 
-        if button == self.annotated_radio:
-            pixmap = self.annotated_pixmap
+        if self.show_labels_checkbox.isChecked():
+            pixmap = self.overlaid_pixmap
         else:
-            pixmap = self.ocr_pixmap
+            pixmap = self.orig_pixmap
 
-        if pixmap:
-            scaled_pixmap = pixmap.scaledToWidth(200, Qt.TransformationMode.SmoothTransformation)
-            self.screenshot_label.setPixmap(scaled_pixmap)
+        scaled_pixmap = pixmap.scaledToWidth(200, Qt.TransformationMode.SmoothTransformation)
+        self.screenshot_label.setPixmap(scaled_pixmap)
 
     def _create_timing_group(self) -> QGroupBox | None:
         """Create a timing breakdown section from step phase metadata."""
@@ -1223,6 +1242,7 @@ class AIMonitorPanel(QWidget):
                 "response_text": _extract_response_text(response_data),
                 "parsed_actions": parsed_actions,
                 "vision_enabled": response_data.get("vision_enabled", True),
+                "ui_elements": request_data.get("ui_elements"),
             })
 
         if not calls_payload:

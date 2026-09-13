@@ -48,6 +48,14 @@ class RuntimeStats:
     invalid_response_count: int = 0
     total_ai_tokens_used: int = 0
 
+    # AI Call Type Breakdown (JSON: call_type -> counts)
+    ai_success_by_type: dict[str, int] = field(default_factory=dict)
+    ai_total_by_type: dict[str, int] = field(default_factory=dict)
+
+    # Vision vs Non-Vision
+    vision_call_count: int = 0
+    non_vision_call_count: int = 0
+
     # Multi-Action Batching
     multi_action_batch_count: int = 0
     single_action_count: int = 0
@@ -134,6 +142,10 @@ class RuntimeStats:
             "ai_retry_count": self.ai_retry_count,
             "invalid_response_count": self.invalid_response_count,
             "total_ai_tokens_used": self.total_ai_tokens_used,
+            "ai_success_by_type_json": json.dumps(self.ai_success_by_type),
+            "ai_total_by_type_json": json.dumps(self.ai_total_by_type),
+            "vision_call_count": self.vision_call_count,
+            "non_vision_call_count": self.non_vision_call_count,
 
             # Multi-Action Batching
             "multi_action_batch_count": self.multi_action_batch_count,
@@ -173,6 +185,98 @@ class RuntimeStats:
             "transition_count": self.transition_count,
             "unique_transitions": self.unique_transitions,
         }
+
+    @classmethod
+    def from_db_dict(cls, data: dict[str, Any]) -> "RuntimeStats":
+        """Reconstruct RuntimeStats from database row dictionary.
+
+        Args:
+            data: Dictionary from database query (keys match to_db_dict + run_id, etc.)
+
+        Returns:
+            RuntimeStats instance
+        """
+        import json
+
+        def parse_json_field(key: str, default: dict | None = None) -> dict:
+            value = data.get(key)
+            if value is None:
+                return default or {}
+            if isinstance(value, str):
+                try:
+                    return json.loads(value)
+                except Exception:
+                    return default or {}
+            return value if isinstance(value, dict) else (default or {})
+
+        return cls(
+            total_steps=data.get("total_steps", 0),
+            successful_steps=data.get("successful_steps", 0),
+            failed_steps=data.get("failed_steps", 0),
+            crawl_duration_seconds=data.get("crawl_duration_seconds", 0.0),
+            avg_step_duration_ms=data.get("avg_step_duration_ms", 0.0),
+
+            unique_screens_visited=data.get("unique_screens_visited", 0),
+            total_screen_visits=data.get("total_screen_visits", 0),
+            deepest_navigation_depth=data.get("deepest_navigation_depth", 0),
+            most_visited_screen_id=data.get("most_visited_screen_id"),
+            most_visited_screen_count=data.get("most_visited_screen_count", 0),
+            unique_activities_visited=data.get("unique_activities_visited", 0),
+
+            actions_by_type=parse_json_field("actions_by_type_json"),
+            successful_actions_by_type=parse_json_field("successful_actions_by_type_json"),
+            failed_actions_by_type=parse_json_field("failed_actions_by_type_json"),
+            avg_action_duration_ms=data.get("avg_action_duration_ms", 0.0),
+            min_action_duration_ms=data.get("min_action_duration_ms"),
+            max_action_duration_ms=data.get("max_action_duration_ms"),
+
+            total_ai_calls=data.get("total_ai_calls", 0),
+            avg_ai_response_time_ms=data.get("avg_ai_response_time_ms", 0.0),
+            min_ai_response_time_ms=data.get("min_ai_response_time_ms"),
+            max_ai_response_time_ms=data.get("max_ai_response_time_ms"),
+            ai_timeout_count=data.get("ai_timeout_count", 0),
+            ai_error_count=data.get("ai_error_count", 0),
+            ai_retry_count=data.get("ai_retry_count", 0),
+            invalid_response_count=data.get("invalid_response_count", 0),
+            total_ai_tokens_used=data.get("total_ai_tokens_used", 0),
+            ai_success_by_type=parse_json_field("ai_success_by_type_json"),
+            ai_total_by_type=parse_json_field("ai_total_by_type_json"),
+            vision_call_count=data.get("vision_call_count", 0),
+            non_vision_call_count=data.get("non_vision_call_count", 0),
+
+            multi_action_batch_count=data.get("multi_action_batch_count", 0),
+            single_action_count=data.get("single_action_count", 0),
+            total_batch_actions=data.get("total_batch_actions", 0),
+            avg_batch_size=data.get("avg_batch_size", 0.0),
+            max_batch_size=data.get("max_batch_size", 0),
+
+            stuck_detection_count=data.get("stuck_detection_count", 0),
+            stuck_recovery_success=data.get("stuck_recovery_success", 0),
+            app_crash_count=data.get("app_crash_count", 0),
+            app_relaunch_count=data.get("app_relaunch_count", 0),
+            context_loss_count=data.get("context_loss_count", 0),
+            context_recovery_count=data.get("context_recovery_count", 0),
+            invalid_bbox_count=data.get("invalid_bbox_count", 0),
+            avg_recovery_time_ms=data.get("avg_recovery_time_ms", 0.0),
+
+            device_model=data.get("device_model"),
+            android_version=data.get("android_version"),
+            screen_width=data.get("screen_width"),
+            screen_height=data.get("screen_height"),
+            app_version=data.get("app_version"),
+
+            pcap_file_size_bytes=data.get("pcap_file_size_bytes"),
+            pcap_packet_count=data.get("pcap_packet_count"),
+            mobsf_security_score=data.get("mobsf_security_score"),
+            mobsf_high_issues=data.get("mobsf_high_issues", 0),
+            mobsf_medium_issues=data.get("mobsf_medium_issues", 0),
+            mobsf_low_issues=data.get("mobsf_low_issues", 0),
+            video_file_size_bytes=data.get("video_file_size_bytes"),
+            video_duration_seconds=data.get("video_duration_seconds"),
+
+            transition_count=data.get("transition_count", 0),
+            unique_transitions=data.get("unique_transitions", 0),
+        )
 
 
 class RuntimeStatsCollector:
@@ -327,6 +431,29 @@ class RuntimeStatsCollector:
     def record_invalid_response(self) -> None:
         """Record an invalid AI response (JSON parse or schema error)."""
         self._stats.invalid_response_count += 1
+
+    def record_ai_call_type(self, call_type: str, success: bool) -> None:
+        """Record an AI call by its type (manager/executor/fast_agent/app_opener).
+
+        Args:
+            call_type: One of "manager", "executor", "fast_agent", "app_opener"
+            success: Whether the call succeeded
+        """
+        self._stats.ai_total_by_type[call_type] = (
+            self._stats.ai_total_by_type.get(call_type, 0) + 1
+        )
+        if success:
+            self._stats.ai_success_by_type[call_type] = (
+                self._stats.ai_success_by_type.get(call_type, 0) + 1
+            )
+
+    def record_vision_call(self) -> None:
+        """Record an AI call where vision was enabled."""
+        self._stats.vision_call_count += 1
+
+    def record_non_vision_call(self) -> None:
+        """Record an AI call where vision was disabled."""
+        self._stats.non_vision_call_count += 1
 
     def record_batch(self, action_count: int, success: bool) -> None:
         """Record a batch of actions.

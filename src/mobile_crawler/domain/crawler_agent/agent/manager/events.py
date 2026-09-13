@@ -39,6 +39,20 @@ class ManagerResponseEvent(Event):
     # instead), so the AI Monitor should say "not needed" rather than "missing"
     vision_enabled: bool = True
 
+    # Indexed UI elements from the accessibility tree / OmniParser for this
+    # step's screenshot — carried through so the overlay renderer can display
+    # them in the Statistics panel and AI Monitor's Show Details view.
+    elements: list[dict] | None = None
+
+    # Whether a navigation loop (stuck) was detected on this step. Set by the
+    # manager's state-graph tracker before the LLM call; consumed by the stats
+    # collector to count stuck detections / recoveries.
+    loop_detected: bool = False
+
+    # OmniParser call duration for this step's state fetch, when OmniParser
+    # actually ran (a11y fallback / omniparser-only mode); None otherwise.
+    omniparser_ms: float | None = None
+
 
 class ManagerPlanDetailsEvent(Event):
     """Plan parsed and ready (internal event with full details)."""

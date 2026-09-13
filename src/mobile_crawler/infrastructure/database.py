@@ -313,15 +313,79 @@ class DatabaseManager:
             if "recovery_time_ms" not in columns:
                 conn.execute("ALTER TABLE step_logs ADD COLUMN recovery_time_ms REAL")
 
-            # Migration for run_stats recovery columns
+            # Migration for run_stats columns. Covers both columns added purely
+            # via this catch-up list (never in the base CREATE TABLE) and base
+            # schema columns that older databases predate (e.g. context_loss_count
+            # was added straight into 001_initial_schema.sql's CREATE TABLE at
+            # some point, which only helps brand-new databases — existing ones
+            # never got the column since CREATE TABLE IF NOT EXISTS is a no-op).
             cursor = conn.execute("PRAGMA table_info(run_stats)")
             columns = [row["name"] for row in cursor.fetchall()]
-            if "uiautomator_crash_count" not in columns:
-                conn.execute("ALTER TABLE run_stats ADD COLUMN uiautomator_crash_count INTEGER DEFAULT 0")
-            if "uiautomator_recovery_count" not in columns:
-                conn.execute("ALTER TABLE run_stats ADD COLUMN uiautomator_recovery_count INTEGER DEFAULT 0")
-            if "avg_recovery_time_ms" not in columns:
-                conn.execute("ALTER TABLE run_stats ADD COLUMN avg_recovery_time_ms REAL")
+            run_stats_columns = {
+                "total_steps": "INTEGER DEFAULT 0",
+                "successful_steps": "INTEGER DEFAULT 0",
+                "failed_steps": "INTEGER DEFAULT 0",
+                "crawl_duration_seconds": "REAL",
+                "avg_step_duration_ms": "REAL",
+                "unique_screens_visited": "INTEGER DEFAULT 0",
+                "total_screen_visits": "INTEGER DEFAULT 0",
+                "deepest_navigation_depth": "INTEGER DEFAULT 0",
+                "most_visited_screen_id": "INTEGER",
+                "most_visited_screen_count": "INTEGER DEFAULT 0",
+                "unique_activities_visited": "INTEGER DEFAULT 0",
+                "actions_by_type_json": "TEXT",
+                "successful_actions_by_type_json": "TEXT",
+                "failed_actions_by_type_json": "TEXT",
+                "avg_action_duration_ms": "REAL",
+                "min_action_duration_ms": "REAL",
+                "max_action_duration_ms": "REAL",
+                "total_ai_calls": "INTEGER DEFAULT 0",
+                "avg_ai_response_time_ms": "REAL",
+                "min_ai_response_time_ms": "REAL",
+                "max_ai_response_time_ms": "REAL",
+                "ai_timeout_count": "INTEGER DEFAULT 0",
+                "ai_error_count": "INTEGER DEFAULT 0",
+                "ai_retry_count": "INTEGER DEFAULT 0",
+                "invalid_response_count": "INTEGER DEFAULT 0",
+                "total_ai_tokens_used": "INTEGER",
+                "multi_action_batch_count": "INTEGER DEFAULT 0",
+                "single_action_count": "INTEGER DEFAULT 0",
+                "total_batch_actions": "INTEGER DEFAULT 0",
+                "avg_batch_size": "REAL",
+                "max_batch_size": "INTEGER DEFAULT 0",
+                "stuck_detection_count": "INTEGER DEFAULT 0",
+                "stuck_recovery_success": "INTEGER DEFAULT 0",
+                "app_crash_count": "INTEGER DEFAULT 0",
+                "app_relaunch_count": "INTEGER DEFAULT 0",
+                "context_loss_count": "INTEGER DEFAULT 0",
+                "context_recovery_count": "INTEGER DEFAULT 0",
+                "invalid_bbox_count": "INTEGER DEFAULT 0",
+                "device_model": "TEXT",
+                "android_version": "TEXT",
+                "screen_width": "INTEGER",
+                "screen_height": "INTEGER",
+                "app_version": "TEXT",
+                "pcap_file_size_bytes": "INTEGER",
+                "pcap_packet_count": "INTEGER",
+                "mobsf_security_score": "REAL",
+                "mobsf_high_issues": "INTEGER DEFAULT 0",
+                "mobsf_medium_issues": "INTEGER DEFAULT 0",
+                "mobsf_low_issues": "INTEGER DEFAULT 0",
+                "video_file_size_bytes": "INTEGER",
+                "video_duration_seconds": "REAL",
+                "transition_count": "INTEGER DEFAULT 0",
+                "unique_transitions": "INTEGER DEFAULT 0",
+                "uiautomator_crash_count": "INTEGER DEFAULT 0",
+                "uiautomator_recovery_count": "INTEGER DEFAULT 0",
+                "avg_recovery_time_ms": "REAL",
+                "vision_call_count": "INTEGER DEFAULT 0",
+                "non_vision_call_count": "INTEGER DEFAULT 0",
+                "ai_success_by_type_json": "TEXT",
+                "ai_total_by_type_json": "TEXT",
+            }
+            for col_name, col_type in run_stats_columns.items():
+                if col_name not in columns:
+                    conn.execute(f"ALTER TABLE run_stats ADD COLUMN {col_name} {col_type}")
 
             # Migration for step_logs.current_phase
             cursor = conn.execute("PRAGMA table_info(step_logs)")

@@ -18,7 +18,7 @@ from mobile_crawler.domain.context_guard import (
     StepSkipReason,
     UIDumpValidator,
 )
-from mobile_crawler.domain.crawler_agent.agent.common.events import ToolExecutionEvent
+from mobile_crawler.domain.crawler_agent.agent.common.events import ScreenshotEvent, ToolExecutionEvent
 from mobile_crawler.domain.crawler_agent.agent.droid.events import AppOpenerResponseEvent
 from mobile_crawler.domain.crawler_agent.agent.executor.events import ExecutorResponseEvent
 from mobile_crawler.domain.crawler_agent.agent.fast_agent.events import FastAgentResponseEvent
@@ -878,11 +878,25 @@ class CrawlerAgentService:
         # Increment step number on each tool execution
         self._current_step_number += 1
         self._apply_pending_step_timing()
+        duration_ms = getattr(event, "duration_ms", None)
         self._add_sub_phase_timing(
             "tool_execution_ms",
-            getattr(event, "duration_ms", None),
+            duration_ms,
             parent_phase=StepPhase.EXECUTE,
         )
+
+        if self._emit_step_phase_event and duration_ms is not None:
+            try:
+                self._emit_step_phase_event(
+                    "on_action_timing",
+                    self._current_run_id,
+                    self._current_step_number,
+                    tool_name,
+                    success,
+                    duration_ms,
+                )
+            except Exception as e:
+                logger.warning(f"Failed to emit action timing event: {e}")
 
         logger.debug(f"Step {self._current_step_number}: tool={tool_name} " f"success={success}")
 
@@ -1098,6 +1112,18 @@ class CrawlerAgentService:
         except Exception as e:
             logger.warning(f"Phase transition error at step {self._current_step_number}: {e}")
 
+    async def _handle_screenshot_timing_event(self, event) -> None:
+        """Handle a ScreenshotEvent carrying capture duration for the Statistics dashboard."""
+        duration_ms = getattr(event, "duration_ms", None)
+        if duration_ms is None or not self._emit_step_phase_event:
+            return
+        try:
+            self._emit_step_phase_event(
+                "on_screenshot_timing", self._current_run_id, self._current_step_number, duration_ms
+            )
+        except Exception as e:
+            logger.warning(f"Failed to emit screenshot timing event: {e}")
+
     async def _handle_ai_interaction_event(self, event) -> None:
         """Handle AI interaction events (Manager/Executor/FastAgent/AppOpener responses).
 
@@ -1136,8 +1162,13 @@ class CrawlerAgentService:
         # AppOpener never captures a screenshot (pure text/package-matching call),
         # so vision is never applicable there regardless of any config flag.
         vision_enabled = False
+        elements = None
+        loop_detected = False
+        retry_count = 0
+        omniparser_ms = None
 
         if isinstance(event, ManagerResponseEvent):
+            call_type = "manager"
             screenshot_bytes = getattr(event, "screenshot", None)
             system_prompt = getattr(event, "system_prompt", None) or ""
             user_prompt = getattr(event, "user_prompt_text", None) or ""
@@ -1148,7 +1179,12 @@ class CrawlerAgentService:
             success = getattr(event, "success", True)
             error_message = getattr(event, "error", None)
             vision_enabled = getattr(event, "vision_enabled", True)
+            elements = getattr(event, "elements", None)
+            retry_count = len(getattr(event, "validation_retries", None) or [])
+            loop_detected = getattr(event, "loop_detected", False)
+            omniparser_ms = getattr(event, "omniparser_ms", None)
         elif isinstance(event, ExecutorResponseEvent):
+            call_type = "executor"
             screenshot_bytes = getattr(event, "screenshot", None)
             prompt_text = getattr(event, "prompt_text", None)
             raw_response = event.response
@@ -1157,6 +1193,7 @@ class CrawlerAgentService:
             success = getattr(event, "success", True)
             error_message = getattr(event, "error", None)
             vision_enabled = getattr(event, "vision_enabled", True)
+            elements = getattr(event, "elements", None)
             # Use already-parsed result from event (Fix 8: single parse, not double)
             parsed = event.parsed_action
             if parsed:
@@ -1170,6 +1207,7 @@ class CrawlerAgentService:
             else:
                 actions = []
         elif isinstance(event, FastAgentResponseEvent):
+            call_type = "fast_agent"
             screenshot_bytes = getattr(event, "screenshot", None)
             prompt_text = getattr(event, "prompt_text", None)
             raw_response = getattr(event, "raw_response", None) or event.thought
@@ -1178,7 +1216,11 @@ class CrawlerAgentService:
             success = getattr(event, "success", True)
             error_message = getattr(event, "error", None)
             vision_enabled = getattr(event, "vision_enabled", True)
+            elements = getattr(event, "elements", None)
+            retry_count = len(getattr(event, "validation_retries", None) or [])
+            omniparser_ms = getattr(event, "omniparser_ms", None)
         elif isinstance(event, AppOpenerResponseEvent):
+            call_type = "app_opener"
             prompt_text = event.prompt
             raw_response = event.response
             usage = None
@@ -1203,7 +1245,11 @@ class CrawlerAgentService:
 
         # Build request_data matching ai_monitor_panel.py's expected shape
         screenshot_b64 = base64.b64encode(screenshot_bytes).decode("utf-8") if screenshot_bytes else ""
-        request_data = {"user_prompt": json.dumps({"text": prompt_text or "", "screenshot": screenshot_b64})}
+        request_data = {
+            "user_prompt": json.dumps({"text": prompt_text or "", "screenshot": screenshot_b64}),
+            "ui_elements": elements,
+            "vision_enabled": vision_enabled,
+        }
 
         # Build response_data
         tokens_input = usage.request_tokens if usage else None
@@ -1217,15 +1263,26 @@ class CrawlerAgentService:
             "success": success,
             "error_message": error_message,
             "vision_enabled": vision_enabled,
+            "call_type": call_type,
+            "retry_count": retry_count,
+            "loop_detected": loop_detected,
         }
 
         # Emit signals to UI (on_ai_request_sent, on_ai_response_received, on_screenshot_captured)
         if self._emit_step_phase_event:
             try:
                 self._emit_step_phase_event("on_ai_request_sent", self._current_run_id, step_number, request_data)
-                self._emit_step_phase_event("on_ai_response_received", self._current_run_id, step_number, response_data)
+                # Also emit token counts directly in response_data for stats tracking fallback
+                # (in case OTel span processor isn't active)
+                response_data_with_tokens = {**response_data, "tokens_input": tokens_input, "tokens_output": tokens_output}
+                self._emit_step_phase_event("on_ai_response_received", self._current_run_id, step_number, response_data_with_tokens)
                 if screenshot_path:
                     self._emit_step_phase_event("on_screenshot_captured", self._current_run_id, step_number, screenshot_path)
+                if omniparser_ms is not None:
+                    self._emit_step_phase_event(
+                        "on_omniparser_timing", self._current_run_id, step_number, omniparser_ms,
+                        len(elements) if elements else 0,
+                    )
             except Exception as e:
                 logger.warning(f"Failed to emit AI interaction events: {e}")
 
@@ -1246,7 +1303,7 @@ class CrawlerAgentService:
                     latency_ms=latency_ms,
                     success=success,
                     error_message=error_message,
-                    retry_count=0,
+                    retry_count=retry_count,
                 )
                 self.ai_interaction_repository.create_ai_interaction(interaction)
             except Exception as e:
@@ -1409,6 +1466,8 @@ class CrawlerAgentService:
                                 async for event in workflow_result.stream_events():
                                     if isinstance(event, ToolExecutionEvent):
                                         await self._handle_tool_execution_event(event)
+                                    elif isinstance(event, ScreenshotEvent):
+                                        await self._handle_screenshot_timing_event(event)
                                     else:
                                         self._buffer_workflow_timing(event)
                                         await self._handle_ai_interaction_event(event)

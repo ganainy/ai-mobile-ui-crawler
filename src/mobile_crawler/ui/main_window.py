@@ -26,6 +26,7 @@ from mobile_crawler.core.crawl_controller import CrawlController
 from mobile_crawler.core.crawl_state_machine import CrawlState
 from mobile_crawler.core.crawler_loop import CrawlerLoop
 from mobile_crawler.core.log_sinks import LogLevel, QLogHandler
+from mobile_crawler.core.runtime_stats_collector import RuntimeStatsCollector
 from mobile_crawler.core.stale_run_cleaner import StaleRunCleaner
 from mobile_crawler.domain.models import ActionResult
 from mobile_crawler.domain.providers.registry import ProviderRegistry
@@ -37,6 +38,7 @@ from mobile_crawler.infrastructure.database import DatabaseManager
 from mobile_crawler.infrastructure.device_detection import DeviceDetection
 from mobile_crawler.infrastructure.mobsf_manager import MobSFManager
 from mobile_crawler.infrastructure.run_repository import RunRepository
+from mobile_crawler.infrastructure.run_stats_repository import RunStatsRepository
 from mobile_crawler.infrastructure.screen_repository import ScreenRepository
 from mobile_crawler.infrastructure.session_folder_manager import SessionFolderManager
 from mobile_crawler.infrastructure.step_log_repository import StepLogRepository
@@ -57,6 +59,8 @@ from mobile_crawler.ui.widgets.log_viewer import LogViewer
 from mobile_crawler.ui.widgets.run_history_view import RunHistoryView
 from mobile_crawler.ui.widgets.settings_panel import SettingsPanel
 from mobile_crawler.ui.widgets.stats_dashboard import StatsDashboard
+
+logger = logging.getLogger(__name__)
 
 
 def _get_gui_icon_path() -> str:
@@ -101,9 +105,13 @@ class CrawlStatistics:
     ai_response_times_ms: list[float] = field(default_factory=list)
     last_step_number: int = 0  # Track last seen step to avoid double counting
 
-    # OCR timing
+    # OCR timing (OCR grounding isn't used by the live pipeline — always 0/empty)
     ocr_total_time_ms: float = 0.0
     ocr_operation_count: int = 0
+
+    # OmniParser vision-parsing timing
+    omniparser_total_time_ms: float = 0.0
+    omniparser_call_count: int = 0
 
     # Action execution timing
     action_total_time_ms: float = 0.0
@@ -149,6 +157,12 @@ class CrawlStatistics:
         if self.ocr_operation_count == 0:
             return 0.0
         return self.ocr_total_time_ms / self.ocr_operation_count
+
+    def avg_omniparser_time_ms(self) -> float:
+        """Average OmniParser vision-parsing call time in milliseconds."""
+        if self.omniparser_call_count == 0:
+            return 0.0
+        return self.omniparser_total_time_ms / self.omniparser_call_count
 
     def avg_action_time_ms(self) -> float:
         """Average action execution time in milliseconds."""
@@ -285,6 +299,7 @@ class MainWindow(QMainWindow):
         # Repository services for statistics
         step_log_repository = StepLogRepository(db_manager)
         screen_repository = ScreenRepository(db_manager)
+        run_stats_repository = RunStatsRepository(db_manager)
 
         return {
             "device_detection": device_detection,
@@ -299,6 +314,7 @@ class MainWindow(QMainWindow):
             "database_manager": db_manager,
             "step_log_repository": step_log_repository,
             "screen_repository": screen_repository,
+            "run_stats_repository": run_stats_repository,
             "session_folder_manager": session_folder_manager,
         }
 
@@ -362,9 +378,13 @@ class MainWindow(QMainWindow):
         self.signal_adapter.debug_log.connect(self._on_debug_log)
         self.signal_adapter.ocr_completed.connect(self._on_ocr_completed)
         self.signal_adapter.screenshot_timing.connect(self._on_screenshot_timing)
+        self.signal_adapter.action_timing.connect(self._on_action_timing)
+        self.signal_adapter.omniparser_timing.connect(self._on_omniparser_timing)
         self.signal_adapter.step_phase_transition.connect(self._on_step_phase_transition)
+        self.signal_adapter.mobsf_finished.connect(self._on_mobsf_finished)
         if self.ai_monitor_panel and hasattr(self.signal_adapter, "ai_request_sent"):
             self.signal_adapter.ai_request_sent.connect(self.ai_monitor_panel.add_request)
+            self.signal_adapter.ai_request_sent.connect(self._on_ai_request_stats)
             self.signal_adapter.ai_response_received.connect(self.ai_monitor_panel.add_response)
             self.signal_adapter.screenshot_captured.connect(self.ai_monitor_panel.add_screenshot_path)
 
@@ -411,11 +431,20 @@ class MainWindow(QMainWindow):
             # Initialize statistics tracking
             self._current_stats = CrawlStatistics(run_id=run_id, start_time=datetime.now())
 
+            # Initialize runtime stats collector for persistence
+            self._runtime_stats_collector = RuntimeStatsCollector(
+                run_id=run_id, run_stats_repository=self._services["run_stats_repository"]
+            )
+            self._runtime_stats_collector.start_session()
+
             # Reset and configure stats dashboard
             if self.stats_dashboard:
                 self.stats_dashboard.reset()
                 self.stats_dashboard.set_max_steps(self.settings_panel.get_max_steps())
                 self.stats_dashboard.set_max_duration(self.settings_panel.get_max_duration())
+                self.stats_dashboard.set_tool_calls_applicable(
+                    self.settings_panel.get_enable_crawler_agent()
+                )
                 if hasattr(self.settings_panel, "get_limit_mode"):
                     self.stats_dashboard.set_progress_mode(self.settings_panel.get_limit_mode())
 
@@ -675,9 +704,11 @@ class MainWindow(QMainWindow):
     def _on_crawl_finished(self) -> None:
         """Handle crawl completion."""
         self._update_crawl_ui_state(running=False)
+        self._save_run_stats()
         self._crawler_worker = None
         self._current_run_id = None
         self._crawler_loop = None
+        self._runtime_stats_collector = None
 
     def _on_crawl_error(self, error_msg: str) -> None:
         """Handle crawl error.
@@ -687,9 +718,90 @@ class MainWindow(QMainWindow):
         """
         self._show_error("Crawl Error", error_msg)
         self._update_crawl_ui_state(running=False)
+        self._save_run_stats()
         self._crawler_worker = None
         self._current_run_id = None
         self._crawler_loop = None
+        self._runtime_stats_collector = None
+
+    def _save_run_stats(self) -> None:
+        """Persist the runtime stats collector to the run_stats table."""
+        if not self._runtime_stats_collector:
+            return
+
+        try:
+            collector = self._runtime_stats_collector
+
+            # Fill in device/app info if available
+            device_info = getattr(self, "_device_info", None)
+            if device_info:
+                collector.set_device_info(
+                    device_id=device_info.get("serial", ""),
+                    device_model=device_info.get("model", ""),
+                    android_version=device_info.get("android_version", ""),
+                    screen_width=device_info.get("screen_width", 0) or 0,
+                    screen_height=device_info.get("screen_height", 0) or 0,
+                )
+
+            app_info = getattr(self, "_app_info", None)
+            if app_info:
+                collector.set_app_info(
+                    app_package=app_info.get("package_name", ""),
+                    app_version=app_info.get("version_name", ""),
+                )
+
+            # Record capture artifacts: scan the run's session folder for
+            # any .pcap / .mp4 outputs and fold their sizes into the stats.
+            try:
+                session_path = None
+                try:
+                    repo = self._services.get("run_repository")
+                    run = repo.get_run_by_id(collector._run_id) if repo else None
+                    if run and run.session_path:
+                        session_path = run.session_path
+                except Exception as e:
+                    logger.debug("Could not resolve session_path for run_stats: %s", e)
+
+                if session_path:
+                    from pathlib import Path
+
+                    p = Path(session_path)
+                    pcaps = list(p.rglob("*.pcap"))
+                    if pcaps:
+                        collector.record_pcap_stats(
+                            file_size_bytes=sum(f.stat().st_size for f in pcaps if f.exists())
+                        )
+
+                    videos = list(p.rglob("*.mp4"))
+                    if videos:
+                        total = sum(f.stat().st_size for f in videos if f.exists())
+                        # Duration: prefer manifest.json `total_duration_s` if present
+                        duration_s = 0.0
+                        m = p / "videos" / "manifest.json"
+                        if m.exists():
+                            try:
+                                import json
+
+                                with open(m, encoding="utf-8") as fh:
+                                    data = json.load(fh)
+                                duration_s = float(data.get("total_duration_s") or 0.0)
+                                if duration_s == 0.0 and "segments" in data:
+                                    duration_s = sum(
+                                        float(s.get("duration_s", 0) or 0)
+                                        for s in data.get("segments", [])
+                                    )
+                            except Exception:
+                                pass
+                        # Keep 0.0 when no manifest/duration — don't fabricate.
+                        collector.record_video_stats(total, duration_s)
+            except Exception as e:
+                logger.debug("Post-crawl media scan skipped: %s", e)
+
+            # Save via the collector's repository (set at construction time)
+            collector.save()
+            logger.info(f"Saved run_stats for run_id={collector._run_id}")
+        except Exception as e:
+            logger.error(f"Failed to save run_stats: {e}", exc_info=True)
 
     def _on_step_by_step_toggled(self, enabled: bool) -> None:
         """Handle step-by-step mode toggle."""
@@ -751,27 +863,25 @@ class MainWindow(QMainWindow):
                 self._update_dashboard_stats()
             return  # Step lines don't need further parsing
 
-        # ── Action outcome from executor debug log ────────────────────────
-        # CrawlerAgent executor logs: "✅ Execution complete: <summary>"
-        #                     or  "❌ Execution complete: <summary>"
-        if "Execution complete:" in message:
-            if "\u2705" in message:  # ✅
-                stats.successful_actions += 1
-                stats.tool_call_count += 1
-                updated = True
-            elif "\u274c" in message:  # ❌
-                stats.failed_actions += 1
-                stats.tool_call_count += 1
-                stats.tool_error_count += 1
-                updated = True
-
-        # ── FastAgent function-results: action outcomes from XML blocks ───
-        # FastAgent emits <output>...</output> for success, <error>...</error> for failure
-        if "<output>" in message:
+        # ── Action outcomes ─────────────────────────────────────────────────
+        # Two mutually exclusive formats, matched once so a single line
+        # never double-counts an action:
+        #   - CrawlerAgent executor: "✅/❌ Execution complete: <summary>"
+        #   - FastAgent XML blocks:   "<output>...</output>" / "<error>...</error>"
+        if "Execution complete:" in message and "✅" in message:  # executor success
             stats.successful_actions += 1
             stats.tool_call_count += 1
             updated = True
-        elif "<error>" in message and "</error>" in message:
+        elif "Execution complete:" in message and "❌" in message:  # executor failure
+            stats.failed_actions += 1
+            stats.tool_call_count += 1
+            stats.tool_error_count += 1
+            updated = True
+        elif "<output>" in message:  # FastAgent success block
+            stats.successful_actions += 1
+            stats.tool_call_count += 1
+            updated = True
+        elif "<error>" in message and "</error>" in message:  # FastAgent error block
             stats.failed_actions += 1
             stats.tool_call_count += 1
             stats.tool_error_count += 1
@@ -943,6 +1053,55 @@ class MainWindow(QMainWindow):
             self._current_stats.screenshot_count += 1
             self._current_stats.screenshot_total_time_ms += duration_ms
             self._update_dashboard_stats()
+
+    def _on_omniparser_timing(
+        self, run_id: int, step_number: int, duration_ms: float, element_count: int
+    ) -> None:
+        """Handle OmniParser vision-parsing timing event.
+
+        Args:
+            run_id: Run ID
+            step_number: Step number
+            duration_ms: OmniParser call duration
+            element_count: Number of elements OmniParser returned
+        """
+        if self._current_stats and self._current_stats.run_id == run_id:
+            self._current_stats.omniparser_call_count += 1
+            self._current_stats.omniparser_total_time_ms += duration_ms
+            self._update_dashboard_stats()
+
+    def _on_action_timing(
+        self, run_id: int, step_number: int, action_type: str, success: bool, duration_ms: float
+    ) -> None:
+        """Handle action timing event (real per-tool-call duration from the CrawlerAgent path).
+
+        Args:
+            run_id: Run ID
+            step_number: Step number
+            action_type: Tool/action name (e.g. "click", "swipe")
+            success: Whether the action succeeded
+            duration_ms: Wall-clock execution time
+        """
+        if not self._current_stats or self._current_stats.run_id != run_id:
+            return
+
+        if duration_ms > 0:
+            self._current_stats.action_count += 1
+            self._current_stats.action_total_time_ms += duration_ms
+            self._update_dashboard_stats()
+
+        if self._runtime_stats_collector and self._runtime_stats_collector._run_id == run_id:
+            self._runtime_stats_collector.record_action(action_type, success, duration_ms)
+
+    def _on_mobsf_finished(self, run_id: int, security_score: float, high_issues: int, medium_issues: int, low_issues: int) -> None:
+        """Handle MobSF static-analysis completion — feed results into the collector."""
+        if self._runtime_stats_collector and self._runtime_stats_collector._run_id == run_id:
+            self._runtime_stats_collector.record_mobsf_results(
+                security_score=security_score,
+                high_issues=high_issues,
+                medium_issues=medium_issues,
+                low_issues=low_issues,
+            )
 
     def _on_step_phase_transition(self, run_id: int, step_number: int, from_phase: str, to_phase: str, duration_ms: float) -> None:
         """Handle step phase transition event — count transitions for stats."""
@@ -1130,7 +1289,10 @@ class MainWindow(QMainWindow):
 
         # Instantiate widget
         self.run_history_view = RunHistoryView(
-            self._services["run_repository"], self._services["report_generator"], self._services["mobsf_manager"]
+            self._services["run_repository"],
+            self._services["report_generator"],
+            self._services["mobsf_manager"],
+            self._services.get("run_stats_repository"),
         )
         self.run_history_view.setObjectName("runHistoryView")
         self.run_history_view.setMinimumHeight(170)
@@ -1239,6 +1401,7 @@ class MainWindow(QMainWindow):
         self.signal_adapter.step_completed.connect(self._on_step_completed_stats)
         self.signal_adapter.action_executed.connect(self._on_action_executed_stats)
         self.signal_adapter.ai_response_received.connect(self._on_ai_response_stats)
+        self.signal_adapter.screenshot_captured.connect(self._on_screenshot_captured_stats)
         self.signal_adapter.crawl_completed.connect(self._on_crawl_completed_stats)
 
     def _setup_python_logging(self) -> None:
@@ -1381,6 +1544,14 @@ class MainWindow(QMainWindow):
         self._current_stats.total_steps = step_number
         self._current_stats.last_step_number = step_number
 
+        # Record in runtime stats collector
+        if self._runtime_stats_collector and self._runtime_stats_collector._run_id == run_id:
+            self._runtime_stats_collector.record_step_start()
+            if actions_count > 0:
+                self._runtime_stats_collector.record_step_success(duration_ms)
+            else:
+                self._runtime_stats_collector.record_step_failure(duration_ms, "no actions executed")
+
         # Update dashboard
         self._update_dashboard_stats()
 
@@ -1402,6 +1573,12 @@ class MainWindow(QMainWindow):
         if hasattr(result, "action_type") and result.action_type:
             self._current_stats.last_action_type = result.action_type
 
+        # Record in runtime stats collector
+        if self._runtime_stats_collector and self._runtime_stats_collector._run_id == run_id:
+            action_type = getattr(result, "action_type", "unknown") or "unknown"
+            duration_ms = getattr(result, "duration_ms", 0.0) or 0.0
+            self._runtime_stats_collector.record_action(action_type, result.success, duration_ms)
+
         # Update dashboard
         self._update_dashboard_stats()
 
@@ -1414,10 +1591,27 @@ class MainWindow(QMainWindow):
         if not self._current_stats or self._current_stats.run_id != run_id:
             return
 
+        # Track the most recent screenshot path for stats dashboard overlay
+        self._last_screenshot_path = screenshot_path
+
+        # Update the screenshot display now — _last_request_data was set by
+        # _on_ai_request_stats moments earlier for this same call (request_sent
+        # always fires before screenshot_captured), so they're guaranteed to
+        # match. Updating from _on_ai_response_stats instead would race: that
+        # handler can fire for THIS call before this event updates
+        # _last_screenshot_path, pairing fresh elements with the previous
+        # step's screenshot.
+        request_data = getattr(self, "_last_request_data", None)
+        if request_data is not None:
+            elements = request_data.get("ui_elements")
+            vision_enabled = request_data.get("vision_enabled", True)
+            self.stats_dashboard.update_screenshot(screenshot_path, elements, vision_enabled)
+
         # Increment total visits
         self._current_stats.total_screen_visits += 1
 
         # Compute perceptual hash to identify unique screens
+        screen_hash = None
         if screenshot_path:
             try:
                 import os
@@ -1431,10 +1625,29 @@ class MainWindow(QMainWindow):
                     self._current_stats.unique_screen_hashes.add(screen_hash)
             except Exception:
                 # If hashing fails, use step number as fallback identifier
-                self._current_stats.unique_screen_hashes.add(f"step_{step_number}")
+                screen_hash = f"step_{step_number}"
+                self._current_stats.unique_screen_hashes.add(screen_hash)
+
+        # Record in runtime stats collector (screen id = hash-based)
+        if self._runtime_stats_collector and self._runtime_stats_collector._run_id == run_id:
+            screen_id = hash(screen_hash or step_number) if screen_hash else step_number
+            self._runtime_stats_collector.record_screen_visit(screen_id=screen_id, navigation_depth=step_number)
 
         # Update dashboard
         self._update_dashboard_stats()
+
+    def _on_ai_request_stats(self, run_id: int, step_number: int, request_data: dict[str, Any]) -> None:
+        """Stash request data for screenshot overlay (consumed in _on_screenshot_captured_stats).
+
+        Emission order for a call that captures a new screenshot is always
+        request_sent -> response_received -> screenshot_captured, so by the
+        time screenshot_captured fires, _last_request_data already reflects
+        this same call — pairing them there (not in _on_ai_response_stats)
+        guarantees the screenshot and its overlay elements match.
+        """
+        if not self._current_stats or self._current_stats.run_id != run_id:
+            return
+        self._last_request_data = request_data
 
     def _on_ai_response_stats(self, run_id: int, step_number: int, response_data: dict[str, Any]) -> None:
         """Update AI performance metrics when response received."""
@@ -1447,6 +1660,50 @@ class MainWindow(QMainWindow):
         # Track AI calls
         self._current_stats.ai_call_count += 1
         self._current_stats.ai_response_times_ms.append(response_time)
+
+        # Accumulate token counts (fallback when OTel span processor isn't active)
+        tokens_in = response_data.get("tokens_input") or 0
+        tokens_out = response_data.get("tokens_output") or 0
+        if tokens_in > 0 or tokens_out > 0:
+            self._current_stats.total_input_tokens += tokens_in
+            self._current_stats.total_output_tokens += tokens_out
+
+        # Record in runtime stats collector
+        if self._runtime_stats_collector and self._runtime_stats_collector._run_id == run_id:
+            success = response_data.get("success", True)
+            self._runtime_stats_collector.record_ai_call(
+                response_time_ms=response_time,
+                tokens_used=tokens_in + tokens_out,
+                success=success
+            )
+
+            # Record retries / invalid responses (each validation retry = one invalid response)
+            retry_count = response_data.get("retry_count", 0) or 0
+            for _ in range(retry_count):
+                self._runtime_stats_collector.record_ai_retry()
+                self._runtime_stats_collector.record_invalid_response()
+
+            # Track call type for per-type success rates
+            call_type = response_data.get("call_type")
+            if call_type:
+                self._runtime_stats_collector.record_ai_call_type(call_type, success)
+
+            # Track vision vs non-vision call ratio
+            vision_enabled = response_data.get("vision_enabled", True)
+            if vision_enabled:
+                self._runtime_stats_collector.record_vision_call()
+            else:
+                self._runtime_stats_collector.record_non_vision_call()
+
+            # Track stuck (navigation loop) detections and recoveries
+            loop_detected = bool(response_data.get("loop_detected", False))
+            if loop_detected:
+                self._runtime_stats_collector.record_stuck_detection()
+                self._loop_detected_prev = True
+            else:
+                if getattr(self, "_loop_detected_prev", False):
+                    self._runtime_stats_collector.record_stuck_recovery(success=True)
+                self._loop_detected_prev = False
 
         # Update dashboard
         self._update_dashboard_stats()
@@ -1481,6 +1738,7 @@ class MainWindow(QMainWindow):
             action_avg_ms=stats.avg_action_time_ms(),
             ocr_avg_ms=stats.avg_ocr_time_ms(),
             screenshot_avg_ms=stats.avg_screenshot_time_ms(),
+            omniparser_avg_ms=stats.avg_omniparser_time_ms(),
             last_action=stats.last_action_type,
             step_progress=stats.current_step_of_max or str(stats.total_steps),
             total_input_tokens=stats.total_input_tokens,
@@ -1505,10 +1763,15 @@ class MainWindow(QMainWindow):
         if not self._current_stats:
             return
 
-        # Pull latest OTel token/latency data from the active crawl
+        # Pull latest OTel token/latency data from the active crawl. Only
+        # adopt it once OTel has actually captured something — otherwise an
+        # inactive/unsupported span processor (0/0 snapshot) would stomp the
+        # token counts already accumulated per-call in _on_ai_response_stats.
         if self._crawler_loop:
             span_stats = self._crawler_loop.get_span_stats()
-            if span_stats is not None:
+            if span_stats is not None and (
+                span_stats.total_input_tokens > 0 or span_stats.total_output_tokens > 0
+            ):
                 self._current_stats.total_input_tokens = span_stats.total_input_tokens
                 self._current_stats.total_output_tokens = span_stats.total_output_tokens
                 self._current_stats.otel_latencies_ms = span_stats.llm_latencies_ms
@@ -1561,41 +1824,6 @@ class MainWindow(QMainWindow):
 
         self._update_dashboard_stats()
         self._current_stats = None
-
-    def _query_final_statistics(self, run_id: int) -> dict[str, Any]:
-        """Query database for accurate final statistics.
-
-        Returns:
-            Dictionary with all statistics fields for update_stats()
-        """
-        step_repo = self._services.get("step_log_repository")
-        screen_repo = self._services.get("screen_repository")
-
-        # Query step statistics
-        step_stats = step_repo.get_step_statistics(run_id) if step_repo else {}
-
-        # Query screen counts
-        unique_screens = screen_repo.count_unique_screens_for_run(run_id) if screen_repo else 0
-        total_visits = step_repo.count_screen_visits_for_run(run_id) if step_repo else 0
-
-        # Query AI metrics
-        ai_stats = step_repo.get_ai_statistics(run_id) if step_repo else {}
-
-        # Calculate derived metrics
-        duration = (datetime.now() - self._current_stats.start_time).total_seconds() if self._current_stats else 0
-        screens_per_min = (unique_screens / (duration / 60.0)) if duration > 0 else 0.0
-
-        return {
-            "total_steps": step_stats.get("total_steps", 0),
-            "successful_steps": step_stats.get("successful_steps", 0),
-            "failed_steps": step_stats.get("failed_steps", 0),
-            "unique_screens": unique_screens,
-            "total_visits": total_visits,
-            "screens_per_minute": screens_per_min,
-            "ai_calls": ai_stats.get("ai_calls", 0),
-            "avg_ai_response_time_ms": ai_stats.get("avg_response_time_ms", 0.0),
-            "duration_seconds": duration,
-        }
 
     def closeEvent(self, event):
         """Handle window close event."""
