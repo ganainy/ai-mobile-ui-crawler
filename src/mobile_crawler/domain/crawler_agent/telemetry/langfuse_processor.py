@@ -29,6 +29,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Optional
 
 import requests
+from langfuse._client.span_filter import is_langfuse_span
 from langfuse._client.span_processor import (
     LangfuseSpanProcessor as BaseLangfuseSpanProcessor,
 )
@@ -478,7 +479,7 @@ class LangfuseSpanProcessor(BaseLangfuseSpanProcessor):
 
     # Span processing
     def on_end(self, span: ReadableSpan) -> None:
-        if self._is_langfuse_span(span) and not self._is_langfuse_project_span(span):
+        if is_langfuse_span(span) and not self._is_langfuse_project_span(span):
             return
 
         if self._is_blocked_instrumentation_scope(span):

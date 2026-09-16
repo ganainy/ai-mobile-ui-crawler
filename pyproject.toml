@@ -74,6 +74,10 @@ arize = [
     "arize-phoenix>=12.3.0",
     "llama-index-callbacks-arize-phoenix>=0.1.0",
 ]
+langfuse = [
+    "langfuse>=4.15.0,<5.0.0",
+    "openinference-instrumentation-llama-index>=4.0.0",
+]
 
 [project.scripts]
 mobile-crawler-cli = "mobile_crawler.cli.main:run"
