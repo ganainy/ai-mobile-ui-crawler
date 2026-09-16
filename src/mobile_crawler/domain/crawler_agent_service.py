@@ -397,8 +397,6 @@ class CrawlerAgentService:
                 self._crawler_agent_config.target_package = target_package
             return
 
-        # Instrument LlamaIndex and register stats collector (idempotent)
-        self._setup_instrumentation()
         self._stats_processor.reset()
 
         try:
@@ -1439,6 +1437,13 @@ class CrawlerAgentService:
                 from mobile_crawler.domain.crawler_agent.agent.droid.crawler_agent import CrawlerAgent
 
                 self._crawler_agent = CrawlerAgent(goal=goal.description, config=self._crawler_agent_config)
+
+                # Instrument LlamaIndex and register stats collector (idempotent).
+                # Runs after CrawlerAgent construction so it reuses whatever
+                # TracerProvider setup_tracing() (Phoenix/Langfuse) already
+                # registered, instead of racing it and winning with a bare,
+                # exporter-less provider.
+                self._setup_instrumentation()
 
                 # Wire observers to the Crawler agent's state_provider and driver
                 self._wire_observers_to_agent()

@@ -101,7 +101,15 @@ def _setup_phoenix_tracing() -> bool:
         )
         return False
 
-    handler = arize_phoenix_callback_handler()
+    try:
+        handler = arize_phoenix_callback_handler()
+    except Exception as e:
+        logger.warning(
+            f"⚠️  Failed to set up Phoenix tracing: {e}. "
+            "Tracing will be disabled for this session."
+        )
+        return False
+
     llama_index.core.global_handler = handler
     logger.debug("🔍 Arize Phoenix tracing enabled globally")
     return True

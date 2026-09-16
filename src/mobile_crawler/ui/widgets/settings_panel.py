@@ -575,6 +575,14 @@ class SettingsPanel(QWidget):
         phoenix_layout.addWidget(self.phoenix_url_input)
         tracing_layout.addWidget(self.phoenix_widget)
 
+        self.phoenix_hint = QLabel(
+            "Phoenix does not start automatically. Run `phoenix serve` in a separate "
+            "terminal first, then view traces at this URL in your browser."
+        )
+        self.phoenix_hint.setWordWrap(True)
+        self.phoenix_hint.setStyleSheet("color: #666; font-size: 11px;")
+        tracing_layout.addWidget(self.phoenix_hint)
+
         # Langfuse configuration widget
         self.langfuse_widget = QWidget()
         langfuse_layout = QVBoxLayout(self.langfuse_widget)
@@ -662,17 +670,20 @@ class SettingsPanel(QWidget):
         else:
             self.phoenix_widget.setEnabled(False)
             self.langfuse_widget.setEnabled(False)
+            self.phoenix_hint.setVisible(False)
 
     def _on_tracing_provider_changed(self, provider: str):
         """Handle tracing provider combobox change."""
         if not self.enable_tracing_checkbox.isChecked():
             self.phoenix_widget.setEnabled(False)
             self.langfuse_widget.setEnabled(False)
+            self.phoenix_hint.setVisible(False)
             return
 
         if provider == "phoenix":
             self.phoenix_widget.setVisible(True)
             self.phoenix_widget.setEnabled(True)
+            self.phoenix_hint.setVisible(True)
             self.langfuse_widget.setVisible(False)
             self.langfuse_widget.setEnabled(False)
         else:
@@ -680,6 +691,7 @@ class SettingsPanel(QWidget):
             self.phoenix_widget.setEnabled(False)
             self.langfuse_widget.setVisible(True)
             self.langfuse_widget.setEnabled(True)
+            self.phoenix_hint.setVisible(False)
 
     def _load_settings(self):
         """Load settings from user_config.db."""
