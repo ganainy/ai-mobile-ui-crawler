@@ -442,9 +442,6 @@ class MainWindow(QMainWindow):
                 self.stats_dashboard.reset()
                 self.stats_dashboard.set_max_steps(self.settings_panel.get_max_steps())
                 self.stats_dashboard.set_max_duration(self.settings_panel.get_max_duration())
-                self.stats_dashboard.set_tool_calls_applicable(
-                    self.settings_panel.get_enable_crawler_agent()
-                )
                 if hasattr(self.settings_panel, "get_limit_mode"):
                     self.stats_dashboard.set_progress_mode(self.settings_panel.get_limit_mode())
 

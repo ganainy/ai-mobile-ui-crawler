@@ -1,18 +1,21 @@
 """Statistics dashboard widget for mobile-crawler GUI."""
 
 import io
-from PySide6.QtCore import Qt, Signal
+
+from PIL import Image
+from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtGui import QFont, QPixmap
 from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
     QGroupBox,
+    QHBoxLayout,
     QLabel,
     QProgressBar,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
-from PIL import Image
 
 from mobile_crawler.domain.element_overlay_renderer import ElementOverlayRenderer
 
@@ -31,6 +34,67 @@ def _make_separator() -> QFrame:
     return sep
 
 
+def _make_stat_label(text: str, tooltip: str = "") -> QLabel:
+    lbl = QLabel(text)
+    if tooltip:
+        lbl.setToolTip(tooltip)
+    return lbl
+
+
+class _ScreenshotView(QLabel):
+    """Screenshot label that keeps a 9:16 aspect ratio and scales to fit."""
+
+    _ASPECT_RATIO = 9 / 16  # width / height
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._source_pixmap: QPixmap | None = None
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.setStyleSheet("border: 1px solid #333;")
+        self.setText("No screenshot yet")
+
+        policy = QSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        policy.setHeightForWidth(True)
+        self.setSizePolicy(policy)
+
+    def set_source_pixmap(self, pixmap: QPixmap | None):
+        self._source_pixmap = pixmap
+        self._rescale()
+
+    def clear(self):
+        self._source_pixmap = None
+        super().clear()
+        self.setText("No screenshot yet")
+
+    def hasHeightForWidth(self) -> bool:
+        return True
+
+    def heightForWidth(self, width: int) -> int:
+        return max(round(width / self._ASPECT_RATIO), 1)
+
+    def sizeHint(self) -> QSize:
+        width = 260
+        return QSize(width, self.heightForWidth(width))
+
+    def minimumSizeHint(self) -> QSize:
+        width = 180
+        return QSize(width, self.heightForWidth(width))
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._rescale()
+
+    def _rescale(self):
+        if self._source_pixmap is None or self._source_pixmap.isNull():
+            return
+        scaled = self._source_pixmap.scaled(
+            self.size(),
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        self.setPixmap(scaled)
+
+
 class StatsDashboard(QWidget):
     """Widget for displaying real-time crawl statistics."""
 
@@ -41,7 +105,6 @@ class StatsDashboard(QWidget):
         self._max_steps = 100
         self._max_duration_seconds = 300
         self._overlay_renderer = ElementOverlayRenderer()
-        self._tool_calls_applicable = True
         self._setup_ui()
 
     # ------------------------------------------------------------------
@@ -62,25 +125,33 @@ class StatsDashboard(QWidget):
         self.placeholder_label.setStyleSheet("color: #888; font-style: italic; padding: 40px;")
         group_layout.addWidget(self.placeholder_label)
 
-        # Real stats content
+        # Real stats content, split into two columns: the screenshot on the
+        # left (so it can be displayed large) and the metrics on the right.
         self.stats_content = QWidget()
-        grid = QGridLayout(self.stats_content)
-        grid.setHorizontalSpacing(16)
-        grid.setVerticalSpacing(4)
+        content_layout = QHBoxLayout(self.stats_content)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(16)
+        content_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-        row = 0
+        content_layout.addWidget(self._build_screenshot_column(), 1)
+        content_layout.addWidget(self._build_metrics_column(), 2)
 
-        # ── Screenshot ──────────────────────────────────────
-        grid.addWidget(_make_section_label("Screenshot"), row, 0, 1, 2)
-        row += 1
+        self.stats_content.setVisible(False)
+        group_layout.addWidget(self.stats_content)
 
-        self.screenshot_label = QLabel()
-        self.screenshot_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.screenshot_label.setStyleSheet("border: 1px solid #333;")
-        self.screenshot_label.setFixedSize(200, 355)  # Approx 9:16 aspect ratio
-        self.screenshot_label.setText("No screenshot yet")
-        grid.addWidget(self.screenshot_label, row, 0, 1, 2)
-        row += 1
+        outer.addWidget(self.stats_group)
+
+    def _build_screenshot_column(self) -> QWidget:
+        column = QWidget()
+        column.setMaximumWidth(360)
+        layout = QVBoxLayout(column)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
+
+        layout.addWidget(_make_section_label("Screenshot"))
+
+        self.screenshot_label = _ScreenshotView()
+        layout.addWidget(self.screenshot_label)
 
         self.screenshot_hint_label = QLabel(
             "For reference only — not necessarily what was sent to the AI this step."
@@ -88,30 +159,58 @@ class StatsDashboard(QWidget):
         self.screenshot_hint_label.setWordWrap(True)
         self.screenshot_hint_label.setStyleSheet("color: #888; font-size: 9px; font-style: italic;")
         self.screenshot_hint_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        grid.addWidget(self.screenshot_hint_label, row, 0, 1, 2)
-        row += 1
+        self.screenshot_hint_label.setSizePolicy(
+            QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum
+        )
+        layout.addWidget(self.screenshot_hint_label)
+        layout.addStretch(1)
 
-        grid.addWidget(_make_separator(), row, 0, 1, 2)
-        row += 1
+        return column
+
+    def _build_metrics_column(self) -> QWidget:
+        column = QWidget()
+        column.setMinimumWidth(300)
+        grid = QGridLayout(column)
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setHorizontalSpacing(16)
+        grid.setVerticalSpacing(4)
+
+        row = 0
 
         # ── Crawl Progress ──────────────────────────────────────
         grid.addWidget(_make_section_label("Crawl Progress"), row, 0, 1, 2)
         row += 1
 
-        self.total_steps_label = QLabel("Total Steps: 0")
-        grid.addWidget(self.total_steps_label, row, 0)
-
-        self.current_step_label = QLabel("Current: —")
-        grid.addWidget(self.current_step_label, row, 1)
+        self.total_steps_label = _make_stat_label(
+            "Total Steps: 0",
+            "Number of crawl steps completed since the run started.",
+        )
+        grid.addWidget(self.total_steps_label, row, 0, 1, 2)
         row += 1
 
-        grid.addWidget(QLabel("Step Progress:"), row, 0)
+        self.current_step_label = _make_stat_label(
+            "Current: —",
+            "The step currently being executed, shown as 'step / limit'.",
+        )
+        grid.addWidget(self.current_step_label, row, 0, 1, 2)
+        row += 1
+
+        self.step_progress_label = _make_stat_label(
+            "Step Progress:",
+            "Progress toward the configured run limit, measured in steps or duration.",
+        )
+        grid.addWidget(self.step_progress_label, row, 0, 1, 2)
+        row += 1
+
         self.step_progress_bar = QProgressBar()
         self.step_progress_bar.setRange(0, self._max_steps)
         self.step_progress_bar.setValue(0)
         self.step_progress_bar.setTextVisible(True)
         self.step_progress_bar.setFormat("%v / %m steps")
-        grid.addWidget(self.step_progress_bar, row, 1)
+        self.step_progress_bar.setToolTip(
+            "Progress toward the configured run limit, measured in steps or duration."
+        )
+        grid.addWidget(self.step_progress_bar, row, 0, 1, 2)
         row += 1
 
         grid.addWidget(_make_separator(), row, 0, 1, 2)
@@ -121,20 +220,34 @@ class StatsDashboard(QWidget):
         grid.addWidget(_make_section_label("Actions"), row, 0, 1, 2)
         row += 1
 
-        self.successful_steps_label = QLabel("Actions OK: 0")
+        self.successful_steps_label = _make_stat_label(
+            "Actions OK: 0",
+            "UI actions that executed successfully.",
+        )
         self.successful_steps_label.setStyleSheet("color: #4caf50;")
-        grid.addWidget(self.successful_steps_label, row, 0)
-
-        self.failed_steps_label = QLabel("Actions Failed: 0")
-        self.failed_steps_label.setStyleSheet("color: #f44336;")
-        grid.addWidget(self.failed_steps_label, row, 1)
+        grid.addWidget(self.successful_steps_label, row, 0, 1, 2)
         row += 1
 
-        self.success_rate_label = QLabel("Success Rate: —")
-        grid.addWidget(self.success_rate_label, row, 0)
+        self.failed_steps_label = _make_stat_label(
+            "Actions Failed: 0",
+            "UI actions that failed to execute.",
+        )
+        self.failed_steps_label.setStyleSheet("color: #f44336;")
+        grid.addWidget(self.failed_steps_label, row, 0, 1, 2)
+        row += 1
 
-        self.last_action_label = QLabel("Last Action: —")
-        grid.addWidget(self.last_action_label, row, 1)
+        self.success_rate_label = _make_stat_label(
+            "Success Rate: —",
+            "Share of attempted actions that succeeded (OK / total actions).",
+        )
+        grid.addWidget(self.success_rate_label, row, 0, 1, 2)
+        row += 1
+
+        self.last_action_label = _make_stat_label(
+            "Last Action: —",
+            "The most recent action performed by the crawler.",
+        )
+        grid.addWidget(self.last_action_label, row, 0, 1, 2)
         row += 1
 
         grid.addWidget(_make_separator(), row, 0, 1, 2)
@@ -144,18 +257,32 @@ class StatsDashboard(QWidget):
         grid.addWidget(_make_section_label("AI Performance"), row, 0, 1, 2)
         row += 1
 
-        self.ai_calls_label = QLabel("AI Calls: 0")
-        grid.addWidget(self.ai_calls_label, row, 0)
-
-        self.ai_response_time_label = QLabel("Avg Response: —")
-        grid.addWidget(self.ai_response_time_label, row, 1)
+        self.ai_calls_label = _make_stat_label(
+            "AI Calls: 0",
+            "Number of AI model requests made during the crawl.",
+        )
+        grid.addWidget(self.ai_calls_label, row, 0, 1, 2)
         row += 1
 
-        self.tokens_in_label = QLabel("Tokens In: —")
-        grid.addWidget(self.tokens_in_label, row, 0)
+        self.ai_response_time_label = _make_stat_label(
+            "Avg Response: —",
+            "Average AI model response time per call.",
+        )
+        grid.addWidget(self.ai_response_time_label, row, 0, 1, 2)
+        row += 1
 
-        self.tokens_out_label = QLabel("Tokens Out: —")
-        grid.addWidget(self.tokens_out_label, row, 1)
+        self.tokens_in_label = _make_stat_label(
+            "Tokens In: —",
+            "Total input tokens sent to the AI model.",
+        )
+        grid.addWidget(self.tokens_in_label, row, 0, 1, 2)
+        row += 1
+
+        self.tokens_out_label = _make_stat_label(
+            "Tokens Out: —",
+            "Total output tokens generated by the AI model.",
+        )
+        grid.addWidget(self.tokens_out_label, row, 0, 1, 2)
         row += 1
 
         grid.addWidget(_make_separator(), row, 0, 1, 2)
@@ -165,15 +292,25 @@ class StatsDashboard(QWidget):
         grid.addWidget(_make_section_label("Tool Metrics"), row, 0, 1, 2)
         row += 1
 
-        self.tool_calls_per_step_label = QLabel("Calls/Step: —")
-        grid.addWidget(self.tool_calls_per_step_label, row, 0)
-
-        self.tool_error_count_label = QLabel("Tool Errors: 0")
-        self.tool_error_count_label.setStyleSheet("color: #f44336;")
-        grid.addWidget(self.tool_error_count_label, row, 1)
+        self.tool_calls_per_step_label = _make_stat_label(
+            "Calls/Step: —",
+            "Average number of agent tool calls made per crawl step.",
+        )
+        grid.addWidget(self.tool_calls_per_step_label, row, 0, 1, 2)
         row += 1
 
-        self.phase_transition_label = QLabel("Phase Transitions: 0")
+        self.tool_error_count_label = _make_stat_label(
+            "Tool Errors: 0",
+            "Number of agent tool calls that returned an error.",
+        )
+        self.tool_error_count_label.setStyleSheet("color: #f44336;")
+        grid.addWidget(self.tool_error_count_label, row, 0, 1, 2)
+        row += 1
+
+        self.phase_transition_label = _make_stat_label(
+            "Phase Transitions: 0",
+            "Number of step phase changes observed (for example planning to acting).",
+        )
         grid.addWidget(self.phase_transition_label, row, 0, 1, 2)
         row += 1
 
@@ -184,18 +321,31 @@ class StatsDashboard(QWidget):
         grid.addWidget(_make_section_label("Screen Discovery"), row, 0, 1, 2)
         row += 1
 
-        self.unique_screens_label = QLabel("Unique Screens: —")
-        grid.addWidget(self.unique_screens_label, row, 0)
-
-        self.total_visits_label = QLabel("Total Visits: —")
-        grid.addWidget(self.total_visits_label, row, 1)
+        self.unique_screens_label = _make_stat_label(
+            "Unique Screens: —",
+            "Number of distinct screens discovered during the crawl.",
+        )
+        grid.addWidget(self.unique_screens_label, row, 0, 1, 2)
         row += 1
 
-        self.screens_per_min_label = QLabel("Screens/min: —")
+        self.total_visits_label = _make_stat_label(
+            "Total Visits: —",
+            "Total screen visits, counting revisits of already-seen screens.",
+        )
+        grid.addWidget(self.total_visits_label, row, 0, 1, 2)
+        row += 1
+
+        self.screens_per_min_label = _make_stat_label(
+            "Screens/min: —",
+            "Average rate of screen visits per minute of crawl time.",
+        )
         grid.addWidget(self.screens_per_min_label, row, 0, 1, 2)
         row += 1
 
-        self.revisit_ratio_label = QLabel("Revisit Ratio: —")
+        self.revisit_ratio_label = _make_stat_label(
+            "Revisit Ratio: —",
+            "Share of screen visits that revisited an already-seen screen.",
+        )
         grid.addWidget(self.revisit_ratio_label, row, 0, 1, 2)
         row += 1
 
@@ -206,19 +356,32 @@ class StatsDashboard(QWidget):
         grid.addWidget(_make_section_label("Timing"), row, 0, 1, 2)
         row += 1
 
-        self.ocr_avg_label = QLabel("Avg OCR: n/a (OCR not used)")
+        self.ocr_avg_label = _make_stat_label(
+            "Avg OCR: n/a (OCR not used)",
+            "Average OCR grounding time per step (OCR is not used in the current pipeline).",
+        )
         self.ocr_avg_label.setStyleSheet("color: #888;")
         grid.addWidget(self.ocr_avg_label, row, 0, 1, 2)
         row += 1
 
-        self.action_avg_label = QLabel("Avg Action: —")
-        grid.addWidget(self.action_avg_label, row, 0)
-
-        self.screenshot_avg_label = QLabel("Avg Screenshot: —")
-        grid.addWidget(self.screenshot_avg_label, row, 1)
+        self.action_avg_label = _make_stat_label(
+            "Avg Action: —",
+            "Average time to execute a single UI action.",
+        )
+        grid.addWidget(self.action_avg_label, row, 0, 1, 2)
         row += 1
 
-        self.omniparser_avg_label = QLabel("Avg OmniParser: —")
+        self.screenshot_avg_label = _make_stat_label(
+            "Avg Screenshot: —",
+            "Average time to capture a screenshot.",
+        )
+        grid.addWidget(self.screenshot_avg_label, row, 0, 1, 2)
+        row += 1
+
+        self.omniparser_avg_label = _make_stat_label(
+            "Avg OmniParser: —",
+            "Average time to parse the screen with OmniParser.",
+        )
         grid.addWidget(self.omniparser_avg_label, row, 0, 1, 2)
         row += 1
 
@@ -229,14 +392,17 @@ class StatsDashboard(QWidget):
         grid.addWidget(_make_section_label("Duration"), row, 0, 1, 2)
         row += 1
 
-        self.duration_label = QLabel("Elapsed: 0s")
+        self.duration_label = _make_stat_label(
+            "Elapsed: 0s",
+            "Total wall-clock time since the crawl started.",
+        )
         grid.addWidget(self.duration_label, row, 0, 1, 2)
         row += 1
 
-        self.stats_content.setVisible(False)
-        group_layout.addWidget(self.stats_content)
+        # Keep the metrics pinned to the top instead of stretched down
+        grid.setRowStretch(row, 1)
 
-        outer.addWidget(self.stats_group)
+        return column
 
     # ------------------------------------------------------------------
     # Public API
@@ -263,15 +429,6 @@ class StatsDashboard(QWidget):
         else:
             self.step_progress_bar.setRange(0, self._max_steps)
             self.step_progress_bar.setFormat(f"%v / {self._max_steps} steps")
-
-    def set_tool_calls_applicable(self, applicable: bool):
-        """Set whether the tool-calls-per-step metric applies to this crawl mode.
-
-        When False (non-CrawlerAgent modes that don't produce tool-call
-        telemetry), the dashboard renders "n/a" instead of "—" so the metric
-        reads as "not applicable" rather than "not available".
-        """
-        self._tool_calls_applicable = bool(applicable)
 
     def update_stats(
         self,
@@ -387,9 +544,7 @@ class StatsDashboard(QWidget):
             self.omniparser_avg_label.setText("Avg OmniParser: —")
 
         # ── Tool Metrics ─────────────────────────────────────
-        if not self._tool_calls_applicable:
-            self.tool_calls_per_step_label.setText("Calls/Step: n/a")
-        elif tool_calls_per_step > 0:
+        if tool_calls_per_step > 0:
             self.tool_calls_per_step_label.setText(f"Calls/Step: {tool_calls_per_step:.1f}")
         else:
             self.tool_calls_per_step_label.setText("Calls/Step: —")
@@ -444,9 +599,8 @@ class StatsDashboard(QWidget):
             pixmap = QPixmap()
             pixmap.loadFromData(buffer.read())
 
-            # Scale to fit the label
-            scaled = pixmap.scaledToWidth(200, Qt.TransformationMode.SmoothTransformation)
-            self.screenshot_label.setPixmap(scaled)
+            # The view stores the source and rescales it to its own size
+            self.screenshot_label.set_source_pixmap(pixmap)
 
             # Update hint text
             if not vision_enabled:

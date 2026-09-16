@@ -243,28 +243,12 @@ class SettingsPanel(QWidget):
         crawler_layout.setSpacing(12)
         crawler_layout.setContentsMargins(15, 20, 15, 20)
 
-        self.enable_crawler_agent_checkbox = QCheckBox("Enable Crawler Agent")
-        self.enable_crawler_agent_checkbox.setToolTip(
-            "Use the advanced multi-step planning agent instead of single-shot AI responses"
-        )
-        crawler_layout.addWidget(self.enable_crawler_agent_checkbox)
-
         self.crawler_reasoning_checkbox = QCheckBox("Use Reasoning Mode")
         self.crawler_reasoning_checkbox.setToolTip(
             "Enable complex planning with ManagerAgent -> ExecutorAgent cycles (vs direct execution)"
         )
         self.crawler_reasoning_checkbox.setChecked(True)
         crawler_layout.addWidget(self.crawler_reasoning_checkbox)
-
-        max_cycles_layout = QHBoxLayout()
-        max_cycles_layout.addWidget(QLabel("Max Planning Cycles:"))
-        self.crawler_max_cycles_input = QSpinBox()
-        self.crawler_max_cycles_input.setRange(1, 20)
-        self.crawler_max_cycles_input.setValue(5)
-        self.crawler_max_cycles_input.setToolTip("Maximum planning/execution cycles for the crawler agent")
-        max_cycles_layout.addWidget(self.crawler_max_cycles_input)
-        max_cycles_layout.addStretch()
-        crawler_layout.addLayout(max_cycles_layout)
 
         self.crawler_streaming_checkbox = QCheckBox("Enable Streaming Output")
         self.crawler_streaming_checkbox.setToolTip("Show real-time agent planning and execution updates")
@@ -329,15 +313,6 @@ class SettingsPanel(QWidget):
 
         objective_group.setLayout(objective_layout)
         layout.addWidget(objective_group)
-
-        def on_crawler_agent_enabled_changed(enabled):
-            self.crawler_reasoning_checkbox.setEnabled(enabled)
-            self.crawler_max_cycles_input.setEnabled(enabled)
-            self.crawler_streaming_checkbox.setEnabled(enabled)
-            self.crawler_retry_count_input.setEnabled(enabled)
-
-        self.enable_crawler_agent_checkbox.toggled.connect(on_crawler_agent_enabled_changed)
-        on_crawler_agent_enabled_changed(self.enable_crawler_agent_checkbox.isChecked())
 
         layout.addStretch()
         return self._wrap_in_scroll_area(tab)
@@ -776,14 +751,8 @@ class SettingsPanel(QWidget):
         self.mobsf_api_url_input.setText(mobsf_api_url)
 
         # Load Crawler Agent settings
-        enable_crawler = self._config_store.get_setting("use_crawler_agent", default=True)
-        self.enable_crawler_agent_checkbox.setChecked(enable_crawler)
-
         crawler_reasoning = self._config_store.get_setting("crawler_reasoning_mode", default=True)
         self.crawler_reasoning_checkbox.setChecked(crawler_reasoning)
-
-        crawler_max_cycles = self._config_store.get_setting("crawler_max_cycles", default=5)
-        self.crawler_max_cycles_input.setValue(crawler_max_cycles)
 
         crawler_streaming = self._config_store.get_setting("crawler_streaming", default=False)
         self.crawler_streaming_checkbox.setChecked(crawler_streaming)
@@ -955,14 +924,8 @@ class SettingsPanel(QWidget):
                 self._config_store.set_setting("mobsf_api_url", "http://localhost:8000", "string")
 
             # Save Crawler Agent settings
-            enable_crawler = self.enable_crawler_agent_checkbox.isChecked()
-            self._config_store.set_setting("use_crawler_agent", enable_crawler, "bool")
-
             crawler_reasoning = self.crawler_reasoning_checkbox.isChecked()
             self._config_store.set_setting("crawler_reasoning_mode", crawler_reasoning, "bool")
-
-            crawler_max_cycles = self.crawler_max_cycles_input.value()
-            self._config_store.set_setting("crawler_max_cycles", crawler_max_cycles, "int")
 
             crawler_streaming = self.crawler_streaming_checkbox.isChecked()
             self._config_store.set_setting("crawler_streaming", crawler_streaming, "bool")
@@ -1212,14 +1175,6 @@ class SettingsPanel(QWidget):
             True if MobSF analysis is enabled
         """
         return self.enable_mobsf_analysis_checkbox.isChecked()
-
-    def get_enable_crawler_agent(self) -> bool:
-        """Get the current crawler agent enabled state.
-
-        Returns:
-            True if crawler agent is enabled
-        """
-        return self.enable_crawler_agent_checkbox.isChecked()
 
     def get_exploration_objective(self) -> str:
         """Get the current exploration objective / prompt for crawler agent.

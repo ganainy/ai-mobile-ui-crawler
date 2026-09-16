@@ -46,12 +46,10 @@ class TestDefaultConfigValues:
             "mobsf_scan_timeout",
             "mobsf_poll_interval",
             "mobsf_request_timeout",
-            "use_crawler_agent",
             "pre_crawl_wake_device",
             "pre_crawl_unlock_swipe",
             "pre_crawl_wake_timeout_seconds",
             "crawler_reasoning_mode",
-            "crawler_max_cycles",
             "crawler_streaming",
             "crawler_retry_count",
             "ui_parser_mode",
@@ -86,7 +84,6 @@ class TestDefaultConfigValues:
             "pcapdroid_finalize_wait",
             "pcapdroid_consent_timeout_seconds",
             "pcapdroid_consent_poll_interval_seconds",
-            "crawler_max_cycles",
             "crawler_retry_count",
             "pre_crawl_wake_timeout_seconds",
             "omniparser_cache_ttl_days",
@@ -131,7 +128,6 @@ class TestDefaultConfigValues:
             "pcapdroid_auto_accept_consent",
             "enable_video_recording",
             "enable_mobsf_analysis",
-            "use_crawler_agent",
             "pre_crawl_wake_device",
             "pre_crawl_unlock_swipe",
             "crawler_reasoning_mode",
@@ -165,7 +161,6 @@ class TestDefaultConfigValues:
             "theme",
             "window_width",
             "window_height",
-            "use_crawler_agent",
             "crawler_reasoning_mode",
         ]
         for key in required_keys:
@@ -187,7 +182,6 @@ class TestDefaultConfigValues:
 
     def test_crawler_agent_config_sensible(self):
         """Test crawler agent config values make sense."""
-        assert DEFAULTS["crawler_max_cycles"] >= 1
         assert DEFAULTS["crawler_retry_count"] >= 0
         assert DEFAULTS["omniparser_box_threshold"] > 0
         assert DEFAULTS["omniparser_box_threshold"] < 1

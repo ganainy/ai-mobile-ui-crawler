@@ -77,23 +77,18 @@ DEFAULTS: dict[str, Any] = {
     "mobsf_request_timeout": 300,  # 5 minutes for large report downloads
     # Test credentials
     # Crawler Agent Integration settings
-    # Enable the internalized crawler-agent system for multi-step planning
-    "use_crawler_agent": True,
     # Wake/unlock preflight before launching the target app or crawler
     "pre_crawl_wake_device": True,
     "pre_crawl_unlock_swipe": True,
     "pre_crawl_wake_timeout_seconds": 5.0,
     # Use reasoning mode for complex planning (vs direct execution)
     "crawler_reasoning_mode": True,
-    # Maximum planning/execution cycles for crawler agent
-    "crawler_max_cycles": 5,
     # Agent streaming output (for real-time updates)
     "crawler_streaming": False,
-    # Crawler agent retry count for failed operations
+    # Retries for failed agent operations (transient UI-parser/network failures,
+    # e.g. Replicate "closed" connection). These do NOT trigger an app relaunch,
+    # only a step retry.
     "crawler_retry_count": 2,
-    # Retries for transient UI-parser/network failures (e.g. Replicate "closed"
-    # connection). These do NOT trigger an app relaunch, only a step retry.
-    "crawler_transient_retries": 3,
     # UI parser strategy: OmniParser (vision) as primary mode
     "ui_parser_mode": "omniparser",
     "omniparser_backend": "replicate",
