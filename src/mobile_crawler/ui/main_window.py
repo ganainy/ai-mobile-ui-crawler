@@ -1196,11 +1196,6 @@ class MainWindow(QMainWindow):
         self.device_selector.device_selected.connect(self._on_device_selected)
         self.app_selector.app_selected.connect(self._on_app_selected)
 
-        # Sync initial state from widgets that loaded persisted values
-        # (signals were emitted before connections were made)
-        if self.app_selector.current_package():
-            self._selected_package = self.app_selector.current_package()
-
         layout.addWidget(self.device_selector, 0)
         layout.addWidget(self.app_selector, 0)
         layout.addWidget(self.ai_selector, 0)

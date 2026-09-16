@@ -10,7 +10,7 @@
         ".specify/scripts/bash/": true,
         ".specify/scripts/powershell/": true
     },
-    "python.defaultInterpreterPath": "python",
+    "python.defaultInterpreterPath": "${workspaceFolder}/.venv312/Scripts/python.exe",
     "python.formatting.provider": "black",
     "python.linting.enabled": true,
     "python.linting.ruffEnabled": true,
