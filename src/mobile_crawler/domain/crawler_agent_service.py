@@ -33,6 +33,7 @@ from mobile_crawler.domain.models import AIAction, BoundingBox
 from mobile_crawler.domain.stats_collector_span_processor import OTEL_AVAILABLE, StatsCollectorSpanProcessor
 from mobile_crawler.domain.step_phase import StepPhase, StepPhaseStateMachine
 from mobile_crawler.domain.step_phase_models import StepPhaseTransition
+from workflows.errors import WorkflowCancelledByUser
 from mobile_crawler.domain.ui_wait_predicate import AdaptiveWaitConfig, UIWaitPredicate
 from mobile_crawler.infrastructure.ai_interaction_repository import AIInteraction, AIInteractionRepository
 from mobile_crawler.infrastructure.step_phase_repository import StepPhaseRepository
@@ -248,7 +249,6 @@ class CrawlerAgentService:
                 "step_by_step": bool(step_by_step),
             },
             "device": {
-                "platform": "android",
                 "serial": self.device_id,
                 "auto_setup": False,  # We handle device setup separately
             },
@@ -1423,7 +1423,7 @@ class CrawlerAgentService:
         # NOT relaunch the app — the device and screenshot are fine, only the
         # transport dropped. Give them their own retry budget so they don't
         # burn crash-retry slots. See PLAN-update-prompt-fix.
-        max_transient_retries = int(self.config_manager.get("crawler_transient_retries", 3) or 3)
+        max_transient_retries = int(self.config_manager.get("crawler_retry_count", 2) or 2)
         transient_retry_delay = 2.0  # seconds between transient retries
 
         crash_attempt = 0
@@ -1617,6 +1617,40 @@ class CrawlerAgentService:
                     )
                 return crawler_result
 
+            except WorkflowCancelledByUser:
+                # User pressed Stop. This is a normal, expected outcome (not a crash) -
+                # CrawlerLoop already reports it as "Stopped by user" once _cancel_requested
+                # is set, so surface it at INFO with whatever progress was made instead of
+                # logging a scary traceback and discarding the run's steps/actions.
+                duration_ms = (time.time() - start_time) * 1000
+                actions_taken = []
+                action_outcomes = []
+                steps_completed = 0
+                if hasattr(self._crawler_agent, "shared_state"):
+                    shared_state = self._crawler_agent.shared_state
+                    actions_taken = getattr(shared_state, "action_history", None) or []
+                    action_outcomes = getattr(shared_state, "action_outcomes", None) or []
+                    steps_completed = getattr(shared_state, "step_number", 0) or len(action_outcomes)
+
+                successful_count = sum(1 for outcome in action_outcomes if outcome is True)
+                failed_count = sum(1 for outcome in action_outcomes if outcome is False)
+
+                logger.info(
+                    f"Crawler agent cancelled by user after {steps_completed} steps in {duration_ms:.1f}ms"
+                )
+                return CrawlerRunResult(
+                    success=True,
+                    steps_completed=steps_completed,
+                    actions_taken=actions_taken,
+                    final_state={
+                        "successful_actions": successful_count,
+                        "failed_actions": failed_count,
+                        "total_actions": len(action_outcomes),
+                        "completion_reason": "Cancelled by user",
+                    },
+                    error_message=None,
+                    total_duration_ms=duration_ms,
+                )
             except Exception as e:
                 duration_ms = (time.time() - start_time) * 1000
                 error_msg = str(e)
