@@ -301,7 +301,7 @@ class CrawlerAgentService:
         enable_tracing = self.config_manager.get("enable_tracing", False)
         tracing_provider = self.config_manager.get("tracing_provider", "phoenix")
         phoenix_url = self.config_manager.get("phoenix_url", "http://localhost:6006")
-        langfuse_host = self.config_manager.get("langfuse_host", "https://us.cloud.langfuse.com")
+        langfuse_host = self.config_manager.get("langfuse_host", "https://cloud.langfuse.com")
         langfuse_pub = self.config_manager.get("langfuse_public_key", "")
         langfuse_sec = self.config_manager.get("langfuse_secret_key", "")
 
@@ -1654,7 +1654,7 @@ class CrawlerAgentService:
                 if goal is not None:
                     self._log_agent_interaction(run_id, goal, None, error_msg)
 
-                logger.error(f"Crawler agent execution failed: {error_msg}")
+                logger.error(f"Crawler agent execution failed: {error_msg}", exc_info=True)
                 return CrawlerRunResult(
                     success=False,
                     steps_completed=0,
