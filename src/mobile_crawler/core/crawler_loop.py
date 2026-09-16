@@ -9,7 +9,7 @@ import time
 from datetime import datetime
 
 from mobile_crawler.config.config_manager import ConfigManager
-from mobile_crawler.core.crawl_state_machine import CrawlState
+from mobile_crawler.core.crawl_state_machine import CrawlState, CrawlStateMachine
 from mobile_crawler.core.crawler_event_listener import CrawlerEventListener
 from mobile_crawler.core.log_sinks import LogLevel, capture_stdout_to_ui
 from mobile_crawler.domain.crawler_agent_service import CrawlerAgentService
@@ -61,6 +61,7 @@ class CrawlerLoop:
         self._traffic_capture_manager: TrafficCaptureManager | None = None
         self._video_recording_manager: VideoRecordingManager | None = None
         self._cancel_requested = False
+        self._state_machine = CrawlStateMachine()
         self._state = CrawlState.UNINITIALIZED.value
         self._step_by_step_enabled = False
 
@@ -517,6 +518,10 @@ class CrawlerLoop:
     def _transition_state(self, new_state: str, run_id: int | None) -> None:
         """Update internal state and notify listeners."""
         old_state = self._state
+        try:
+            self._state_machine.transition_to(CrawlState(new_state))
+        except ValueError as e:
+            logger.warning("Invalid crawl state transition: %s", e)
         self._state = new_state
         if run_id is not None:
             self._emit_event("on_state_changed", run_id, old_state, new_state)

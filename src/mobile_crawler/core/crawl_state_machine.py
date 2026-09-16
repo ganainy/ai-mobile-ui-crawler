@@ -74,12 +74,12 @@ class CrawlStateMachine:
         valid_transitions = {
             CrawlState.UNINITIALIZED: [CrawlState.INITIALIZING, CrawlState.ERROR],
             CrawlState.INITIALIZING: [CrawlState.RUNNING, CrawlState.ERROR],
-            CrawlState.RUNNING: [CrawlState.PAUSED_MANUAL, CrawlState.PAUSED_STEP, CrawlState.STOPPING, CrawlState.ERROR],
-            CrawlState.PAUSED_MANUAL: [CrawlState.RUNNING, CrawlState.STOPPING, CrawlState.ERROR],
-            CrawlState.PAUSED_STEP: [CrawlState.RUNNING, CrawlState.PAUSED_MANUAL, CrawlState.STOPPING, CrawlState.ERROR],
+            CrawlState.RUNNING: [CrawlState.PAUSED_MANUAL, CrawlState.PAUSED_STEP, CrawlState.STOPPING, CrawlState.STOPPED, CrawlState.ERROR],
+            CrawlState.PAUSED_MANUAL: [CrawlState.RUNNING, CrawlState.STOPPING, CrawlState.STOPPED, CrawlState.ERROR],
+            CrawlState.PAUSED_STEP: [CrawlState.RUNNING, CrawlState.PAUSED_MANUAL, CrawlState.STOPPING, CrawlState.STOPPED, CrawlState.ERROR],
             CrawlState.STOPPING: [CrawlState.STOPPED, CrawlState.ERROR],
             CrawlState.STOPPED: set(),  # Terminal state
-            CrawlState.ERROR: set()     # Terminal state
+            CrawlState.ERROR: [CrawlState.STOPPED]  # finally block always drives ERROR -> STOPPED
         }
 
         return target in valid_transitions.get(current, [])

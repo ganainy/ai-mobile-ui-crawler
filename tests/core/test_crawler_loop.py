@@ -810,3 +810,16 @@ class TestCrawlerLoopErrorHandling:
         crawler_loop._transition_state("running", 1)
         assert crawler_loop._state == "running"
         mock_listener.on_state_changed.assert_called_once_with(1, "uninitialized", "running")
+
+    def test_transition_state_logs_warning_on_invalid_sequence(self, crawler_loop, mock_listener, caplog):
+        """An invalid transition sequence logs a warning instead of raising, and
+        self._state is still updated so callers aren't blocked by the matrix gap."""
+        import logging
+
+        with caplog.at_level(logging.WARNING):
+            # UNINITIALIZED -> STOPPED is not a valid edge in the matrix.
+            crawler_loop._transition_state("stopped", 1)
+
+        assert crawler_loop._state == "stopped"
+        assert any("Invalid crawl state transition" in record.message for record in caplog.records)
+        mock_listener.on_state_changed.assert_called_once_with(1, "uninitialized", "stopped")

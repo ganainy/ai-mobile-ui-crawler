@@ -108,6 +108,39 @@ class TestCrawlStateMachine:
         machine2.transition_to(CrawlState.ERROR)
         assert machine2.state == CrawlState.ERROR
 
+    def test_running_to_stopped_direct(self):
+        """RUNNING -> STOPPED is valid (crawler_loop's finally block skips STOPPING)."""
+        machine = CrawlStateMachine()
+        machine.transition_to(CrawlState.INITIALIZING)
+        machine.transition_to(CrawlState.RUNNING)
+        machine.transition_to(CrawlState.STOPPED)
+        assert machine.state == CrawlState.STOPPED
+
+    def test_error_to_stopped(self):
+        """ERROR -> STOPPED is valid (crawler_loop's finally block always drives to STOPPED)."""
+        machine = CrawlStateMachine()
+        machine.transition_to(CrawlState.INITIALIZING)
+        machine.transition_to(CrawlState.RUNNING)
+        machine.transition_to(CrawlState.ERROR)
+        machine.transition_to(CrawlState.STOPPED)
+        assert machine.state == CrawlState.STOPPED
+
+    def test_paused_states_to_stopped_direct(self):
+        """PAUSED_MANUAL/PAUSED_STEP -> STOPPED is valid without an intermediate STOPPING."""
+        machine = CrawlStateMachine()
+        machine.transition_to(CrawlState.INITIALIZING)
+        machine.transition_to(CrawlState.RUNNING)
+        machine.transition_to(CrawlState.PAUSED_MANUAL)
+        machine.transition_to(CrawlState.STOPPED)
+        assert machine.state == CrawlState.STOPPED
+
+        machine2 = CrawlStateMachine()
+        machine2.transition_to(CrawlState.INITIALIZING)
+        machine2.transition_to(CrawlState.RUNNING)
+        machine2.transition_to(CrawlState.PAUSED_STEP)
+        machine2.transition_to(CrawlState.STOPPED)
+        assert machine2.state == CrawlState.STOPPED
+
     def test_state_change_events(self):
         """Test that state change events are emitted."""
         machine = CrawlStateMachine()

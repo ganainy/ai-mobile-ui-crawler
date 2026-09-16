@@ -132,9 +132,14 @@ class StepPhaseStateMachine:
 
         phase_entry = self._transition_times[phase]
 
-        # Find the next phase that was entered after this one
+        # Timestamps alone can't disambiguate ties (time.monotonic() resolution
+        # can put two fast transitions on the same tick), so use insertion order
+        # of _transition_times as a proxy for transition order: entries recorded
+        # after `phase`'s entry are the candidates for "the next phase".
+        keys = list(self._transition_times.keys())
+        phase_index = keys.index(phase)
         next_entries = [
-            t for t in self._transition_times.values() if t > phase_entry
+            self._transition_times[p] for p in keys[phase_index + 1:]
         ]
         if not next_entries:
             return None
