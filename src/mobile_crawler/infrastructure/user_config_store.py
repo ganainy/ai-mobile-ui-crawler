@@ -4,6 +4,7 @@ import base64
 import platform
 import sqlite3
 import threading
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +32,8 @@ class UserConfigStore:
         self.db_path = db_path
         # Thread-local storage for connections (SQLite connections are not thread-safe)
         self._local = threading.local()
+        # Cached Fernet cipher (machine-bound key derivation spawns a subprocess, so avoid repeating it)
+        self._fernet_cache: Fernet | None = None
 
     def get_connection(self) -> sqlite3.Connection:
         """Get database connection with row factory configured.
@@ -50,6 +53,35 @@ class UserConfigStore:
         if hasattr(self._local, "connection") and self._local.connection:
             self._local.connection.close()
             self._local.connection = None
+
+    @contextmanager
+    def batch(self):
+        """Group multiple writes on this thread into a single commit.
+
+        Each set_setting/delete_setting/set_secret/delete_secret call commits
+        individually by default, which is one fsync per call. Saving a whole
+        settings form can trigger dozens of them; wrapping the calls in this
+        context defers all of them to a single commit at the end (rolling
+        back if an exception escapes), which avoids paying per-call disk
+        latency dozens of times over.
+        """
+        self._local.batch_depth = getattr(self._local, "batch_depth", 0) + 1
+        try:
+            yield
+        except Exception:
+            if self._local.batch_depth == 1:
+                self.get_connection().rollback()
+            raise
+        else:
+            if self._local.batch_depth == 1:
+                self.get_connection().commit()
+        finally:
+            self._local.batch_depth -= 1
+
+    def _commit(self, conn: sqlite3.Connection):
+        """Commit unless inside an active batch() on this thread."""
+        if not getattr(self._local, "batch_depth", 0):
+            conn.commit()
 
     def create_schema(self):
         """Create tables for user_config.db."""
@@ -130,7 +162,7 @@ class UserConfigStore:
             (key, value_str, value_type, updated_at),
         )
 
-        conn.commit()
+        self._commit(conn)
 
     def delete_setting(self, key: str) -> bool:
         """Delete a setting.
@@ -147,7 +179,7 @@ class UserConfigStore:
         cursor.execute("DELETE FROM user_config WHERE key = ?", (key,))
         deleted = cursor.rowcount > 0
 
-        conn.commit()
+        self._commit(conn)
         return deleted
 
     def get_all_settings(self) -> dict[str, Any]:
@@ -268,11 +300,17 @@ class UserConfigStore:
     def _get_fernet(self) -> Fernet:
         """Get Fernet cipher instance with machine-bound key.
 
+        Cached after first derivation since deriving the key spawns a
+        subprocess (on Windows) and runs PBKDF2, which is too slow to repeat
+        for every secret read/write.
+
         Returns:
             Fernet cipher for encryption/decryption
         """
-        key = self._derive_machine_key()
-        return Fernet(key)
+        if self._fernet_cache is None:
+            key = self._derive_machine_key()
+            self._fernet_cache = Fernet(key)
+        return self._fernet_cache
 
     def encrypt_secret(self, plaintext: str) -> bytes:
         """Encrypt a plaintext secret.
@@ -379,7 +417,7 @@ class UserConfigStore:
             (key, encrypted_value, updated_at),
         )
 
-        conn.commit()
+        self._commit(conn)
 
     def delete_secret(self, key: str) -> bool:
         """Delete a secret.
@@ -396,7 +434,7 @@ class UserConfigStore:
         cursor.execute("DELETE FROM secrets WHERE key = ?", (key,))
         deleted = cursor.rowcount > 0
 
-        conn.commit()
+        self._commit(conn)
         return deleted
 
     def _detect_type(self, value: Any) -> str:

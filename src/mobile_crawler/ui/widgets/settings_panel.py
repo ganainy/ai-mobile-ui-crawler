@@ -842,161 +842,162 @@ class SettingsPanel(QWidget):
                 if mobsf_url and not self._validate_mobsf_url(mobsf_url):
                     return
 
-            # Save API keys (encrypted)
-            if gemini_key:
-                self._config_store.set_secret_plaintext("gemini_api_key", gemini_key)
-            else:
-                self._config_store.delete_secret("gemini_api_key")
+            with self._config_store.batch():
+                # Save API keys (encrypted)
+                if gemini_key:
+                    self._config_store.set_secret_plaintext("gemini_api_key", gemini_key)
+                else:
+                    self._config_store.delete_secret("gemini_api_key")
 
-            if openrouter_key:
-                self._config_store.set_secret_plaintext("openrouter_api_key", openrouter_key)
-            else:
-                self._config_store.delete_secret("openrouter_api_key")
+                if openrouter_key:
+                    self._config_store.set_secret_plaintext("openrouter_api_key", openrouter_key)
+                else:
+                    self._config_store.delete_secret("openrouter_api_key")
 
-            # Save crawl limits
-            self._config_store.set_setting("max_steps", self.max_steps_input.value(), "int")
-            self._config_store.set_setting("max_duration_seconds", self.max_duration_input.value(), "int")
+                # Save crawl limits
+                self._config_store.set_setting("max_steps", self.max_steps_input.value(), "int")
+                self._config_store.set_setting("max_duration_seconds", self.max_duration_input.value(), "int")
 
-            # Save limit type preference
-            limit_type = "steps" if self.steps_radio.isChecked() else "duration"
-            self._config_store.set_setting("limit_type", limit_type, "string")
+                # Save limit type preference
+                limit_type = "steps" if self.steps_radio.isChecked() else "duration"
+                self._config_store.set_setting("limit_type", limit_type, "string")
 
-            # Save screen configuration
-            self._config_store.set_setting("top_bar_height", self.top_bar_height_input.value(), "int")
+                # Save screen configuration
+                self._config_store.set_setting("top_bar_height", self.top_bar_height_input.value(), "int")
 
-            # Save test credentials
-            test_username = self.test_username_input.text().strip()
-            if test_username:
-                self._config_store.set_setting("test_username", test_username, "string")
-            else:
-                self._config_store.delete_setting("test_username")
+                # Save test credentials
+                test_username = self.test_username_input.text().strip()
+                if test_username:
+                    self._config_store.set_setting("test_username", test_username, "string")
+                else:
+                    self._config_store.delete_setting("test_username")
 
-            test_password = self.test_password_input.text().strip()
-            if test_password:
-                self._config_store.set_secret_plaintext("test_password", test_password)
-            else:
-                self._config_store.delete_secret("test_password")
+                test_password = self.test_password_input.text().strip()
+                if test_password:
+                    self._config_store.set_secret_plaintext("test_password", test_password)
+                else:
+                    self._config_store.delete_secret("test_password")
 
-            test_address = self.test_address_input.text().strip()
-            if test_address:
-                self._config_store.set_setting("test_address", test_address, "string")
-            else:
-                self._config_store.delete_setting("test_address")
+                test_address = self.test_address_input.text().strip()
+                if test_address:
+                    self._config_store.set_setting("test_address", test_address, "string")
+                else:
+                    self._config_store.delete_setting("test_address")
 
-            test_email = self.test_email_input.text().strip()
-            if test_email:
-                self._config_store.set_setting("test_email", test_email, "string")
-            else:
-                self._config_store.delete_setting("test_email")
+                test_email = self.test_email_input.text().strip()
+                if test_email:
+                    self._config_store.set_setting("test_email", test_email, "string")
+                else:
+                    self._config_store.delete_setting("test_email")
 
-            test_phone = self.test_phone_input.text().strip()
-            if test_phone:
-                self._config_store.set_setting("test_phone", test_phone, "string")
-            else:
-                self._config_store.delete_setting("test_phone")
+                test_phone = self.test_phone_input.text().strip()
+                if test_phone:
+                    self._config_store.set_setting("test_phone", test_phone, "string")
+                else:
+                    self._config_store.delete_setting("test_phone")
 
-            # Cleanup old config keys
-            self._config_store.delete_setting("test_gmail_account")
+                # Cleanup old config keys
+                self._config_store.delete_setting("test_gmail_account")
 
-            # Save traffic capture settings
-            enable_traffic_capture = self.enable_traffic_capture_checkbox.isChecked()
-            self._config_store.set_setting("enable_traffic_capture", enable_traffic_capture, "bool")
+                # Save traffic capture settings
+                enable_traffic_capture = self.enable_traffic_capture_checkbox.isChecked()
+                self._config_store.set_setting("enable_traffic_capture", enable_traffic_capture, "bool")
 
-            pcapdroid_api_key = self.pcapdroid_api_key_input.text().strip()
-            if pcapdroid_api_key:
-                self._config_store.set_secret_plaintext("pcapdroid_api_key", pcapdroid_api_key)
-            else:
-                self._config_store.delete_secret("pcapdroid_api_key")
+                pcapdroid_api_key = self.pcapdroid_api_key_input.text().strip()
+                if pcapdroid_api_key:
+                    self._config_store.set_secret_plaintext("pcapdroid_api_key", pcapdroid_api_key)
+                else:
+                    self._config_store.delete_secret("pcapdroid_api_key")
 
-            # Save video recording settings
-            enable_video_recording = self.enable_video_recording_checkbox.isChecked()
-            self._config_store.set_setting("enable_video_recording", enable_video_recording, "bool")
+                # Save video recording settings
+                enable_video_recording = self.enable_video_recording_checkbox.isChecked()
+                self._config_store.set_setting("enable_video_recording", enable_video_recording, "bool")
 
-            # Save MobSF settings
-            enable_mobsf_analysis = self.enable_mobsf_analysis_checkbox.isChecked()
-            self._config_store.set_setting("enable_mobsf_analysis", enable_mobsf_analysis, "bool")
+                # Save MobSF settings
+                enable_mobsf_analysis = self.enable_mobsf_analysis_checkbox.isChecked()
+                self._config_store.set_setting("enable_mobsf_analysis", enable_mobsf_analysis, "bool")
 
-            mobsf_api_url = self.mobsf_api_url_input.text().strip()
-            if mobsf_api_url:
-                self._config_store.set_setting("mobsf_api_url", mobsf_api_url, "string")
-            else:
-                self._config_store.set_setting("mobsf_api_url", "http://localhost:8000", "string")
+                mobsf_api_url = self.mobsf_api_url_input.text().strip()
+                if mobsf_api_url:
+                    self._config_store.set_setting("mobsf_api_url", mobsf_api_url, "string")
+                else:
+                    self._config_store.set_setting("mobsf_api_url", "http://localhost:8000", "string")
 
-            # Save Crawler Agent settings
-            crawler_reasoning = self.crawler_reasoning_checkbox.isChecked()
-            self._config_store.set_setting("crawler_reasoning_mode", crawler_reasoning, "bool")
+                # Save Crawler Agent settings
+                crawler_reasoning = self.crawler_reasoning_checkbox.isChecked()
+                self._config_store.set_setting("crawler_reasoning_mode", crawler_reasoning, "bool")
 
-            crawler_streaming = self.crawler_streaming_checkbox.isChecked()
-            self._config_store.set_setting("crawler_streaming", crawler_streaming, "bool")
+                crawler_streaming = self.crawler_streaming_checkbox.isChecked()
+                self._config_store.set_setting("crawler_streaming", crawler_streaming, "bool")
 
-            crawler_retry_count = self.crawler_retry_count_input.value()
-            self._config_store.set_setting("crawler_retry_count", crawler_retry_count, "int")
+                crawler_retry_count = self.crawler_retry_count_input.value()
+                self._config_store.set_setting("crawler_retry_count", crawler_retry_count, "int")
 
-            # Save UI parser mode
-            ui_parser_mode = self.ui_parser_mode_combo.currentText()
-            self._config_store.set_setting("ui_parser_mode", ui_parser_mode, "string")
+                # Save UI parser mode
+                ui_parser_mode = self.ui_parser_mode_combo.currentText()
+                self._config_store.set_setting("ui_parser_mode", ui_parser_mode, "string")
 
-            # Save OmniParser backend and local URL settings
-            omniparser_backend = self.omniparser_backend_combo.currentText()
-            self._config_store.set_setting("omniparser_backend", omniparser_backend, "string")
+                # Save OmniParser backend and local URL settings
+                omniparser_backend = self.omniparser_backend_combo.currentText()
+                self._config_store.set_setting("omniparser_backend", omniparser_backend, "string")
 
-            omniparser_local_url = self.omniparser_local_url_input.text().strip()
-            self._config_store.set_setting("omniparser_local_url", omniparser_local_url, "string")
+                omniparser_local_url = self.omniparser_local_url_input.text().strip()
+                self._config_store.set_setting("omniparser_local_url", omniparser_local_url, "string")
 
-            omniparser_local_parse_timeout = self.omniparser_local_parse_timeout_input.value()
-            self._config_store.set_setting(
-                "omniparser_local_parse_timeout_seconds",
-                omniparser_local_parse_timeout,
-                "int",
-            )
+                omniparser_local_parse_timeout = self.omniparser_local_parse_timeout_input.value()
+                self._config_store.set_setting(
+                    "omniparser_local_parse_timeout_seconds",
+                    omniparser_local_parse_timeout,
+                    "int",
+                )
 
-            # Save Replicate API key (as regular setting, not secret - for easier debugging)
-            replicate_key = self.replicate_api_key_input.text().strip()
-            if replicate_key:
-                self._config_store.set_setting("replicate_api_key", replicate_key, "string")
-            else:
-                self._config_store.delete_setting("replicate_api_key")
+                # Save Replicate API key (as regular setting, not secret - for easier debugging)
+                replicate_key = self.replicate_api_key_input.text().strip()
+                if replicate_key:
+                    self._config_store.set_setting("replicate_api_key", replicate_key, "string")
+                else:
+                    self._config_store.delete_setting("replicate_api_key")
 
-            # Save OmniParser keep-alive settings
-            keepalive_enabled = self.omniparser_keepalive_checkbox.isChecked()
-            self._config_store.set_setting("omniparser_keepalive_enabled", keepalive_enabled, "bool")
+                # Save OmniParser keep-alive settings
+                keepalive_enabled = self.omniparser_keepalive_checkbox.isChecked()
+                self._config_store.set_setting("omniparser_keepalive_enabled", keepalive_enabled, "bool")
 
-            keepalive_interval = self.omniparser_keepalive_interval_input.value()
-            self._config_store.set_setting(
-                "omniparser_keepalive_interval_minutes", keepalive_interval, "int"
-            )
+                keepalive_interval = self.omniparser_keepalive_interval_input.value()
+                self._config_store.set_setting(
+                    "omniparser_keepalive_interval_minutes", keepalive_interval, "int"
+                )
 
-            # Save exploration objective
-            exploration_objective = self.exploration_objective_input.toPlainText().strip()
-            if exploration_objective:
-                self._config_store.set_setting("exploration_objective", exploration_objective, "string")
-            else:
-                self._config_store.delete_setting("exploration_objective")
+                # Save exploration objective
+                exploration_objective = self.exploration_objective_input.toPlainText().strip()
+                if exploration_objective:
+                    self._config_store.set_setting("exploration_objective", exploration_objective, "string")
+                else:
+                    self._config_store.delete_setting("exploration_objective")
 
-            # Save Tracing / Observability settings
-            enable_tracing = self.enable_tracing_checkbox.isChecked()
-            self._config_store.set_setting("enable_tracing", enable_tracing, "bool")
+                # Save Tracing / Observability settings
+                enable_tracing = self.enable_tracing_checkbox.isChecked()
+                self._config_store.set_setting("enable_tracing", enable_tracing, "bool")
 
-            tracing_provider = self.tracing_provider_combo.currentText()
-            self._config_store.set_setting("tracing_provider", tracing_provider, "string")
+                tracing_provider = self.tracing_provider_combo.currentText()
+                self._config_store.set_setting("tracing_provider", tracing_provider, "string")
 
-            phoenix_url = self.phoenix_url_input.text().strip()
-            self._config_store.set_setting("phoenix_url", phoenix_url, "string")
+                phoenix_url = self.phoenix_url_input.text().strip()
+                self._config_store.set_setting("phoenix_url", phoenix_url, "string")
 
-            langfuse_host = self.langfuse_host_input.text().strip()
-            self._config_store.set_setting("langfuse_host", langfuse_host, "string")
+                langfuse_host = self.langfuse_host_input.text().strip()
+                self._config_store.set_setting("langfuse_host", langfuse_host, "string")
 
-            langfuse_pub = self.langfuse_pub_key_input.text().strip()
-            if langfuse_pub:
-                self._config_store.set_secret_plaintext("langfuse_public_key", langfuse_pub)
-            else:
-                self._config_store.delete_secret("langfuse_public_key")
+                langfuse_pub = self.langfuse_pub_key_input.text().strip()
+                if langfuse_pub:
+                    self._config_store.set_secret_plaintext("langfuse_public_key", langfuse_pub)
+                else:
+                    self._config_store.delete_secret("langfuse_public_key")
 
-            langfuse_sec = self.langfuse_secret_key_input.text().strip()
-            if langfuse_sec:
-                self._config_store.set_secret_plaintext("langfuse_secret_key", langfuse_sec)
-            else:
-                self._config_store.delete_secret("langfuse_secret_key")
+                langfuse_sec = self.langfuse_secret_key_input.text().strip()
+                if langfuse_sec:
+                    self._config_store.set_secret_plaintext("langfuse_secret_key", langfuse_sec)
+                else:
+                    self._config_store.delete_secret("langfuse_secret_key")
 
             # Emit signal
             self.settings_saved.emit()
