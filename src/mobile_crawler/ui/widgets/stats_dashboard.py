@@ -134,7 +134,7 @@ class StatsDashboard(QWidget):
         content_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         content_layout.addWidget(self._build_screenshot_column(), 1)
-        content_layout.addWidget(self._build_metrics_column(), 2)
+        content_layout.addWidget(self._build_metrics_column(), 1)
 
         self.stats_content.setVisible(False)
         group_layout.addWidget(self.stats_content)
@@ -143,7 +143,7 @@ class StatsDashboard(QWidget):
 
     def _build_screenshot_column(self) -> QWidget:
         column = QWidget()
-        column.setMaximumWidth(360)
+        column.setMaximumWidth(420)
         layout = QVBoxLayout(column)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(4)

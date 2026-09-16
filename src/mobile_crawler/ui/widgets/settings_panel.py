@@ -281,7 +281,7 @@ class SettingsPanel(QWidget):
         objective_layout.addWidget(objective_hint)
 
         self.exploration_objective_input = QTextEdit()
-        self.exploration_objective_input.setMaximumHeight(120)
+        self.exploration_objective_input.setMinimumHeight(120)
         objective_layout.addWidget(self.exploration_objective_input)
 
         # Reset button layout
@@ -312,9 +312,8 @@ class SettingsPanel(QWidget):
         objective_layout.addLayout(reset_layout)
 
         objective_group.setLayout(objective_layout)
-        layout.addWidget(objective_group)
+        layout.addWidget(objective_group, 1)
 
-        layout.addStretch()
         return self._wrap_in_scroll_area(tab)
 
     def _setup_api_keys_tab(self) -> QWidget:
@@ -522,8 +521,8 @@ class SettingsPanel(QWidget):
         mobsf_group.setLayout(mobsf_layout)
         layout.addWidget(mobsf_group)
 
-        # Observability & Tracing
-        tracing_group = QGroupBox("Observability & Tracing")
+        # Agent Execution Tracing
+        tracing_group = QGroupBox("Agent Execution Tracing")
         tracing_layout = QVBoxLayout()
 
         self.enable_tracing_checkbox = QCheckBox("Enable Tracing (OpenTelemetry)")
