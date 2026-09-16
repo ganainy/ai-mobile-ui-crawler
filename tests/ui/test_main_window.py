@@ -41,6 +41,9 @@ class _FakeSignalAdapter:
         self.ocr_completed = _Connectable()
         self.screenshot_timing = _Connectable()
         self.step_phase_transition = _Connectable()
+        self.action_timing = _Connectable()
+        self.omniparser_timing = _Connectable()
+        self.mobsf_finished = _Connectable()
 
 
 class _FakeSelector(QWidget):

@@ -2,7 +2,7 @@
 
 from unittest.mock import Mock
 
-from mobile_crawler.core.crawl_controller import CrawlController
+from mobile_crawler.core.crawl_controller import CrawlController, CrawlControlState
 from mobile_crawler.core.crawl_state_machine import CrawlState
 from mobile_crawler.ui.widgets.crawl_control_panel import CrawlControlPanel
 
@@ -10,7 +10,7 @@ from mobile_crawler.ui.widgets.crawl_control_panel import CrawlControlPanel
 def _create_panel():
     """Helper function to create a CrawlControlPanel instance."""
     mock_controller = Mock(spec=CrawlController)
-    mock_controller.get_state = Mock(return_value=CrawlState.UNINITIALIZED)
+    mock_controller.state = CrawlControlState.STOPPED
     return CrawlControlPanel(crawl_controller=mock_controller)
 
 
@@ -166,7 +166,7 @@ class TestValidationPassed:
     def test_validation_passed_during_run(self, qtbot):
         """Test that validation doesn't affect start button during run."""
         panel = _create_panel()
-        panel.crawl_controller.get_state = Mock(return_value=CrawlState.RUNNING)
+        panel.crawl_controller.state = CrawlControlState.RUNNING
         qtbot.addWidget(panel)
         panel.set_validation_passed(True)
 

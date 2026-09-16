@@ -1,7 +1,25 @@
 """Shared pytest fixtures for mobile-crawler tests."""
 
+import os
+
 import pytest
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QMessageBox
+
+# Run the GUI offscreen so no test ever flashes a window on screen.
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+
+@pytest.fixture(autouse=True)
+def _silence_modal_dialogs(monkeypatch):
+    """Neutralize modal dialogs so no UI test blocks on a manual button press.
+
+    Tests that assert on specific dialog content override these stubs inside
+    their own test bodies (which run after this fixture).
+    """
+    monkeypatch.setattr(QMessageBox, "warning", lambda *a, **k: QMessageBox.StandardButton.Ok)
+    monkeypatch.setattr(QMessageBox, "critical", lambda *a, **k: QMessageBox.StandardButton.Ok)
+    monkeypatch.setattr(QMessageBox, "information", lambda *a, **k: QMessageBox.StandardButton.Ok)
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
 
 
 @pytest.fixture(scope="session")

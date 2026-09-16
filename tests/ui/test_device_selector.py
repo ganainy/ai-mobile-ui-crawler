@@ -31,8 +31,15 @@ def mock_config_store():
 
 
 @pytest.fixture
-def device_selector(qapp, mock_config_store):
+def device_selector(qapp, mock_config_store, monkeypatch):
     """Create DeviceSelector instance for tests."""
+    # `_refresh_devices` delegates to AsyncOperation (a QThread). Run it
+    # synchronously so detection results/errors are applied inline and the
+    # combo box is populated before assertions run.
+    from mobile_crawler.ui.async_utils import AsyncOperation
+
+    monkeypatch.setattr(AsyncOperation, "start", lambda self: self.run())
+
     mock_detection = Mock(spec=DeviceDetection)
     parent_widget = QWidget()
     selector = DeviceSelector(

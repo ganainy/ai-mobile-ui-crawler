@@ -3,6 +3,7 @@
 import datetime
 import json
 import sqlite3
+from contextlib import contextmanager
 
 import pytest
 from PySide6.QtWidgets import QLineEdit, QMessageBox, QScrollArea
@@ -39,6 +40,27 @@ class MockConfigStore:
 
     def __init__(self, connection):
         self._connection = connection
+        self._batch_depth = 0
+
+    @contextmanager
+    def batch(self):
+        """Mirror UserConfigStore.batch(): defer commits until the outer exit."""
+        self._batch_depth += 1
+        try:
+            yield
+        except Exception:
+            if self._batch_depth == 1:
+                self._connection.rollback()
+            raise
+        else:
+            if self._batch_depth == 1:
+                self._connection.commit()
+        finally:
+            self._batch_depth -= 1
+
+    def _commit(self):
+        if not self._batch_depth:
+            self._connection.commit()
 
     def get_secret_plaintext(self, key: str):
         cursor = self._connection.cursor()
@@ -60,12 +82,12 @@ class MockConfigStore:
         """,
             (key, plaintext.encode(), updated_at),
         )
-        self._connection.commit()
+        self._commit()
 
     def delete_secret(self, key: str):
         cursor = self._connection.cursor()
         cursor.execute("DELETE FROM secrets WHERE key = ?", (key,))
-        self._connection.commit()
+        self._commit()
 
     def get_setting(self, key: str, default=None):
         cursor = self._connection.cursor()
@@ -89,12 +111,12 @@ class MockConfigStore:
         """,
             (key, value_str, value_type, updated_at),
         )
-        self._connection.commit()
+        self._commit()
 
     def delete_setting(self, key: str):
         cursor = self._connection.cursor()
         cursor.execute("DELETE FROM user_config WHERE key = ?", (key,))
-        self._connection.commit()
+        self._commit()
 
     def _detect_type(self, value):
         if isinstance(value, bool):
