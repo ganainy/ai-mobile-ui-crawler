@@ -1,5 +1,6 @@
 """Main window for the mobile-crawler GUI application."""
 
+import asyncio
 import logging
 import re
 import sys
@@ -30,6 +31,11 @@ from mobile_crawler.core.crawler_loop import CrawlerLoop
 from mobile_crawler.core.log_sinks import LogLevel, QLogHandler
 from mobile_crawler.core.runtime_stats_collector import RuntimeStatsCollector
 from mobile_crawler.core.stale_run_cleaner import StaleRunCleaner
+from mobile_crawler.domain.guided_scenarios_generator import (
+    generate_guided_scenarios,
+    guided_scenarios_config_key,
+    guided_scenarios_url_override_config_key,
+)
 from mobile_crawler.domain.models import ActionResult
 from mobile_crawler.domain.providers.registry import ProviderRegistry
 from mobile_crawler.domain.providers.vision_detector import VisionDetector
@@ -207,6 +213,28 @@ class CrawlerWorker(QThread):
             self.error.emit(str(e))
 
 
+class GuidedScenariosWorker(QThread):
+    """Worker thread that resolves an App Web Profile and generates a Guided Scenarios list."""
+
+    finished = Signal(list, str)  # scenarios, warning ("" if none)
+    error = Signal(str)
+
+    def __init__(self, config_manager: ConfigManager, app_package: str, website_url_override: str | None):
+        super().__init__()
+        self.config_manager = config_manager
+        self.app_package = app_package
+        self.website_url_override = website_url_override
+
+    def run(self):
+        try:
+            result = asyncio.run(
+                generate_guided_scenarios(self.config_manager, self.app_package, self.website_url_override)
+            )
+            self.finished.emit(result.scenarios, result.warning or "")
+        except Exception as e:
+            self.error.emit(str(e))
+
+
 class _ResettableSplitterHandle(QSplitterHandle):
     """Splitter handle that resets its splitter to defaults on double-click."""
 
@@ -323,6 +351,9 @@ class MainWindow(QMainWindow):
         self._crawler_worker = None
         self._current_run_id = None
         self._crawler_loop = None
+
+        # Guided Scenarios generation state
+        self._guided_scenarios_worker = None
 
         # MobSF startup state
         self._mobsf_docker_service = None
@@ -1287,6 +1318,9 @@ class MainWindow(QMainWindow):
         self.settings_panel.settings_saved.connect(self._on_settings_saved)
         self.settings_panel.omniparser_keepalive_pinged.connect(self._on_omniparser_keepalive_pinged)
         self.settings_panel.reset_layout_requested.connect(self._on_reset_layout_requested)
+        self.settings_panel.generate_guided_scenarios_requested.connect(
+            self._on_generate_guided_scenarios_requested
+        )
         self.device_selector.device_selected.connect(self._on_device_selected)
         self.app_selector.app_selected.connect(self._on_app_selected)
 
@@ -1413,7 +1447,39 @@ class MainWindow(QMainWindow):
             if not api_key:
                 # Show warning but don't prevent saving
                 pass
+
+        # Persist any manual edits to the Guided Scenarios list / URL override
+        # for the currently selected app (same save point every other
+        # per-field setting in this panel already uses).
+        if self._selected_package:
+            self._save_guided_scenarios_for_selected_package()
+
         self._update_start_button_state()
+
+    def _save_guided_scenarios_for_selected_package(self) -> None:
+        """Persist the panel's current Guided Scenarios list + URL override for `self._selected_package`."""
+        user_config_store = self._services["user_config_store"]
+        user_config_store.set_setting(
+            guided_scenarios_config_key(self._selected_package),
+            self.settings_panel.get_guided_scenarios(),
+            "json",
+        )
+        user_config_store.set_setting(
+            guided_scenarios_url_override_config_key(self._selected_package),
+            self.settings_panel.get_guided_scenarios_url_override(),
+            "string",
+        )
+
+    def _load_guided_scenarios_for_selected_package(self) -> None:
+        """Load the persisted Guided Scenarios list + URL override for `self._selected_package` into the panel."""
+        user_config_store = self._services["user_config_store"]
+        scenarios = user_config_store.get_setting(guided_scenarios_config_key(self._selected_package), default=[])
+        url_override = user_config_store.get_setting(
+            guided_scenarios_url_override_config_key(self._selected_package), default=""
+        )
+        self.settings_panel.set_guided_scenarios(scenarios if isinstance(scenarios, list) else [])
+        self.settings_panel.set_guided_scenarios_url_override(url_override or "")
+        self.settings_panel.set_guided_scenarios_warning(None)
 
     def _on_reset_layout_requested(self) -> None:
         """Restore both splitters to their default sizes and persist that."""
@@ -1442,7 +1508,47 @@ class MainWindow(QMainWindow):
             package: Selected app package name
         """
         self._selected_package = package
+        self._load_guided_scenarios_for_selected_package()
         self._update_start_button_state()
+
+    def _on_generate_guided_scenarios_requested(self) -> None:
+        """Resolve the selected app's App Web Profile and generate a Guided Scenarios list from it."""
+        if not self._selected_package:
+            self.settings_panel.set_guided_scenarios_warning("Select an app first.")
+            return
+        if self._guided_scenarios_worker and self._guided_scenarios_worker.isRunning():
+            return
+
+        config_manager = self._create_config_manager()
+        website_url_override = self.settings_panel.get_guided_scenarios_url_override()
+
+        self.settings_panel.set_guided_scenarios_warning(None)
+        self.settings_panel.set_generate_guided_scenarios_busy(True)
+
+        self._guided_scenarios_worker = GuidedScenariosWorker(
+            config_manager, self._selected_package, website_url_override or None
+        )
+        self._guided_scenarios_worker.finished.connect(self._on_guided_scenarios_generated)
+        self._guided_scenarios_worker.error.connect(self._on_guided_scenarios_generation_error)
+        self._guided_scenarios_worker.start()
+
+    def _on_guided_scenarios_generated(self, scenarios: list, warning: str) -> None:
+        """Handle a completed Guided Scenarios generation attempt."""
+        self.settings_panel.set_generate_guided_scenarios_busy(False)
+        self.settings_panel.set_guided_scenarios_warning(warning or None)
+
+        if scenarios:
+            # Generate always replaces the current list wholesale.
+            self.settings_panel.set_guided_scenarios(scenarios)
+            if self._selected_package:
+                self._save_guided_scenarios_for_selected_package()
+
+    def _on_guided_scenarios_generation_error(self, message: str) -> None:
+        """Handle an unexpected failure in the Guided Scenarios worker thread."""
+        self.settings_panel.set_generate_guided_scenarios_busy(False)
+        self.settings_panel.set_guided_scenarios_warning(
+            f"Failed to generate scenarios from app info: {message}"
+        )
 
     def _get_api_key_for_provider(self, provider: str) -> str:
         """Get API key for the specified provider.
@@ -2012,6 +2118,13 @@ class MainWindow(QMainWindow):
                 if not startup_worker.wait(10000):
                     startup_worker.terminate()
                     startup_worker.wait()
+
+            # Wait briefly for the Guided Scenarios worker to avoid a running-thread warning
+            guided_scenarios_worker = getattr(self, "_guided_scenarios_worker", None)
+            if guided_scenarios_worker and guided_scenarios_worker.isRunning():
+                if not guided_scenarios_worker.wait(2000):
+                    guided_scenarios_worker.terminate()
+                    guided_scenarios_worker.wait()
         except Exception:
             # Silently fail on close errors
             pass

@@ -6,8 +6,9 @@ import threading
 import time
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import QTimer, Signal
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QButtonGroup,
     QCheckBox,
     QComboBox,
@@ -15,6 +16,8 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QListWidget,
+    QListWidgetItem,
     QMessageBox,
     QPushButton,
     QRadioButton,
@@ -60,6 +63,7 @@ class SettingsPanel(QWidget):
     settings_saved = Signal()  # type: ignore
     omniparser_keepalive_pinged = Signal(bool, str, float)  # type: ignore
     reset_layout_requested = Signal()  # type: ignore
+    generate_guided_scenarios_requested = Signal()  # type: ignore
     _status_bar_preview_captured = Signal(bytes)  # type: ignore
     _status_bar_preview_failed = Signal(str)  # type: ignore
 
@@ -362,6 +366,78 @@ class SettingsPanel(QWidget):
 
         objective_group.setLayout(objective_layout)
         layout.addWidget(objective_group, 1)
+
+        # Guided Scenarios group
+        guided_scenarios_group = QGroupBox("Guided Scenarios")
+        guided_scenarios_layout = QVBoxLayout()
+        guided_scenarios_layout.setSpacing(8)
+        guided_scenarios_layout.setContentsMargins(15, 20, 15, 20)
+
+        guided_scenarios_hint = QLabel(
+            "An ordered checklist of pages/flows the crawler must visit before free exploration. "
+            "Generate it from the app's Play Store listing and website, or edit it by hand. "
+            "Persisted per app — reselecting this app later reloads it."
+        )
+        guided_scenarios_hint.setWordWrap(True)
+        guided_scenarios_hint.setStyleSheet("color: #666; font-size: 11px;")
+        guided_scenarios_layout.addWidget(guided_scenarios_hint)
+
+        url_layout = QHBoxLayout()
+        url_layout.addWidget(QLabel("Website URL:"))
+        self.guided_scenarios_url_input = QLineEdit()
+        self.guided_scenarios_url_input.setPlaceholderText(
+            "Auto-filled from the Play Store listing when available; override here"
+        )
+        url_layout.addWidget(self.guided_scenarios_url_input)
+        guided_scenarios_layout.addLayout(url_layout)
+
+        generate_layout = QHBoxLayout()
+        self.generate_guided_scenarios_button = QPushButton("Generate from App Info")
+        self.generate_guided_scenarios_button.setToolTip(
+            "Fetch the app's Play Store description and website, then ask the AI to propose a checklist. "
+            "Replaces the current list."
+        )
+        self.generate_guided_scenarios_button.clicked.connect(
+            self.generate_guided_scenarios_requested.emit
+        )
+        generate_layout.addWidget(self.generate_guided_scenarios_button)
+        generate_layout.addStretch()
+        guided_scenarios_layout.addLayout(generate_layout)
+
+        self.guided_scenarios_warning_label = QLabel("")
+        self.guided_scenarios_warning_label.setWordWrap(True)
+        self.guided_scenarios_warning_label.setStyleSheet("color: #d9822b; font-size: 11px;")
+        self.guided_scenarios_warning_label.setVisible(False)
+        guided_scenarios_layout.addWidget(self.guided_scenarios_warning_label)
+
+        self.guided_scenarios_list = QListWidget()
+        self.guided_scenarios_list.setMinimumHeight(140)
+        self.guided_scenarios_list.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
+        self.guided_scenarios_list.setDefaultDropAction(Qt.DropAction.MoveAction)
+        guided_scenarios_layout.addWidget(self.guided_scenarios_list)
+
+        list_buttons_layout = QHBoxLayout()
+        self.guided_scenario_add_button = QPushButton("Add")
+        self.guided_scenario_add_button.clicked.connect(self._add_guided_scenario)
+        list_buttons_layout.addWidget(self.guided_scenario_add_button)
+
+        self.guided_scenario_remove_button = QPushButton("Remove")
+        self.guided_scenario_remove_button.clicked.connect(self._remove_selected_guided_scenario)
+        list_buttons_layout.addWidget(self.guided_scenario_remove_button)
+
+        self.guided_scenario_up_button = QPushButton("Move Up")
+        self.guided_scenario_up_button.clicked.connect(lambda: self._move_guided_scenario(-1))
+        list_buttons_layout.addWidget(self.guided_scenario_up_button)
+
+        self.guided_scenario_down_button = QPushButton("Move Down")
+        self.guided_scenario_down_button.clicked.connect(lambda: self._move_guided_scenario(1))
+        list_buttons_layout.addWidget(self.guided_scenario_down_button)
+
+        list_buttons_layout.addStretch()
+        guided_scenarios_layout.addLayout(list_buttons_layout)
+
+        guided_scenarios_group.setLayout(guided_scenarios_layout)
+        layout.addWidget(guided_scenarios_group, 1)
 
         return self._wrap_in_scroll_area(tab)
 
@@ -1345,6 +1421,73 @@ class SettingsPanel(QWidget):
     def _reset_exploration_objective(self):
         """Reset the exploration objective text edit to the default value."""
         self.exploration_objective_input.setPlainText(DEFAULT_EXPLORATION_OBJECTIVE)
+
+    def _add_guided_scenario(self) -> None:
+        """Add a new editable, empty Guided Scenario item and start editing it."""
+        item = QListWidgetItem("New scenario")
+        item.setFlags(item.flags() | Qt.ItemFlag.ItemIsEditable)
+        self.guided_scenarios_list.addItem(item)
+        self.guided_scenarios_list.setCurrentItem(item)
+        self.guided_scenarios_list.editItem(item)
+
+    def _remove_selected_guided_scenario(self) -> None:
+        """Remove the currently selected Guided Scenario item(s)."""
+        for item in self.guided_scenarios_list.selectedItems():
+            self.guided_scenarios_list.takeItem(self.guided_scenarios_list.row(item))
+
+    def _move_guided_scenario(self, direction: int) -> None:
+        """Move the currently selected Guided Scenario item up (-1) or down (+1)."""
+        row = self.guided_scenarios_list.currentRow()
+        if row < 0:
+            return
+        new_row = row + direction
+        if not (0 <= new_row < self.guided_scenarios_list.count()):
+            return
+        item = self.guided_scenarios_list.takeItem(row)
+        self.guided_scenarios_list.insertItem(new_row, item)
+        self.guided_scenarios_list.setCurrentRow(new_row)
+
+    def get_guided_scenarios(self) -> list[str]:
+        """Get the current Guided Scenarios list, in order.
+
+        Returns:
+            Ordered list of non-empty scenario strings
+        """
+        return [
+            self.guided_scenarios_list.item(i).text().strip()
+            for i in range(self.guided_scenarios_list.count())
+            if self.guided_scenarios_list.item(i).text().strip()
+        ]
+
+    def set_guided_scenarios(self, scenarios: list[str]) -> None:
+        """Replace the Guided Scenarios list wholesale."""
+        self.guided_scenarios_list.clear()
+        for scenario in scenarios:
+            item = QListWidgetItem(scenario)
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsEditable)
+            self.guided_scenarios_list.addItem(item)
+
+    def get_guided_scenarios_url_override(self) -> str:
+        """Get the user-entered website URL override for Guided Scenario generation."""
+        return self.guided_scenarios_url_input.text().strip()
+
+    def set_guided_scenarios_url_override(self, url: str) -> None:
+        """Set the website URL override field."""
+        self.guided_scenarios_url_input.setText(url or "")
+
+    def set_guided_scenarios_warning(self, message: str | None) -> None:
+        """Show or clear the Guided Scenarios warning banner (e.g. generation failures)."""
+        if message:
+            self.guided_scenarios_warning_label.setText(message)
+            self.guided_scenarios_warning_label.setVisible(True)
+        else:
+            self.guided_scenarios_warning_label.setText("")
+            self.guided_scenarios_warning_label.setVisible(False)
+
+    def set_generate_guided_scenarios_busy(self, busy: bool) -> None:
+        """Disable/relabel the Generate button while a generation request is in flight."""
+        self.generate_guided_scenarios_button.setEnabled(not busy)
+        self.generate_guided_scenarios_button.setText("Generating..." if busy else "Generate from App Info")
 
     def get_ui_parser_mode(self) -> str:
         """Get the current UI parser mode.

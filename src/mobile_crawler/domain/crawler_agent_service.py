@@ -29,6 +29,7 @@ from mobile_crawler.domain.crawler_agent.agent.executor.events import ExecutorRe
 from mobile_crawler.domain.crawler_agent.agent.fast_agent.events import FastAgentResponseEvent
 from mobile_crawler.domain.crawler_agent.agent.manager.events import ManagerResponseEvent
 from mobile_crawler.domain.errors import ErrorContext, FatalError
+from mobile_crawler.domain.guided_scenarios_generator import guided_scenarios_config_key
 from mobile_crawler.domain.models import AIAction, BoundingBox
 from mobile_crawler.domain.stats_collector_span_processor import OTEL_AVAILABLE, StatsCollectorSpanProcessor
 from mobile_crawler.domain.step_phase import StepPhase, StepPhaseStateMachine
@@ -1340,7 +1341,7 @@ class CrawlerAgentService:
         Returns:
             CrawlerGoal for app exploration
         """
-        guided = self.config_manager.get("guided_scenarios", [])
+        guided = self.config_manager.get(guided_scenarios_config_key(app_package), [])
         if guided and isinstance(guided, list):
             description = (
                 f"Explore the {app_package} app. "
