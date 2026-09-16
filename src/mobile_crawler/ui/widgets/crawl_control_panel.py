@@ -182,7 +182,9 @@ class CrawlControlPanel(QWidget):
         # Apply feature availability overrides
         if not self._pause_available:
             self.pause_button.setEnabled(False)
+            self.pause_button.setVisible(False)
             self.resume_button.setEnabled(False)
+            self.resume_button.setVisible(False)
 
         if not self._step_by_step_available:
             self.step_by_step_checkbox.setEnabled(False)
@@ -211,7 +213,9 @@ class CrawlControlPanel(QWidget):
         self._pause_available = enabled
         if not enabled:
             self.pause_button.setEnabled(False)
+            self.pause_button.setVisible(False)
             self.resume_button.setEnabled(False)
+            self.resume_button.setVisible(False)
 
     def set_validation_passed(self, passed: bool):
         """Set whether pre-crawl validation has passed.

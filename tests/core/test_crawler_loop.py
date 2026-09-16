@@ -424,8 +424,9 @@ class TestCrawlerLoopLifecycle:
 
         crawler_loop.run(1)
 
-        # Should have transitioned from uninitialized to running, then to stopped
-        assert ("uninitialized", "running") in states
+        # Should have transitioned from uninitialized to initializing to running, then to stopped
+        assert ("uninitialized", "initializing") in states
+        assert ("initializing", "running") in states
         assert any(s[1] == "stopped" for s in states)
 
     @patch('mobile_crawler.core.crawler_loop.MobSFManager')

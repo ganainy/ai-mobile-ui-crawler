@@ -108,6 +108,7 @@ class CrawlerLoop:
     def stop(self) -> None:
         """Stop the crawler."""
         self._cancel_requested = True
+        self._transition_state(CrawlState.STOPPING.value, self._current_run_id)
         if self._crawler_agent_service and self._crawler_agent_service.request_cancel():
             logger.info("Requested cancellation of crawler agent workflow.")
 
@@ -211,6 +212,7 @@ class CrawlerLoop:
             self.run_repository.update_session_path(run_id, session_path)
             run.session_path = session_path
 
+            self._transition_state(CrawlState.INITIALIZING.value, run_id)
             self._transition_state(CrawlState.RUNNING.value, run_id)
             self._emit_event("on_crawl_started", run_id, run.app_package)
 
