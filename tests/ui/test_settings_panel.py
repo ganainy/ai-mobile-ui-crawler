@@ -793,3 +793,41 @@ class TestMobSFAutoRun:
         panel.enable_mobsf_analysis_checkbox.setChecked(True)
         panel.auto_run_mobsf_after_crawl_checkbox.setChecked(True)
         assert panel.get_auto_run_mobsf_after_crawl() is True
+
+
+class TestStatusBarExclusionPreview:
+    """Tests for the bottom-bar input and screenshot-calibration preview."""
+
+    def test_preview_and_refresh_button_exist(self, qt_app, mock_config_store):
+        panel = _create_settings_panel(mock_config_store)
+        assert panel.screenshot_preview is not None
+        assert panel.screenshot_refresh_button is not None
+
+    def test_bottom_bar_height_defaults_to_zero(self, qt_app, mock_config_store):
+        panel = _create_settings_panel(mock_config_store)
+        assert panel.get_bottom_bar_height() == 0
+
+    def test_get_bottom_bar_height(self, qt_app, mock_config_store):
+        panel = _create_settings_panel(mock_config_store)
+        panel.bottom_bar_height_input.setValue(48)
+        assert panel.get_bottom_bar_height() == 48
+
+    def test_bottom_bar_height_persists(self, qt_app, mock_config_store, monkeypatch):
+        monkeypatch.setattr(QMessageBox, "information", lambda *a, **k: None)
+        panel = _create_settings_panel(mock_config_store)
+        panel.bottom_bar_height_input.setValue(64)
+        panel._on_save_clicked()
+
+        panel2 = _create_settings_panel(mock_config_store)
+        assert panel2.get_bottom_bar_height() == 64
+
+    def test_notify_device_changed_none_shows_placeholder(self, qt_app, mock_config_store):
+        panel = _create_settings_panel(mock_config_store)
+        panel.notify_device_changed(None)
+        assert not panel.screenshot_preview.has_screenshot()
+
+    def test_preview_failure_is_handled_without_raising(self, qt_app, mock_config_store):
+        panel = _create_settings_panel(mock_config_store)
+        # Guards the logger reference in _on_status_bar_preview_failed.
+        panel._on_status_bar_preview_failed("boom")
+        assert not panel.screenshot_preview.has_screenshot()

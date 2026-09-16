@@ -54,6 +54,7 @@ class _FakeSelector(QWidget):
         self.app_selected = _Connectable()
         self.settings_saved = _Connectable()
         self.omniparser_keepalive_pinged = _Connectable()
+        self.reset_layout_requested = _Connectable()
 
     def set_api_key_callback(self, _callback):
         pass

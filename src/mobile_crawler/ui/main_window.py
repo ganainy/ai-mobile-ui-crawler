@@ -632,9 +632,13 @@ class MainWindow(QMainWindow):
 
         # Set screen configuration
         top_height = self.settings_panel.get_top_bar_height()
+        bottom_height = self.settings_panel.get_bottom_bar_height()
         # Log to UI so user can see it's being picked up
-        self.signal_adapter.on_debug_log(0, 0, f"UI: Setting top_bar_height to {top_height}px")
+        self.signal_adapter.on_debug_log(
+            0, 0, f"UI: Setting top_bar_height to {top_height}px, bottom_bar_height to {bottom_height}px"
+        )
         config_manager.set("top_bar_height", top_height)
+        config_manager.set("bottom_bar_height", bottom_height)
 
         # Set feature flags from settings panel
         enable_traffic_capture = self.settings_panel.get_enable_traffic_capture()
@@ -1427,6 +1431,7 @@ class MainWindow(QMainWindow):
         self._selected_device = device
         if self.app_selector:
             self.app_selector.set_device_id(device.device_id if device else None)
+        self.settings_panel.notify_device_changed(device.device_id if device else None)
 
         self._update_start_button_state()
 
@@ -1692,7 +1697,10 @@ class MainWindow(QMainWindow):
         if request_data is not None:
             elements = request_data.get("ui_elements")
             vision_enabled = request_data.get("vision_enabled", True)
-            self.stats_dashboard.update_screenshot(screenshot_path, elements, vision_enabled)
+            status_bar_exclusion_px = request_data.get("status_bar_exclusion_px", 0)
+            self.stats_dashboard.update_screenshot(
+                screenshot_path, elements, vision_enabled, status_bar_exclusion_px
+            )
 
         # Increment total visits
         self._current_stats.total_screen_visits += 1

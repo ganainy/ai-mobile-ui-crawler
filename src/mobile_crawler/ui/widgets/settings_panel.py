@@ -1,5 +1,6 @@
 """Settings panel widget for mobile-crawler GUI."""
 
+import logging
 import os
 import threading
 import time
@@ -25,8 +26,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from mobile_crawler.ui.widgets.status_bar_exclusion_preview import StatusBarExclusionPreview
+
 if TYPE_CHECKING:
     from mobile_crawler.infrastructure.user_config_store import UserConfigStore
+
+logger = logging.getLogger(__name__)
 
 
 DEFAULT_EXPLORATION_OBJECTIVE = (
@@ -55,6 +60,8 @@ class SettingsPanel(QWidget):
     settings_saved = Signal()  # type: ignore
     omniparser_keepalive_pinged = Signal(bool, str, float)  # type: ignore
     reset_layout_requested = Signal()  # type: ignore
+    _status_bar_preview_captured = Signal(bytes)  # type: ignore
+    _status_bar_preview_failed = Signal(str)  # type: ignore
 
     def __init__(self, config_store: "UserConfigStore", parent=None):
         """Initialize settings panel widget.
@@ -70,8 +77,14 @@ class SettingsPanel(QWidget):
         self._keepalive_thread: threading.Thread | None = None
         self._keepalive_in_flight = False
         self._crawl_running = False
+        self._device_id: str | None = None
+        self._status_bar_preview_device_id: str | None = None
+        self._status_bar_preview_thread: threading.Thread | None = None
+        self._status_bar_preview_in_flight = False
         self._setup_ui()
         self.omniparser_keepalive_pinged.connect(self._on_keepalive_pinged)
+        self._status_bar_preview_captured.connect(self._on_status_bar_preview_captured)
+        self._status_bar_preview_failed.connect(self._on_status_bar_preview_failed)
         self._load_settings()
 
     def _setup_ui(self):
@@ -175,8 +188,35 @@ class SettingsPanel(QWidget):
             "Exclude the Android status bar from OCR and AI analysis. Typically 80-120px."
         )
         top_bar_layout.addWidget(self.top_bar_height_input)
+        self.screenshot_refresh_button = QPushButton("Refresh")
+        self.screenshot_refresh_button.setToolTip("Take a fresh screenshot from the connected device.")
+        self.screenshot_refresh_button.clicked.connect(self._fetch_status_bar_preview)
+        top_bar_layout.addWidget(self.screenshot_refresh_button)
         top_bar_layout.addStretch()
         screen_layout.addLayout(top_bar_layout)
+
+        bottom_bar_layout = QHBoxLayout()
+        bottom_bar_label = QLabel("Exclude Bottom Bar (pixels):")
+        bottom_bar_layout.addWidget(bottom_bar_label)
+        self.bottom_bar_height_input = QSpinBox()
+        self.bottom_bar_height_input.setRange(0, 500)
+        self.bottom_bar_height_input.setValue(0)
+        self.bottom_bar_height_input.setToolTip(
+            "Exclude the Android navigation bar from OCR and AI analysis. 0 if you use gesture navigation."
+        )
+        bottom_bar_layout.addWidget(self.bottom_bar_height_input)
+        bottom_bar_layout.addStretch()
+        screen_layout.addLayout(bottom_bar_layout)
+
+        self.screenshot_preview = StatusBarExclusionPreview()
+        self.screenshot_preview.top_exclusion_changed.connect(self.top_bar_height_input.setValue)
+        self.top_bar_height_input.valueChanged.connect(self.screenshot_preview.set_top_exclusion_px)
+        self.screenshot_preview.bottom_exclusion_changed.connect(self.bottom_bar_height_input.setValue)
+        self.bottom_bar_height_input.valueChanged.connect(self.screenshot_preview.set_bottom_exclusion_px)
+        preview_row = QHBoxLayout()
+        preview_row.addWidget(self.screenshot_preview)
+        preview_row.addStretch()
+        screen_layout.addLayout(preview_row)
 
         screen_group.setLayout(screen_layout)
         layout.addWidget(screen_group)
@@ -725,6 +765,8 @@ class SettingsPanel(QWidget):
         # Load screen configuration
         top_bar_height = self._config_store.get_setting("top_bar_height", default=80)
         self.top_bar_height_input.setValue(top_bar_height)
+        bottom_bar_height = self._config_store.get_setting("bottom_bar_height", default=0)
+        self.bottom_bar_height_input.setValue(bottom_bar_height)
 
         # Load limit type preference (default to steps)
         limit_type = self._config_store.get_setting("limit_type", default="steps")
@@ -891,6 +933,9 @@ class SettingsPanel(QWidget):
 
                 # Save screen configuration
                 self._config_store.set_setting("top_bar_height", self.top_bar_height_input.value(), "int")
+                self._config_store.set_setting(
+                    "bottom_bar_height", self.bottom_bar_height_input.value(), "int"
+                )
 
                 # Save test credentials
                 test_username = self.test_username_input.text().strip()
@@ -1097,6 +1142,73 @@ class SettingsPanel(QWidget):
         finally:
             self._keepalive_in_flight = False
 
+    def notify_device_changed(self, device_id: str | None) -> None:
+        """Tell the panel which device is selected, so it can preview it.
+
+        Called by main_window whenever device selection changes. Auto-fetches
+        a calibration screenshot the first time a device becomes available,
+        or when the device changes; safe to call repeatedly.
+        """
+        self._device_id = device_id
+        if device_id is None:
+            self._status_bar_preview_device_id = None
+            self.screenshot_preview.set_placeholder("Connect a device to preview")
+            return
+        if device_id != self._status_bar_preview_device_id:
+            self._fetch_status_bar_preview()
+
+    def _fetch_status_bar_preview(self) -> None:
+        """Capture a fresh screenshot from the selected device for the preview."""
+        if self._device_id is None:
+            self.screenshot_preview.set_placeholder("Connect a device to preview")
+            return
+        if self._status_bar_preview_in_flight:
+            return
+        self._status_bar_preview_in_flight = True
+        self._status_bar_preview_thread = threading.Thread(
+            target=self._run_status_bar_preview_capture,
+            args=(self._device_id,),
+            daemon=True,
+        )
+        self._status_bar_preview_thread.start()
+
+    def _run_status_bar_preview_capture(self, device_id: str) -> None:
+        import tempfile
+
+        from mobile_crawler.domain.adb_action_executor import ADBActionExecutor
+
+        tmp_path: str | None = None
+        try:
+            executor = ADBActionExecutor(device_id)
+            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+                tmp_path = tmp.name
+            result = executor.take_screenshot(tmp_path)
+            if not result.success:
+                self._status_bar_preview_failed.emit(result.error_message or "Screenshot failed")
+                return
+            with open(tmp_path, "rb") as f:
+                image_bytes = f.read()
+            self._status_bar_preview_captured.emit(image_bytes)
+        except Exception as exc:
+            self._status_bar_preview_failed.emit(str(exc))
+        finally:
+            if tmp_path is not None:
+                try:
+                    os.remove(tmp_path)
+                except OSError:
+                    pass
+            self._status_bar_preview_in_flight = False
+
+    def _on_status_bar_preview_captured(self, image_bytes: bytes) -> None:
+        self._status_bar_preview_device_id = self._device_id
+        self.screenshot_preview.set_screenshot(image_bytes)
+        self.screenshot_preview.set_top_exclusion_px(self.top_bar_height_input.value())
+        self.screenshot_preview.set_bottom_exclusion_px(self.bottom_bar_height_input.value())
+
+    def _on_status_bar_preview_failed(self, message: str) -> None:
+        logger.warning(f"Status bar preview screenshot failed: {message}")
+        self.screenshot_preview.set_placeholder("Couldn't capture screenshot")
+
     def _on_keepalive_pinged(self, _success: bool, message: str, _elapsed_seconds: float) -> None:
         timestamp = time.strftime("%H:%M:%S")
         self.omniparser_keepalive_status_label.setText(f"{message} at {timestamp}")
@@ -1157,6 +1269,14 @@ class SettingsPanel(QWidget):
             Current top bar height in pixels
         """
         return self.top_bar_height_input.value()
+
+    def get_bottom_bar_height(self) -> int:
+        """Get the current bottom bar height value.
+
+        Returns:
+            Current bottom bar height in pixels
+        """
+        return self.bottom_bar_height_input.value()
 
     def get_test_username(self) -> str:
         """Get the current test username value.
