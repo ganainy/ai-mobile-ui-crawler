@@ -6,6 +6,8 @@ from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QDialog,
+    QGridLayout,
+    QGroupBox,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -133,8 +135,6 @@ class RunStatsDialog(QDialog):
         content = QWidget()
         content_layout = QVBoxLayout(content)
 
-        from PySide6.QtWidgets import QGridLayout, QScrollArea
-
         for title, rows in groups:
             group = QGroupBox(title)
             grid = QGridLayout(group)
@@ -252,23 +252,27 @@ class RunHistoryView(QWidget):
 
         # Refresh button
         self.refresh_button = QPushButton("Refresh")
+        self.refresh_button.setToolTip("Reload the run list from the database")
         self.refresh_button.clicked.connect(self._load_runs)
         buttons_layout.addWidget(self.refresh_button)
 
         # Delete button
         self.delete_button = QPushButton("Delete Run")
+        self.delete_button.setToolTip("Delete the selected run and all of its data")
         self.delete_button.clicked.connect(self._on_delete_clicked)
         self.delete_button.setEnabled(False)
         buttons_layout.addWidget(self.delete_button)
 
         # Generate Report button
         self.report_button = QPushButton("Generate Report")
+        self.report_button.setToolTip("Generate an enhanced report for the selected run")
         self.report_button.clicked.connect(self._on_generate_report_clicked)
         self.report_button.setEnabled(False)
         buttons_layout.addWidget(self.report_button)
 
         # Run MobSF button
         self.mobsf_button = QPushButton("Run MobSF")
+        self.mobsf_button.setToolTip("Run MobSF static analysis for the selected run's app")
         self.mobsf_button.clicked.connect(self._on_mobsf_clicked)
         self.mobsf_button.setEnabled(False)
         buttons_layout.addWidget(self.mobsf_button)
@@ -401,7 +405,33 @@ class RunHistoryView(QWidget):
         self.delete_button.setEnabled(has_selection)
         self.report_button.setEnabled(has_selection)
         self.mobsf_button.setEnabled(has_selection)
-        self.stats_button.setEnabled(has_selection)
+        self._update_stats_button_state()
+
+    def _update_stats_button_state(self):
+        """Enable the View Stats button only when stats exist for the selection."""
+        if not self._run_stats_repository:
+            self.stats_button.setEnabled(False)
+            self.stats_button.setToolTip("Detailed statistics are not available")
+            return
+
+        run_id = self.get_selected_run_id()
+        if run_id is None:
+            self.stats_button.setEnabled(False)
+            self.stats_button.setToolTip("Select a run to view its detailed statistics")
+            return
+
+        try:
+            has_stats = self._run_stats_repository.get_run_stats(run_id) is not None
+        except Exception:
+            has_stats = False
+
+        self.stats_button.setEnabled(has_stats)
+        if has_stats:
+            self.stats_button.setToolTip("View detailed persisted statistics for the selected run")
+        else:
+            self.stats_button.setToolTip(
+                "No persisted statistics for this run (stats are saved when a crawl completes)"
+            )
 
     def _on_view_stats_clicked(self):
         """Open the run_stats detail dialog for the selected run."""
