@@ -19,6 +19,12 @@ class LLMProfile:
     temperature: float = 0.2
     base_url: str | None = None
     api_base: str | None = None
+    # llama-index-llms-google-genai fetches model metadata over the network
+    # during __init__ unless both of these are set, which turned a routine
+    # LLM load into a multi-minute (or indefinite) hang on a slow/blocked
+    # connection to Google's API. Setting them skips that call.
+    context_window: int = 1_048_576
+    max_tokens: int = 8192
     kwargs: dict[str, Any] = field(default_factory=dict)
 
     def to_load_llm_kwargs(self) -> dict[str, Any]:
@@ -26,13 +32,15 @@ class LLMProfile:
         result = {
             "model": self.model,
             "temperature": self.temperature,
+            "context_window": self.context_window,
+            "max_tokens": self.max_tokens,
         }
         # Add optional URL parameters
         if self.base_url:
             result["base_url"] = self.base_url
         if self.api_base:
             result["api_base"] = self.api_base
-        # Merge additional kwargs
+        # Merge additional kwargs (can override context_window/max_tokens too)
         result.update(self.kwargs)
         return result
 
