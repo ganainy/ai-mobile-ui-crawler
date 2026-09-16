@@ -1,7 +1,9 @@
 """Tests for UI wait predicates."""
+from io import BytesIO
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from PIL import Image
 
 from mobile_crawler.domain.ui_wait_predicate import (
     DEFAULT_WAIT_PROFILES,
@@ -172,17 +174,54 @@ class TestUIWaitPredicate:
 
     @pytest.mark.asyncio
     async def test_expensive_vision_mode_does_not_poll_get_state(self, mock_state_provider):
-        """OmniParser mode uses a cheap settle delay instead of repeated state parsing."""
-        current_app_provider = AsyncMock(return_value="com.example.app")
+        """OmniParser mode polls screenshots instead of parsing state via get_state."""
+        # Use real PNG bytes so Image.open + compute_screen_hash work end-to-end
+        test_img = Image.new("RGB", (1080, 1920), color="white")
+        buf = BytesIO()
+        test_img.save(buf, format="PNG")
+        mock_state_provider.screenshot.return_value = buf.getvalue()
+
         predicate = UIWaitPredicate(
             state_provider=mock_state_provider,
             config=AdaptiveWaitConfig(config_manager=None),
-            current_app_provider=current_app_provider,
             expensive_state_polling=True,
+            grace_delay_s=0.001,
         )
 
-        result = await predicate.wait_for_ui_settled("tap", timeout_ms=10)
+        result = await predicate.wait_for_ui_settled("tap", timeout_ms=500)
 
         assert result is True
         mock_state_provider.get_state.assert_not_awaited()
-        current_app_provider.assert_awaited_once()
+        # Screenshot polling should have occurred (at least 2 calls for stable hash)
+        assert mock_state_provider.screenshot.await_count >= 2
+
+
+@pytest.mark.asyncio
+async def test_screenshot_settled_stable_after_two_polls():
+    """Screenshot hash polling returns True when two consecutive hashes match."""
+    from unittest.mock import patch
+
+    provider = AsyncMock()
+
+    # Create two different real PIL images so dhash produces different hashes
+    img1 = Image.new("RGB", (1080, 1920), color="red")
+    img2 = Image.new("RGB", (1080, 1920), color="red")  # same → same hash
+
+    def to_bytes(img):
+        buf = BytesIO()
+        img.save(buf, format="PNG")
+        return buf.getvalue()
+
+    provider.screenshot.side_effect = [to_bytes(img1), to_bytes(img2)]
+
+    predicate = UIWaitPredicate(
+        state_provider=provider,
+        config=AdaptiveWaitConfig(config_manager=None),
+        expensive_state_polling=True,
+        grace_delay_s=0.001,
+    )
+
+    with patch("PIL.Image.open", side_effect=[img1, img2]):
+        result = await predicate.wait_for_ui_settled("tap", timeout_ms=500)
+
+    assert result is True

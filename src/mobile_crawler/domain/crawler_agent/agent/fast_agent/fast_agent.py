@@ -25,6 +25,8 @@ from mobile_crawler.domain.crawler_agent.agent.common.events import (
     ExternalUserMessageDroppedEvent,
     RecordUIStateEvent,
     ScreenshotEvent,
+    StepAdvanceEvent,
+    StepPausedEvent,
 )
 from mobile_crawler.domain.crawler_agent.agent.fast_agent.events import (
     FastAgentEndEvent,
@@ -48,6 +50,7 @@ from mobile_crawler.domain.crawler_agent.agent.utils.tracing_setup import record
 from mobile_crawler.domain.crawler_agent.config_manager.config_manager import AgentConfig, TracingConfig
 from mobile_crawler.domain.crawler_agent.config_manager.prompt_loader import PromptLoader
 from mobile_crawler.domain.crawler_agent.tools.driver.base import DeviceDisconnectedError
+from mobile_crawler.domain.ui_wait_predicate import wait_for_ui_settled_after_action
 
 if TYPE_CHECKING:
     from mobile_crawler.domain.crawler_agent.agent.action_context import ActionContext
@@ -533,7 +536,11 @@ class FastAgent(Workflow):
         results_xml = format_tool_results(results)
         logger.info("💡 Tool results:", extra={"color": "dim"})
         logger.info(f"{results_xml}")
-        await asyncio.sleep(self.agent_config.after_sleep_action)
+        await wait_for_ui_settled_after_action(
+            self.action_ctx.state_provider,
+            call.name,
+            self.agent_config.wait_for_stable_ui,
+        )
 
         # Update remembered info
         self.remembered_info = self.shared_state.fast_memory
@@ -572,6 +579,28 @@ class FastAgent(Workflow):
         self.shared_state.message_history.append(
             ChatMessage(role="user", content=output)
         )
+
+        # Step-by-step mode: block until the external caller (CrawlerLoop.advance_step)
+        # sends a StepAdvanceEvent into this workflow's Context. Mirrors the pause in
+        # CrawlerAgent.handle_executor_result for the Manager/Executor (reasoning=True)
+        # path — FastAgent runs its own nested workflow so it needs its own pause point.
+        if self.agent_config.step_by_step:
+            logger.info(
+                f"⏸ Step-by-step: pausing after step {self.shared_state.step_number}. Waiting for advance."
+            )
+            ctx.write_event_to_stream(
+                StepPausedEvent(step_number=self.shared_state.step_number)
+            )
+            try:
+                await ctx.wait_for_event(
+                    StepAdvanceEvent,
+                    waiter_event=None,
+                    waiter_id="step_by_step_advance",
+                    timeout=None,
+                )
+            except asyncio.CancelledError:
+                logger.info("Step-by-step wait cancelled; stopping workflow.")
+                raise
 
         return FastAgentInputEvent()
 

@@ -4,11 +4,20 @@ Replaces fixed-duration sleeps (ADBActionExecutor._action_delay_ms = 1500)
 with polling-based waits that check UI state readiness.
 """
 import asyncio
+import io
 import logging
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any, Protocol
+
+from PIL import Image
+
+from mobile_crawler.domain.screen_hash import (
+    SETTLE_HAMMING_THRESHOLD,
+    compute_screen_hash,
+    is_screen_stable,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +27,10 @@ class StateProvider(Protocol):
 
     async def get_state(self) -> Any:
         """Return current UI state."""
+        ...
+
+    async def screenshot(self) -> bytes:
+        """Return raw PNG bytes of the current screen."""
         ...
 
 
@@ -125,6 +138,7 @@ class UIWaitPredicate:
         latest_state_provider: Callable[[], Any] | None = None,
         current_app_provider: Callable[[], Awaitable[str]] | None = None,
         expensive_state_polling: bool | None = None,
+        grace_delay_s: float = 0.3,
     ):
         """
         Args:
@@ -141,6 +155,7 @@ class UIWaitPredicate:
             if expensive_state_polling is not None
             else getattr(state_provider, "ui_parser_mode", None) == "omniparser"
         )
+        self.grace_delay_s = grace_delay_s
 
     async def wait_for_ui_settled(
         self,
@@ -166,23 +181,9 @@ class UIWaitPredicate:
         poll_interval = profile.poll_interval_s
 
         if self.expensive_state_polling:
-            await asyncio.sleep(min(timeout, max(0.2, poll_interval)))
-            if self.current_app_provider:
-                try:
-                    current_app = await self.current_app_provider()
-                    logger.debug(
-                        "UI settle used cheap current-app check for %s: current_app=%s",
-                        action_type,
-                        current_app or "",
-                    )
-                except Exception as e:
-                    logger.debug(f"Cheap current-app check failed after {action_type}: {e}")
-            else:
-                logger.debug(
-                    "UI settle used fixed settle delay for %s because state polling is expensive",
-                    action_type,
-                )
-            return True
+            return await self._wait_for_screenshot_settled(
+                action_type, timeout, poll_interval
+            )
 
         deadline = time.monotonic() + timeout
         latest_state = self.latest_state_provider() if self.latest_state_provider else None
@@ -213,3 +214,62 @@ class UIWaitPredicate:
             f"({action_type}, {timeout:.1f}s)"
         )
         return False
+
+    async def _wait_for_screenshot_settled(
+        self, action_type: str, timeout: float, poll_interval: float
+    ) -> bool:
+        """Wait until screenshot-hash is stable using cheap screenshot polling.
+
+        Replaces the old fixed-delay shortcut. Polls driver.screenshot()
+        (cheap, no OmniParser) and compares dHash Hamming distance.
+        """
+        # Grace delay before first poll
+        await asyncio.sleep(self.grace_delay_s)
+
+        deadline = time.monotonic() + timeout
+        prev_hash: str | None = None
+        poll_count = 0
+
+        while time.monotonic() < deadline:
+            poll_count += 1
+            try:
+                screenshot_bytes = await self.state_provider.screenshot()
+                image = Image.open(io.BytesIO(screenshot_bytes))
+                current_hash = compute_screen_hash(image)
+
+                if prev_hash is not None and is_screen_stable(
+                    prev_hash, current_hash, threshold=SETTLE_HAMMING_THRESHOLD
+                ):
+                    logger.debug(
+                        f"UI settled after {poll_count} polls "
+                        f"({action_type}, ~{poll_count * 200:.0f}ms)"
+                    )
+                    return True
+
+                prev_hash = current_hash
+            except Exception as e:
+                logger.debug(f"Screenshot hash poll failed (will retry): {e}")
+
+            await asyncio.sleep(poll_interval)
+
+        logger.debug(
+            f"UI screenshot wait timed out after {poll_count} polls "
+            f"({action_type}, {timeout:.1f}s)"
+        )
+        return False
+
+
+async def wait_for_ui_settled_after_action(
+    state_provider: StateProvider,
+    action_type: str,
+    grace_delay_s: float,
+) -> bool:
+    """Wait for the UI to settle after dispatching `action_type`.
+
+    Shared by the executor and fast agents so they don't each construct
+    their own `UIWaitPredicate`.
+    """
+    return await UIWaitPredicate(
+        state_provider=state_provider,
+        grace_delay_s=grace_delay_s,
+    ).wait_for_ui_settled(action_type)

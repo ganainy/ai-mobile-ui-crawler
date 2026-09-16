@@ -3,9 +3,9 @@
 import logging
 from dataclasses import dataclass
 
-import imagehash
 from PIL import Image
 
+from mobile_crawler.domain.screen_hash import compute_screen_hash
 from mobile_crawler.infrastructure.database import DatabaseManager
 from mobile_crawler.infrastructure.screen_repository import Screen, ScreenRepository
 
@@ -177,37 +177,11 @@ class ScreenTracker:
     def _generate_hash(self, image: Image.Image) -> str:
         """Generate a perceptual hash for the image.
 
-        Uses dHash (Difference Hash) with size=8 (64-bit hash) which is robust to:
-        - Scaling and aspect ratio changes
-        - Minor color adjustments
-        - Brightness changes
-        - Content replacement (e.g., carousel rotations)
-
-        The status bar (top 100px) is excluded from hashing to prevent
-        false positives from time/battery/notifications changes.
-
-        Args:
-            image: PIL Image to hash
-
-        Returns:
-            Hex string representation of the 64-bit perceptual hash
+        Delegates to the shared :func:`compute_screen_hash` so that both
+        screen dedup (here) and settle detection (UIWaitPredicate) use the
+        same crop+dHash recipe and cannot drift apart.
         """
-        # Convert to RGB if necessary (imagehash works best with RGB)
-        if image.mode != 'RGB':
-            image = image.convert('RGB')
-
-        # Exclude status bar (top 100px) from hashing
-        # This prevents false positives from time/battery/notifications
-        width, height = image.size
-        if height > 100:
-            image = image.crop((0, 100, width, height))
-
-        # Generate difference hash (dHash) with size=8
-        # dHash tracks gradients and structure better than frequency (pHash)
-        # making it more robust to "content replacement" like carousels
-        dhash = imagehash.dhash(image, hash_size=8)
-
-        return str(dhash)
+        return compute_screen_hash(image)
 
     def _find_similar_screen(self, composite_hash: str) -> Screen | None:
         """Find an existing screen with similar hash.

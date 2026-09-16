@@ -31,6 +31,7 @@ from mobile_crawler.domain.crawler_agent.agent.utils.inference import acall_with
 from mobile_crawler.domain.crawler_agent.agent.utils.prompt_resolver import PromptResolver
 from mobile_crawler.domain.crawler_agent.config_manager.config_manager import AgentConfig
 from mobile_crawler.domain.crawler_agent.config_manager.prompt_loader import PromptLoader
+from mobile_crawler.domain.ui_wait_predicate import wait_for_ui_settled_after_action
 
 if TYPE_CHECKING:
     from mobile_crawler.domain.crawler_agent.agent.action_context import ActionContext
@@ -285,7 +286,11 @@ class ExecutorAgent(Workflow):
             action_type, action_args, self.action_ctx, workflow_ctx=ctx
         )
 
-        await asyncio.sleep(self.agent_config.after_sleep_action)
+        await wait_for_ui_settled_after_action(
+            self.action_ctx.state_provider,
+            action_type,
+            self.agent_config.wait_for_stable_ui,
+        )
 
         logger.debug(
             f"{'✅' if result.success else '❌'} Execution complete: {result.summary}"
