@@ -5,7 +5,6 @@ from PIL import Image
 
 from mobile_crawler.domain.screen_hash import (
     HAMMING_THRESHOLD,
-    STATUS_BAR_HEIGHT,
     compute_screen_hash,
     hamming_distance,
     is_screen_stable,
@@ -38,27 +37,6 @@ class TestComputeScreenHash:
         draw1.rectangle([100, 200, 400, 500], fill="red")
         draw2.rectangle([600, 800, 900, 1100], fill="blue")
         assert compute_screen_hash(img1) != compute_screen_hash(img2)
-
-    def test_status_bar_cropped(self):
-        """Status bar (top 100px) is excluded from hashing."""
-        # An image that is entirely one color except the status bar
-        img = Image.new("RGB", (1080, 1920), color="white")
-        # Paint the status bar a different color
-        for y in range(STATUS_BAR_HEIGHT):
-            for x in range(1080):
-                img.putpixel((x, y), (255, 0, 0))
-
-        # The hash should match a plain white image (status bar excluded)
-        plain = Image.new("RGB", (1080, 1920), color="white")
-        assert compute_screen_hash(img) == compute_screen_hash(plain)
-
-    def test_small_image_no_crop(self):
-        """Images with height <= STATUS_BAR_HEIGHT are not cropped."""
-        img = Image.new("RGB", (100, 50), color="green")
-        # Should not raise
-        result = compute_screen_hash(img)
-        assert isinstance(result, str)
-        assert len(result) == 16
 
     def test_rgba_converted_to_rgb(self):
         """RGBA images are converted to RGB before hashing."""

@@ -260,6 +260,8 @@ class CrawlerAgentService:
                 "omniparser_local_parse_timeout_seconds", 120
             ),
             "target_package": target_package,
+            "status_bar_exclusion_px": self.config_manager.get("top_bar_height", 80),
+            "bottom_bar_exclusion_px": self.config_manager.get("bottom_bar_height", 0),
         }
 
         # Set Replicate API key in environment (both names) for the agent
@@ -1253,10 +1255,18 @@ class CrawlerAgentService:
 
         # Build request_data matching ai_monitor_panel.py's expected shape
         screenshot_b64 = base64.b64encode(screenshot_bytes).decode("utf-8") if screenshot_bytes else ""
+        config = self._crawler_agent_config
         request_data = {
             "user_prompt": json.dumps({"text": prompt_text or "", "screenshot": screenshot_b64}),
             "ui_elements": elements,
             "vision_enabled": vision_enabled,
+            # The screenshot on disk (screenshot_path above) has already had
+            # these cropped off at capture time (ADR-0002), but `elements[].bounds`
+            # are absolute device coordinates (needed for tapping) — overlay
+            # renderers need these to translate bounds back into the cropped
+            # image's coordinate space before drawing. See CONTEXT.md.
+            "status_bar_exclusion_px": config.status_bar_exclusion_px if config else 0,
+            "bottom_bar_exclusion_px": config.bottom_bar_exclusion_px if config else 0,
         }
 
         # Build response_data

@@ -12,13 +12,25 @@ class ElementOverlayRenderer:
     # Color palette (cycling, same as OverlayRenderer for consistency)
     COLORS: list[str] = ["#00FF00", "#0088FF", "#FF8800", "#FF00FF", "#00FFFF"]
 
-    def render(self, image: Image.Image, elements: list[dict]) -> Image.Image:
+    def render(
+        self,
+        image: Image.Image,
+        elements: list[dict],
+        top_offset_px: int = 0,
+    ) -> Image.Image:
         """Render element index labels onto an image.
 
         Args:
-            image: Source image to render overlays on
+            image: Source image to render overlays on. May already have
+                Status Bar Exclusion cropped off the top (ADR-0002) — pass
+                the same top_offset_px used for that crop so bounds line up.
             elements: List of element dicts with 'index' and 'bounds' keys.
-                      'bounds' is a string "x1,y1,x2,y2" in pixel coordinates.
+                      'bounds' is a string "x1,y1,x2,y2" in *absolute device*
+                      pixel coordinates (see CONTEXT.md "Status Bar Exclusion").
+            top_offset_px: Status Bar Exclusion pixels already cropped off
+                the top of *image*. Subtracted from bounds before drawing so
+                they land in image's (cropped) coordinate space instead of
+                the device's absolute one.
 
         Returns:
             New image with element labels overlaid (in-memory, not saved).
@@ -46,6 +58,10 @@ class ElementOverlayRenderer:
             except (ValueError, AttributeError):
                 # Skip elements with unparseable bounds
                 continue
+
+            if top_offset_px:
+                y1 -= top_offset_px
+                y2 -= top_offset_px
 
             # Validate bounds (skip invalid but don't fail the whole render)
             if x1 < 0 or y1 < 0 or x2 > width or y2 > height or x1 >= x2 or y1 >= y2:

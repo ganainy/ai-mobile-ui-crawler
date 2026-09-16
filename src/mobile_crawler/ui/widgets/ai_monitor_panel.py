@@ -668,9 +668,11 @@ class StepDetailWidget(QWidget):
             # Use the first call that has ui_elements captured (added alongside
             # request_data by crawler_agent_service.py, not nested in prompt_text)
             elements = None
+            status_bar_exclusion_px = 0
             for call in self.calls:
                 if call.get("ui_elements"):
                     elements = call["ui_elements"]
+                    status_bar_exclusion_px = call.get("status_bar_exclusion_px", 0)
                     break
 
             # Render overlay if elements available
@@ -692,7 +694,9 @@ class StepDetailWidget(QWidget):
                     qbuffer.close()
 
                     # Render overlay
-                    overlaid_pil = self._overlay_renderer.render(pil_image, elements)
+                    overlaid_pil = self._overlay_renderer.render(
+                        pil_image, elements, top_offset_px=status_bar_exclusion_px
+                    )
 
                     # Convert back to QPixmap
                     out_buffer = io.BytesIO()
@@ -1298,6 +1302,7 @@ class AIMonitorPanel(QWidget):
                 "parsed_actions": parsed_actions,
                 "vision_enabled": response_data.get("vision_enabled", True),
                 "ui_elements": request_data.get("ui_elements"),
+                "status_bar_exclusion_px": request_data.get("status_bar_exclusion_px", 0),
             })
 
         if not calls_payload:

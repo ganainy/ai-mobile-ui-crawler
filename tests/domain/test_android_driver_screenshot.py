@@ -76,3 +76,81 @@ async def test_screenshot_string_result_encoded_to_bytes():
     result = await driver.screenshot()
 
     assert isinstance(result, bytes)
+
+
+@pytest.mark.asyncio
+async def test_screenshot_crops_status_bar_exclusion_png():
+    """status_bar_exclusion_px crops the top off a PNG screenshot before returning."""
+    driver = AndroidDriver(serial="emulator-5554", status_bar_exclusion_px=10)
+    driver._connected = True
+    driver.device = AsyncMock()
+    output = io.BytesIO()
+    Image.new("RGB", (20, 40), color=(255, 0, 0)).save(output, format="PNG")
+    driver.device.screenshot_bytes = AsyncMock(return_value=output.getvalue())
+
+    result = await driver.screenshot()
+
+    with Image.open(io.BytesIO(result)) as img:
+        assert img.size == (20, 30)
+
+
+@pytest.mark.asyncio
+async def test_screenshot_crops_status_bar_exclusion_jpeg():
+    """status_bar_exclusion_px crops the top off an already-JPEG screenshot too."""
+    driver = AndroidDriver(serial="emulator-5554", status_bar_exclusion_px=10)
+    driver._connected = True
+    driver.device = AsyncMock()
+    output = io.BytesIO()
+    Image.new("RGB", (20, 40), color=(255, 0, 0)).save(output, format="JPEG")
+    driver.device.screenshot_bytes = AsyncMock(return_value=output.getvalue())
+
+    result = await driver.screenshot()
+
+    with Image.open(io.BytesIO(result)) as img:
+        assert img.size == (20, 30)
+
+
+@pytest.mark.asyncio
+async def test_screenshot_zero_exclusion_leaves_jpeg_untouched():
+    """Default status_bar_exclusion_px=0 keeps the existing passthrough behavior."""
+    driver = _driver()
+    jpeg = _jpeg_bytes()
+    driver.device.screenshot_bytes = AsyncMock(return_value=jpeg)
+
+    result = await driver.screenshot()
+
+    assert result == jpeg
+
+
+@pytest.mark.asyncio
+async def test_screenshot_crops_bottom_bar_exclusion_only():
+    """bottom_bar_exclusion_px alone crops the bottom, independent of the top."""
+    driver = AndroidDriver(serial="emulator-5554", bottom_bar_exclusion_px=15)
+    driver._connected = True
+    driver.device = AsyncMock()
+    output = io.BytesIO()
+    Image.new("RGB", (20, 40), color=(255, 0, 0)).save(output, format="PNG")
+    driver.device.screenshot_bytes = AsyncMock(return_value=output.getvalue())
+
+    result = await driver.screenshot()
+
+    with Image.open(io.BytesIO(result)) as img:
+        assert img.size == (20, 25)
+
+
+@pytest.mark.asyncio
+async def test_screenshot_crops_both_top_and_bottom():
+    """Top and bottom exclusion combine to crop both edges in one pass."""
+    driver = AndroidDriver(
+        serial="emulator-5554", status_bar_exclusion_px=10, bottom_bar_exclusion_px=15
+    )
+    driver._connected = True
+    driver.device = AsyncMock()
+    output = io.BytesIO()
+    Image.new("RGB", (20, 40), color=(255, 0, 0)).save(output, format="PNG")
+    driver.device.screenshot_bytes = AsyncMock(return_value=output.getvalue())
+
+    result = await driver.screenshot()
+
+    with Image.open(io.BytesIO(result)) as img:
+        assert img.size == (20, 15)

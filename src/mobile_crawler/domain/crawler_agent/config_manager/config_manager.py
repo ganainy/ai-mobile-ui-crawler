@@ -198,6 +198,11 @@ class CrawlerConfig:
     omniparser_box_threshold: float = 0.05
     omniparser_a11y_threshold: int = 5
     target_package: str | None = None
+    # Status Bar Exclusion / Bottom Bar Exclusion: pixels cropped from the
+    # top/bottom of every screenshot at capture time, before hashing/OCR/AI
+    # vision. See ADR-0002.
+    status_bar_exclusion_px: int = 80
+    bottom_bar_exclusion_px: int = 0
 
     def __post_init__(self):
         """Ensure default profiles exist."""
@@ -332,6 +337,8 @@ class CrawlerConfig:
             omniparser_box_threshold=data.get("omniparser_box_threshold", 0.05),
             omniparser_a11y_threshold=data.get("omniparser_a11y_threshold", 5),
             target_package=data.get("target_package"),
+            status_bar_exclusion_px=data.get("status_bar_exclusion_px", 80),
+            bottom_bar_exclusion_px=data.get("bottom_bar_exclusion_px", 0),
         )
 
     @classmethod

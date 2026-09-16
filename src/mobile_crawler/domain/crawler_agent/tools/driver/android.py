@@ -51,10 +51,14 @@ class AndroidDriver(DeviceDriver):
     def __init__(
         self,
         serial: str | None = None,
+        status_bar_exclusion_px: int = 0,
+        bottom_bar_exclusion_px: int = 0,
     ) -> None:
         self._serial = serial
         self.device = None
         self._connected = False
+        self.status_bar_exclusion_px = status_bar_exclusion_px
+        self.bottom_bar_exclusion_px = bottom_bar_exclusion_px
 
     # -- lifecycle -----------------------------------------------------------
 
@@ -296,7 +300,13 @@ class AndroidDriver(DeviceDriver):
     # -- state / observation -------------------------------------------------
 
     async def screenshot(self, hide_overlay: bool = True) -> bytes:
-        """Take screenshot using ADB screencap - no Portal needed."""
+        """Take screenshot using ADB screencap - no Portal needed.
+
+        The top ``status_bar_exclusion_px`` and bottom ``bottom_bar_exclusion_px``
+        pixels (Status Bar Exclusion / Bottom Bar Exclusion, see CONTEXT.md)
+        are cropped off before the image reaches any consumer (hashing, OCR
+        grounding, AI vision) — see ADR-0002.
+        """
         await self.ensure_connected()
 
         max_screenshot_attempts = 3
@@ -324,11 +334,25 @@ class AndroidDriver(DeviceDriver):
                     with Image.open(io.BytesIO(result)) as img:
                         if img.mode != "RGB":
                             img = img.convert("RGB")
+                        img = self._crop_screen(img)
                         output = io.BytesIO()
                         img.save(output, format="JPEG", quality=95)
                         return output.getvalue()
 
-                # Not PNG - pass through as-is (likely JPEG already)
+                # Not PNG (likely JPEG already) - crop if configured, else pass through
+                if self.status_bar_exclusion_px > 0 or self.bottom_bar_exclusion_px > 0:
+                    import io
+
+                    from PIL import Image
+
+                    with Image.open(io.BytesIO(result)) as img:
+                        if img.mode != "RGB":
+                            img = img.convert("RGB")
+                        img = self._crop_screen(img)
+                        output = io.BytesIO()
+                        img.save(output, format="JPEG", quality=95)
+                        return output.getvalue()
+
                 return result
             except Exception as e:
                 last_error = e
@@ -355,6 +379,15 @@ class AndroidDriver(DeviceDriver):
             raise RuntimeError("Screenshot capture failed after retries") from last_error
 
         raise RuntimeError("Screenshot capture failed after retries")
+
+    def _crop_screen(self, img: "Image.Image") -> "Image.Image":
+        """Crop the configured Status Bar / Bottom Bar Exclusion off *img*."""
+        top = max(0, self.status_bar_exclusion_px)
+        bottom = max(0, self.bottom_bar_exclusion_px)
+        width, height = img.size
+        if top + bottom <= 0 or top + bottom >= height:
+            return img
+        return img.crop((0, top, width, height - bottom))
 
     async def get_ui_tree(self) -> dict[str, Any]:
         """Get UI state - returns structure expected by provider.

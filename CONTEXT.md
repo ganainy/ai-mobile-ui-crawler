@@ -19,3 +19,11 @@ _Avoid_: Online lookup, Play Store lookup
 **App Metadata Cache**:
 Filesystem cache of resolved App Metadata (icon files + a JSON index) so repeat app-list fetches don't re-resolve every package. Entries from Local Resolution are keyed by package + versionCode (invalidated on app update); entries from Network Resolution have no version signal and are keyed by package name alone with a 30-day refresh.
 _Avoid_: Icon cache
+
+**Status Bar Exclusion**:
+The number of pixels cropped from the top of every screenshot, at capture time, before it's used for hashing, OCR grounding, or AI vision. Calibrated by dragging a line on a live device screenshot in Settings rather than guessing a pixel count blind.
+_Avoid_: Top bar height, top bar exclusion, exclude top bar
+
+**Bottom Bar Exclusion**:
+The number of pixels cropped from the bottom of every screenshot, at capture time, alongside Status Bar Exclusion. Covers the Android navigation bar (3-button nav); defaults to 0 since gesture-navigation devices have none to exclude. Calibrated the same way as Status Bar Exclusion, via a second draggable line on the same preview.
+_Avoid_: Bottom bar height, nav bar exclusion, exclude bottom bar

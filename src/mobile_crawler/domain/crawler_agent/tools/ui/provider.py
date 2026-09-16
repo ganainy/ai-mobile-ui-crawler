@@ -160,6 +160,8 @@ class AndroidStateProvider(StateProvider):
         omniparser_a11y_threshold: int = 5,
         target_package: str | None = None,
         target_recovery_attempts: int = 3,
+        status_bar_exclusion_px: int = 0,
+        bottom_bar_exclusion_px: int = 0,
     ) -> None:
         super().__init__(driver)
         self.tree_filter = tree_filter
@@ -177,6 +179,13 @@ class AndroidStateProvider(StateProvider):
         self.omniparser_a11y_threshold = omniparser_a11y_threshold
         self.target_package = target_package
         self.target_recovery_attempts = target_recovery_attempts
+        # Status Bar / Bottom Bar Exclusion: driver.screenshot() already
+        # cropped this many px off the top/bottom (ADR-0002). OmniParser bbox
+        # ratios are relative to that cropped image, so the formatter must
+        # scale against the cropped height and add the top offset back to
+        # land on absolute device coordinates.
+        self.status_bar_exclusion_px = status_bar_exclusion_px
+        self.bottom_bar_exclusion_px = bottom_bar_exclusion_px
 
         # OmniParser client (initialized lazily)
         self._omni_client = None
@@ -258,6 +267,8 @@ class AndroidStateProvider(StateProvider):
         self.tree_formatter.screen_width = screen_width
         self.tree_formatter.screen_height = screen_height
         self.tree_formatter.use_normalized = self.use_normalized
+        self.tree_formatter.status_bar_exclusion_px = self.status_bar_exclusion_px
+        self.tree_formatter.bottom_bar_exclusion_px = self.bottom_bar_exclusion_px
 
         formatted_text, focused_text, elements, phone_state = self.tree_formatter.format(
             filtered, phone_state, omni_tree=omni_tree

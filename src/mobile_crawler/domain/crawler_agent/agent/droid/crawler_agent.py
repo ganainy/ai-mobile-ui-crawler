@@ -188,6 +188,8 @@ class CrawlerAgent(Workflow):
             omniparser_box_threshold=config.omniparser_box_threshold if config else 0.05,
             omniparser_a11y_threshold=config.omniparser_a11y_threshold if config else 5,
             target_package=config.target_package if config else None,
+            status_bar_exclusion_px=config.status_bar_exclusion_px if config else 80,
+            bottom_bar_exclusion_px=config.bottom_bar_exclusion_px if config else 0,
         )
 
         # These are populated in start_handler (unless injected via __init__)
@@ -413,6 +415,8 @@ class CrawlerAgent(Workflow):
 
             driver = AndroidDriver(
                 serial=device_serial,
+                status_bar_exclusion_px=self.config.status_bar_exclusion_px,
+                bottom_bar_exclusion_px=self.config.bottom_bar_exclusion_px,
             )
             await driver.connect()
 
@@ -451,6 +455,8 @@ class CrawlerAgent(Workflow):
                 omniparser_box_threshold=self.config.omniparser_box_threshold,
                 omniparser_a11y_threshold=self.config.omniparser_a11y_threshold,
                 target_package=self.config.target_package,
+                status_bar_exclusion_px=self.config.status_bar_exclusion_px,
+                bottom_bar_exclusion_px=self.config.bottom_bar_exclusion_px,
             )
 
         # ── 3. Build tool registry ────────────────────────────────────

@@ -571,13 +571,22 @@ class StatsDashboard(QWidget):
         self.omniparser_avg_label.setText("Avg OmniParser: —")
         self.update_stats(total_steps=0, successful_steps=0, failed_steps=0, duration_seconds=0.0)
 
-    def update_screenshot(self, screenshot_path: str | None, elements: list[dict] | None, vision_enabled: bool):
+    def update_screenshot(
+        self,
+        screenshot_path: str | None,
+        elements: list[dict] | None,
+        vision_enabled: bool,
+        status_bar_exclusion_px: int = 0,
+    ):
         """Update the screenshot display with optional element overlay.
 
         Args:
             screenshot_path: Path to the screenshot file, or None if no screenshot
             elements: List of UI elements to overlay (with 'index' and 'bounds'), or None
             vision_enabled: Whether vision was enabled for this step
+            status_bar_exclusion_px: Status Bar Exclusion px already cropped off
+                screenshot_path's top (ADR-0002) — elements[].bounds are in
+                absolute device coordinates, so this is needed to line them up.
         """
         if not screenshot_path:
             self.screenshot_label.clear()
@@ -590,7 +599,9 @@ class StatsDashboard(QWidget):
 
             # Render overlay if elements are available
             if elements:
-                pil_image = self._overlay_renderer.render(pil_image, elements)
+                pil_image = self._overlay_renderer.render(
+                    pil_image, elements, top_offset_px=status_bar_exclusion_px
+                )
 
             # Convert PIL image to QPixmap via in-memory buffer
             buffer = io.BytesIO()

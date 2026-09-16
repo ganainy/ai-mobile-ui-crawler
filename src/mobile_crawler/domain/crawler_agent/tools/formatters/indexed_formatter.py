@@ -16,6 +16,15 @@ class IndexedFormatter(TreeFormatter):
         self.screen_width: int | None = None
         self.screen_height: int | None = None
         self.use_normalized: bool = False
+        # Status Bar / Bottom Bar Exclusion (ADR-0002): px cropped off the
+        # top/bottom of the screenshot OmniParser bbox ratios are relative
+        # to. screen_height is the full device height, so both must be
+        # subtracted before it's used as the ratio denominator; the top
+        # exclusion is then added back afterward to land on absolute device
+        # coordinates (the bottom exclusion needs no offset — it only
+        # shrinks the denominator, it doesn't move the coordinate origin).
+        self.status_bar_exclusion_px: int = 0
+        self.bottom_bar_exclusion_px: int = 0
 
     def format(
         self,
@@ -93,10 +102,15 @@ class IndexedFormatter(TreeFormatter):
             if bbox and len(bbox) == 4:
                 # Convert normalized coords to pixel coords if we have screen dimensions
                 if self.screen_width and self.screen_height:
+                    cropped_height = (
+                        self.screen_height
+                        - self.status_bar_exclusion_px
+                        - self.bottom_bar_exclusion_px
+                    )
                     x1 = int(bbox[0] * self.screen_width)
-                    y1 = int(bbox[1] * self.screen_height)
+                    y1 = int(bbox[1] * cropped_height) + self.status_bar_exclusion_px
                     x2 = int(bbox[2] * self.screen_width)
-                    y2 = int(bbox[3] * self.screen_height)
+                    y2 = int(bbox[3] * cropped_height) + self.status_bar_exclusion_px
                     bounds = f"{x1},{y1},{x2},{y2}"
                 else:
                     bounds = f"{bbox[0]},{bbox[1]},{bbox[2]},{bbox[3]}"

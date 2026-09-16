@@ -2,14 +2,14 @@
 
 Extracted from ScreenTracker._generate_hash for reuse in both
 screen dedup (ScreenTracker) and settle detection (UIWaitPredicate).
+
+Images reaching compute_screen_hash() have already had the Status Bar
+Exclusion cropped off at capture time (AndroidDriver.screenshot(), see
+ADR-0002), so no cropping happens here.
 """
 
 import imagehash
 from PIL import Image
-
-# Status bar height excluded from hashing (top 100px).
-# Prevents false positives from time/battery/notifications changes.
-STATUS_BAR_HEIGHT = 100
 
 # dHash size (64-bit hash).
 DHASH_SIZE = 8
@@ -34,9 +34,6 @@ def compute_screen_hash(image: Image.Image) -> str:
     - Minor color adjustments / brightness changes
     - Content replacement (e.g., carousel rotations)
 
-    The status bar (top 100px) is excluded to prevent false positives
-    from time/battery/notifications changes.
-
     Args:
         image: PIL Image to hash
 
@@ -45,10 +42,6 @@ def compute_screen_hash(image: Image.Image) -> str:
     """
     if image.mode != "RGB":
         image = image.convert("RGB")
-
-    width, height = image.size
-    if height > STATUS_BAR_HEIGHT:
-        image = image.crop((0, STATUS_BAR_HEIGHT, width, height))
 
     dhash = imagehash.dhash(image, hash_size=DHASH_SIZE)
     return str(dhash)
