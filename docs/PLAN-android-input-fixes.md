@@ -37,10 +37,7 @@ This plan outlines the testing, verification, and formal documentation of the fi
 > **1. Configurable Focus Delay**
 > Should the 0.5-second delay introduced in `actions.py` be configurable via `config.yaml`? Slower emulators or older devices might require longer focus times (e.g. 0.8s or 1s).
 >
-> **2. iOS Driver Alignment**
-> Does the iOS driver/executor experience similar text clearing or focus latency problems, or is this currently scoped strictly to Android and ADB?
->
-> **3. Additional Escaping Characters**
+> **2. Additional Escaping Characters**
 > Are there other special shell characters we should proactively escape (e.g., `&`, `|`, `;`, `<`, `>`) in the input sequence, or is the current subset (`\`, `"`, `$`, `` ` ``) sufficient?
 
 ---

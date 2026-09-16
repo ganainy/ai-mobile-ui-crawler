@@ -602,7 +602,6 @@ class TestCrawlerAgentServiceConfig:
         config = crawler_agent_service._get_crawler_agent_config(max_steps=20)
 
         assert config["agent"]["max_steps"] == 20
-        assert config["device"]["platform"] == "android"
         assert config["device"]["serial"] == "test_device_123"
         assert config["device"]["auto_setup"] is False
         assert "llm_profiles" in config

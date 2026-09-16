@@ -121,7 +121,7 @@ Choose the most appropriate app based on the description. Return the package nam
         logger.info(f"Starting app {package_name}")
         result = await self.driver.start_app(package_name)
 
-        # Check for driver failure (AndroidDriver/IosDriver return "Failed..." strings)
+        # Check for driver failure (AndroidDriver returns "Failed..." strings)
         failed = isinstance(result, str) and result.lower().startswith("failed")
         summary = result if isinstance(result, str) else f"Started {package_name}"
 

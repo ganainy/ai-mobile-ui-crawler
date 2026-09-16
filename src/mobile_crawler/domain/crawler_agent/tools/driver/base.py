@@ -1,6 +1,6 @@
 """DeviceDriver — raw device I/O interface.
 
-Subclasses implement the actual communication (ADB, iOS HTTP, cloud SDK, etc.).
+Subclasses implement the actual communication (ADB, cloud SDK, etc.).
 Unsupported methods are detected via the ``supported`` set, not introspection.
 """
 
@@ -22,7 +22,7 @@ class DeviceDriver:
     Concrete drivers override the methods they support and declare them
     in the ``supported`` class-level set.
 
-    ``platform`` identifies the device type (e.g. "Android", "iOS").
+    ``platform`` identifies the device type (currently always "Android").
     """
 
     platform: str = "Android"

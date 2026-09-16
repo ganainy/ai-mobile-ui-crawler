@@ -112,8 +112,6 @@ device:
   serial: null
   # Use TCP communication instead of usb
   use_tcp: false
-  # Platform: android or ios but currently only android is supported
-  platform: android
   # Auto-install/update Portal APK and enable accessibility before each run
   auto_setup: true
 

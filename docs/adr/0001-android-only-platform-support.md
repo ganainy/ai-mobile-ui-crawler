@@ -1,0 +1,3 @@
+# Android-only platform support
+
+The codebase carried a `DeviceDriver`/`StateProvider` abstraction over `platform` (`"android"` | `"ios"`), but the iOS path (`IOSDriver`, `IOSStateProvider`, portal discovery) had no tests, no GUI exposure, and its own config comment already disclaimed it as unsupported. Since the project targets Android only for the foreseeable future, we removed the iOS implementation and collapsed the `platform` concept entirely rather than leaving a single-value abstraction in place. Re-adding iOS (or another platform) later means reintroducing the abstraction deliberately, not resurrecting dead scaffolding — `git revert` recovers the removed code if needed.

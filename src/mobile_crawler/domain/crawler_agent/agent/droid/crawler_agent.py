@@ -79,12 +79,10 @@ from mobile_crawler.domain.crawler_agent.telemetry import (
 )
 from mobile_crawler.domain.crawler_agent.tools.driver.android import AndroidDriver
 from mobile_crawler.domain.crawler_agent.tools.driver.base import DeviceDisconnectedError
-from mobile_crawler.domain.crawler_agent.tools.driver.ios import IOSDriver, discover_ios_portal
 from mobile_crawler.domain.crawler_agent.tools.driver.recording import RecordingDriver
 from mobile_crawler.domain.crawler_agent.tools.driver.stealth import StealthDriver
 from mobile_crawler.domain.crawler_agent.tools.filters import ConciseFilter, DetailedFilter
 from mobile_crawler.domain.crawler_agent.tools.formatters import IndexedFormatter
-from mobile_crawler.domain.crawler_agent.tools.ui.ios_provider import IOSStateProvider
 from mobile_crawler.domain.crawler_agent.tools.ui.provider import AndroidStateProvider
 
 if TYPE_CHECKING:
@@ -393,16 +391,8 @@ class CrawlerAgent(Workflow):
         else:
             vision_enabled = self.config.agent.fast_agent.vision
 
-        is_ios = self.resolved_device_config.platform.lower() == "ios"
-
         if self._injected_driver is not None:
             driver = self._injected_driver
-        elif is_ios:
-            ios_url = self.resolved_device_config.serial
-            if not ios_url:
-                ios_url = await discover_ios_portal()
-            driver = IOSDriver(url=ios_url)
-            await driver.connect()
         else:
             device_serial = self.resolved_device_config.serial
             if device_serial is None:
@@ -425,7 +415,7 @@ class CrawlerAgent(Workflow):
 
         # Wrap with StealthDriver if stealth mode enabled
         stealth_enabled = self.config.tools and self.config.tools.stealth
-        if stealth_enabled and not is_ios:
+        if stealth_enabled:
             driver = StealthDriver(driver)
 
         # Wrap with RecordingDriver if trajectory saving enabled
@@ -439,11 +429,6 @@ class CrawlerAgent(Workflow):
         # ── 2. Create state provider ──────────────────────────────────
         if self._injected_state_provider is not None:
             self.state_provider = self._injected_state_provider
-        elif is_ios:
-            self.state_provider = IOSStateProvider(
-                driver,
-                use_normalized=self.config.agent.use_normalized_coordinates,
-            )
         else:
             tree_filter = ConciseFilter() if vision_enabled else DetailedFilter()
             tree_formatter = IndexedFormatter()
@@ -469,7 +454,6 @@ class CrawlerAgent(Workflow):
         registry, standard_tool_names = await build_tool_registry(
             supported_buttons=driver.supported_buttons,
             credential_manager=self.credential_manager,
-            platform="ios" if is_ios else "android",
         )
 
         # User custom tools

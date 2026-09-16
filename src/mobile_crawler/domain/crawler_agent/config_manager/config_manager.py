@@ -104,7 +104,6 @@ class DeviceConfig:
 
     serial: str | None = None
     use_tcp: bool = False
-    platform: str = "android"
     auto_setup: bool = False  # No Portal needed - using ADB + OmniParser
 
 

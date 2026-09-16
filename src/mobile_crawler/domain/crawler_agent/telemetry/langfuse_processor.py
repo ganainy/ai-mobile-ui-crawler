@@ -178,7 +178,6 @@ class LangfuseSpanProcessor(BaseLangfuseSpanProcessor):
             if self.agent.config.device:
                 device = self.agent.config.device
                 input_data["device"] = {
-                    "platform": device.platform,
                     "serial": device.serial,
                     "use_tcp": device.use_tcp,
                 }

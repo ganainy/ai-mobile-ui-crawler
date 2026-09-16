@@ -11,7 +11,6 @@ from mobile_crawler.domain.crawler_agent.agent.utils.actions import (
     long_press,
     long_press_at,
     open_app,
-    open_bundle_id,
     remember,
     swipe,
     system_button,
@@ -26,7 +25,6 @@ logger = logging.getLogger("crawler_agent")
 async def build_tool_registry(
     supported_buttons: set[str] | None = None,
     credential_manager=None,
-    platform: str = "android",
 ) -> tuple[ToolRegistry, set[str]]:
     """Build a ToolRegistry with all standard droidrun tools.
 
@@ -34,8 +32,6 @@ async def build_tool_registry(
         supported_buttons: Buttons available for system_button description.
             Defaults to ``{"back", "home", "enter"}`` if *None*.
         credential_manager: If provided and has keys, ``type_secret`` is registered.
-        platform: ``"android"`` or ``"ios"``. Controls which ``open_app``
-            implementation is registered.
 
     Returns:
         ``(registry, standard_tool_names)`` where *standard_tool_names* is the
@@ -180,28 +176,16 @@ async def build_tool_registry(
 
     # -- App / state / flow control ------------------------------------------
 
-    if platform.lower() == "ios":
-        registry.register(
-            "open_app",
-            fn=open_bundle_id,
-            params={"bundle_id": {"type": "string", "required": True}},
-            description=(
-                "Open an app by its exact bundle identifier. "
-                'Usage: {"action": "open_app", "bundle_id": "com.apple.Preferences"}'
-            ),
-            deps={"start_app"},
-        )
-    else:
-        registry.register(
-            "open_app",
-            fn=open_app,
-            params={"text": {"type": "string", "required": True}},
-            description=(
-                "Open an app by name or description. "
-                'Usage: {"action": "open_app", "text": "Gmail"}'
-            ),
-            deps={"start_app", "get_apps"},
-        )
+    registry.register(
+        "open_app",
+        fn=open_app,
+        params={"text": {"type": "string", "required": True}},
+        description=(
+            "Open an app by name or description. "
+            'Usage: {"action": "open_app", "text": "Gmail"}'
+        ),
+        deps={"start_app", "get_apps"},
+    )
 
     registry.register(
         "remember",
