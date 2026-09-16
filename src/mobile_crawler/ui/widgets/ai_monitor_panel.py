@@ -8,7 +8,7 @@ import os
 import re
 from datetime import datetime
 
-from PySide6.QtCore import QBuffer, QByteArray, QIODevice, Qt, QTimer, Signal, Slot
+from PySide6.QtCore import QBuffer, QByteArray, QIODevice, QSize, Qt, QTimer, Signal, Slot
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
     QButtonGroup,
@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QRadioButton,
     QScrollArea,
+    QSizePolicy,
     QStackedWidget,
     QTableWidget,
     QTableWidgetItem,
@@ -35,7 +36,7 @@ from PySide6.QtWidgets import (
 import io
 from PIL import Image
 from mobile_crawler.domain.element_overlay_renderer import ElementOverlayRenderer
-from .json_tree_widget import JsonTreeWidget
+from .prompt_fields_widget import PromptFieldsWidget
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +84,7 @@ def _extract_embedded_json(raw_text: str):
     """Find and parse a JSON blob within a larger text response, if any.
 
     Many raw responses (e.g. the Manager's <thought>/<plan>/```json block)
-    aren't valid JSON as a whole, which used to make JsonTreeWidget fall back
+    aren't valid JSON as a whole, which used to make the prompt tree fall back
     to a single table row with an empty key and the entire blob crammed into
     the value cell. Split the two apart instead: return the surrounding plain
     text (JSON portion removed) and the parsed JSON object, so each can be
@@ -295,13 +296,67 @@ class AIInteractionItem(QWidget):
 
 
 
+class _ScalableScreenshotLabel(QLabel):
+    """Screenshot label that fills the width the layout gives it.
+
+    Unlike a fixed `scaledToWidth(200)` pixmap, this keeps the source image's
+    aspect ratio via `heightForWidth` (so a taller column means a taller,
+    sharper screenshot) and scales the pixmap up to a height ceiling, beyond
+    which it centres the image instead of growing the row forever.
+    """
+
+    def __init__(self, max_height: int = 900, parent=None):
+        super().__init__(parent)
+        self._source_pixmap: QPixmap | None = None
+        self._max_height = max_height
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.setStyleSheet("border: 1px solid #3d3d3d; background-color: #1e1e1e;")
+        policy = QSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        policy.setHeightForWidth(True)
+        self.setSizePolicy(policy)
+
+    def set_source_pixmap(self, pixmap: QPixmap | None) -> None:
+        self._source_pixmap = pixmap
+        self._rescale()
+
+    def hasHeightForWidth(self) -> bool:
+        return True
+
+    def heightForWidth(self, width: int) -> int:
+        if not self._source_pixmap or self._source_pixmap.isNull() or self._source_pixmap.width() == 0:
+            return 320
+        ratio = self._source_pixmap.height() / self._source_pixmap.width()
+        return max(1, min(round(width * ratio), self._max_height))
+
+    def sizeHint(self) -> QSize:
+        return QSize(380, self.heightForWidth(380))
+
+    def minimumSizeHint(self) -> QSize:
+        return QSize(220, 320)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._rescale()
+
+    def _rescale(self) -> None:
+        if not self._source_pixmap or self._source_pixmap.isNull():
+            return
+        super().setPixmap(
+            self._source_pixmap.scaled(
+                self.size(),
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+        )
+
+
 class StepDetailWidget(QWidget):
     """Widget for displaying detailed step information in a tab.
 
-    Result-first layout: Screenshot + Result (parsed action, reasoning, raw
-    response) are shown up top. Prompt Data and Timing Breakdown are demoted
-    to collapsed sections below, since they're supporting detail rather than
-    the primary "what did the AI do" story.
+    Layout: the screenshot gets the left column; the right column stacks the
+    prompt that was sent (the bulky part, so it gets most of the height) over
+    the Result (parsed action, reasoning, raw response). The timing breakdown
+    stays collapsed at the bottom as supporting detail.
 
     A step may involve multiple AI calls (e.g. Manager plan, then Executor
     action) — `calls` carries all of them, and a selector lets the viewer
@@ -368,19 +423,21 @@ class StepDetailWidget(QWidget):
         scroll_content = QWidget()
         scroll_layout = QVBoxLayout(scroll_content)
 
-        # ---- Top tier (always visible): Screenshot + Result ----
+        # ---- Main tier: Screenshot (left) + Prompt over Result (right) ----
+        # The prompt is the bulky part, so it takes the top of the right
+        # column; the Result is usually a few lines and sits underneath it.
         top_row_layout = QHBoxLayout()
 
         screenshot_group = self._build_screenshot_group()
-        top_row_layout.addWidget(screenshot_group, 1)
+        top_row_layout.addWidget(screenshot_group, 2)
 
-        result_container_layout = QVBoxLayout()
+        right_column_layout = QVBoxLayout()
 
         self.result_stack = QStackedWidget()
         self.prompt_stack = QStackedWidget()
         for call in self.calls:
             self.result_stack.addWidget(self._build_result_page(call))
-            self.prompt_stack.addWidget(self._build_prompt_tree(call))
+            self.prompt_stack.addWidget(self._build_prompt_fields(call))
         self.result_stack.setCurrentIndex(self.default_index)
         self.prompt_stack.setCurrentIndex(self.default_index)
 
@@ -394,21 +451,22 @@ class StepDetailWidget(QWidget):
             self.call_selector.currentIndexChanged.connect(self._on_call_selected)
             selector_layout.addWidget(self.call_selector)
             selector_layout.addStretch()
-            result_container_layout.addLayout(selector_layout)
+            right_column_layout.addLayout(selector_layout)
         else:
             self.call_selector = None
+
+        # Prompt sent dominates the right column (its value boxes soak up the
+        # spare height); the Result keeps only the room its few lines need.
+        prompt_section = CollapsibleSection("Prompt sent", self.prompt_stack, collapsed=False)
+        right_column_layout.addWidget(prompt_section, 1)
 
         result_group = QGroupBox("Result")
         result_group_layout = QVBoxLayout(result_group)
         result_group_layout.addWidget(self.result_stack)
-        result_container_layout.addWidget(result_group)
+        right_column_layout.addWidget(result_group, 0)
 
-        top_row_layout.addLayout(result_container_layout, 2)
+        top_row_layout.addLayout(right_column_layout, 3)
         scroll_layout.addLayout(top_row_layout)
-
-        # ---- Bottom tier (collapsed by default): Prompt + Timing ----
-        prompt_section = CollapsibleSection("Prompt sent", self.prompt_stack, collapsed=True)
-        scroll_layout.addWidget(prompt_section)
 
         timing_group = self._create_timing_group()
         if timing_group:
@@ -520,7 +578,7 @@ class StepDetailWidget(QWidget):
 
         return container
 
-    def _build_prompt_tree(self, call: dict) -> QWidget:
+    def _build_prompt_fields(self, call: dict) -> QWidget:
         """Build one page of the Prompt stack for a single AI call."""
         full_prompt = call.get("prompt_text") or ""
         prompt_json_data = full_prompt
@@ -549,7 +607,7 @@ class StepDetailWidget(QWidget):
             ):
                 prompt_json_data = "[Large base64 data - not displayed]"
 
-        return JsonTreeWidget(prompt_json_data)
+        return PromptFieldsWidget(prompt_json_data)
 
     def _build_screenshot_group(self) -> QGroupBox:
         """Build the Screenshot group with element overlay checkbox."""
@@ -650,12 +708,9 @@ class StepDetailWidget(QWidget):
                 self.overlaid_pixmap = screenshot_pixmap
                 self.show_labels_checkbox.setEnabled(False)
 
-            self.screenshot_label = QLabel()
-            # Show overlaid by default if available
+            self.screenshot_label = _ScalableScreenshotLabel()
             display_pixmap = self.overlaid_pixmap if self.show_labels_checkbox.isChecked() else self.orig_pixmap
-            scaled_pixmap = display_pixmap.scaledToWidth(200, Qt.TransformationMode.SmoothTransformation)
-            self.screenshot_label.setPixmap(scaled_pixmap)
-            self.screenshot_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.screenshot_label.set_source_pixmap(display_pixmap)
             self.screenshot_layout.addWidget(self.screenshot_label)
         else:
             # No screenshot available
@@ -683,8 +738,7 @@ class StepDetailWidget(QWidget):
         else:
             pixmap = self.orig_pixmap
 
-        scaled_pixmap = pixmap.scaledToWidth(200, Qt.TransformationMode.SmoothTransformation)
-        self.screenshot_label.setPixmap(scaled_pixmap)
+        self.screenshot_label.set_source_pixmap(pixmap)
 
     def _create_timing_group(self) -> QGroupBox | None:
         """Create a timing breakdown section from step phase metadata."""

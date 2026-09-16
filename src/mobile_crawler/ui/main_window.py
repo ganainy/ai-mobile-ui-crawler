@@ -1256,7 +1256,12 @@ class MainWindow(QMainWindow):
         """Open the AI monitor detail view for a step."""
         dialog = QDialog(self)
         dialog.setWindowTitle(f"Step {step_number} Details")
-        dialog.resize(1100, 760)
+        dialog.setWindowFlags(
+            dialog.windowFlags()
+            | Qt.WindowType.WindowMaximizeButtonHint
+            | Qt.WindowType.WindowMinimizeButtonHint
+        )
+        dialog.resize(1400, 900)
         layout = QVBoxLayout(dialog)
         layout.addWidget(
             StepDetailWidget(
@@ -1269,6 +1274,7 @@ class MainWindow(QMainWindow):
                 timing_data=timing_data if isinstance(timing_data, dict) else {},
             )
         )
+        dialog.showMaximized()
         dialog.exec()
 
     def _create_bottom_panel(self) -> QWidget:
