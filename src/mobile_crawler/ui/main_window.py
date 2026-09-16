@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QSplitter,
+    QSplitterHandle,
     QTabWidget,
     QVBoxLayout,
     QWidget,
@@ -206,6 +207,78 @@ class CrawlerWorker(QThread):
             self.error.emit(str(e))
 
 
+class _ResettableSplitterHandle(QSplitterHandle):
+    """Splitter handle that resets its splitter to defaults on double-click."""
+
+    def mouseDoubleClickEvent(self, event):
+        splitter = self.splitter()
+        if isinstance(splitter, PersistedSplitter):
+            splitter.reset_to_default()
+        super().mouseDoubleClickEvent(event)
+
+
+class PersistedSplitter(QSplitter):
+    """QSplitter whose sizes are remembered across app restarts.
+
+    Sizes are saved as proportions of the splitter's total size (not raw
+    pixels), so a layout saved on one window/monitor size still restores
+    sensibly on another. Saves are debounced ~500ms after dragging stops,
+    so panel resizing doesn't hit the database on every mouse-move event.
+    Double-clicking a handle, or calling reset_to_default(), restores the
+    hardcoded default sizes.
+    """
+
+    _SAVE_DEBOUNCE_MS = 500
+
+    def __init__(self, orientation, config_store: UserConfigStore, default_sizes: list[int], parent=None):
+        super().__init__(orientation, parent)
+        self._config_store = config_store
+        self._default_sizes = default_sizes
+        self._save_timer = QTimer(self)
+        self._save_timer.setSingleShot(True)
+        self._save_timer.timeout.connect(self._save_sizes)
+        self.splitterMoved.connect(lambda *_: self._save_timer.start(self._SAVE_DEBOUNCE_MS))
+
+    def createHandle(self):
+        return _ResettableSplitterHandle(self.orientation(), self)
+
+    def _config_key(self) -> str:
+        return f"ui_splitter_{self.objectName()}_sizes"
+
+    def restore_or_default(self) -> None:
+        """Apply the saved proportions, falling back to the hardcoded defaults."""
+        proportions = self._config_store.get_setting(self._config_key(), default=None)
+        if (
+            isinstance(proportions, list)
+            and len(proportions) == len(self._default_sizes)
+            and all(isinstance(p, (int, float)) for p in proportions)
+        ):
+            total = sum(self._default_sizes)
+            self.setSizes([max(1, round(p * total)) for p in proportions])
+        else:
+            self.setSizes(self._default_sizes)
+
+    def reset_to_default(self) -> None:
+        """Restore hardcoded sizes and persist them as the new saved layout."""
+        self._save_timer.stop()
+        self.setSizes(self._default_sizes)
+        self._save_sizes()
+
+    def flush_pending_save(self) -> None:
+        """Save immediately if a debounced save is still pending (e.g. on app close)."""
+        if self._save_timer.isActive():
+            self._save_timer.stop()
+            self._save_sizes()
+
+    def _save_sizes(self) -> None:
+        sizes = self.sizes()
+        total = sum(sizes)
+        if total <= 0:
+            return
+        proportions = [s / total for s in sizes]
+        self._config_store.set_setting(self._config_key(), proportions, "json")
+
+
 class MainWindow(QMainWindow):
     """Main application window for mobile-crawler GUI."""
 
@@ -228,6 +301,8 @@ class MainWindow(QMainWindow):
         self.stats_dashboard: StatsDashboard = None
         self.settings_panel: SettingsPanel = None
         self.run_history_view: RunHistoryView = None
+        self.main_splitter: PersistedSplitter = None
+        self.workspace_splitter: PersistedSplitter = None
         self._log_cleaner = LogCleaner()
 
         # Signal adapter for thread-safe event bridging
@@ -342,12 +417,16 @@ class MainWindow(QMainWindow):
         main_layout = QVBoxLayout(central_widget)
         main_layout.setContentsMargins(4, 4, 4, 4)
 
-        workspace_splitter = QSplitter(Qt.Orientation.Vertical)
+        config_store = self._services["user_config_store"]
+
+        workspace_splitter = PersistedSplitter(Qt.Orientation.Vertical, config_store, [600, 170])
         workspace_splitter.setObjectName("workspaceSplitter")
 
         # Create main horizontal splitter for left/center/right
-        main_splitter = QSplitter(Qt.Orientation.Horizontal)
+        main_splitter = PersistedSplitter(Qt.Orientation.Horizontal, config_store, [280, 500, 500])
         main_splitter.setObjectName("mainSplitter")
+        self.main_splitter = main_splitter
+        self.workspace_splitter = workspace_splitter
 
         # Left panel: Device, App, AI selectors, Settings
         left_panel = self._create_left_panel()
@@ -361,8 +440,8 @@ class MainWindow(QMainWindow):
         right_panel = self._create_right_panel()
         main_splitter.addWidget(right_panel)
 
-        # Set splitter proportions (approx 20% left, 40% center, 40% right)
-        main_splitter.setSizes([280, 500, 500])
+        # Restore saved proportions (approx 20% left, 40% center, 40% right by default)
+        main_splitter.restore_or_default()
 
         workspace_splitter.addWidget(main_splitter)
 
@@ -398,7 +477,7 @@ class MainWindow(QMainWindow):
         # Bottom panel: Run history
         bottom_panel = self._create_bottom_panel()
         workspace_splitter.addWidget(bottom_panel)
-        workspace_splitter.setSizes([600, 170])
+        workspace_splitter.restore_or_default()
         workspace_splitter.setStretchFactor(0, 1)
         workspace_splitter.setStretchFactor(1, 0)
 
@@ -1203,6 +1282,7 @@ class MainWindow(QMainWindow):
         self.ai_selector.model_selected.connect(self._on_model_selected)
         self.settings_panel.settings_saved.connect(self._on_settings_saved)
         self.settings_panel.omniparser_keepalive_pinged.connect(self._on_omniparser_keepalive_pinged)
+        self.settings_panel.reset_layout_requested.connect(self._on_reset_layout_requested)
         self.device_selector.device_selected.connect(self._on_device_selected)
         self.app_selector.app_selected.connect(self._on_app_selected)
 
@@ -1330,6 +1410,13 @@ class MainWindow(QMainWindow):
                 # Show warning but don't prevent saving
                 pass
         self._update_start_button_state()
+
+    def _on_reset_layout_requested(self) -> None:
+        """Restore both splitters to their default sizes and persist that."""
+        if self.main_splitter:
+            self.main_splitter.reset_to_default()
+        if self.workspace_splitter:
+            self.workspace_splitter.reset_to_default()
 
     def _on_device_selected(self, device) -> None:
         """Handle device selection.
@@ -1891,6 +1978,13 @@ class MainWindow(QMainWindow):
         try:
             if self.settings_panel:
                 self.settings_panel.stop_keepalive()
+
+            # Flush any debounced splitter-size save so a resize right before
+            # quitting isn't lost.
+            if self.main_splitter:
+                self.main_splitter.flush_pending_save()
+            if self.workspace_splitter:
+                self.workspace_splitter.flush_pending_save()
 
             # Stop crawler if running
             if self._crawler_loop:

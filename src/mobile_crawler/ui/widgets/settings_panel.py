@@ -54,6 +54,7 @@ class SettingsPanel(QWidget):
     # Signal emitted when settings are saved
     settings_saved = Signal()  # type: ignore
     omniparser_keepalive_pinged = Signal(bool, str, float)  # type: ignore
+    reset_layout_requested = Signal()  # type: ignore
 
     def __init__(self, config_store: "UserConfigStore", parent=None):
         """Initialize settings panel widget.
@@ -96,6 +97,14 @@ class SettingsPanel(QWidget):
 
         # Save button in bottom area (stays visible regardless of tab)
         save_layout = QHBoxLayout()
+        self.reset_layout_button = QPushButton("Reset Layout")
+        self.reset_layout_button.setMinimumHeight(40)
+        self.reset_layout_button.setToolTip(
+            "Restore the panel/splitter layout to its default sizes "
+            "(double-clicking a splitter handle resets just that one)."
+        )
+        self.reset_layout_button.clicked.connect(self.reset_layout_requested.emit)
+        save_layout.addWidget(self.reset_layout_button)
         save_layout.addStretch()
         self.save_button = QPushButton("Save Settings")
         self.save_button.setMinimumHeight(40)
