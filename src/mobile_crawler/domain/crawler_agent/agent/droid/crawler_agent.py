@@ -7,6 +7,7 @@ Architecture:
 - When reasoning=True: Uses Manager (planning) + Executor (action) workflows
 """
 
+import asyncio
 import logging
 import os
 import traceback
@@ -34,6 +35,8 @@ from mobile_crawler.domain.crawler_agent.agent.common.events import (
     RecordUIStateEvent,
     ResultEvent,
     ScreenshotEvent,
+    StepAdvanceEvent,
+    StepPausedEvent,
 )
 from mobile_crawler.domain.crawler_agent.agent.droid.state import CrawlerAgentState, QueuedUserMessage
 from mobile_crawler.domain.crawler_agent.agent.executor import ExecutorAgent
@@ -772,6 +775,28 @@ class CrawlerAgent(Workflow):
             self.trajectory_writer.write(
                 self.trajectory, stage=f"step_{self.shared_state.step_number}"
             )
+
+        # Step-by-step mode: block until the external caller (CrawlerLoop.advance_step)
+        # sends a StepAdvanceEvent into this workflow's Context. This genuinely gates
+        # execution — the agent cannot continue to the next decide/execute cycle.
+        if self.config.agent.step_by_step:
+            logger.info(
+                f"⏸ Step-by-step: pausing after step {self.shared_state.step_number}. Waiting for advance."
+            )
+            ctx.write_event_to_stream(
+                StepPausedEvent(step_number=self.shared_state.step_number)
+            )
+            try:
+                await ctx.wait_for_event(
+                    StepAdvanceEvent,
+                    waiter_event=None,
+                    waiter_id="step_by_step_advance",
+                    timeout=None,
+                )
+            except asyncio.CancelledError:
+                # Workflow cancelled while paused (stop requested) — let it finalize.
+                logger.info("Step-by-step wait cancelled; stopping workflow.")
+                raise
 
         return ManagerInputEvent()
 

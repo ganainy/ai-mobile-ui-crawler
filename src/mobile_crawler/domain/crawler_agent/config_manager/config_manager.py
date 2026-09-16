@@ -79,6 +79,7 @@ class AgentConfig:
     after_sleep_action: float = 1.0
     wait_for_stable_ui: float = 0.3
     use_normalized_coordinates: bool = False
+    step_by_step: bool = False  # Enable step-by-step mode
 
     fast_agent: FastAgentConfig = field(default_factory=FastAgentConfig)
     manager: ManagerConfig = field(default_factory=ManagerConfig)
@@ -281,6 +282,7 @@ class CrawlerConfig:
             after_sleep_action=agent_data.get("after_sleep_action", 1.0),
             wait_for_stable_ui=agent_data.get("wait_for_stable_ui", 0.3),
             use_normalized_coordinates=agent_data.get("use_normalized_coordinates", False),
+            step_by_step=agent_data.get("step_by_step", False),
             fast_agent=fast_agent_config,
             manager=manager_config,
             executor=executor_config,

@@ -452,15 +452,13 @@ class MainWindow(QMainWindow):
             crawler_loop = self._create_crawler_loop(config_manager, run)
             self._crawler_loop = crawler_loop
 
-            # Disable pause/step-by-step when crawler agent is used
-            if self.settings_panel.get_enable_crawler_agent():
-                self._step_by_step_enabled = False
-                self.control_panel.set_step_by_step(False)
-                self.control_panel.set_step_by_step_available(False)
-                self.control_panel.set_pause_available(False)
-            else:
-                self.control_panel.set_step_by_step_available(True)
-                self.control_panel.set_pause_available(True)
+            # Step-by-step mode is now supported with the internal crawler agent.
+            # Always make it available; the UI preference persists via config.
+            self.control_panel.set_step_by_step_available(True)
+            # Manual pause/resume are still unimplemented stubs on CrawlerLoop
+            # (they just log "not supported"), so don't expose a Pause button
+            # that would look like it works but wouldn't.
+            self.control_panel.set_pause_available(False)
 
             # Apply step-by-step mode if enabled in UI
             if self._step_by_step_enabled:
@@ -1317,12 +1315,6 @@ class MainWindow(QMainWindow):
 
         Validates API keys and updates start button state.
         """
-        # Update control availability based on crawler-agent setting
-        if self.control_panel:
-            crawler_agent_enabled = self.settings_panel.get_enable_crawler_agent()
-            self.control_panel.set_step_by_step_available(not crawler_agent_enabled)
-            self.control_panel.set_pause_available(not crawler_agent_enabled)
-
         # Validate API keys based on selected provider
         if self._ai_provider:
             api_key = self._get_api_key_for_provider(self._ai_provider)

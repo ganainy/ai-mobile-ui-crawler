@@ -52,7 +52,7 @@ class TestCrawlerLoopInitialization:
         assert loop.run_repository == mock_run_repository
         assert loop.session_folder_manager == mock_session_folder_manager
         assert loop.event_listeners == []
-        assert loop._state == "IDLE"
+        assert loop._state == "uninitialized"
         assert not loop.is_running()
 
     def test_init_with_event_listeners(self, mock_config_manager, mock_run_repository, mock_session_folder_manager, mock_listener):
@@ -396,7 +396,7 @@ class TestCrawlerLoopLifecycle:
 
     @patch('mobile_crawler.core.crawler_loop.CrawlerAgentService')
     def test_run_transitions_through_states(self, mock_crawler_service_class, crawler_loop, mock_run_repository, mock_session_folder_manager, mock_listener):
-        """Test that run() transitions through states IDLE -> RUNNING -> STOPPED."""
+        """Test that run() transitions through states uninitialized -> running -> stopped."""
         mock_run = Mock()
         mock_run.app_package = "com.example.app"
         mock_run.device_id = "device123"
@@ -424,9 +424,9 @@ class TestCrawlerLoopLifecycle:
 
         crawler_loop.run(1)
 
-        # Should have transitioned from IDLE to RUNNING, then to STOPPED
-        assert ("IDLE", "RUNNING") in states
-        assert any(s[1] == "STOPPED" for s in states)
+        # Should have transitioned from uninitialized to running, then to stopped
+        assert ("uninitialized", "running") in states
+        assert any(s[1] == "stopped" for s in states)
 
     @patch('mobile_crawler.core.crawler_loop.MobSFManager')
     @patch('mobile_crawler.core.crawler_loop.CrawlerAgentService')
@@ -643,19 +643,70 @@ class TestCrawlerLoopLifecycle:
         crawler_loop.resume()
         mock_listener.on_debug_log.assert_called_once()
 
-    def test_set_step_by_step_enabled_emits_debug_log(self, crawler_loop, mock_listener):
-        """Test set_step_by_step_enabled emits debug log."""
-        crawler_loop.set_step_by_step_enabled(True)
-        mock_listener.on_debug_log.assert_called_once()
-
-    def test_advance_step_emits_debug_log(self, crawler_loop, mock_listener):
-        """Test advance_step emits debug log."""
-        crawler_loop.advance_step()
-        mock_listener.on_debug_log.assert_called_once()
-
-    def test_is_step_by_step_enabled_returns_false(self, crawler_loop):
-        """Test is_step_by_step_enabled always returns False."""
+    def test_set_step_by_step_enabled_toggles_flag(self, crawler_loop, mock_listener):
+        """Test set_step_by_step_enabled sets the internal flag and emits a debug log."""
         assert not crawler_loop.is_step_by_step_enabled()
+        crawler_loop.set_step_by_step_enabled(True)
+        assert crawler_loop.is_step_by_step_enabled()
+        mock_listener.on_debug_log.assert_called_once()
+        assert "enabled" in mock_listener.on_debug_log.call_args[0][2].lower()
+
+    def test_set_step_by_step_disabled(self, crawler_loop, mock_listener):
+        """Test disabling step-by-step clears the flag."""
+        crawler_loop.set_step_by_step_enabled(True)
+        mock_listener.reset_mock()
+        crawler_loop.set_step_by_step_enabled(False)
+        assert not crawler_loop.is_step_by_step_enabled()
+        assert "disabled" in mock_listener.on_debug_log.call_args[0][2].lower()
+
+    def test_advance_step_transitions_from_paused_step_to_running(self, crawler_loop, mock_listener):
+        """Test advance_step emits on_state_changed to RUNNING when the event was actually dispatched."""
+        crawler_loop._state = "paused_step"
+        crawler_loop._current_run_id = 42
+        mock_service = Mock()
+        mock_service.advance_step.return_value = True
+        crawler_loop._crawler_agent_service = mock_service
+        crawler_loop.advance_step()
+        # Should have emitted on_state_changed with RUNNING
+        mock_listener.on_state_changed.assert_called_once_with(42, "paused_step", "running")
+
+    def test_advance_step_no_active_service_does_not_transition(self, crawler_loop, mock_listener):
+        """Test advance_step leaves state as paused_step when no workflow is active to receive the event."""
+        crawler_loop._state = "paused_step"
+        crawler_loop._current_run_id = 42
+        crawler_loop._crawler_agent_service = None
+        crawler_loop.advance_step()
+        mock_listener.on_state_changed.assert_not_called()
+        assert crawler_loop._state == "paused_step"
+
+    def test_advance_step_without_paused_state_does_not_emit_state_change(self, crawler_loop, mock_listener):
+        """Test advance_step does not emit state change if not currently paused."""
+        crawler_loop._state = "running"
+        crawler_loop._current_run_id = 42
+        crawler_loop._crawler_agent_service = None
+        crawler_loop.advance_step()
+        mock_listener.on_state_changed.assert_not_called()
+
+    def test_advance_step_delegates_to_service(self, crawler_loop, mock_listener):
+        """Test advance_step forwards to CrawlerAgentService.advance_step()."""
+        crawler_loop._state = "paused_step"
+        crawler_loop._current_run_id = 1
+        mock_service = Mock()
+        mock_service.advance_step.return_value = True
+        crawler_loop._crawler_agent_service = mock_service
+        crawler_loop.advance_step()
+        mock_service.advance_step.assert_called_once()
+        assert crawler_loop._state == "running"
+
+    def test_set_step_by_step_enabled_updates_agent_config(self, crawler_loop):
+        """Test set_step_by_step_enabled propagates to the agent config if already initialized."""
+        mock_cfg = Mock()
+        mock_cfg.agent.step_by_step = False
+        mock_service = Mock()
+        mock_service._crawler_agent_config = mock_cfg
+        crawler_loop._crawler_agent_service = mock_service
+        crawler_loop.set_step_by_step_enabled(True)
+        assert mock_cfg.agent.step_by_step is True
 
 
 class TestCrawlerLoopEventEmission:
@@ -756,6 +807,6 @@ class TestCrawlerLoopErrorHandling:
 
     def test_transition_state_updates_state(self, crawler_loop, mock_listener):
         """Test _transition_state updates internal state and notifies."""
-        crawler_loop._transition_state("RUNNING", 1)
-        assert crawler_loop._state == "RUNNING"
-        mock_listener.on_state_changed.assert_called_once_with(1, "IDLE", "RUNNING")
+        crawler_loop._transition_state("running", 1)
+        assert crawler_loop._state == "running"
+        mock_listener.on_state_changed.assert_called_once_with(1, "uninitialized", "running")

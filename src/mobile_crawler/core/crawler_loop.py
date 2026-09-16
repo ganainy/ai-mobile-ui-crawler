@@ -9,6 +9,7 @@ import time
 from datetime import datetime
 
 from mobile_crawler.config.config_manager import ConfigManager
+from mobile_crawler.core.crawl_state_machine import CrawlState
 from mobile_crawler.core.crawler_event_listener import CrawlerEventListener
 from mobile_crawler.core.log_sinks import LogLevel, capture_stdout_to_ui
 from mobile_crawler.domain.crawler_agent_service import CrawlerAgentService
@@ -60,7 +61,8 @@ class CrawlerLoop:
         self._traffic_capture_manager: TrafficCaptureManager | None = None
         self._video_recording_manager: VideoRecordingManager | None = None
         self._cancel_requested = False
-        self._state = "IDLE"
+        self._state = CrawlState.UNINITIALIZED.value
+        self._step_by_step_enabled = False
 
     def add_event_listener(self, listener: CrawlerEventListener) -> None:
         """Add an event listener."""
@@ -117,26 +119,75 @@ class CrawlerLoop:
         return self._crawl_thread is not None and self._crawl_thread.is_alive()
 
     def set_step_by_step_enabled(self, enabled: bool) -> None:
-        """Enable or disable step-by-step mode."""
+        """Enable or disable step-by-step mode at runtime.
+
+        When enabled, the agent workflow will pause after each execute cycle
+        and wait for an explicit ``advance_step()`` call before continuing.
+        The ``step_by_step_enabled`` flag is also forwarded to the current
+        ``CrawlerAgentService`` so the agent picks it up immediately.
+        """
+        self._step_by_step_enabled = enabled
+        if self._crawler_agent_service:
+            cfg = getattr(self._crawler_agent_service, "_crawler_agent_config", None)
+            if cfg is not None:
+                cfg.agent.step_by_step = enabled
         self._emit_event(
             "on_debug_log",
             self._current_run_id or -1,
             0,
-            "Step-by-step mode not supported in internalized crawler mode."
+            f"Step-by-step mode {'enabled' if enabled else 'disabled'}.",
         )
 
     def is_step_by_step_enabled(self) -> bool:
         """Check if step-by-step mode is enabled."""
-        return False
+        return self._step_by_step_enabled
 
     def advance_step(self) -> None:
-        """Advance to the next step when paused in step-by-step mode."""
-        self._emit_event(
-            "on_debug_log",
-            self._current_run_id or -1,
-            0,
-            "Advance step not supported in internalized crawler mode."
-        )
+        """Advance to the next step when paused in step-by-step mode.
+
+        This sends a ``StepAdvanceEvent`` into the running agent workflow
+        (via ``CrawlerAgentService.advance_step``) and transitions the
+        loop state back to ``RUNNING`` so the UI hides the Next Step button.
+
+        Only takes effect while the loop is actually ``PAUSED_STEP`` — this
+        guards against a stray or double "Next Step" click forwarding an
+        extra ``StepAdvanceEvent`` into the workflow, which would otherwise
+        get buffered and silently skip the *next* pause instead of this one.
+        """
+        if self._state != CrawlState.PAUSED_STEP.value:
+            self._emit_event(
+                "on_debug_log",
+                self._current_run_id or -1,
+                0,
+                "Advance step requested, but the crawler is not currently paused.",
+            )
+            return
+
+        if not self._crawler_agent_service:
+            self._emit_event(
+                "on_debug_log",
+                self._current_run_id or -1,
+                0,
+                "Advance step requested, but crawler agent service is not active.",
+            )
+            return
+
+        sent = self._crawler_agent_service.advance_step()
+        if sent:
+            self._transition_state(CrawlState.RUNNING.value, self._current_run_id)
+            self._emit_event(
+                "on_debug_log",
+                self._current_run_id or -1,
+                0,
+                "Step advanced.",
+            )
+        else:
+            self._emit_event(
+                "on_debug_log",
+                self._current_run_id or -1,
+                0,
+                "Advance step requested, but no active workflow handler is available.",
+            )
 
     def run(self, run_id: int) -> None:
         """Run the crawler loop for the given run.
@@ -159,7 +210,7 @@ class CrawlerLoop:
             self.run_repository.update_session_path(run_id, session_path)
             run.session_path = session_path
 
-            self._transition_state("RUNNING", run_id)
+            self._transition_state(CrawlState.RUNNING.value, run_id)
             self._emit_event("on_crawl_started", run_id, run.app_package)
 
             self._crawler_agent_service = CrawlerAgentService(
@@ -172,6 +223,7 @@ class CrawlerLoop:
             self._crawler_agent_service.begin_step_tracking(
                 run_id=run_id,
                 emit_step_phase_event=self._emit_event,
+                emit_state_change=lambda state: self._transition_state(state, run_id),
                 screenshots_dir=self.session_folder_manager.get_subfolder(run, "screenshots"),
             )
 
@@ -248,7 +300,8 @@ class CrawlerLoop:
                         app_package=run.app_package,
                         max_steps=actual_max_steps,
                         exploration_objective=exploration_objective,
-                        max_duration_seconds=max_duration if limit_type == "duration" else None
+                        max_duration_seconds=max_duration if limit_type == "duration" else None,
+                        step_by_step=self._step_by_step_enabled,
                     )
                 finally:
                     if self._video_recording_manager:
@@ -387,7 +440,7 @@ class CrawlerLoop:
 
         except CrawlerError as e:
             logger.error(json.dumps(e.to_log_dict()))
-            self._transition_state("ERROR", run_id)
+            self._transition_state(CrawlState.ERROR.value, run_id)
             self._emit_event("on_error", run_id, None, e)
         except Exception as e:
             wrapped = FatalError(
@@ -396,7 +449,7 @@ class CrawlerLoop:
                 cause=e,
             )
             logger.error(json.dumps(wrapped.to_log_dict()))
-            self._transition_state("ERROR", run_id)
+            self._transition_state(CrawlState.ERROR.value, run_id)
             self._emit_event("on_error", run_id, None, wrapped)
         finally:
             self._video_recording_manager = None
@@ -404,7 +457,7 @@ class CrawlerLoop:
             if self._crawler_agent_service:
                 self._crawler_agent_service.clear_run_logging()
                 self._crawler_agent_service = None
-            self._transition_state("STOPPED", run_id)
+            self._transition_state(CrawlState.STOPPED.value, run_id)
 
     def _run_mobsf_analysis(self, run, run_id: int) -> None:
         """Run MobSF after a successful crawl without affecting crawl completion."""

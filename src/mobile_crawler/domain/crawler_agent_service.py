@@ -18,7 +18,12 @@ from mobile_crawler.domain.context_guard import (
     StepSkipReason,
     UIDumpValidator,
 )
-from mobile_crawler.domain.crawler_agent.agent.common.events import ScreenshotEvent, ToolExecutionEvent
+from mobile_crawler.domain.crawler_agent.agent.common.events import (
+    ScreenshotEvent,
+    StepAdvanceEvent,
+    StepPausedEvent,
+    ToolExecutionEvent,
+)
 from mobile_crawler.domain.crawler_agent.agent.droid.events import AppOpenerResponseEvent
 from mobile_crawler.domain.crawler_agent.agent.executor.events import ExecutorResponseEvent
 from mobile_crawler.domain.crawler_agent.agent.fast_agent.events import FastAgentResponseEvent
@@ -179,6 +184,7 @@ class CrawlerAgentService:
         # tool-level counter.
         self._ai_call_step_number: int = 0
         self._emit_step_phase_event = None  # Callback to CrawlerLoop._emit_event
+        self._emit_state_change = None  # Callback for CrawlState transitions (set in begin_step_tracking)
         self._sub_phase_starts: dict[str, float] = {}
         self._phase_metadata: dict[str, dict[str, Any]] = {}
         self._pending_step_timing: dict[str, Any] = {}
@@ -195,6 +201,7 @@ class CrawlerAgentService:
         self,
         max_steps: int = 15,
         target_package: str | None = None,
+        step_by_step: bool = False,
     ) -> dict[str, Any]:
         """Convert crawler configuration to internal crawler_agent format.
 
@@ -238,6 +245,7 @@ class CrawlerAgentService:
                 "max_steps": max_steps,
                 "reasoning": self.config_manager.get("crawler_reasoning_mode", True),
                 "streaming": self.config_manager.get("crawler_streaming", False),
+                "step_by_step": bool(step_by_step),
             },
             "device": {
                 "platform": "android",
@@ -389,12 +397,14 @@ class CrawlerAgentService:
         self,
         max_steps: int = 15,
         target_package: str | None = None,
+        step_by_step: bool = False,
     ) -> None:
         """Initialize Crawler agent with current configuration."""
         if self._is_initialized:
             if self._crawler_agent_config is not None:
                 self._crawler_agent_config.agent.max_steps = max_steps
                 self._crawler_agent_config.target_package = target_package
+                self._crawler_agent_config.agent.step_by_step = step_by_step
             return
 
         self._stats_processor.reset()
@@ -404,7 +414,9 @@ class CrawlerAgentService:
             from mobile_crawler.domain.crawler_agent.config_manager.config_manager import CrawlerConfig
 
             # Create Crawler configuration
-            config_dict = self._get_crawler_agent_config(max_steps, target_package=target_package)
+            config_dict = self._get_crawler_agent_config(
+                max_steps, target_package=target_package, step_by_step=step_by_step
+            )
             self._crawler_agent_config = CrawlerConfig.from_dict(config_dict)
 
             self._is_initialized = True
@@ -546,6 +558,7 @@ class CrawlerAgentService:
         self,
         run_id: int,
         emit_step_phase_event=None,
+        emit_state_change=None,
         screenshots_dir: str | None = None,
     ) -> None:
         """Initialize step phase tracking for a run.
@@ -561,6 +574,7 @@ class CrawlerAgentService:
         self._current_step_number = 0
         self._ai_call_step_number = 0
         self._emit_step_phase_event = emit_step_phase_event
+        self._emit_state_change = emit_state_change
         self._sub_phase_starts = {}
         self._phase_metadata = {}
         self._pending_step_timing = {}
@@ -1379,6 +1393,7 @@ class CrawlerAgentService:
         max_steps: int = 15,
         exploration_objective: str | None = None,
         max_duration_seconds: int | None = None,
+        step_by_step: bool = False,
     ) -> CrawlerRunResult:
         """Execute an app exploration task using internal Crawler agent.
 
@@ -1388,6 +1403,7 @@ class CrawlerAgentService:
             max_steps: Maximum steps to execute
             exploration_objective: Optional specific exploration objective
             max_duration_seconds: Optional maximum duration in seconds
+            step_by_step: Whether to pause after each step and wait for advance_step()
 
         Returns:
             CrawlerRunResult with execution details
@@ -1419,7 +1435,9 @@ class CrawlerAgentService:
                 await self._ensure_target_app_active_before_crawler(app_package)
 
                 # Initialize agent if needed
-                await self._initialize_agent(max_steps, target_package=app_package)
+                await self._initialize_agent(
+                    max_steps, target_package=app_package, step_by_step=step_by_step
+                )
 
                 # Create exploration goal
                 goal = self._create_exploration_goal(app_package, max_steps, exploration_objective)
@@ -1465,7 +1483,12 @@ class CrawlerAgentService:
                             """Background task: consume agent events and drive step phase metadata."""
                             try:
                                 async for event in workflow_result.stream_events():
-                                    if isinstance(event, ToolExecutionEvent):
+                                    if isinstance(event, StepPausedEvent):
+                                        # Surface the pause to the UI / CrawlerLoop.
+                                        # Use the CrawlState enum value string ("paused_step").
+                                        if self._emit_state_change:
+                                            self._emit_state_change("paused_step")
+                                    elif isinstance(event, ToolExecutionEvent):
                                         await self._handle_tool_execution_event(event)
                                     elif isinstance(event, ScreenshotEvent):
                                         await self._handle_screenshot_timing_event(event)
@@ -2026,6 +2049,30 @@ class CrawlerAgentService:
             return True
 
         return False
+
+    def advance_step(self) -> bool:
+        """Send a StepAdvanceEvent to the running agent workflow from a non-async caller (thread-safe).
+
+        Returns True if the event was dispatched; False if no active handler exists.
+        """
+        handler = self._current_handler
+        loop = self._handler_loop
+        if not handler or not loop:
+            return False
+
+        def _send() -> None:
+            try:
+                handler.ctx.send_event(StepAdvanceEvent())
+            except Exception as exc:
+                logger.warning("Failed to send StepAdvanceEvent: %s", exc)
+
+        if loop.is_running():
+            loop.call_soon_threadsafe(_send)
+            return True
+
+        return False
+
+    # ------------------------------------------------------------------
 
     async def analyze_ui_context(self, agent_tools, phone_state: dict[str, Any]) -> dict[str, Any]:
         """Analyze UI context using OmniParser fallback.

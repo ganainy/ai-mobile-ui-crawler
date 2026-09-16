@@ -82,6 +82,18 @@ class RecordUIStateEvent(Event):
     ui_state: list[dict[str, Any]]
 
 
+class StepAdvanceEvent(Event):
+    """Request to advance one step when paused in step-by-step mode."""
+
+    pass
+
+
+class StepPausedEvent(Event):
+    """Emitted when the crawler pauses waiting for the user to advance a step."""
+
+    step_number: int
+
+
 class ToolExecutionEvent(Event):
     """Emitted after every tool call dispatched through ToolRegistry."""
 
