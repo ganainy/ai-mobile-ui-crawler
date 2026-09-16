@@ -351,6 +351,10 @@ class AndroidStateProvider(StateProvider):
             f"after {self.target_recovery_attempts} attempts ({detail})"
         )
 
+    async def screenshot(self) -> bytes:
+        """Return raw PNG bytes of the current screen."""
+        return await self._capture_screenshot_with_retry()
+
     async def _capture_screenshot_with_retry(self) -> bytes:
         retries = 3
         delay_seconds = 1.5

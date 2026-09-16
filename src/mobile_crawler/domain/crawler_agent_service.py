@@ -634,6 +634,7 @@ class CrawlerAgentService:
                 latest_state_provider=latest_state,
                 current_app_provider=current_app if driver else None,
                 expensive_state_polling=expensive_state_polling,
+                grace_delay_s=self._crawler_agent_config.agent.wait_for_stable_ui,
             )
             if driver:
                 self._action_verifier = ActionVerifier(
@@ -664,13 +665,8 @@ class CrawlerAgentService:
                 f"DeviceContextCapture and AppSwitchRecovery wired with " f"target_package={self._target_package}"
             )
 
-        # Set after_sleep_action to 0.0 to disable internal fixed delay
-        # Our explicit wait predicates replace it
-        if self._crawler_agent_config:
-            try:
-                self._crawler_agent_config.agent.after_sleep_action = 0.0
-            except Exception:
-                logger.debug("Could not set after_sleep_action=0.0")
+        # after_sleep_action is now a real delay driven by UIWaitPredicate
+        # (wait_for_ui_settled) in the agents — no longer forced to 0.0
 
     def _start_sub_phase(self, phase_name: str) -> None:
         """Record the start timestamp for a diagnostic sub-phase."""
