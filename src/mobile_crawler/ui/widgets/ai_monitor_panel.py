@@ -8,7 +8,7 @@ import os
 import re
 from datetime import datetime
 
-from PySide6.QtCore import Qt, QTimer, Signal, Slot
+from PySide6.QtCore import QBuffer, QByteArray, QIODevice, Qt, QTimer, Signal, Slot
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
     QButtonGroup,
@@ -625,11 +625,13 @@ class StepDetailWidget(QWidget):
                 source_label = "OmniParser" if first.get("source") == "omni" else "Accessibility tree"
                 self.show_labels_checkbox.setText(f"Show element labels ({source_label})")
                 try:
-                    # Convert QPixmap to PIL Image
-                    buffer = io.BytesIO()
-                    screenshot_pixmap.save(buffer, "PNG")
-                    buffer.seek(0)
-                    pil_image = Image.open(buffer)
+                    # Convert QPixmap to PIL Image via QBuffer (QPixmap.save()
+                    # needs a real QIODevice, not a Python io.BytesIO)
+                    qbuffer = QBuffer()
+                    qbuffer.open(QIODevice.OpenModeFlag.WriteOnly)
+                    screenshot_pixmap.save(qbuffer, "PNG")
+                    pil_image = Image.open(io.BytesIO(qbuffer.data().data()))
+                    qbuffer.close()
 
                     # Render overlay
                     overlaid_pil = self._overlay_renderer.render(pil_image, elements)
@@ -637,9 +639,8 @@ class StepDetailWidget(QWidget):
                     # Convert back to QPixmap
                     out_buffer = io.BytesIO()
                     overlaid_pil.save(out_buffer, format="PNG")
-                    out_buffer.seek(0)
                     overlaid_pixmap = QPixmap()
-                    overlaid_pixmap.loadFromData(out_buffer.read())
+                    overlaid_pixmap.loadFromData(QByteArray(out_buffer.getvalue()))
                     self.overlaid_pixmap = overlaid_pixmap
                 except Exception as e:
                     logger.warning(f"Failed to render element-label overlay: {e}", exc_info=True)
