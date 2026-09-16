@@ -45,6 +45,21 @@ class TestRuntimeStats:
         assert db_dict["device_model"] == "Pixel 5"
         assert db_dict["android_version"] == "13.0"
 
+    def test_to_db_dict_nulls_most_visited_screen_id(self):
+        """most_visited_screen_id is never persisted (no real screens.id here)."""
+        stats = RuntimeStats(most_visited_screen_id=12345, most_visited_screen_count=3)
+
+        db_dict = stats.to_db_dict()
+
+        assert db_dict["most_visited_screen_id"] is None
+        assert db_dict["most_visited_screen_count"] == 3
+
+    def test_from_db_dict_ignores_most_visited_screen_id(self):
+        """from_db_dict leaves most_visited_screen_id as None."""
+        stats = RuntimeStats.from_db_dict({"run_id": 1, "most_visited_screen_id": 42})
+
+        assert stats.most_visited_screen_id is None
+
 
 class TestRuntimeStatsCollector:
     """Tests for RuntimeStatsCollector."""

@@ -25,7 +25,7 @@ class RuntimeStats:
     total_screen_visits: int = 0
     screens_per_minute: float = 0.0
     deepest_navigation_depth: int = 0
-    most_visited_screen_id: int | None = None
+    most_visited_screen_id: int | str | None = None
     most_visited_screen_count: int = 0
     unique_activities_visited: int = 0
 
@@ -120,7 +120,7 @@ class RuntimeStats:
             "unique_screens_visited": self.unique_screens_visited,
             "total_screen_visits": self.total_screen_visits,
             "deepest_navigation_depth": self.deepest_navigation_depth,
-            "most_visited_screen_id": self.most_visited_screen_id,
+            "most_visited_screen_id": None,
             "most_visited_screen_count": self.most_visited_screen_count,
             "unique_activities_visited": self.unique_activities_visited,
 
@@ -219,7 +219,6 @@ class RuntimeStats:
             unique_screens_visited=data.get("unique_screens_visited", 0),
             total_screen_visits=data.get("total_screen_visits", 0),
             deepest_navigation_depth=data.get("deepest_navigation_depth", 0),
-            most_visited_screen_id=data.get("most_visited_screen_id"),
             most_visited_screen_count=data.get("most_visited_screen_count", 0),
             unique_activities_visited=data.get("unique_activities_visited", 0),
 
@@ -292,7 +291,7 @@ class RuntimeStatsCollector:
         self._run_id = run_id
         self._run_stats_repository = run_stats_repository
         self._stats = RuntimeStats()
-        self._screen_visit_counts: dict[int, int] = {}
+        self._screen_visit_counts: dict[int | str, int] = {}
         self._transition_set: set = set()
         self._batch_results: list[bool] = []  # Track batch success/failure
 
@@ -337,11 +336,12 @@ class RuntimeStatsCollector:
                 (self._stats.avg_step_duration_ms * (total_steps - 1) + duration_ms) / total_steps
             )
 
-    def record_screen_visit(self, screen_id: int, navigation_depth: int = 0) -> None:
+    def record_screen_visit(self, screen_id: int | str, navigation_depth: int = 0) -> None:
         """Record a screen visit.
 
         Args:
-            screen_id: ID of the screen visited
+            screen_id: Identifier of the screen visited. Used only as an
+                in-memory dedup key for counting; it is never persisted.
             navigation_depth: Current navigation depth from launch
         """
         # Update visit count

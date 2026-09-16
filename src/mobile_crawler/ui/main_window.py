@@ -1628,10 +1628,11 @@ class MainWindow(QMainWindow):
                 screen_hash = f"step_{step_number}"
                 self._current_stats.unique_screen_hashes.add(screen_hash)
 
-        # Record in runtime stats collector (screen id = hash-based)
+        # Record in runtime stats collector using the perceptual hash as an
+        # in-memory dedup key (never persisted to the FK'd most_visited_screen_id).
         if self._runtime_stats_collector and self._runtime_stats_collector._run_id == run_id:
-            screen_id = hash(screen_hash or step_number) if screen_hash else step_number
-            self._runtime_stats_collector.record_screen_visit(screen_id=screen_id, navigation_depth=step_number)
+            screen_key = screen_hash or f"step_{step_number}"
+            self._runtime_stats_collector.record_screen_visit(screen_id=screen_key, navigation_depth=step_number)
 
         # Update dashboard
         self._update_dashboard_stats()
