@@ -135,7 +135,7 @@ def _setup_langfuse_tracing(
         if tracing_config.langfuse_host:
             os.environ["LANGFUSE_HOST"] = tracing_config.langfuse_host
         else:
-            os.environ["LANGFUSE_HOST"] = "https://us.cloud.langfuse.com"
+            os.environ["LANGFUSE_HOST"] = "https://cloud.langfuse.com"
 
         # Verify credentials
         from langfuse import Langfuse

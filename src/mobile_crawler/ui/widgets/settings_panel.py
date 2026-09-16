@@ -591,7 +591,7 @@ class SettingsPanel(QWidget):
         host_layout = QHBoxLayout()
         host_layout.addWidget(QLabel("Host URL:"))
         self.langfuse_host_input = QLineEdit()
-        self.langfuse_host_input.setPlaceholderText("https://us.cloud.langfuse.com")
+        self.langfuse_host_input.setPlaceholderText("https://cloud.langfuse.com")
         host_layout.addWidget(self.langfuse_host_input)
         langfuse_layout.addLayout(host_layout)
 
@@ -610,6 +610,15 @@ class SettingsPanel(QWidget):
         self.langfuse_secret_key_input.setPlaceholderText("sk-lf-...")
         secret_key_layout.addWidget(self.langfuse_secret_key_input)
         langfuse_layout.addLayout(secret_key_layout)
+
+        langfuse_hint = QLabel(
+            "Traces are sent to your Langfuse cloud project. Copy the Host URL, Public Key, "
+            "and Secret Key from your Langfuse project settings, then view traces in the "
+            "Langfuse dashboard."
+        )
+        langfuse_hint.setWordWrap(True)
+        langfuse_hint.setStyleSheet("color: #666; font-size: 11px;")
+        langfuse_layout.addWidget(langfuse_hint)
 
         tracing_layout.addWidget(self.langfuse_widget)
 
@@ -689,9 +698,9 @@ class SettingsPanel(QWidget):
         else:
             self.phoenix_widget.setVisible(False)
             self.phoenix_widget.setEnabled(False)
+            self.phoenix_hint.setVisible(False)
             self.langfuse_widget.setVisible(True)
             self.langfuse_widget.setEnabled(True)
-            self.phoenix_hint.setVisible(False)
 
     def _load_settings(self):
         """Load settings from user_config.db."""
@@ -833,7 +842,7 @@ class SettingsPanel(QWidget):
         phoenix_url = self._config_store.get_setting("phoenix_url", default="http://localhost:6006")
         self.phoenix_url_input.setText(phoenix_url)
 
-        langfuse_host = self._config_store.get_setting("langfuse_host", default="https://us.cloud.langfuse.com")
+        langfuse_host = self._config_store.get_setting("langfuse_host", default="https://cloud.langfuse.com")
         self.langfuse_host_input.setText(langfuse_host)
 
         langfuse_pub = self._config_store.get_secret_plaintext("langfuse_public_key")
@@ -1318,7 +1327,7 @@ class SettingsPanel(QWidget):
         self.enable_tracing_checkbox.setChecked(False)
         self.tracing_provider_combo.setCurrentText("phoenix")
         self.phoenix_url_input.setText("http://localhost:6006")
-        self.langfuse_host_input.setText("https://us.cloud.langfuse.com")
+        self.langfuse_host_input.setText("https://cloud.langfuse.com")
         self.langfuse_pub_key_input.clear()
         self.langfuse_secret_key_input.clear()
 
