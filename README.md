@@ -23,13 +23,13 @@ For development tools:
 pip install -e ".[dev]"
 ```
 
-Run the GUI and managed MobSF stack:
+Run the GUI:
 
 ```powershell
-.\scripts\start.ps1
+mobile-crawler-gui
 ```
 
-Use `.\scripts\start.ps1 -UiOnly` to start only the GUI. After editable install, `mobile-crawler-gui` also starts the GUI only.
+When "Enable MobSF Analysis" is turned on in Settings, the GUI automatically starts the managed MobSF Docker container on launch (and warns if Docker or MobSF is unavailable). Otherwise it runs without MobSF.
 
 Run a crawl from the CLI:
 
@@ -37,14 +37,6 @@ Run a crawl from the CLI:
 python run_cli.py crawl --device emulator-5554 --package com.example.app --provider gemini --model gemini-1.5-flash --steps 15
 # or, after editable install:
 mobile-crawler-cli crawl --device emulator-5554 --package com.example.app --provider gemini --model gemini-1.5-flash --steps 15
-```
-
-Startup helper:
-
-```powershell
-.\scripts\start.ps1          # start MobSF, then the UI
-.\scripts\start.ps1 -NoMobsf # start only the UI
-.\scripts\start.ps1 -UiOnly  # start only the UI
 ```
 
 ## Current Project State
@@ -124,7 +116,7 @@ Replace `172.20.10.4` with the device IP address reported by Android or `adb she
 
 ### GUI
 
-The main GUI launcher is `.\scripts\start.ps1`, which starts the managed MobSF container and then runs `mobile_crawler.ui.main_window`. `MainWindow` builds the PySide6 interface, creates services and repositories, bridges Python logging into the log panel, creates run records, and launches crawl execution on a worker thread.
+The GUI entry point is the `mobile-crawler-gui` console script (`mobile_crawler.ui.main_window:run`). On launch it starts the managed MobSF Docker container when MobSF analysis is enabled. `MainWindow` builds the PySide6 interface, creates services and repositories, bridges Python logging into the log panel, creates run records, and launches crawl execution on a worker thread.
 
 The UI exposes device selection, app selection, AI model/provider selection, crawl controls, settings, logs, run history, statistics, and AI monitoring. Settings are persisted through `UserConfigStore` and copied into a `ConfigManager` when a crawl starts.
 
@@ -228,13 +220,7 @@ docker run --rm -it --name mobile-crawler-mobsf -p 8000:8000 opensecurity/mobile
 
 Keep this PowerShell window open while using MobSF analysis. To stop MobSF, press `Ctrl+C` in that window.
 
-Or use the project launcher:
-
-```powershell
-.\scripts\start.ps1
-```
-
-The launcher starts MobSF with the expected container name, saves the API key to `.mobsf_api_key` when it can extract it from the container logs, then starts the GUI.
+Alternatively, run the GUI normally; when "Enable MobSF Analysis" is on, it starts the managed container automatically (with the expected container name), saves the API key to `.mobsf_api_key` when it can extract it from the container logs, and on close offers to stop the container it started.
 
 ### Configure MobSF API Key
 
@@ -261,7 +247,7 @@ Automatic after crawl:
 mobile-crawler-cli crawl --device emulator-5554 --package com.example.app --provider gemini --model gemini-1.5-flash --enable-mobsf-analysis
 ```
 
-In the GUI, enable MobSF analysis in Settings before starting a crawl. MobSF runs only after a successful, non-cancelled crawl. If MobSF fails, the crawl remains completed and the failure is written to logs.
+In the GUI, enable MobSF analysis in Settings before starting a crawl. To run MobSF automatically after each successful, non-cancelled crawl, also enable the "Automatically run after each successful crawl" checkbox; otherwise MobSF stays available for manual runs only. If MobSF fails, the crawl remains completed and the failure is written to logs.
 
 Manual from history:
 
@@ -276,7 +262,7 @@ The manual button uses the run's stored device ID and package name, so the same 
 
 The current crawl flow is:
 
-1. `run_cli.py`, `mobile-crawler-cli`, `mobile-crawler-gui`, or `.\scripts\start.ps1` starts the CLI or GUI.
+1. `run_cli.py`/`mobile-crawler-cli` starts the CLI, or `mobile-crawler-gui` starts the GUI.
 2. The CLI `crawl` command or GUI `MainWindow` creates a run record, prepares `ConfigManager`, repositories, and `SessionFolderManager`, then runs `CrawlerLoop`.
 3. `CrawlerLoop` creates a timestamped session folder, stores the session path on the run, emits lifecycle events, attaches crawler-agent logging, and calls `CrawlerAgentService.execute_exploration_task()`.
 4. `CrawlerAgentService` translates Mobile Crawler settings into the internal runtime's `CrawlerConfig`, ensures the target package is active through ADB preflight checks, creates a `CrawlerAgent`, and runs the crawler-agent workflow.

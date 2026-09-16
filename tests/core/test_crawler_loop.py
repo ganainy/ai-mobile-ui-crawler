@@ -443,6 +443,7 @@ class TestCrawlerLoopLifecycle:
         """MobSF should run after successful non-cancelled crawls when enabled."""
         mock_config_manager.get.side_effect = lambda key, default=None: {
             "enable_mobsf_analysis": True,
+            "auto_run_mobsf_after_crawl": True,
             "enable_video_recording": False,
             "limit_type": "steps",
             "max_crawl_steps": 1,
@@ -522,6 +523,48 @@ class TestCrawlerLoopLifecycle:
 
     @patch('mobile_crawler.core.crawler_loop.MobSFManager')
     @patch('mobile_crawler.core.crawler_loop.CrawlerAgentService')
+    def test_run_skips_mobsf_when_auto_run_disabled(
+        self,
+        mock_crawler_service_class,
+        mock_mobsf_class,
+        crawler_loop,
+        mock_config_manager,
+        mock_run_repository,
+        mock_session_folder_manager,
+    ):
+        """MobSF should not auto-run when enabled but auto-run-after-crawl is off."""
+        mock_config_manager.get.side_effect = lambda key, default=None: {
+            "enable_mobsf_analysis": True,
+            "auto_run_mobsf_after_crawl": False,
+            "enable_video_recording": False,
+            "limit_type": "steps",
+        }.get(key, default)
+        mock_run = Mock()
+        mock_run.app_package = "com.example.app"
+        mock_run.device_id = "device123"
+        mock_run_repository.get_run_by_id.return_value = mock_run
+        mock_session_folder_manager.create_session_folder.return_value = "/tmp/session"
+
+        mock_service = Mock()
+        mock_crawler_service_class.return_value = mock_service
+
+        async def mock_explore(*args, **kwargs):
+            mock_result = Mock()
+            mock_result.success = True
+            mock_result.steps_completed = 1
+            mock_result.error_message = None
+            mock_result.final_state = {}
+            return mock_result
+
+        mock_service.execute_exploration_task = mock_explore
+        mock_service.cleanup = Mock()
+
+        crawler_loop.run(1)
+
+        mock_mobsf_class.assert_not_called()
+
+    @patch('mobile_crawler.core.crawler_loop.MobSFManager')
+    @patch('mobile_crawler.core.crawler_loop.CrawlerAgentService')
     def test_run_logs_mobsf_failure_without_erroring_crawl(
         self,
         mock_crawler_service_class,
@@ -535,6 +578,7 @@ class TestCrawlerLoopLifecycle:
         """MobSF failures should be logged without changing completed crawl status."""
         mock_config_manager.get.side_effect = lambda key, default=None: {
             "enable_mobsf_analysis": True,
+            "auto_run_mobsf_after_crawl": True,
             "enable_video_recording": False,
             "limit_type": "steps",
         }.get(key, default)

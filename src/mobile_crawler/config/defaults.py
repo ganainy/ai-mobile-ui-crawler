@@ -65,6 +65,9 @@ DEFAULTS: dict[str, Any] = {
     # MobSF static analysis settings
     # Enable MobSF static security analysis after crawl completion
     "enable_mobsf_analysis": False,
+    # Automatically run MobSF analysis after each successful crawl (GUI). When
+    # False, MobSF can still be run manually from Run History.
+    "auto_run_mobsf_after_crawl": False,
     # MobSF server API URL (must be running and accessible)
     "mobsf_api_url": "http://localhost:8000",
     # MobSF API key (required for API access)

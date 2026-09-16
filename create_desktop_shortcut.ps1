@@ -10,12 +10,25 @@ $DesktopPath = [Environment]::GetFolderPath("Desktop")
 $ShortcutPath = Join-Path $DesktopPath "Mobile Crawler.lnk"
 
 # Paths
-$StartScriptPath = Join-Path $ScriptDir "scripts\start.ps1"
 $IconPathIco = Join-Path $ScriptDir "crawler_logo.ico"
 
-# Check if files exist
-if (-not (Test-Path $StartScriptPath)) {
-    Write-Host "Error: scripts\start.ps1 not found!" -ForegroundColor Red
+# Find a Python interpreter to launch the GUI. Prefer a project virtualenv's
+# windowed interpreter (pythonw.exe) so no console window is shown.
+$venvDirs = @("venv312", ".venv", "venv")
+$pythonExe = $null
+foreach ($venvDir in $venvDirs) {
+    $pythonw = Join-Path $ScriptDir (Join-Path $venvDir "Scripts\pythonw.exe")
+    if (Test-Path $pythonw) { $pythonExe = $pythonw; break }
+    $python = Join-Path $ScriptDir (Join-Path $venvDir "Scripts\python.exe")
+    if (Test-Path $python) { $pythonExe = $python; break }
+}
+if (-not $pythonExe) {
+    $pythonExe = (Get-Command python -ErrorAction SilentlyContinue).Source
+}
+
+# Check if the Python interpreter was found
+if (-not $pythonExe) {
+    Write-Host "Error: Python not found. Install Python, create a virtualenv, and run 'pip install -e .' first." -ForegroundColor Red
     exit 1
 }
 
@@ -30,8 +43,8 @@ $WshShell = New-Object -ComObject WScript.Shell
 
 # Create shortcut
 $Shortcut = $WshShell.CreateShortcut($ShortcutPath)
-$Shortcut.TargetPath = "powershell.exe"
-$Shortcut.Arguments = "-ExecutionPolicy Bypass -File `"$StartScriptPath`""
+$Shortcut.TargetPath = $pythonExe
+$Shortcut.Arguments = "-m mobile_crawler.ui.main_window"
 $Shortcut.WorkingDirectory = $ScriptDir
 $Shortcut.Description = "Launch Mobile Crawler"
 

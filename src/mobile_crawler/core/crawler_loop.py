@@ -424,7 +424,11 @@ class CrawlerLoop:
                 end_time=datetime.now()
             )
 
-            if status == "COMPLETED" and self.config_manager.get("enable_mobsf_analysis", False) is True:
+            if (
+                status == "COMPLETED"
+                and self.config_manager.get("enable_mobsf_analysis", False) is True
+                and self.config_manager.get("auto_run_mobsf_after_crawl", False) is True
+            ):
                 self._run_mobsf_analysis(run, run_id)
 
             # Emit crawl completed with action stats encoded in reason for backward compatibility

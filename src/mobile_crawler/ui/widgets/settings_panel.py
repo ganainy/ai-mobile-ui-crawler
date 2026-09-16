@@ -509,6 +509,12 @@ class SettingsPanel(QWidget):
         self.enable_mobsf_analysis_checkbox = QCheckBox("Enable MobSF Analysis")
         mobsf_layout.addWidget(self.enable_mobsf_analysis_checkbox)
 
+        self.auto_run_mobsf_after_crawl_checkbox = QCheckBox(
+            "Automatically run after each successful crawl"
+        )
+        self.auto_run_mobsf_after_crawl_checkbox.setEnabled(False)
+        mobsf_layout.addWidget(self.auto_run_mobsf_after_crawl_checkbox)
+
         mobsf_url_layout = QHBoxLayout()
         mobsf_url_layout.addWidget(QLabel("API URL:"))
         self.mobsf_api_url_input = QLineEdit()
@@ -516,6 +522,14 @@ class SettingsPanel(QWidget):
         self.mobsf_api_url_input.setEnabled(False)
         mobsf_url_layout.addWidget(self.mobsf_api_url_input)
         mobsf_layout.addLayout(mobsf_url_layout)
+
+        mobsf_hint = QLabel(
+            "Run MobSF automatically after each successful crawl, or manually from Run "
+            "History by selecting a completed run and clicking 'Run MobSF'."
+        )
+        mobsf_hint.setWordWrap(True)
+        mobsf_hint.setStyleSheet("color: #666; font-size: 11px;")
+        mobsf_layout.addWidget(mobsf_hint)
 
         self.enable_mobsf_analysis_checkbox.toggled.connect(self._on_mobsf_toggled)
         mobsf_group.setLayout(mobsf_layout)
@@ -644,6 +658,7 @@ class SettingsPanel(QWidget):
             checked: Whether MobSF analysis is enabled
         """
         self.mobsf_api_url_input.setEnabled(checked)
+        self.auto_run_mobsf_after_crawl_checkbox.setEnabled(checked)
 
     def _on_tracing_toggled(self, checked: bool):
         """Handle tracing enabled checkbox toggle."""
@@ -745,6 +760,9 @@ class SettingsPanel(QWidget):
         enable_mobsf_analysis = self._config_store.get_setting("enable_mobsf_analysis", default=False)
         self.enable_mobsf_analysis_checkbox.setChecked(enable_mobsf_analysis)
         self._on_mobsf_toggled(enable_mobsf_analysis)
+
+        auto_run_mobsf = self._config_store.get_setting("auto_run_mobsf_after_crawl", default=False)
+        self.auto_run_mobsf_after_crawl_checkbox.setChecked(auto_run_mobsf)
 
         mobsf_api_url = self._config_store.get_setting("mobsf_api_url", default="http://localhost:8000")
         self.mobsf_api_url_input.setText(mobsf_api_url)
@@ -916,6 +934,9 @@ class SettingsPanel(QWidget):
                 # Save MobSF settings
                 enable_mobsf_analysis = self.enable_mobsf_analysis_checkbox.isChecked()
                 self._config_store.set_setting("enable_mobsf_analysis", enable_mobsf_analysis, "bool")
+
+                auto_run_mobsf = self.auto_run_mobsf_after_crawl_checkbox.isChecked()
+                self._config_store.set_setting("auto_run_mobsf_after_crawl", auto_run_mobsf, "bool")
 
                 mobsf_api_url = self.mobsf_api_url_input.text().strip()
                 if mobsf_api_url:
@@ -1175,6 +1196,14 @@ class SettingsPanel(QWidget):
             True if MobSF analysis is enabled
         """
         return self.enable_mobsf_analysis_checkbox.isChecked()
+
+    def get_auto_run_mobsf_after_crawl(self) -> bool:
+        """Get the current auto-run MobSF after crawl state.
+
+        Returns:
+            True if MobSF analysis should run automatically after a successful crawl
+        """
+        return self.auto_run_mobsf_after_crawl_checkbox.isChecked()
 
     def get_exploration_objective(self) -> str:
         """Get the current exploration objective / prompt for crawler agent.

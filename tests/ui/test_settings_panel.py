@@ -749,3 +749,25 @@ class TestOmniparserKeepAlive:
         panel2 = _create_settings_panel(mock_config_store)
         assert panel2.omniparser_keepalive_checkbox.isChecked()
         assert panel2.omniparser_keepalive_interval_input.value() == 7
+
+
+class TestMobSFAutoRun:
+    """Tests for the MobSF auto-run-after-crawl checkbox."""
+
+    def test_auto_run_checkbox_exists_and_disabled_initially(self, qt_app, mock_config_store):
+        panel = _create_settings_panel(mock_config_store)
+        assert hasattr(panel, "auto_run_mobsf_after_crawl_checkbox")
+        assert not panel.auto_run_mobsf_after_crawl_checkbox.isChecked()
+        assert not panel.auto_run_mobsf_after_crawl_checkbox.isEnabled()
+
+    def test_auto_run_checkbox_enabled_when_mobsf_enabled(self, qt_app, mock_config_store):
+        panel = _create_settings_panel(mock_config_store)
+        panel.enable_mobsf_analysis_checkbox.setChecked(True)
+        assert panel.auto_run_mobsf_after_crawl_checkbox.isEnabled()
+
+    def test_get_auto_run_mobsf_after_crawl(self, qt_app, mock_config_store):
+        panel = _create_settings_panel(mock_config_store)
+        assert panel.get_auto_run_mobsf_after_crawl() is False
+        panel.enable_mobsf_analysis_checkbox.setChecked(True)
+        panel.auto_run_mobsf_after_crawl_checkbox.setChecked(True)
+        assert panel.get_auto_run_mobsf_after_crawl() is True

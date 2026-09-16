@@ -29,9 +29,50 @@ MOBSF_CONTAINER_NAME = "mobile-crawler-mobsf"
 MOBSF_API_KEY_FILE = ".mobsf_api_key"
 MOBSF_KEY_DISCOVERY_ERROR = (
     "MobSF API key could not be discovered from .mobsf_api_key or Docker logs for "
-    "mobile-crawler-mobsf. Start MobSF with scripts/start.ps1."
+    "mobile-crawler-mobsf. Enable MobSF analysis and restart the GUI, or start MobSF manually."
 )
 MOBSF_INVALID_KEY_ERROR = "MobSF API key is invalid; refreshed Docker key did not authenticate."
+
+
+def extract_api_key_from_logs(logs: str) -> str:
+    """Extract the MobSF REST API key from raw container log output.
+
+    MobSF prints the key with ANSI color codes, so those are stripped first.
+
+    Args:
+        logs: Raw combined stdout/stderr text from the MobSF container.
+
+    Returns:
+        The discovered API key, or an empty string if none was found.
+    """
+    logs = re.sub(r"\x1b\[[0-9;]*m", "", logs)
+    match = re.search(r"REST API Key:\s*([A-Fa-f0-9]+)", logs)
+    if match:
+        return match.group(1).strip()
+    return ""
+
+
+def find_api_key_file() -> Path | None:
+    """Find .mobsf_api_key in the current working tree or its parents."""
+    for parent in [Path.cwd(), *Path.cwd().parents]:
+        candidate = parent / MOBSF_API_KEY_FILE
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def api_key_write_path() -> Path:
+    """Return the path used to cache a discovered MobSF API key."""
+    existing = find_api_key_file()
+    return existing if existing else Path.cwd() / MOBSF_API_KEY_FILE
+
+
+def save_api_key_file(api_key: str) -> None:
+    """Cache a discovered MobSF API key for future runs."""
+    try:
+        api_key_write_path().write_text(f"{api_key}\n", encoding="utf-8")
+    except OSError as e:
+        logger.warning("Failed to save MobSF API key file: %s", e)
 
 
 class MobSFAnalysisResult:
@@ -236,23 +277,15 @@ class MobSFManager:
 
     def _find_api_key_file(self) -> Path | None:
         """Find .mobsf_api_key in the current working tree or parents."""
-        for parent in [Path.cwd(), *Path.cwd().parents]:
-            candidate = parent / MOBSF_API_KEY_FILE
-            if candidate.exists():
-                return candidate
-        return None
+        return find_api_key_file()
 
     def _api_key_write_path(self) -> Path:
         """Return the path used to cache a discovered MobSF API key."""
-        existing = self._find_api_key_file()
-        return existing if existing else Path.cwd() / MOBSF_API_KEY_FILE
+        return api_key_write_path()
 
     def _save_api_key_file(self, api_key: str) -> None:
         """Cache a discovered MobSF API key for future runs."""
-        try:
-            self._api_key_write_path().write_text(f"{api_key}\n", encoding="utf-8")
-        except OSError as e:
-            logger.warning("Failed to save MobSF API key file: %s", e)
+        save_api_key_file(api_key)
 
     def _discover_api_key_from_docker_logs(self) -> str:
         """Extract the MobSF REST API key from the managed Docker container logs."""
@@ -269,12 +302,7 @@ class MobSFManager:
             logger.warning("Failed to read MobSF Docker logs: %s", e)
             return ""
 
-        logs = f"{result.stdout}\n{result.stderr}"
-        logs = re.sub(r"\x1b\[[0-9;]*m", "", logs)
-        match = re.search(r"REST API Key:\s*([A-Fa-f0-9]+)", logs)
-        if match:
-            return match.group(1).strip()
-        return ""
+        return extract_api_key_from_logs(f"{result.stdout}\n{result.stderr}")
 
     def _validate_api_key(self, api_url: str, api_key: str) -> tuple[bool, str | None]:
         """Validate a MobSF API key against an authenticated API endpoint."""

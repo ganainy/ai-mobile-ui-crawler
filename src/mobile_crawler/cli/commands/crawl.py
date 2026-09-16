@@ -237,6 +237,7 @@ def crawl(device: str, package: str, model: str, steps: int | None, duration: in
             config_manager.set('enable_video_recording', True)
         if enable_mobsf_analysis:
             config_manager.set('enable_mobsf_analysis', True)
+            config_manager.set('auto_run_mobsf_after_crawl', True)
 
         # Initialize database
         db_manager = DatabaseManager()

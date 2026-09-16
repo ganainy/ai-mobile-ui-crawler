@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QApplication,
     QDialog,
     QMainWindow,
+    QMessageBox,
     QSplitter,
     QTabWidget,
     QVBoxLayout,
@@ -36,6 +37,7 @@ from mobile_crawler.infrastructure.database import DatabaseManager
 
 # Service imports
 from mobile_crawler.infrastructure.device_detection import DeviceDetection
+from mobile_crawler.infrastructure.mobsf_docker import MobSFDockerService
 from mobile_crawler.infrastructure.mobsf_manager import MobSFManager
 from mobile_crawler.infrastructure.run_repository import RunRepository
 from mobile_crawler.infrastructure.run_stats_repository import RunStatsRepository
@@ -45,6 +47,7 @@ from mobile_crawler.infrastructure.step_log_repository import StepLogRepository
 from mobile_crawler.infrastructure.step_phase_repository import StepPhaseRepository
 from mobile_crawler.infrastructure.user_config_store import UserConfigStore
 from mobile_crawler.ui.log_cleaner import LogCleaner
+from mobile_crawler.ui.mobsf_startup_worker import MobSFStartupWorker
 
 # Signal adapter
 from mobile_crawler.ui.signal_adapter import QtSignalAdapter
@@ -245,6 +248,10 @@ class MainWindow(QMainWindow):
         self._crawler_worker = None
         self._current_run_id = None
         self._crawler_loop = None
+
+        # MobSF startup state
+        self._mobsf_docker_service = None
+        self._mobsf_startup_worker = None
 
         # Load step-by-step preference from config store
         config_store = self._services["user_config_store"]
@@ -554,25 +561,28 @@ class MainWindow(QMainWindow):
         enable_traffic_capture = self.settings_panel.get_enable_traffic_capture()
         enable_video_recording = self.settings_panel.get_enable_video_recording()
         enable_mobsf_analysis = self.settings_panel.get_enable_mobsf_analysis()
+        auto_run_mobsf = self.settings_panel.get_auto_run_mobsf_after_crawl()
 
         # Log feature flag values for debugging
         self.signal_adapter.on_debug_log(
             0,
             0,
-            f"UI: Feature flags - traffic_capture={enable_traffic_capture}, video_recording={enable_video_recording}, mobsf_analysis={enable_mobsf_analysis}",
+            f"UI: Feature flags - traffic_capture={enable_traffic_capture}, video_recording={enable_video_recording}, mobsf_analysis={enable_mobsf_analysis}, auto_run_mobsf={auto_run_mobsf}",
         )
 
         config_manager.set("enable_traffic_capture", enable_traffic_capture)
         config_manager.set("pcapdroid_tls_decryption", bool(enable_traffic_capture))
         config_manager.set("enable_video_recording", enable_video_recording)
         config_manager.set("enable_mobsf_analysis", enable_mobsf_analysis)
+        config_manager.set("auto_run_mobsf_after_crawl", auto_run_mobsf)
 
         # Verify settings were stored correctly by reading them back
         verified_traffic = config_manager.get("enable_traffic_capture", "NOT_FOUND")
         verified_video = config_manager.get("enable_video_recording", "NOT_FOUND")
         verified_mobsf = config_manager.get("enable_mobsf_analysis", "NOT_FOUND")
+        verified_auto_run_mobsf = config_manager.get("auto_run_mobsf_after_crawl", "NOT_FOUND")
         self.signal_adapter.on_debug_log(
-            0, 0, f"UI: Verified DB write - traffic={verified_traffic}, video={verified_video}, mobsf={verified_mobsf}"
+            0, 0, f"UI: Verified DB write - traffic={verified_traffic}, video={verified_video}, mobsf={verified_mobsf}, auto_run_mobsf={verified_auto_run_mobsf}"
         )
 
         # Set PCAPdroid configuration (package and activity are fixed, no UI configuration needed)
@@ -1816,8 +1826,68 @@ class MainWindow(QMainWindow):
         self._update_dashboard_stats()
         self._current_stats = None
 
+    def start_mobsf_if_enabled(self) -> None:
+        """Start the MobSF Docker container in the background if analysis is enabled.
+
+        Only runs when the persisted ``enable_mobsf_analysis`` setting is on. The
+        orchestration runs on a worker thread so the UI stays responsive during
+        container startup or a first-time image pull.
+        """
+        if not self.settings_panel.get_enable_mobsf_analysis():
+            return
+
+        docker_service = MobSFDockerService()
+        self._mobsf_docker_service = docker_service
+
+        worker = MobSFStartupWorker(docker_service)
+        worker.result.connect(self._on_mobsf_startup_result)
+        self._mobsf_startup_worker = worker
+        worker.start()
+
+    def _on_mobsf_startup_result(self, ok: bool, message: str, started_by_gui: bool) -> None:
+        """Handle the MobSF startup worker result: log it and warn if it failed."""
+        if self._mobsf_docker_service is not None:
+            self._mobsf_docker_service.started_by_gui = started_by_gui
+
+        level = LogLevel.INFO if ok else LogLevel.WARNING
+        self._append_clean_log(level, f"MobSF: {message}", "mobsf")
+
+        if not ok:
+            QMessageBox.warning(
+                self,
+                "MobSF Unavailable",
+                f"MobSF static analysis could not be started:\n\n{message}",
+            )
+
+    def _maybe_prompt_mobsf_stop(self) -> None:
+        """Offer to stop the MobSF container if this session started it."""
+        docker_service = getattr(self, "_mobsf_docker_service", None)
+        if docker_service is None or not docker_service.started_by_gui:
+            return
+
+        try:
+            if not docker_service.is_running():
+                return
+        except Exception:
+            return
+
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Question)
+        box.setWindowTitle("MobSF")
+        box.setText("MobSF is still running.")
+        box.setInformativeText("Keep it running, or stop the container?")
+        keep_btn = box.addButton("Keep Running", QMessageBox.ButtonRole.YesRole)
+        stop_btn = box.addButton("Stop MobSF", QMessageBox.ButtonRole.NoRole)
+        box.setDefaultButton(keep_btn)
+        box.exec()
+
+        if box.clickedButton() is stop_btn:
+            docker_service.stop()
+
     def closeEvent(self, event):
         """Handle window close event."""
+        self._maybe_prompt_mobsf_stop()
+
         try:
             if self.settings_panel:
                 self.settings_panel.stop_keepalive()
@@ -1833,6 +1903,13 @@ class MainWindow(QMainWindow):
                 if not worker.wait(2000):  # Wait up to 2s
                     worker.terminate()
                     worker.wait()
+
+            # Wait briefly for the MobSF startup worker to avoid a running-thread warning
+            startup_worker = getattr(self, "_mobsf_startup_worker", None)
+            if startup_worker and startup_worker.isRunning():
+                if not startup_worker.wait(10000):
+                    startup_worker.terminate()
+                    startup_worker.wait()
         except Exception:
             # Silently fail on close errors
             pass
@@ -1855,6 +1932,7 @@ def run():
     # Create window after setting the app icon
     window = MainWindow()
     window.showMaximized()
+    window.start_mobsf_if_enabled()
 
     sys.exit(app.exec())
 

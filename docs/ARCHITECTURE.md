@@ -8,14 +8,14 @@
 ```text
 ┌─────────────────────────────────────────────────────────────┐
 │                 Interface / Entry Layer                      │
-├──────────────────┬──────────────────┬───────────────────────┤
-│   CLI            │   GUI            │   Startup scripts      │
-│  `run_cli.py`    │ `run_ui.py`      │ `scripts/start.ps1`    │
-│  `src/mobile_`   │ `src/mobile_`    │                        │
-│  `crawler/cli/*` │ `crawler/ui/*`   │                        │
-└────────┬─────────┴────────┬─────────┴──────────┬────────────┘
-         │                  │                     │
-         ▼                  ▼                     ▼
+├──────────────────────────┬───────────────────────────────────┤
+│   CLI                    │   GUI                             │
+│  `run_cli.py`            │  `mobile-crawler-gui`             │
+│  `src/mobile_crawler/`   │  `src/mobile_crawler/ui/`         │
+│  `cli/*`                 │  (via `main_window.py`)           │
+└────────┬─────────────────┴──────────┬────────────────────────┘
+         │                            │
+         ▼                            ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                 Orchestration / Domain                       │
 │  `src/mobile_crawler/core/*` + `src/mobile_crawler/domain/*`│
@@ -54,7 +54,7 @@
 
 **Interface Layer:**
 - Purpose: Accept user intent and map it to crawl/report/config operations.
-- Location: `run_cli.py`, `run_ui.py`, `src/mobile_crawler/cli/`, `src/mobile_crawler/ui/`
+- Location: `run_cli.py`, `src/mobile_crawler/cli/`, `src/mobile_crawler/ui/`
 - Contains: Click commands, Qt widgets, startup helpers.
 - Depends on: `config`, `core`, `domain`, `infrastructure`.
 - Used by: End users and scripts.
@@ -131,14 +131,14 @@
 - Responsibilities: Register Click command group and dispatch subcommands.
 
 **GUI Entrypoint:**
-- Location: `run_ui.py`, `src/mobile_crawler/ui/main_window.py:1515`
-- Triggers: `mobile-crawler-gui` script or direct Python execution.
-- Responsibilities: Build `QApplication`, instantiate `MainWindow`, start event loop.
+- Location: `src/mobile_crawler/ui/main_window.py` (`run()`)
+- Triggers: `mobile-crawler-gui` script or direct Python execution (`python -m mobile_crawler.ui.main_window`).
+- Responsibilities: Build `QApplication`, instantiate `MainWindow`, start the MobSF Docker container when MobSF analysis is enabled, and start the event loop.
 
-**Startup Orchestration Script:**
-- Location: `scripts/start.ps1`
-- Triggers: Manual shell execution.
-- Responsibilities: Optionally start MobSF and then launch the UI.
+**MobSF Container Orchestration:**
+- Location: `src/mobile_crawler/infrastructure/mobsf_docker.py`
+- Triggers: `MainWindow.start_mobsf_if_enabled()` at GUI launch, when `enable_mobsf_analysis` is on.
+- Responsibilities: Start/stop the MobSF Docker container, wait for readiness, and extract/cache the REST API key.
 
 ## Architectural Constraints
 
