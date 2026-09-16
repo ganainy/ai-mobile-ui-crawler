@@ -3,7 +3,7 @@
 from unittest.mock import Mock
 
 import pytest
-from PySide6.QtWidgets import QApplication, QLabel, QWidget
+from PySide6.QtWidgets import QApplication, QLabel, QMessageBox, QWidget
 
 from mobile_crawler.domain.providers.registry import ProviderRegistry
 from mobile_crawler.domain.providers.vision_detector import VisionDetector
@@ -193,8 +193,12 @@ class TestCurrentProvider:
         """Test that current_provider returns None initially."""
         assert ai_model_selector.current_provider() is None
 
-    def test_current_provider_returns_selected_provider(self, qapp, ai_model_selector):
+    def test_current_provider_returns_selected_provider(self, qapp, ai_model_selector, monkeypatch):
         """Test that current_provider returns selected provider."""
+        # No API key callback is configured, so selecting a key-required provider
+        # would otherwise pop a real blocking "API Key Required" dialog.
+        monkeypatch.setattr(QMessageBox, "warning", lambda *args, **kwargs: None)
+
         ai_model_selector.provider_combo.setCurrentIndex(1)  # Select "Gemini"
 
         assert ai_model_selector.current_provider() == "gemini"
@@ -224,8 +228,12 @@ class TestCurrentModel:
 class TestSetProvider:
     """Tests for set_provider method."""
 
-    def test_set_provider(self, qapp, ai_model_selector):
+    def test_set_provider(self, qapp, ai_model_selector, monkeypatch):
         """Test setting a specific provider."""
+        # No API key callback is configured, and "openrouter" requires one, so this
+        # would otherwise pop a real blocking "API Key Required" dialog.
+        monkeypatch.setattr(QMessageBox, "warning", lambda *args, **kwargs: None)
+
         ai_model_selector.provider_registry.fetch_gemini_models = Mock(return_value=[])
 
         ai_model_selector.set_provider("openrouter")
