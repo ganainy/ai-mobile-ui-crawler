@@ -8,3 +8,17 @@ When you need to understand the project's architecture, find how components rela
 
 - `.ua/knowledge-graph.json` — nodes, edges, layers, and tour. Check `.ua/meta.json`'s `gitCommitHash` to see how stale it is relative to `HEAD`.
 - Re-run `/understand` after significant structural changes to keep it current.
+
+## Agent skills
+
+### Issue tracker
+
+Issues and specs live as GitHub issues (`gh` CLI) in `ganainy/ai-mobile-ui-crawler`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default label vocabulary (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context layout (`CONTEXT.md` + `docs/adr/` at the repo root). See `docs/agents/domain.md`.
