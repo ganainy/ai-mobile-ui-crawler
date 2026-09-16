@@ -196,7 +196,7 @@ class SettingsPanel(QWidget):
         self.test_username_input.setText("testuser")
         credentials_layout.addLayout(field_layout)
 
-        field_layout, self.test_password_input = create_credential_field("Test Password:", "Enter test password")
+        field_layout, self.test_password_input = create_credential_field("Test Password:", "Enter test password", is_password=True)
         self.test_password_input.setText("Password123")
         credentials_layout.addLayout(field_layout)
 
