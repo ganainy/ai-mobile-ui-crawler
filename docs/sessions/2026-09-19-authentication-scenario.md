@@ -11,3 +11,7 @@ date: 2026-09-19
 - Sign-up password is generated per run; sign-up address is `name+package@gmail.com` (or the App Account override).
 - Tests: `tests/domain/test_authentication.py`, plus goal/tool test in `test_crawler_agent_service.py`. Full suite: 1426 passed, 7 skipped.
 - Not done: manual check on a real app needing email verification (acceptance item); `auth_note` in Run Report.
+
+## Test speedup (same day)
+Full suite 5m28s -> 3m34s (commit 2bbbba6): virtual clock in `test_traffic_capture_manager.py`, `pre_crawl_wake_device: False` in traffic-capture loop tests (they called real adb), leaked-connection cleanup in `test_screen_repository.py`. Root cause not fixed: `DatabaseManager.get_connection()` opens an unclosed connection per call, locking the file on Windows.
+Note: unstaged edits in `crawler_agent_service.py`, `input_dictionary.py`, `prompt_builder.py`, `sms_reader.py`, `main_window.py`, `settings_panel.py` appeared after the commits; not made deliberately, left untouched.
