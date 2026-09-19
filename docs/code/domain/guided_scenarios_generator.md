@@ -24,4 +24,5 @@ Source: `src/mobile_crawler/domain/guided_scenarios_generator.py`
 
 ## Imported by
 - [[code/domain/crawler_agent_service|domain.crawler_agent_service]]
+- [[code/domain/run_config_snapshot|domain.run_config_snapshot]]
 - [[code/ui/main_window|ui.main_window]]

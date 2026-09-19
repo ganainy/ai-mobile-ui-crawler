@@ -17,6 +17,7 @@ Source: `src/mobile_crawler/infrastructure/user_config_store.py`
 ## Imported by
 - [[code/config/config_manager|config.config_manager]]
 - [[code/domain/omni_parser_client|domain.omni_parser_client]]
+- [[code/infrastructure/app_account_store|infrastructure.app_account_store]]
 - [[code/ui/main_window|ui.main_window]]
 - [[code/ui/widgets/ai_model_selector|ui.widgets.ai_model_selector]]
 - [[code/ui/widgets/app_selector|ui.widgets.app_selector]]

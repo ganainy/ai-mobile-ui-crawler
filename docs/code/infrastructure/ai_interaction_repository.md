@@ -18,5 +18,6 @@ Source: `src/mobile_crawler/infrastructure/ai_interaction_repository.py`
 ## Imported by
 - [[code/domain/crawler_agent_service|domain.crawler_agent_service]]
 - [[code/domain/report_generator|domain.report_generator]]
+- [[code/infrastructure/analysis_bundle|infrastructure.analysis_bundle]]
 - [[code/infrastructure/run_exporter|infrastructure.run_exporter]]
 - [[code/ui/main_window|ui.main_window]]

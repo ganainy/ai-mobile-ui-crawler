@@ -11,7 +11,9 @@ Entry point for the Obsidian vault (`docs/`). Claude reads this first each sessi
 - Recent: local OmniParser Docker auto-start at GUI launch; Docker stop dialog / taskbar icon / Stop button polish; App Web Profile -> Guided Scenarios wired end-to-end.
 
 ## Next / blockers
-- (none recorded yet)
+- Issue #6 (Run Report + Analysis Bundle): implemented, uncommitted, not yet run on a real device or against a live Phoenix/Langfuse server. See [session](sessions/2026-09-19-run-report-analysis-bundle.md).
+- Auth / sign-up / OTP support: design agreed 2026-09-19, issues #7-#11 (#11 blocked by #7-#10). #7 App Accounts done ([session](sessions/2026-09-19-app-accounts.md)); #8-#11 not started. See [session](sessions/2026-09-19-auth-verification-design.md).
+- Next: verify #6 on a real run, then run the crawler on ~10 health apps and analyse the bundles.
 
 ## Map of the vault
 - [Glossary](Glossary.md) - stub pointing at root `CONTEXT.md`

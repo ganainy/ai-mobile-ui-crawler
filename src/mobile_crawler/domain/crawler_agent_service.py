@@ -10,6 +10,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
+from workflows.errors import WorkflowCancelledByUser
+
 from mobile_crawler.config.config_manager import ConfigManager
 from mobile_crawler.domain.action_verifier import ActionVerifier
 from mobile_crawler.domain.context_guard import (
@@ -31,10 +33,10 @@ from mobile_crawler.domain.crawler_agent.agent.manager.events import ManagerResp
 from mobile_crawler.domain.errors import ErrorContext, FatalError
 from mobile_crawler.domain.guided_scenarios_generator import guided_scenarios_config_key
 from mobile_crawler.domain.models import AIAction, BoundingBox
+from mobile_crawler.domain.prompt_builder import format_login_and_form_data
 from mobile_crawler.domain.stats_collector_span_processor import OTEL_AVAILABLE, StatsCollectorSpanProcessor
 from mobile_crawler.domain.step_phase import StepPhase, StepPhaseStateMachine
 from mobile_crawler.domain.step_phase_models import StepPhaseTransition
-from workflows.errors import WorkflowCancelledByUser
 from mobile_crawler.domain.ui_wait_predicate import AdaptiveWaitConfig, UIWaitPredicate
 from mobile_crawler.infrastructure.ai_interaction_repository import AIInteraction, AIInteractionRepository
 from mobile_crawler.infrastructure.step_phase_repository import StepPhaseRepository
@@ -445,7 +447,7 @@ class CrawlerAgentService:
             return
 
         logger.info(
-            "Target app is not active before crawler startup " "(current=%s, target=%s). Launching target app.",
+            "Target app is not active before crawler startup (current=%s, target=%s). Launching target app.",
             current_package,
             app_package,
         )
@@ -474,7 +476,7 @@ class CrawlerAgentService:
                 return
 
             logger.warning(
-                "Target app preflight verification failed on attempt %s/%s " "(current=%s, target=%s)",
+                "Target app preflight verification failed on attempt %s/%s (current=%s, target=%s)",
                 attempt,
                 attempts,
                 current_package,
@@ -483,7 +485,7 @@ class CrawlerAgentService:
 
         detail = f"last_error={last_error}" if last_error else f"current_package={current_package}"
         raise RuntimeError(
-            f"Unable to open target app '{app_package}' before crawler startup after " f"{attempts} attempts ({detail})"
+            f"Unable to open target app '{app_package}' before crawler startup after {attempts} attempts ({detail})"
         )
 
     async def _ensure_device_awake_before_crawler(self) -> None:
@@ -678,9 +680,7 @@ class CrawlerAgentService:
                 adb_executor=adb_executor,
                 context_capture=self._context_capture,
             )
-            logger.info(
-                f"DeviceContextCapture and AppSwitchRecovery wired with " f"target_package={self._target_package}"
-            )
+            logger.info(f"DeviceContextCapture and AppSwitchRecovery wired with target_package={self._target_package}")
 
         # after_sleep_action is now a real delay driven by UIWaitPredicate
         # (wait_for_ui_settled) in the agents — no longer forced to 0.0
@@ -909,7 +909,7 @@ class CrawlerAgentService:
             except Exception as e:
                 logger.warning(f"Failed to emit action timing event: {e}")
 
-        logger.debug(f"Step {self._current_step_number}: tool={tool_name} " f"success={success}")
+        logger.debug(f"Step {self._current_step_number}: tool={tool_name} success={success}")
 
         # --- Context pre-check (D-02): compare package against target ---
         skip_reason = None
@@ -948,7 +948,7 @@ class CrawlerAgentService:
                             # Record transition with abort metadata
                             self._step_phase_machine.transition_to(StepPhase.CHECKPOINT)
                             raise FatalError(
-                                f"Aborting: {len(attempts)} consecutive app-switch " f"recovery failures",
+                                f"Aborting: {len(attempts)} consecutive app-switch recovery failures",
                                 context=ErrorContext(run_id=self._current_run_id),
                             )
                     else:
@@ -1031,7 +1031,7 @@ class CrawlerAgentService:
                     }
                 )
 
-                logger.info(f"Step {self._current_step_number}: skipping DECIDE/EXECUTE " f"due to {skip_reason.value}")
+                logger.info(f"Step {self._current_step_number}: skipping DECIDE/EXECUTE due to {skip_reason.value}")
 
                 # CAPTURE -> CHECKPOINT (skip DECIDE, EXECUTE, RECORD)
                 self._step_phase_machine.transition_to(StepPhase.CHECKPOINT)
@@ -1069,8 +1069,7 @@ class CrawlerAgentService:
                     try:
                         pre_state = await self._action_verifier.capture_pre_state()
                         logger.debug(
-                            f"Step {self._current_step_number}: captured pre_state "
-                            f"pkg={pre_state.get('package', '?')}"
+                            f"Step {self._current_step_number}: captured pre_state pkg={pre_state.get('package', '?')}"
                         )
                     except Exception as e:
                         logger.warning(f"Step {self._current_step_number}: pre_state capture failed: {e}")
@@ -1085,7 +1084,7 @@ class CrawlerAgentService:
                         parent_phase=StepPhase.EXECUTE,
                     )
                     if not settled:
-                        logger.debug(f"UI did not settle after {tool_name} " f"(step {self._current_step_number})")
+                        logger.debug(f"UI did not settle after {tool_name} (step {self._current_step_number})")
 
                 # EXECUTE -> RECORD
                 self._step_phase_machine.transition_to(StepPhase.RECORD)
@@ -1142,7 +1141,7 @@ class CrawlerAgentService:
         emits AI Monitor signals, and persists to ai_interactions table with real step numbers.
         """
         if not isinstance(
-            event, (ManagerResponseEvent, ExecutorResponseEvent, FastAgentResponseEvent, AppOpenerResponseEvent)
+            event, ManagerResponseEvent | ExecutorResponseEvent | FastAgentResponseEvent | AppOpenerResponseEvent
         ):
             return
 
@@ -1157,7 +1156,7 @@ class CrawlerAgentService:
         # and the tool actually running, no ToolExecutionEvent is emitted, the tool
         # counter never advances, and the next cycle would recompute the SAME number.
         # The dedicated counter is self-contained and immune to that (Fix 5).
-        if isinstance(event, (ManagerResponseEvent, AppOpenerResponseEvent, FastAgentResponseEvent)):
+        if isinstance(event, ManagerResponseEvent | AppOpenerResponseEvent | FastAgentResponseEvent):
             self._ai_call_step_number += 1
         step_number = self._ai_call_step_number
 
@@ -1293,13 +1292,24 @@ class CrawlerAgentService:
                 self._emit_step_phase_event("on_ai_request_sent", self._current_run_id, step_number, request_data)
                 # Also emit token counts directly in response_data for stats tracking fallback
                 # (in case OTel span processor isn't active)
-                response_data_with_tokens = {**response_data, "tokens_input": tokens_input, "tokens_output": tokens_output}
-                self._emit_step_phase_event("on_ai_response_received", self._current_run_id, step_number, response_data_with_tokens)
+                response_data_with_tokens = {
+                    **response_data,
+                    "tokens_input": tokens_input,
+                    "tokens_output": tokens_output,
+                }
+                self._emit_step_phase_event(
+                    "on_ai_response_received", self._current_run_id, step_number, response_data_with_tokens
+                )
                 if screenshot_path:
-                    self._emit_step_phase_event("on_screenshot_captured", self._current_run_id, step_number, screenshot_path)
+                    self._emit_step_phase_event(
+                        "on_screenshot_captured", self._current_run_id, step_number, screenshot_path
+                    )
                 if omniparser_ms is not None:
                     self._emit_step_phase_event(
-                        "on_omniparser_timing", self._current_run_id, step_number, omniparser_ms,
+                        "on_omniparser_timing",
+                        self._current_run_id,
+                        step_number,
+                        omniparser_ms,
                         len(elements) if elements else 0,
                     )
             except Exception as e:
@@ -1366,6 +1376,8 @@ class CrawlerAgentService:
                     f"and discover the app's functionality. Focus on user flows like "
                     f"registration, login, main features, and settings."
                 )
+
+        description += "\n\nLOGIN AND FORM DATA:\n" + format_login_and_form_data(self.config_manager, app_package)
 
         # Force continuous exploration by disabling self-termination
         description += (
@@ -1446,9 +1458,7 @@ class CrawlerAgentService:
                 await self._ensure_target_app_active_before_crawler(app_package)
 
                 # Initialize agent if needed
-                await self._initialize_agent(
-                    max_steps, target_package=app_package, step_by_step=step_by_step
-                )
+                await self._initialize_agent(max_steps, target_package=app_package, step_by_step=step_by_step)
 
                 # Create exploration goal
                 goal = self._create_exploration_goal(app_package, max_steps, exploration_objective)
@@ -1646,9 +1656,7 @@ class CrawlerAgentService:
                 successful_count = sum(1 for outcome in action_outcomes if outcome is True)
                 failed_count = sum(1 for outcome in action_outcomes if outcome is False)
 
-                logger.info(
-                    f"Crawler agent cancelled by user after {steps_completed} steps in {duration_ms:.1f}ms"
-                )
+                logger.info(f"Crawler agent cancelled by user after {steps_completed} steps in {duration_ms:.1f}ms")
                 return CrawlerRunResult(
                     success=True,
                     steps_completed=steps_completed,

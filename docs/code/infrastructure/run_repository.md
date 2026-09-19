@@ -24,6 +24,7 @@ Source: `src/mobile_crawler/infrastructure/run_repository.py`
 - [[code/core/stale_run_cleaner|core.stale_run_cleaner]]
 - [[code/domain/report_generator|domain.report_generator]]
 - [[code/domain/traffic_capture_manager|domain.traffic_capture_manager]]
+- [[code/infrastructure/analysis_bundle|infrastructure.analysis_bundle]]
 - [[code/infrastructure/mobsf_manager|infrastructure.mobsf_manager]]
 - [[code/infrastructure/run_exporter|infrastructure.run_exporter]]
 - [[code/infrastructure/session_folder_manager|infrastructure.session_folder_manager]]

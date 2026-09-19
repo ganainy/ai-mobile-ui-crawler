@@ -56,6 +56,7 @@ class _FakeSelector(QWidget):
         self.omniparser_keepalive_pinged = _Connectable()
         self.reset_layout_requested = _Connectable()
         self.generate_guided_scenarios_requested = _Connectable()
+        self.delete_app_account_requested = _Connectable()
 
     def set_api_key_callback(self, _callback):
         pass
@@ -89,8 +90,6 @@ class TestMainWindowConfig:
         window.settings_panel.get_max_duration.return_value = 600
         window.settings_panel.get_gemini_api_key.return_value = ""
         window.settings_panel.get_openrouter_api_key.return_value = ""
-        window.settings_panel.get_test_username.return_value = ""
-        window.settings_panel.get_test_password.return_value = ""
         window.settings_panel.get_top_bar_height.return_value = 0
         window.settings_panel.get_enable_traffic_capture.return_value = True
         window.settings_panel.get_enable_video_recording.return_value = False
@@ -105,9 +104,7 @@ class TestMainWindowConfig:
         window.settings_panel.get_exploration_objective.return_value = ""
 
         config_manager = Mock()
-        config_manager.get.side_effect = (
-            lambda key, default=None: True if key == "enable_traffic_capture" else default
-        )
+        config_manager.get.side_effect = lambda key, default=None: True if key == "enable_traffic_capture" else default
         mock_config_manager_cls.return_value = config_manager
 
         window._create_config_manager()

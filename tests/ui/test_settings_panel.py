@@ -125,7 +125,7 @@ class MockConfigStore:
             return "int"
         elif isinstance(value, float):
             return "float"
-        elif isinstance(value, (list, dict)):
+        elif isinstance(value, list | dict):
             return "json"
         else:
             return "string"
@@ -162,21 +162,25 @@ def mock_config_store():
     conn = sqlite3.connect(":memory:")
     conn.row_factory = sqlite3.Row
     # Create schema
-    conn.execute("""
+    conn.execute(
+        """
         CREATE TABLE IF NOT EXISTS user_config (
                 key TEXT PRIMARY KEY,
                 value TEXT,
                 value_type TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             )
-    """)
-    conn.execute("""
+    """
+    )
+    conn.execute(
+        """
         CREATE TABLE IF NOT EXISTS secrets (
                 key TEXT PRIMARY KEY,
                 encrypted_value BLOB NOT NULL,
                 updated_at TEXT NOT NULL
             )
-    """)
+    """
+    )
     conn.commit()
 
     yield MockConfigStore(conn)
@@ -285,6 +289,7 @@ class TestAPIKeyInputs:
         panel.openrouter_api_key_input.setText("test-key-456")
         assert panel.get_openrouter_api_key() == "test-key-456"
 
+
 class TestCrawlLimitInputs:
     """Tests for crawl limit input fields."""
 
@@ -323,31 +328,45 @@ class TestCrawlLimitInputs:
         assert panel.get_max_duration() == 600
 
 
-class TestCredentialInputs:
-    """Tests for test credential input fields."""
+class TestAppAccountInputs:
+    """Tests for the per-app App Account fields (replace the old global test credentials)."""
 
-    def test_test_username_input_exists(self, qt_app, mock_config_store):
-        """Test that test username input exists."""
+    def test_no_global_username_or_password(self, qt_app, mock_config_store):
         panel = _create_settings_panel(mock_config_store)
-        assert hasattr(panel, "test_username_input")
-        assert panel.test_username_input is not None
+        assert not hasattr(panel, "test_username_input")
+        assert not hasattr(panel, "test_password_input")
 
-    def test_get_test_username(self, qt_app, mock_config_store):
-        """Test getting test username value."""
-        panel = _create_settings_panel(mock_config_store)
-        panel.test_username_input.setText("testuser")
-        assert panel.get_test_username() == "testuser"
+    def test_form_fill_data_group_renamed(self, qt_app, mock_config_store):
+        from PySide6.QtWidgets import QGroupBox
 
-    def test_test_password_input_exists(self, qt_app, mock_config_store):
-        """Test that test password input exists."""
         panel = _create_settings_panel(mock_config_store)
-        assert hasattr(panel, "test_password_input")
-        assert panel.test_password_input is not None
+        titles = {g.title() for g in panel.findChildren(QGroupBox)}
+        assert "Form Fill Data" in titles
+        assert "App Test Credentials" not in titles
 
-    def test_test_password_is_password_mode(self, qt_app, mock_config_store):
-        """Test that test password input is password mode."""
+    def test_get_app_account_none_when_username_empty(self, qt_app, mock_config_store):
         panel = _create_settings_panel(mock_config_store)
-        assert panel.test_password_input.echoMode() == QLineEdit.EchoMode.Password
+        assert panel.get_app_account() is None
+
+    def test_app_account_round_trip(self, qt_app, mock_config_store):
+        from mobile_crawler.infrastructure.app_account_store import AppAccount
+
+        panel = _create_settings_panel(mock_config_store)
+        panel.set_app_account(AppAccount("alice", "pw", "a@gmail.com"))
+        assert panel.get_app_account() == AppAccount("alice", "pw", "a@gmail.com")
+        panel.set_app_account(None)
+        assert panel.get_app_account() is None
+
+    def test_app_account_password_is_password_mode(self, qt_app, mock_config_store):
+        panel = _create_settings_panel(mock_config_store)
+        assert panel.app_account_password_input.echoMode() == QLineEdit.EchoMode.Password
+
+    def test_delete_button_emits_signal(self, qt_app, mock_config_store):
+        panel = _create_settings_panel(mock_config_store)
+        received = []
+        panel.delete_app_account_requested.connect(lambda: received.append(True))
+        panel.app_account_delete_button.click()
+        assert received == [True]
 
 
 class TestReset:
@@ -374,14 +393,10 @@ class TestReset:
     def test_reset_clears_credentials(self, qt_app, mock_config_store):
         """Test that reset clears credential inputs."""
         panel = _create_settings_panel(mock_config_store)
-        panel.test_username_input.setText("testuser_custom")
-        panel.test_password_input.setText("testpass_custom")
         panel.test_address_input.setText("Some Other Address")
         panel.test_email_input.setText("other_email@example.com")
         panel.test_phone_input.setText("+123456789")
         panel.reset()
-        assert panel.test_username_input.text() == "testuser"
-        assert panel.test_password_input.text() == "Password123"
         assert panel.test_address_input.text() == "Kaiserstraße 12, 60311 Frankfurt am Main, Germany"
         assert panel.test_email_input.text() == "testuser@example.com"
         assert panel.test_phone_input.text() == ""
@@ -389,6 +404,7 @@ class TestReset:
     def test_reset_exploration_objective_via_button(self, qt_app, mock_config_store):
         """Test that clicking the Reset to Default button resets the objective prompt."""
         from mobile_crawler.ui.widgets.settings_panel import DEFAULT_EXPLORATION_OBJECTIVE
+
         panel = _create_settings_panel(mock_config_store)
         panel.exploration_objective_input.setPlainText("Custom Objective")
         assert panel.exploration_objective_input.toPlainText() == "Custom Objective"
@@ -433,8 +449,6 @@ class TestSettingsPersistence:
         panel.openrouter_api_key_input.setText("sk-or-test-key-1234567890")
         panel.max_steps_input.setValue(250)
         panel.max_duration_input.setValue(600)
-        panel.test_username_input.setText("testuser")
-        panel.test_password_input.setText("testpass")
         panel.omniparser_backend_combo.setCurrentText("local")
         panel.omniparser_local_parse_timeout_input.setValue(180)
 
@@ -455,8 +469,6 @@ class TestSettingsPersistence:
         assert panel2.openrouter_api_key_input.text() == "sk-or-test-key-1234567890"
         assert panel2.max_steps_input.value() == 250
         assert panel2.max_duration_input.value() == 600
-        assert panel2.test_username_input.text() == "testuser"
-        assert panel2.test_password_input.text() == "testpass"
         assert panel2.omniparser_local_parse_timeout_input.value() == 180
 
     def test_omniparser_local_parse_timeout_persists(self, qt_app, mock_config_store, monkeypatch):
@@ -484,8 +496,6 @@ class TestSettingsPersistence:
         assert panel.openrouter_api_key_input.text() == ""
         assert panel.max_steps_input.value() == 100
         assert panel.max_duration_input.value() == 300
-        assert panel.test_username_input.text() == "testuser"
-        assert panel.test_password_input.text() == "Password123"
 
     def test_gemini_api_key_persists(self, qt_app, mock_config_store, monkeypatch):
         """Test that Gemini API key persists across sessions."""
@@ -544,8 +554,6 @@ class TestSettingsPersistence:
     def test_test_credentials_persist(self, qt_app, mock_config_store, monkeypatch):
         """Test that test credentials persist across sessions."""
         panel = _create_settings_panel(mock_config_store)
-        panel.test_username_input.setText("testuser123")
-        panel.test_password_input.setText("testpass456")
 
         # Mock QMessageBox
         def mock_information(parent, title, message):
@@ -556,10 +564,6 @@ class TestSettingsPersistence:
         panel._on_save_clicked()
 
         # Verify in database
-        saved_username = mock_config_store.get_setting("test_username", default="")
-        saved_password = mock_config_store.get_secret_plaintext("test_password")
-        assert saved_username == "testuser123"
-        assert saved_password == "testpass456"
 
     def test_saving_settings_does_not_write_mobsf_api_key(self, qt_app, mock_config_store, monkeypatch):
         """Saving SettingsPanel must not persist or delete manual MobSF secrets."""

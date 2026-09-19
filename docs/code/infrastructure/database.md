@@ -26,6 +26,7 @@ Source: `src/mobile_crawler/infrastructure/database.py`
 - [[code/domain/screen_tracker|domain.screen_tracker]]
 - [[code/domain/traffic_capture_manager|domain.traffic_capture_manager]]
 - [[code/infrastructure/ai_interaction_repository|infrastructure.ai_interaction_repository]]
+- [[code/infrastructure/analysis_bundle|infrastructure.analysis_bundle]]
 - [[code/infrastructure/mobsf_manager|infrastructure.mobsf_manager]]
 - [[code/infrastructure/run_exporter|infrastructure.run_exporter]]
 - [[code/infrastructure/run_repository|infrastructure.run_repository]]

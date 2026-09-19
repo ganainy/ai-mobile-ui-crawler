@@ -41,13 +41,14 @@ from mobile_crawler.domain.models import ActionResult
 from mobile_crawler.domain.providers.registry import ProviderRegistry
 from mobile_crawler.domain.providers.vision_detector import VisionDetector
 from mobile_crawler.domain.report_generator import ReportGenerator
+from mobile_crawler.infrastructure.app_account_store import AppAccountStore
 from mobile_crawler.infrastructure.database import DatabaseManager
 
 # Service imports
 from mobile_crawler.infrastructure.device_detection import DeviceDetection
 from mobile_crawler.infrastructure.mobsf_docker import MobSFDockerService
-from mobile_crawler.infrastructure.omniparser_docker import OmniParserDockerService
 from mobile_crawler.infrastructure.mobsf_manager import MobSFManager
+from mobile_crawler.infrastructure.omniparser_docker import OmniParserDockerService
 from mobile_crawler.infrastructure.run_repository import RunRepository
 from mobile_crawler.infrastructure.run_stats_repository import RunStatsRepository
 from mobile_crawler.infrastructure.screen_repository import ScreenRepository
@@ -89,9 +90,7 @@ def _set_windows_app_user_model_id() -> None:
     try:
         import ctypes
 
-        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
-            "MobileCrawler.MobileCrawler.GUI"
-        )
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("MobileCrawler.MobileCrawler.GUI")
     except Exception:
         logging.getLogger(__name__).debug(
             "Could not set Windows AppUserModelID",
@@ -282,7 +281,7 @@ class PersistedSplitter(QSplitter):
         if (
             isinstance(proportions, list)
             and len(proportions) == len(self._default_sizes)
-            and all(isinstance(p, (int, float)) for p in proportions)
+            and all(isinstance(p, int | float) for p in proportions)
         ):
             total = sum(self._default_sizes)
             self.setSizes([max(1, round(p * total)) for p in proportions])
@@ -701,9 +700,7 @@ class MainWindow(QMainWindow):
         if openrouter_key:
             config_manager.set("openrouter_api_key", openrouter_key)
 
-        # Set test credentials from settings panel
-        config_manager.set("test_username", self.settings_panel.get_test_username())
-        config_manager.set("test_password", self.settings_panel.get_test_password())
+        # Set form fill data from settings panel
         config_manager.set("test_address", self.settings_panel.get_test_address())
         config_manager.set("test_email", self.settings_panel.get_test_email())
         config_manager.set("test_phone", self.settings_panel.get_test_phone())
@@ -743,7 +740,9 @@ class MainWindow(QMainWindow):
         verified_mobsf = config_manager.get("enable_mobsf_analysis", "NOT_FOUND")
         verified_auto_run_mobsf = config_manager.get("auto_run_mobsf_after_crawl", "NOT_FOUND")
         self.signal_adapter.on_debug_log(
-            0, 0, f"UI: Verified DB write - traffic={verified_traffic}, video={verified_video}, mobsf={verified_mobsf}, auto_run_mobsf={verified_auto_run_mobsf}"
+            0,
+            0,
+            f"UI: Verified DB write - traffic={verified_traffic}, video={verified_video}, mobsf={verified_mobsf}, auto_run_mobsf={verified_auto_run_mobsf}",
         )
 
         # Set PCAPdroid configuration (package and activity are fixed, no UI configuration needed)
@@ -777,9 +776,7 @@ class MainWindow(QMainWindow):
 
         omniparser_timeout = self.settings_panel.get_omniparser_local_parse_timeout_seconds()
         config_manager.set("omniparser_local_parse_timeout_seconds", omniparser_timeout)
-        self.signal_adapter.on_debug_log(
-            0, 0, f"UI: omniparser_local_parse_timeout_seconds = {omniparser_timeout}"
-        )
+        self.signal_adapter.on_debug_log(0, 0, f"UI: omniparser_local_parse_timeout_seconds = {omniparser_timeout}")
 
         replicate_api_key = self.settings_panel.get_replicate_api_key()
         if replicate_api_key:
@@ -934,9 +931,7 @@ class MainWindow(QMainWindow):
                     p = Path(session_path)
                     pcaps = list(p.rglob("*.pcap"))
                     if pcaps:
-                        collector.record_pcap_stats(
-                            file_size_bytes=sum(f.stat().st_size for f in pcaps if f.exists())
-                        )
+                        collector.record_pcap_stats(file_size_bytes=sum(f.stat().st_size for f in pcaps if f.exists()))
 
                     videos = list(p.rglob("*.mp4"))
                     if videos:
@@ -953,8 +948,7 @@ class MainWindow(QMainWindow):
                                 duration_s = float(data.get("total_duration_s") or 0.0)
                                 if duration_s == 0.0 and "segments" in data:
                                     duration_s = sum(
-                                        float(s.get("duration_s", 0) or 0)
-                                        for s in data.get("segments", [])
+                                        float(s.get("duration_s", 0) or 0) for s in data.get("segments", [])
                                     )
                             except Exception:
                                 pass
@@ -1220,9 +1214,7 @@ class MainWindow(QMainWindow):
             self._current_stats.screenshot_total_time_ms += duration_ms
             self._update_dashboard_stats()
 
-    def _on_omniparser_timing(
-        self, run_id: int, step_number: int, duration_ms: float, element_count: int
-    ) -> None:
+    def _on_omniparser_timing(self, run_id: int, step_number: int, duration_ms: float, element_count: int) -> None:
         """Handle OmniParser vision-parsing timing event.
 
         Args:
@@ -1259,7 +1251,9 @@ class MainWindow(QMainWindow):
         if self._runtime_stats_collector and self._runtime_stats_collector._run_id == run_id:
             self._runtime_stats_collector.record_action(action_type, success, duration_ms)
 
-    def _on_mobsf_finished(self, run_id: int, security_score: float, high_issues: int, medium_issues: int, low_issues: int) -> None:
+    def _on_mobsf_finished(
+        self, run_id: int, security_score: float, high_issues: int, medium_issues: int, low_issues: int
+    ) -> None:
         """Handle MobSF static-analysis completion — feed results into the collector."""
         if self._runtime_stats_collector and self._runtime_stats_collector._run_id == run_id:
             self._runtime_stats_collector.record_mobsf_results(
@@ -1269,7 +1263,9 @@ class MainWindow(QMainWindow):
                 low_issues=low_issues,
             )
 
-    def _on_step_phase_transition(self, run_id: int, step_number: int, from_phase: str, to_phase: str, duration_ms: float) -> None:
+    def _on_step_phase_transition(
+        self, run_id: int, step_number: int, from_phase: str, to_phase: str, duration_ms: float
+    ) -> None:
         """Handle step phase transition event — count transitions for stats."""
         if self._current_stats and self._current_stats.run_id == run_id:
             self._current_stats.phase_transition_count += 1
@@ -1365,9 +1361,8 @@ class MainWindow(QMainWindow):
         self.settings_panel.settings_saved.connect(self._on_settings_saved)
         self.settings_panel.omniparser_keepalive_pinged.connect(self._on_omniparser_keepalive_pinged)
         self.settings_panel.reset_layout_requested.connect(self._on_reset_layout_requested)
-        self.settings_panel.generate_guided_scenarios_requested.connect(
-            self._on_generate_guided_scenarios_requested
-        )
+        self.settings_panel.delete_app_account_requested.connect(self._on_delete_app_account_requested)
+        self.settings_panel.generate_guided_scenarios_requested.connect(self._on_generate_guided_scenarios_requested)
         self.device_selector.device_selected.connect(self._on_device_selected)
         self.app_selector.app_selected.connect(self._on_app_selected)
 
@@ -1406,9 +1401,7 @@ class MainWindow(QMainWindow):
         self.log_viewer.setObjectName("logViewer")
         self.ai_monitor_panel = AIMonitorPanel()
         self.ai_monitor_panel.setObjectName("aiMonitorPanel")
-        self.ai_monitor_panel.set_timing_provider(
-            self._services["step_phase_repository"].get_transitions_for_step
-        )
+        self.ai_monitor_panel.set_timing_provider(self._services["step_phase_repository"].get_transitions_for_step)
         self.ai_monitor_panel.show_step_details.connect(self._show_ai_step_details)
 
         tabs.addTab(self.log_viewer, "Logs")
@@ -1432,9 +1425,7 @@ class MainWindow(QMainWindow):
         dialog = QDialog(self)
         dialog.setWindowTitle(f"Step {step_number} Details")
         dialog.setWindowFlags(
-            dialog.windowFlags()
-            | Qt.WindowType.WindowMaximizeButtonHint
-            | Qt.WindowType.WindowMinimizeButtonHint
+            dialog.windowFlags() | Qt.WindowType.WindowMaximizeButtonHint | Qt.WindowType.WindowMinimizeButtonHint
         )
         dialog.resize(1400, 900)
         layout = QVBoxLayout(dialog)
@@ -1500,8 +1491,26 @@ class MainWindow(QMainWindow):
         # per-field setting in this panel already uses).
         if self._selected_package:
             self._save_guided_scenarios_for_selected_package()
+            self._save_app_account_for_selected_package()
 
         self._update_start_button_state()
+
+    def _app_account_store(self) -> AppAccountStore:
+        return AppAccountStore(self._services["user_config_store"])
+
+    def _save_app_account_for_selected_package(self) -> None:
+        """Persist the panel's App Account for `self._selected_package` (empty username deletes it)."""
+        account = self.settings_panel.get_app_account()
+        if account:
+            self._app_account_store().save(self._selected_package, account)
+        else:
+            self._app_account_store().delete(self._selected_package)
+
+    def _on_delete_app_account_requested(self) -> None:
+        """Delete the selected app's App Account and clear the fields."""
+        if self._selected_package:
+            self._app_account_store().delete(self._selected_package)
+        self.settings_panel.set_app_account(None)
 
     def _save_guided_scenarios_for_selected_package(self) -> None:
         """Persist the panel's current Guided Scenarios list + URL override for `self._selected_package`."""
@@ -1556,6 +1565,7 @@ class MainWindow(QMainWindow):
         """
         self._selected_package = package
         self._load_guided_scenarios_for_selected_package()
+        self.settings_panel.set_app_account(self._app_account_store().get(package))
         self._update_start_button_state()
 
     def _on_generate_guided_scenarios_requested(self) -> None:
@@ -1593,9 +1603,7 @@ class MainWindow(QMainWindow):
     def _on_guided_scenarios_generation_error(self, message: str) -> None:
         """Handle an unexpected failure in the Guided Scenarios worker thread."""
         self.settings_panel.set_generate_guided_scenarios_busy(False)
-        self.settings_panel.set_guided_scenarios_warning(
-            f"Failed to generate scenarios from app info: {message}"
-        )
+        self.settings_panel.set_guided_scenarios_warning(f"Failed to generate scenarios from app info: {message}")
 
     def _get_api_key_for_provider(self, provider: str) -> str:
         """Get API key for the specified provider.
@@ -1851,9 +1859,7 @@ class MainWindow(QMainWindow):
             elements = request_data.get("ui_elements")
             vision_enabled = request_data.get("vision_enabled", True)
             status_bar_exclusion_px = request_data.get("status_bar_exclusion_px", 0)
-            self.stats_dashboard.update_screenshot(
-                screenshot_path, elements, vision_enabled, status_bar_exclusion_px
-            )
+            self.stats_dashboard.update_screenshot(screenshot_path, elements, vision_enabled, status_bar_exclusion_px)
 
         # Increment total visits
         self._current_stats.total_screen_visits += 1
@@ -1921,9 +1927,7 @@ class MainWindow(QMainWindow):
         if self._runtime_stats_collector and self._runtime_stats_collector._run_id == run_id:
             success = response_data.get("success", True)
             self._runtime_stats_collector.record_ai_call(
-                response_time_ms=response_time,
-                tokens_used=tokens_in + tokens_out,
-                success=success
+                response_time_ms=response_time, tokens_used=tokens_in + tokens_out, success=success
             )
 
             # Record retries / invalid responses (each validation retry = one invalid response)
@@ -1995,9 +1999,7 @@ class MainWindow(QMainWindow):
             success_rate=(
                 round(stats.successful_actions / max(stats.successful_actions + stats.failed_actions, 1) * 100)
             ),
-            tool_calls_per_step=(
-                round(stats.tool_call_count / max(stats.total_steps, 1), 1)
-            ),
+            tool_calls_per_step=(round(stats.tool_call_count / max(stats.total_steps, 1), 1)),
             tool_error_count=stats.tool_error_count,
             phase_transition_count=stats.phase_transition_count,
         )
@@ -2018,9 +2020,7 @@ class MainWindow(QMainWindow):
         # token counts already accumulated per-call in _on_ai_response_stats.
         if self._crawler_loop:
             span_stats = self._crawler_loop.get_span_stats()
-            if span_stats is not None and (
-                span_stats.total_input_tokens > 0 or span_stats.total_output_tokens > 0
-            ):
+            if span_stats is not None and (span_stats.total_input_tokens > 0 or span_stats.total_output_tokens > 0):
                 self._current_stats.total_input_tokens = span_stats.total_input_tokens
                 self._current_stats.total_output_tokens = span_stats.total_output_tokens
                 self._current_stats.otel_latencies_ms = span_stats.llm_latencies_ms
@@ -2197,7 +2197,9 @@ class MainWindow(QMainWindow):
         box.exec()
 
         if box.clickedButton() is stop_btn:
-            to_stop = [(label, svc) for (cb, svc), (label, _) in zip(checkboxes, candidates) if cb.isChecked()]
+            to_stop = [
+                (label, svc) for (cb, svc), (label, _) in zip(checkboxes, candidates, strict=False) if cb.isChecked()
+            ]
             self._stop_containers_with_progress(to_stop)
 
     def _stop_containers_with_progress(self, services: list) -> None:

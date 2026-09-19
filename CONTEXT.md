@@ -43,3 +43,19 @@ _Avoid_: Top bar height, top bar exclusion, exclude top bar
 **Bottom Bar Exclusion**:
 The number of pixels cropped from the bottom of every screenshot, at capture time, alongside Status Bar Exclusion. Covers the Android navigation bar (3-button nav); defaults to 0 since gesture-navigation devices have none to exclude. Calibrated the same way as Status Bar Exclusion, via a second draggable line on the same preview.
 _Avoid_: Bottom bar height, nav bar exclusion, exclude bottom bar
+
+**App Account**:
+The login identity (username or email, password, and an optional email address override) belonging to one target app package. Stored per package with no global fallback: an account only means something inside the app it was created for. Replaces the single global "test credentials" set.
+_Avoid_: Test credentials, app credentials
+
+**Form Fill Data**:
+Generic, app-independent values (address, email, phone) the crawler types into forms that are not a login. Unlike an App Account it is global.
+_Avoid_: Test credentials
+
+**Verification Challenge**:
+A step in sign-up or login that requires proof of control of an email address or phone number, such as an emailed code or link or an SMS one-time password. The crawler tries to solve it automatically first; when it can't and human fallback is enabled, it asks the user.
+_Avoid_: OTP step, verification step, 2FA
+
+**Human Fallback**:
+An opt-in (checkbox) behaviour where, when the crawler cannot solve a Verification Challenge or complete sign-in by itself, it pauses and asks the user to supply the code or finish the step. Times out after a configurable wait, after which authentication is skipped and the crawl continues with whatever is reachable. When off, authentication is skipped immediately on failure.
+_Avoid_: Manual mode, human in the loop

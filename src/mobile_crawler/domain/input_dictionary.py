@@ -5,6 +5,7 @@ import re
 from typing import Any
 
 from mobile_crawler.config.config_manager import ConfigManager
+from mobile_crawler.infrastructure.app_account_store import AppAccount
 
 logger = logging.getLogger("crawler_agent")
 
@@ -12,11 +13,13 @@ logger = logging.getLogger("crawler_agent")
 class ContextAwareInputDictionary:
     """Matches form input fields to contextually relevant mock data or credentials."""
 
-    def __init__(self, config_manager: ConfigManager | None = None):
+    def __init__(self, config_manager: ConfigManager | None = None, app_account: AppAccount | None = None):
         """Initialize the input dictionary with configuration.
 
         Args:
             config_manager: Configuration manager to load custom test values.
+            app_account: App Account of the package being crawled; without one,
+                username and password fields get an empty suggestion.
         """
         self.config_manager = config_manager
 
@@ -24,13 +27,13 @@ class ContextAwareInputDictionary:
         self.values = {
             "email": self._get_config_val("test_email", "test_user@example.com"),
             "phone": self._get_config_val("test_phone", "15555555555"),
-            "username": self._get_config_val("test_username", "testuser"),
-            "password": self._get_config_val("test_password", "Password123!"),
+            "username": app_account.username if app_account else "",
+            "password": app_account.password if app_account else "",
             "address": self._get_config_val("test_address", "123 Test St"),
             "city": "Test City",
             "zip": "12345",
             "search": "test",
-            "generic": "test input"
+            "generic": "test input",
         }
 
         # Regex patterns for matching field identifiers
@@ -42,7 +45,7 @@ class ContextAwareInputDictionary:
             "city": re.compile(r"(?:city|town|state|province)", re.IGNORECASE),
             "zip": re.compile(r"(?:zip|postal|postcode)", re.IGNORECASE),
             "search": re.compile(r"(?:search|query|find|filter)", re.IGNORECASE),
-            "username": re.compile(r"(?:user|login|\bid\b|name|first|last|profile)", re.IGNORECASE)
+            "username": re.compile(r"(?:user|login|\bid\b|name|first|last|profile)", re.IGNORECASE),
         }
 
     def _get_config_val(self, key: str, default: str) -> str:

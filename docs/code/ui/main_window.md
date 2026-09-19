@@ -33,6 +33,7 @@ Source: `src/mobile_crawler/ui/main_window.py`
 - [[code/domain/providers/vision_detector|domain.providers.vision_detector]]
 - [[code/domain/report_generator|domain.report_generator]]
 - [[code/infrastructure/ai_interaction_repository|infrastructure.ai_interaction_repository]]
+- [[code/infrastructure/app_account_store|infrastructure.app_account_store]]
 - [[code/infrastructure/database|infrastructure.database]]
 - [[code/infrastructure/device_detection|infrastructure.device_detection]]
 - [[code/infrastructure/mobsf_docker|infrastructure.mobsf_docker]]

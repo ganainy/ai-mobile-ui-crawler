@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from mobile_crawler.infrastructure.app_account_store import AppAccount
 from mobile_crawler.ui.widgets.status_bar_exclusion_preview import StatusBarExclusionPreview
 
 if TYPE_CHECKING:
@@ -64,6 +65,7 @@ class SettingsPanel(QWidget):
     omniparser_keepalive_pinged = Signal(bool, str, float)  # type: ignore
     reset_layout_requested = Signal()  # type: ignore
     generate_guided_scenarios_requested = Signal()  # type: ignore
+    delete_app_account_requested = Signal()  # type: ignore
     _status_bar_preview_captured = Signal(bytes)  # type: ignore
     _status_bar_preview_failed = Signal(str)  # type: ignore
 
@@ -226,7 +228,7 @@ class SettingsPanel(QWidget):
         layout.addWidget(screen_group)
 
         # Test Credentials group
-        credentials_group = QGroupBox("App Test Credentials")
+        credentials_group = QGroupBox("Form Fill Data")
         credentials_layout = QVBoxLayout()
         credentials_layout.setSpacing(12)
         credentials_layout.setContentsMargins(15, 20, 15, 20)
@@ -245,16 +247,10 @@ class SettingsPanel(QWidget):
             field_layout.addWidget(edit)
             return field_layout, edit
 
-        field_layout, self.test_username_input = create_credential_field("Test Username:", "Enter test username")
-        self.test_username_input.setText("testuser")
-        credentials_layout.addLayout(field_layout)
-
-        field_layout, self.test_password_input = create_credential_field("Test Password:", "Enter test password", is_password=True)
-        self.test_password_input.setText("Password123")
-        credentials_layout.addLayout(field_layout)
-
         # 1. Address field with German default mock value
-        field_layout, self.test_address_input = create_credential_field("Test Address:", "e.g. Kaiserstraße 12, 60311 Frankfurt am Main, Germany")
+        field_layout, self.test_address_input = create_credential_field(
+            "Test Address:", "e.g. Kaiserstraße 12, 60311 Frankfurt am Main, Germany"
+        )
         self.test_address_input.setText("Kaiserstraße 12, 60311 Frankfurt am Main, Germany")
         self.test_address_input.setToolTip("Default test address used for forms")
         credentials_layout.addLayout(field_layout)
@@ -341,8 +337,11 @@ class SettingsPanel(QWidget):
         reset_layout = QHBoxLayout()
         reset_layout.addStretch()
         self.reset_objective_button = QPushButton("Reset to Default")
-        self.reset_objective_button.setToolTip("Reset the exploration objective prompt to the default coverage maximization prompt")
-        self.reset_objective_button.setStyleSheet("""
+        self.reset_objective_button.setToolTip(
+            "Reset the exploration objective prompt to the default coverage maximization prompt"
+        )
+        self.reset_objective_button.setStyleSheet(
+            """
             QPushButton {
                 background-color: transparent;
                 border: 1px solid #555;
@@ -359,7 +358,8 @@ class SettingsPanel(QWidget):
             QPushButton:pressed {
                 background-color: #222;
             }
-        """)
+        """
+        )
         self.reset_objective_button.clicked.connect(self._reset_exploration_objective)
         reset_layout.addWidget(self.reset_objective_button)
         objective_layout.addLayout(reset_layout)
@@ -397,9 +397,7 @@ class SettingsPanel(QWidget):
             "Fetch the app's Play Store description and website, then ask the AI to propose a checklist. "
             "Replaces the current list."
         )
-        self.generate_guided_scenarios_button.clicked.connect(
-            self.generate_guided_scenarios_requested.emit
-        )
+        self.generate_guided_scenarios_button.clicked.connect(self.generate_guided_scenarios_requested.emit)
         generate_layout.addWidget(self.generate_guided_scenarios_button)
         generate_layout.addStretch()
         guided_scenarios_layout.addLayout(generate_layout)
@@ -438,6 +436,43 @@ class SettingsPanel(QWidget):
 
         guided_scenarios_group.setLayout(guided_scenarios_layout)
         layout.addWidget(guided_scenarios_group, 1)
+
+        # App Account group (per selected app)
+        app_account_group = QGroupBox("App Account")
+        app_account_layout = QVBoxLayout()
+        app_account_layout.setSpacing(8)
+        app_account_layout.setContentsMargins(15, 20, 15, 20)
+
+        app_account_hint = QLabel(
+            "Login the crawler uses for the selected app. Each app has its own account; "
+            "there is no global fallback. Leave the username empty for no account."
+        )
+        app_account_hint.setWordWrap(True)
+        app_account_hint.setStyleSheet("color: #666; font-size: 11px;")
+        app_account_layout.addWidget(app_account_hint)
+
+        self.app_account_username_input = QLineEdit()
+        self.app_account_username_input.setPlaceholderText("Username or email")
+        app_account_layout.addWidget(QLabel("Username / Email:"))
+        app_account_layout.addWidget(self.app_account_username_input)
+
+        self.app_account_password_input = QLineEdit()
+        self.app_account_password_input.setPlaceholderText("Password")
+        self.app_account_password_input.setEchoMode(QLineEdit.EchoMode.Password)
+        app_account_layout.addWidget(QLabel("Password:"))
+        app_account_layout.addWidget(self.app_account_password_input)
+
+        self.app_account_address_input = QLineEdit()
+        self.app_account_address_input.setPlaceholderText("Optional email address override")
+        app_account_layout.addWidget(QLabel("Address override:"))
+        app_account_layout.addWidget(self.app_account_address_input)
+
+        self.app_account_delete_button = QPushButton("Delete Account")
+        self.app_account_delete_button.clicked.connect(self.delete_app_account_requested.emit)
+        app_account_layout.addWidget(self.app_account_delete_button, alignment=Qt.AlignmentFlag.AlignLeft)
+
+        app_account_group.setLayout(app_account_layout)
+        layout.addWidget(app_account_group)
 
         return self._wrap_in_scroll_area(tab)
 
@@ -504,7 +539,9 @@ class SettingsPanel(QWidget):
         self.omniparser_backend_combo = QComboBox()
         self.omniparser_backend_combo.addItems(["replicate", "local"])
         self.omniparser_backend_combo.setCurrentText("replicate")
-        self.omniparser_backend_combo.setToolTip("Select where OmniParser runs: 'replicate' (Cloud API) or 'local' (Local FastAPI server)")
+        self.omniparser_backend_combo.setToolTip(
+            "Select where OmniParser runs: 'replicate' (Cloud API) or 'local' (Local FastAPI server)"
+        )
         backend_layout.addWidget(self.omniparser_backend_combo)
         backend_layout.addStretch()
         parser_layout.addLayout(backend_layout)
@@ -634,9 +671,7 @@ class SettingsPanel(QWidget):
         self.enable_mobsf_analysis_checkbox = QCheckBox("Enable MobSF Analysis")
         mobsf_layout.addWidget(self.enable_mobsf_analysis_checkbox)
 
-        self.auto_run_mobsf_after_crawl_checkbox = QCheckBox(
-            "Automatically run after each successful crawl"
-        )
+        self.auto_run_mobsf_after_crawl_checkbox = QCheckBox("Automatically run after each successful crawl")
         self.auto_run_mobsf_after_crawl_checkbox.setEnabled(False)
         mobsf_layout.addWidget(self.auto_run_mobsf_after_crawl_checkbox)
 
@@ -665,14 +700,18 @@ class SettingsPanel(QWidget):
         tracing_layout = QVBoxLayout()
 
         self.enable_tracing_checkbox = QCheckBox("Enable Tracing (OpenTelemetry)")
-        self.enable_tracing_checkbox.setToolTip("Enable telemetry tracing for agent steps, tool calls, and token usage metrics.")
+        self.enable_tracing_checkbox.setToolTip(
+            "Enable telemetry tracing for agent steps, tool calls, and token usage metrics."
+        )
         tracing_layout.addWidget(self.enable_tracing_checkbox)
 
         provider_layout = QHBoxLayout()
         provider_layout.addWidget(QLabel("Provider:"))
         self.tracing_provider_combo = QComboBox()
         self.tracing_provider_combo.addItems(["phoenix", "langfuse"])
-        self.tracing_provider_combo.setToolTip("Tracing provider: 'phoenix' (local dashboard) or 'langfuse' (cloud monitoring)")
+        self.tracing_provider_combo.setToolTip(
+            "Tracing provider: 'phoenix' (local dashboard) or 'langfuse' (cloud monitoring)"
+        )
         provider_layout.addWidget(self.tracing_provider_combo)
         provider_layout.addStretch()
         tracing_layout.addLayout(provider_layout)
@@ -851,17 +890,14 @@ class SettingsPanel(QWidget):
         else:
             self.steps_radio.setChecked(True)
 
-        # Load test credentials
-        test_username = self._config_store.get_setting("test_username", default="testuser")
-        self.test_username_input.setText(test_username)
+        # Purge the removed global test username/password
+        self._config_store.delete_setting("test_username")
+        self._config_store.delete_secret("test_password")
 
-        test_password = self._config_store.get_secret_plaintext("test_password")
-        if test_password:
-            self.test_password_input.setText(test_password)
-        else:
-            self.test_password_input.setText("Password123")
-
-        test_address = self._config_store.get_setting("test_address", default="Kaiserstraße 12, 60311 Frankfurt am Main, Germany")
+        # Load form fill data
+        test_address = self._config_store.get_setting(
+            "test_address", default="Kaiserstraße 12, 60311 Frankfurt am Main, Germany"
+        )
         self.test_address_input.setText(test_address)
 
         test_email = self._config_store.get_setting("test_email", default="testuser@example.com")
@@ -1012,23 +1048,9 @@ class SettingsPanel(QWidget):
 
                 # Save screen configuration
                 self._config_store.set_setting("top_bar_height", self.top_bar_height_input.value(), "int")
-                self._config_store.set_setting(
-                    "bottom_bar_height", self.bottom_bar_height_input.value(), "int"
-                )
+                self._config_store.set_setting("bottom_bar_height", self.bottom_bar_height_input.value(), "int")
 
-                # Save test credentials
-                test_username = self.test_username_input.text().strip()
-                if test_username:
-                    self._config_store.set_setting("test_username", test_username, "string")
-                else:
-                    self._config_store.delete_setting("test_username")
-
-                test_password = self.test_password_input.text().strip()
-                if test_password:
-                    self._config_store.set_secret_plaintext("test_password", test_password)
-                else:
-                    self._config_store.delete_secret("test_password")
-
+                # Save form fill data
                 test_address = self.test_address_input.text().strip()
                 if test_address:
                     self._config_store.set_setting("test_address", test_address, "string")
@@ -1117,9 +1139,7 @@ class SettingsPanel(QWidget):
                 self._config_store.set_setting("omniparser_keepalive_enabled", keepalive_enabled, "bool")
 
                 keepalive_interval = self.omniparser_keepalive_interval_input.value()
-                self._config_store.set_setting(
-                    "omniparser_keepalive_interval_minutes", keepalive_interval, "int"
-                )
+                self._config_store.set_setting("omniparser_keepalive_interval_minutes", keepalive_interval, "int")
 
                 # Save exploration objective
                 exploration_objective = self.exploration_objective_input.toPlainText().strip()
@@ -1357,18 +1377,6 @@ class SettingsPanel(QWidget):
         """
         return self.bottom_bar_height_input.value()
 
-    def get_test_username(self) -> str:
-        """Get the current test username value.
-
-        Returns:
-            Current test username
-        """
-        return self.test_username_input.text()
-
-    def get_test_password(self) -> str:
-        """Get the current test password value."""
-        return self.test_password_input.text()
-
     def get_test_address(self) -> str:
         """Get the current test address value."""
         return self.test_address_input.text().strip()
@@ -1469,6 +1477,23 @@ class SettingsPanel(QWidget):
             item = QListWidgetItem(scenario)
             item.setFlags(item.flags() | Qt.ItemFlag.ItemIsEditable)
             self.guided_scenarios_list.addItem(item)
+
+    def get_app_account(self) -> AppAccount | None:
+        """Get the App Account entered for the selected app, or None if the username is empty."""
+        username = self.app_account_username_input.text().strip()
+        if not username:
+            return None
+        return AppAccount(
+            username=username,
+            password=self.app_account_password_input.text(),
+            address_override=self.app_account_address_input.text().strip(),
+        )
+
+    def set_app_account(self, account: AppAccount | None) -> None:
+        """Show `account` in the App Account fields (None clears them)."""
+        self.app_account_username_input.setText(account.username if account else "")
+        self.app_account_password_input.setText(account.password if account else "")
+        self.app_account_address_input.setText(account.address_override if account else "")
 
     def get_guided_scenarios_url_override(self) -> str:
         """Get the user-entered website URL override for Guided Scenario generation."""
@@ -1575,8 +1600,6 @@ class SettingsPanel(QWidget):
         self.replicate_api_key_input.clear()
         self.max_steps_input.setValue(100)
         self.max_duration_input.setValue(300)
-        self.test_username_input.setText("testuser")
-        self.test_password_input.setText("Password123")
         self.test_address_input.setText("Kaiserstraße 12, 60311 Frankfurt am Main, Germany")
         self.test_email_input.setText("testuser@example.com")
         self.test_phone_input.clear()

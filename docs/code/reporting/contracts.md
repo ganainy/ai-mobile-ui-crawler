@@ -20,6 +20,7 @@ Source: `src/mobile_crawler/reporting/contracts.py`
 - `ReportGenerator`
 
 ## Imported by
+- [[code/infrastructure/analysis_bundle|infrastructure.analysis_bundle]]
 - [[code/reporting/correlator|reporting.correlator]]
 - [[code/reporting/generator|reporting.generator]]
 - [[code/reporting/parsers/mobsf_parser|reporting.parsers.mobsf_parser]]

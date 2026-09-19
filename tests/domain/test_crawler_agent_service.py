@@ -541,6 +541,27 @@ class TestCrawlerAgentServiceErrorHandling:
         assert "com.example.app" in goal.description
         assert "continuous exploration" in goal.description.lower()
 
+    def test_create_exploration_goal_includes_only_that_packages_app_account(self, crawler_agent_service, tmp_path):
+        """The live agent goal carries the current package's App Account, never another's."""
+        from mobile_crawler.config.config_manager import ConfigManager
+        from mobile_crawler.infrastructure.app_account_store import AppAccount, AppAccountStore
+        from mobile_crawler.infrastructure.user_config_store import UserConfigStore
+
+        ucs = UserConfigStore(tmp_path / "u.db")
+        ucs.create_schema()
+        store = AppAccountStore(ucs)
+        store.save("com.a", AppAccount("alice", "pw-a"))
+        store.save("com.b", AppAccount("bob", "pw-b"))
+        crawler_agent_service.config_manager = ConfigManager(ucs)
+
+        goal_a = crawler_agent_service._create_exploration_goal("com.a", 10)
+        goal_c = crawler_agent_service._create_exploration_goal("com.c", 10)
+
+        assert "Username: alice" in goal_a.description and "Password: pw-a" in goal_a.description
+        assert "bob" not in goal_a.description
+        assert "No App Account exists for com.c" in goal_c.description
+        ucs.close()
+
     def test_create_exploration_goal_includes_dialog_dismissal(self, crawler_agent_service):
         """Goal must instruct the LLM to dismiss update/blocking dialogs.
 
