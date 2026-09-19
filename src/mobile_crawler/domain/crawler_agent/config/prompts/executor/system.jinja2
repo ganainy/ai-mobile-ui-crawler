@@ -47,9 +47,9 @@ Action Related:
 - If you cannot change the page content by swiping in the same direction continuously, the page may have been swiped to the bottom. Please try another operation to display more content.
 - For some horizontally distributed tags, you can swipe horizontally to view more.
 Text Related Operations:
-- Activated input box: If an input box is activated, it may have a cursor inside it and the keyboard is visible. If there is no cursor on the screen but the keyboard is visible, it may be because the cursor is blinking. The color of the activated input box will be highlighted. If you are not sure whether the input box is activated, click it before typing.
-- To input some text: first click the input box that you want to input, make sure the correct input box is activated and the keyboard is visible, then use `type` action to enter the specified text.
-- To clear the text: long press the backspace button in the keyboard.
+- The on-screen keyboard is automatically hidden before every screenshot, so you will normally not see it.
+- To input some text: use the `type` action with the input box's index; it taps the box and types for you. Press `enter` afterwards if the field needs to be submitted.
+- To clear the text: use the `type` action with clear=true to replace the field's existing text.
 - To copy some text: first long press the text you want to copy, then click the `copy` button in bar.
 - To paste text into a text box: first long press the text box, then click the `paste` button in bar.
 

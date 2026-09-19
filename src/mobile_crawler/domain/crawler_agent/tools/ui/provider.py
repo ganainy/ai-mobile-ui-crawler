@@ -7,6 +7,7 @@ and produces a ``UIState`` snapshot.
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 import time
 from collections.abc import Awaitable, Callable
@@ -208,6 +209,7 @@ class AndroidStateProvider(StateProvider):
         state_started = time.perf_counter()
         self._last_omniparser_ms = None
         await self._ensure_target_package_active()
+        await self._dismiss_keyboard()
 
         # Get screenshot via driver (ADB, no Portal needed)
         screenshot_started = time.perf_counter()
@@ -321,6 +323,18 @@ class AndroidStateProvider(StateProvider):
             len(elements) if elements else 0,
         )
         return ui_state
+
+    async def _dismiss_keyboard(self) -> None:
+        """Hide the keyboard so it isn't screenshotted, parsed as elements, or covering the UI."""
+        hide = getattr(self.driver, "hide_keyboard", None)
+        if hide is None:
+            return
+        try:
+            result = hide()
+            if inspect.isawaitable(result):
+                await result
+        except Exception as e:
+            logger.debug(f"hide_keyboard failed: {e}")
 
     async def _ensure_target_package_active(self) -> None:
         """Verify target app before screenshots or OmniParser state parsing."""

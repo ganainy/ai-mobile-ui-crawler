@@ -191,6 +191,16 @@ class AndroidDriver(DeviceDriver):
             else:
                 raise
 
+    async def hide_keyboard(self) -> bool:
+        """Send BACK only when the IME is actually shown (BACK otherwise navigates)."""
+        await self.ensure_connected()
+        output = await self.device.shell("dumpsys input_method | grep mInputShown")
+        if "mInputShown=true" not in output:
+            return False
+        await self.device.keyevent(self._BUTTON_KEYCODES["back"])
+        await asyncio.sleep(0.3)  # let the keyboard slide out before the screenshot
+        return True
+
     async def press_button(self, button: str) -> None:
         try:
             await self.ensure_connected()

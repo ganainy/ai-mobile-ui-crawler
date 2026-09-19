@@ -69,6 +69,14 @@ class DeviceDriver:
         """
         raise NotImplementedError
 
+    async def hide_keyboard(self) -> bool:
+        """Dismiss the on-screen keyboard if it is showing.
+
+        Returns ``True`` if a keyboard was dismissed. Drivers that cannot
+        detect the keyboard leave this as a no-op.
+        """
+        return False
+
     async def press_button(self, button: str) -> None:
         """Press a named button (e.g. back, home, enter).
 
