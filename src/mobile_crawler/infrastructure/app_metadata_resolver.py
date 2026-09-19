@@ -145,9 +145,14 @@ class AppMetadataResolver:
     def _parse_apk(self, package: str, apk_path: Path) -> AppMetadata | None:
         try:
             from androguard.core.apk import APK
+            from loguru import logger as loguru_logger
         except ImportError:
             logger.warning("androguard is not installed; skipping local app metadata resolution")
             return None
+
+        # androguard logs every resource-table entry at DEBUG via loguru; on a
+        # big APK that floods stderr and (GIL-bound) starves the Qt GUI thread.
+        loguru_logger.disable("androguard")
 
         try:
             apk = APK(str(apk_path))

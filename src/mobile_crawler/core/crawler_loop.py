@@ -259,6 +259,22 @@ class CrawlerLoop:
                         device_id=run.device_id,
                     )
                     try:
+                        # PCAPdroid's VPN consent dialog can't be seen/tapped on a
+                        # sleeping display, so wake the device before starting capture.
+                        if self.config_manager.get("pre_crawl_wake_device", True):
+                            from mobile_crawler.domain.adb_action_executor import ADBActionExecutor
+
+                            readiness = await asyncio.to_thread(
+                                ADBActionExecutor(device_id=run.device_id).ensure_device_ready_for_crawl,
+                                timeout_seconds=float(
+                                    self.config_manager.get("pre_crawl_wake_timeout_seconds", 5.0) or 5.0
+                                ),
+                                unlock_swipe=bool(self.config_manager.get("pre_crawl_unlock_swipe", True)),
+                            )
+                            if not readiness.success:
+                                logger.warning(
+                                    "Device not ready before traffic capture: %s", readiness.error_message
+                                )
                         started, message = await self._traffic_capture_manager.start_capture_async(
                             run_id=run_id,
                             step_num=0,
