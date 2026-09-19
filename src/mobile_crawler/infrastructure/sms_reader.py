@@ -24,6 +24,7 @@ NO_SIM_WARNING = (
 _ROW_SPLIT = re.compile(r"^Row: \d+ ", re.MULTILINE)
 _ROW_FIELDS = re.compile(r"address=(.*?), body=(.*), date=(\d+)\s*$", re.DOTALL)
 _OTP = re.compile(r"(?<!\d)\d{4,8}(?!\d)")
+_SIM_NUMBER = re.compile(r"number=(\+?[\d ()-]+)")
 _READ_ERRORS = ("Permission Denial", "SecurityException", "Error while accessing provider")
 
 
@@ -94,6 +95,34 @@ class SmsReader:
     async def check_sim(self, serial: str) -> str | None:
         """Return NO_SIM_WARNING when the device cannot receive SMS, else None."""
         return None if await self.has_sim(serial) else NO_SIM_WARNING
+
+    async def read_own_number(self, serial: str) -> str | None:
+        """Best-effort phone number of the device's SIM, or None.
+
+        Many carriers do not store the number on the SIM and Android restricts the
+        telephony provider on non-rooted devices, so None is a common result.
+        """
+        output, code = await self._adb.execute_async(
+            [
+                "-s",
+                serial,
+                "shell",
+                "content",
+                "query",
+                "--uri",
+                "content://telephony/siminfo",
+                "--projection",
+                "number",
+            ],
+            suppress_stderr=True,
+        )
+        if code != 0 or any(err in output for err in _READ_ERRORS):
+            return None
+        for match in _SIM_NUMBER.finditer(output):
+            number = match.group(1).strip()
+            if sum(ch.isdigit() for ch in number) >= 7:
+                return number
+        return None
 
     async def read_otp(self, serial: str, since_ms: int | None = None, timeout_seconds: float = 60.0) -> SmsReadResult:
         """Wait up to `timeout_seconds` for an SMS newer than `since_ms` (device epoch ms).

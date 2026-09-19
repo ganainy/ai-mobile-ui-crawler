@@ -7,6 +7,7 @@ from mobile_crawler.domain.prompts import DEFAULT_SYSTEM_PROMPT
 from mobile_crawler.infrastructure.app_account_store import AppAccount, AppAccountStore
 from mobile_crawler.infrastructure.screen_repository import ScreenRepository
 from mobile_crawler.infrastructure.step_log_repository import StepLogRepository
+from mobile_crawler.infrastructure.verification_inbox import VerificationInboxStore, default_signup_address
 
 
 def get_app_account(config_manager: ConfigManager, app_package: str | None) -> AppAccount | None:
@@ -14,6 +15,22 @@ def get_app_account(config_manager: ConfigManager, app_package: str | None) -> A
     if not app_package:
         return None
     return AppAccountStore(config_manager.user_config_store).get(app_package)
+
+
+def get_form_email(config_manager: ConfigManager, app_package: str | None) -> str:
+    """Email for form fields: the App Account's override, else the Verification Inbox sign-up address, else ''."""
+    if not app_package:
+        return ""
+    account = get_app_account(config_manager, app_package)
+    if account and account.address_override:
+        return account.address_override
+    inbox = VerificationInboxStore(config_manager.user_config_store).get()
+    return default_signup_address(inbox.address, app_package) if inbox else ""
+
+
+def get_form_phone(config_manager: ConfigManager) -> str:
+    """Phone for form fields: the manual Mobile Number, else the number detected from the device."""
+    return str(config_manager.get("test_phone", "") or config_manager.get("detected_phone", "") or "")
 
 
 def format_login_and_form_data(config_manager: ConfigManager, app_package: str | None) -> str:
@@ -33,12 +50,11 @@ def format_login_and_form_data(config_manager: ConfigManager, app_package: str |
             "sign up if the app allows it, otherwise explore what is reachable without logging in."
         )
 
-    for label, key in (
-        ("Address", "test_address"),
-        ("Email", "test_email"),
-        ("Phone Number", "test_phone"),
+    for label, value in (
+        ("Address", config_manager.get("test_address", "")),
+        ("Email", get_form_email(config_manager, app_package)),
+        ("Phone Number", get_form_phone(config_manager)),
     ):
-        value = config_manager.get(key, "")
         if value:
             lines.append(f"{label}: {value}")
     return "\n".join(lines)
@@ -137,7 +153,10 @@ class PromptBuilder:
                 from mobile_crawler.domain.input_dictionary import ContextAwareInputDictionary
 
                 input_dict = ContextAwareInputDictionary(
-                    self.config_manager, app_account=self._get_app_account(app_package)
+                    self.config_manager,
+                    app_account=self._get_app_account(app_package),
+                    email=get_form_email(self.config_manager, app_package),
+                    phone=get_form_phone(self.config_manager),
                 )
                 for el in ocr_grounding:
                     is_input_field = False

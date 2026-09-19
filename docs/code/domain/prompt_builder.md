@@ -13,6 +13,8 @@ Source: `src/mobile_crawler/domain/prompt_builder.py`
 
 ## Functions
 - `get_app_account`
+- `get_form_email`
+- `get_form_phone`
 - `format_login_and_form_data`
 
 ## Imports
@@ -22,6 +24,7 @@ Source: `src/mobile_crawler/domain/prompt_builder.py`
 - [[code/infrastructure/app_account_store|infrastructure.app_account_store]]
 - [[code/infrastructure/screen_repository|infrastructure.screen_repository]]
 - [[code/infrastructure/step_log_repository|infrastructure.step_log_repository]]
+- [[code/infrastructure/verification_inbox|infrastructure.verification_inbox]]
 
 ## Imported by
 - [[code/domain/crawler_agent_service|domain.crawler_agent_service]]

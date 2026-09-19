@@ -712,7 +712,6 @@ class MainWindow(QMainWindow):
 
         # Set form fill data from settings panel
         config_manager.set("test_address", self.settings_panel.get_test_address())
-        config_manager.set("test_email", self.settings_panel.get_test_email())
         config_manager.set("test_phone", self.settings_panel.get_test_phone())
 
         # Set screen configuration

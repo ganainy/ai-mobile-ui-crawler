@@ -394,11 +394,10 @@ class TestReset:
         """Test that reset clears credential inputs."""
         panel = _create_settings_panel(mock_config_store)
         panel.test_address_input.setText("Some Other Address")
-        panel.test_email_input.setText("other_email@example.com")
         panel.test_phone_input.setText("+123456789")
         panel.reset()
         assert panel.test_address_input.text() == "Kaiserstraße 12, 60311 Frankfurt am Main, Germany"
-        assert panel.test_email_input.text() == "testuser@example.com"
+        assert not hasattr(panel, "test_email_input")
         assert panel.test_phone_input.text() == ""
 
     def test_reset_exploration_objective_via_button(self, qt_app, mock_config_store):

@@ -22,21 +22,30 @@ class TestPromptBuilder:
         assert "No App Account exists for com.a" in prompt
 
     def test_build_system_prompt_with_form_data(self):
-        """Form Fill Data (address, email, phone) still reaches the prompt."""
+        """Form Fill Data: address, phone, and the Verification Inbox sign-up email reach the prompt."""
         config_manager = Mock()
         config_manager.get.side_effect = lambda key, default=None: {
             "test_address": "Kaiserstraße 12, 60311 Frankfurt am Main, Germany",
-            "test_email": "real_email@example.com",
             "test_phone": "+49 170 1234567",
         }.get(key, default)
-        config_manager.user_config_store.get_setting.return_value = None
+        config_manager.user_config_store.get_setting.side_effect = lambda key, default=None: {
+            "verification_inbox_address": "bot@gmail.com",
+        }.get(key, default)
+        config_manager.user_config_store.get_secret_plaintext.return_value = "pw"
 
         builder = PromptBuilder(config_manager, Mock())
         prompt = builder.build_system_prompt("com.a")
 
         assert "Address: Kaiserstraße 12, 60311 Frankfurt am Main, Germany" in prompt
-        assert "Email: real_email@example.com" in prompt
+        assert "Email: bot+com.a@gmail.com" in prompt
         assert "Phone Number: +49 170 1234567" in prompt
+
+    def test_form_phone_falls_back_to_detected_number(self):
+        from mobile_crawler.domain.prompt_builder import get_form_phone
+
+        config_manager = Mock()
+        config_manager.get.side_effect = lambda key, default=None: {"detected_phone": "+491701234567"}.get(key, default)
+        assert get_form_phone(config_manager) == "+491701234567"
 
     def test_build_system_prompt_uses_only_current_packages_account(self, tmp_path):
         from mobile_crawler.config.config_manager import ConfigManager

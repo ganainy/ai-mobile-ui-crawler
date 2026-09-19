@@ -1378,6 +1378,23 @@ class CrawlerAgentService:
             human_fallback=HumanFallback(HumanFallbackConfig.from_store(user_store), self.human_prompter),
         )
 
+    async def _detect_device_phone(self) -> None:
+        """Best-effort: remember the device SIM's number for form fills when none is set manually."""
+        self.config_manager.set("detected_phone", "")
+        if self.config_manager.get("test_phone", "") or not self.device_id:
+            return
+        try:
+            from mobile_crawler.infrastructure.adb_client import ADBClient
+            from mobile_crawler.infrastructure.sms_reader import SmsReader
+
+            number = await SmsReader(ADBClient()).read_own_number(self.device_id)
+        except Exception as e:
+            logger.debug("Could not detect device phone number: %s", e)
+            return
+        if number:
+            logger.info("Detected device phone number for form fills")
+            self.config_manager.set("detected_phone", number)
+
     def _build_auth_section(self, app_package: str) -> str:
         """Create this run's authentication session and return its goal text ('' if unavailable)."""
         try:
@@ -1513,6 +1530,8 @@ class CrawlerAgentService:
 
                 # Initialize agent if needed
                 await self._initialize_agent(max_steps, target_package=app_package, step_by_step=step_by_step)
+
+                await self._detect_device_phone()
 
                 # Create exploration goal
                 goal = self._create_exploration_goal(app_package, max_steps, exploration_objective)

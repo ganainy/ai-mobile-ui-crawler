@@ -13,20 +13,28 @@ logger = logging.getLogger("crawler_agent")
 class ContextAwareInputDictionary:
     """Matches form input fields to contextually relevant mock data or credentials."""
 
-    def __init__(self, config_manager: ConfigManager | None = None, app_account: AppAccount | None = None):
+    def __init__(
+        self,
+        config_manager: ConfigManager | None = None,
+        app_account: AppAccount | None = None,
+        email: str = "",
+        phone: str = "",
+    ):
         """Initialize the input dictionary with configuration.
 
         Args:
             config_manager: Configuration manager to load custom test values.
             app_account: App Account of the package being crawled; without one,
                 username and password fields get an empty suggestion.
+            email: Sign-up email (App Account override or Verification Inbox address).
+            phone: Test phone number (manual or detected from the device).
         """
         self.config_manager = config_manager
 
         # Load credentials with config fallback
         self.values = {
-            "email": self._get_config_val("test_email", "test_user@example.com"),
-            "phone": self._get_config_val("test_phone", "15555555555"),
+            "email": email or "test_user@example.com",
+            "phone": phone or "15555555555",
             "username": app_account.username if app_account else "",
             "password": app_account.password if app_account else "",
             "address": self._get_config_val("test_address", "123 Test St"),

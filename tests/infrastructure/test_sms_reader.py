@@ -136,3 +136,20 @@ async def test_read_otp_defaults_since_to_device_time():
     reader = make_reader({"date +%s": ("5000", 0), "content query": (out, 0)})
     result = await reader.read_otp("emu-1", timeout_seconds=1)
     assert result.code == "222222"
+
+
+@pytest.mark.parametrize(
+    "output,code,expected",
+    [
+        ("Row: 0 number=+491701234567", 0, "+491701234567"),
+        ("Row: 0 number=\nRow: 1 number=0170 1234567", 0, "0170 1234567"),
+        ("Row: 0 number=", 0, None),
+        ("Row: 0 number=123", 0, None),
+        ("Error while accessing provider:telephony", 0, None),
+        ("", 1, None),
+    ],
+)
+@pytest.mark.asyncio
+async def test_read_own_number(output, code, expected):
+    reader = make_reader({"content://telephony/siminfo": (output, code)})
+    assert await reader.read_own_number("emu-1") == expected

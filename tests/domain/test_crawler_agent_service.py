@@ -51,6 +51,7 @@ def mock_config_manager():
     }.get(key, default)
     config.user_config_store = Mock()
     config.user_config_store.get_secret_plaintext = Mock(side_effect=KeyError("not found"))
+    config.user_config_store.get_setting = Mock(return_value=None)
     return config
 
 

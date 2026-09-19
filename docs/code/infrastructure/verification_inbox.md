@@ -29,3 +29,4 @@ Source: `src/mobile_crawler/infrastructure/verification_inbox.py`
 ## Imported by
 - [[code/domain/authentication|domain.authentication]]
 - [[code/domain/crawler_agent_service|domain.crawler_agent_service]]
+- [[code/domain/prompt_builder|domain.prompt_builder]]

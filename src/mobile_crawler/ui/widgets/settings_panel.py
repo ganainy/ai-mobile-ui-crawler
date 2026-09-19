@@ -249,26 +249,23 @@ class SettingsPanel(QWidget):
 
         # 1. Address field with German default mock value
         field_layout, self.test_address_input = create_credential_field(
-            "Test Address:", "e.g. Kaiserstraße 12, 60311 Frankfurt am Main, Germany"
+            "Address:", "e.g. Kaiserstraße 12, 60311 Frankfurt am Main, Germany"
         )
         self.test_address_input.setText("Kaiserstraße 12, 60311 Frankfurt am Main, Germany")
         self.test_address_input.setToolTip("Default test address used for forms")
         credentials_layout.addLayout(field_layout)
 
-        # 2. Email address field with a hint
-        field_layout, self.test_email_input = create_credential_field("Test Email Address:", "Enter test email address")
-        self.test_email_input.setText("testuser@example.com")
-        self.test_email_input.setToolTip("Enter a real email address if you need to receive verification codes or OTPs")
-        email_hint = QLabel("💡 Tip: Provide a real email address if the target app requires email verification/OTP.")
-        email_hint.setStyleSheet("color: #aa6600; font-size: 10px; font-style: italic;")
-        email_hint.setWordWrap(True)
-        field_layout.addWidget(email_hint)
-        credentials_layout.addLayout(field_layout)
-
-        # 3. Mobile Number field with a hint
-        field_layout, self.test_phone_input = create_credential_field("Test Mobile Number:", "e.g. +49 170 1234567")
-        self.test_phone_input.setToolTip("Enter a real mobile number if you need to receive SMS verification/MFA codes")
-        phone_hint = QLabel("💡 Tip: Provide a real mobile number if the target app requires SMS MFA/verification.")
+        # 2. Mobile Number field with a hint (email comes from the Verification Inbox below)
+        field_layout, self.test_phone_input = create_credential_field(
+            "Mobile Number (optional):", "Leave empty to detect from the device SIM"
+        )
+        self.test_phone_input.setToolTip(
+            "Overrides the number the crawler tries to read from the device SIM at the start of a run"
+        )
+        phone_hint = QLabel(
+            "💡 Tip: Leave empty to auto-detect from the SIM. Many carriers/devices don't expose it; "
+            "then enter it here if the app needs a phone number."
+        )
         phone_hint.setStyleSheet("color: #aa6600; font-size: 10px; font-style: italic;")
         phone_hint.setWordWrap(True)
         field_layout.addWidget(phone_hint)
@@ -970,8 +967,8 @@ class SettingsPanel(QWidget):
         )
         self.test_address_input.setText(test_address)
 
-        test_email = self._config_store.get_setting("test_email", default="testuser@example.com")
-        self.test_email_input.setText(test_email)
+        # Purge the removed global test email (replaced by the Verification Inbox)
+        self._config_store.delete_setting("test_email")
 
         test_phone = self._config_store.get_setting("test_phone", default="")
         self.test_phone_input.setText(test_phone)
@@ -1147,12 +1144,6 @@ class SettingsPanel(QWidget):
                     self._config_store.set_setting("test_address", test_address, "string")
                 else:
                     self._config_store.delete_setting("test_address")
-
-                test_email = self.test_email_input.text().strip()
-                if test_email:
-                    self._config_store.set_setting("test_email", test_email, "string")
-                else:
-                    self._config_store.delete_setting("test_email")
 
                 test_phone = self.test_phone_input.text().strip()
                 if test_phone:
@@ -1497,10 +1488,6 @@ class SettingsPanel(QWidget):
         """Get the current test address value."""
         return self.test_address_input.text().strip()
 
-    def get_test_email(self) -> str:
-        """Get the current test email value."""
-        return self.test_email_input.text().strip()
-
     def get_test_phone(self) -> str:
         """Get the current test phone value."""
         return self.test_phone_input.text().strip()
@@ -1721,7 +1708,6 @@ class SettingsPanel(QWidget):
         self.max_steps_input.setValue(100)
         self.max_duration_input.setValue(300)
         self.test_address_input.setText("Kaiserstraße 12, 60311 Frankfurt am Main, Germany")
-        self.test_email_input.setText("testuser@example.com")
         self.test_phone_input.clear()
         self.verification_inbox_address_input.clear()
         self.verification_inbox_password_input.clear()

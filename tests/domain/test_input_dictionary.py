@@ -22,12 +22,12 @@ def test_input_dictionary_default_matching():
 def test_input_dictionary_config_overrides():
     config_manager = Mock()
     config_manager.get.side_effect = lambda key, default=None: {
-        "test_email": "override@example.com",
-        "test_phone": "19999999999",
         "test_address": "456 Custom Ave",
     }.get(key, default)
 
-    input_dict = ContextAwareInputDictionary(config_manager=config_manager)
+    input_dict = ContextAwareInputDictionary(
+        config_manager=config_manager, email="override@example.com", phone="19999999999"
+    )
 
     email_el = {"resourceId": "email_input", "text": ""}
     assert input_dict.get_suggested_input(email_el) == "override@example.com"
