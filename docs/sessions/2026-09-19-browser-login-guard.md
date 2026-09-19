@@ -19,3 +19,6 @@ updated: 2026-09-19
 
 ## Run 174: login attempt without saved account
 On Headspace's email-first web form the manager saw "Password / Log in" after entering the email and reasoned "maybe the account exists", typed the generated sign-up password and got "Wrong email or password". Fix: the no-App-Account branch of `AuthenticationScenario.goal_section` now says the credentials are for a NEW account only, never to log in with them, and to look for the sign-up option instead. Generic text (no app names). Test: `test_goal_section_signup_when_no_account`. Unrelated pre-existing failure: `test_get_crawler_agent_config` expects manager max_tokens 2048 but HEAD (5907fe9) raised it to 8192.
+
+## Committed
+All of the above is in 49c09c1 (plus a `TYPE_CHECKING` import of `PIL.Image` in `driver/android.py` to satisfy ruff F821, and the stale `max_tokens` test fix). The keyboard-hiding edits that appeared in the working tree were another agent's work, committed as 88d4fcf (see [session](2026-09-19-hide-keyboard.md)).
