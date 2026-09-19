@@ -7,6 +7,7 @@ updated: 2026-09-19
 Entry point for the Obsidian vault (`docs/`). Claude reads this first each session and updates it before finishing substantive work.
 
 ## Now
+- Notify-hook debug: spurious toasts come from the async global Stop hook firing when the project Stop hook blocks, and an unmatched Notification hook. Fix proposed, not applied. See [session](sessions/2026-09-19-notify-hook-debug.md).
 - Test Email field removed; "Test" dropped from the Address and Mobile Number labels (email now from App Account override / Verification Inbox); phone auto-detected from SIM via adb, manual field overrides. Uncommitted; not tried on a real device. See [session](sessions/2026-09-19-remove-test-email-detect-phone.md).
 - Old issues #1 and #5 verified fixed and closed; stray `src/=0.4.26` removed. See [session](sessions/2026-09-19-close-old-issues.md).
 - Issue #7 (App Accounts) committed as cf3196f: per-app account store, Settings "App Account" group, account injected into the agent goal. See [session](sessions/2026-09-19-app-accounts.md).
