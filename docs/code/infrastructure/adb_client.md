@@ -13,6 +13,7 @@ Source: `src/mobile_crawler/infrastructure/adb_client.py`
 
 ## Imported by
 - [[code/domain/adb_action_executor|domain.adb_action_executor]]
+- [[code/domain/crawler_agent_service|domain.crawler_agent_service]]
 - [[code/domain/traffic_capture_manager|domain.traffic_capture_manager]]
 - [[code/domain/video_recording_manager|domain.video_recording_manager]]
 - [[code/infrastructure/mobsf_manager|infrastructure.mobsf_manager]]

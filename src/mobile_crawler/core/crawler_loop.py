@@ -46,6 +46,7 @@ class CrawlerLoop:
         event_listeners: list[CrawlerEventListener] | None = None,
         ai_interaction_repository=None,
         report_generator=None,
+        human_prompter=None,
     ):
         """Initialize the crawler-agent-backed crawl wrapper.
 
@@ -56,6 +57,7 @@ class CrawlerLoop:
             event_listeners: List of event listeners
             ai_interaction_repository: Optional repository for AI interaction persistence
             report_generator: Optional ReportGenerator used to write the Run Report after a run
+            human_prompter: Optional HumanPrompter used by Human Fallback during authentication
         """
         self.config_manager = config_manager
         self.run_repository = run_repository
@@ -63,6 +65,7 @@ class CrawlerLoop:
         self.event_listeners = event_listeners or []
         self._ai_interaction_repository = ai_interaction_repository
         self._report_generator = report_generator
+        self._human_prompter = human_prompter
 
         self._crawl_thread: threading.Thread | None = None
         self._current_run_id: int | None = None
@@ -233,6 +236,7 @@ class CrawlerLoop:
                 ai_interaction_repository=self._ai_interaction_repository,
                 device_id=run.device_id,
             )
+            self._crawler_agent_service.human_prompter = self._human_prompter
 
             # Initialize step phase tracking per D-01 (wrap at action level)
             self._crawler_agent_service.begin_step_tracking(

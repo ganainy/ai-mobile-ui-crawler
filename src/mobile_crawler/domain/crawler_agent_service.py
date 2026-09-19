@@ -15,6 +15,7 @@ from workflows.errors import WorkflowCancelledByUser
 
 from mobile_crawler.config.config_manager import ConfigManager
 from mobile_crawler.domain.action_verifier import ActionVerifier
+from mobile_crawler.domain.authentication import AuthenticationSession
 from mobile_crawler.domain.context_guard import (
     AppSwitchRecovery,
     DeviceContextCapture,
@@ -33,6 +34,7 @@ from mobile_crawler.domain.crawler_agent.agent.fast_agent.events import FastAgen
 from mobile_crawler.domain.crawler_agent.agent.manager.events import ManagerResponseEvent
 from mobile_crawler.domain.errors import ErrorContext, FatalError
 from mobile_crawler.domain.guided_scenarios_generator import guided_scenarios_config_key
+from mobile_crawler.domain.human_fallback import HumanFallback, HumanFallbackConfig, HumanPrompter
 from mobile_crawler.domain.models import AIAction, BoundingBox
 from mobile_crawler.domain.prompt_builder import format_login_and_form_data
 from mobile_crawler.domain.run_outcome import build_guided_progress
@@ -169,6 +171,9 @@ class CrawlerAgentService:
         self.device_id = device_id
         self._crawler_agent = None
         self._crawler_agent_config = None
+        # Set by the crawl loop so Human Fallback can reach the GUI; None means fallback is off.
+        self.human_prompter: HumanPrompter | None = None
+        self._auth_session: AuthenticationSession | None = None
         self._current_handler = None
         self._handler_loop = None
         self._log_handler = None
@@ -1350,6 +1355,39 @@ class CrawlerAgentService:
             except Exception as e:
                 logger.warning(f"Failed to persist AI interaction for step {step_number}: {e}")
 
+    def _build_auth_session(self, app_package: str) -> AuthenticationSession:
+        from mobile_crawler.infrastructure.adb_client import ADBClient
+        from mobile_crawler.infrastructure.app_account_store import AppAccountStore
+        from mobile_crawler.infrastructure.sms_reader import SmsReader
+        from mobile_crawler.infrastructure.verification_inbox import VerificationInboxReader, VerificationInboxStore
+
+        user_store = self.config_manager.user_config_store
+        inbox_config = VerificationInboxStore(user_store).get()
+        inbox_reader = (
+            VerificationInboxReader(inbox_config.address, inbox_config.app_password)
+            if inbox_config and inbox_config.app_password
+            else None
+        )
+        return AuthenticationSession(
+            app_package=app_package,
+            device_id=self.device_id,
+            account_store=AppAccountStore(user_store),
+            inbox_config=inbox_config,
+            inbox_reader=inbox_reader,
+            sms_reader=SmsReader(ADBClient()),
+            human_fallback=HumanFallback(HumanFallbackConfig.from_store(user_store), self.human_prompter),
+        )
+
+    def _build_auth_section(self, app_package: str) -> str:
+        """Create this run's authentication session and return its goal text ('' if unavailable)."""
+        try:
+            self._auth_session = self._build_auth_session(app_package)
+            return self._auth_session.goal_section()
+        except Exception as e:
+            self._auth_session = None
+            logger.warning("Authentication scenario unavailable: %s", e)
+            return ""
+
     def _create_exploration_goal(
         self, app_package: str, max_steps: int, exploration_objective: str | None = None
     ) -> CrawlerGoal:
@@ -1364,6 +1402,7 @@ class CrawlerAgentService:
             CrawlerGoal for app exploration
         """
         guided = self.config_manager.get(guided_scenarios_config_key(app_package), [])
+        auth_section = self._build_auth_section(app_package)
         if guided and isinstance(guided, list):
             description = (
                 f"Explore the {app_package} app. "
@@ -1388,6 +1427,9 @@ class CrawlerAgentService:
                     f"and discover the app's functionality. Focus on user flows like "
                     f"registration, login, main features, and settings."
                 )
+
+        if auth_section:
+            description += "\n\nFIRST GUIDED SCENARIO - " + auth_section
 
         description += "\n\nLOGIN AND FORM DATA:\n" + format_login_and_form_data(self.config_manager, app_package)
 
@@ -1483,7 +1525,11 @@ class CrawlerAgentService:
 
                 from mobile_crawler.domain.crawler_agent.agent.droid.crawler_agent import CrawlerAgent
 
-                self._crawler_agent = CrawlerAgent(goal=goal.description, config=self._crawler_agent_config)
+                self._crawler_agent = CrawlerAgent(
+                    goal=goal.description,
+                    config=self._crawler_agent_config,
+                    custom_tools=self._auth_session.tools() if self._auth_session else None,
+                )
 
                 # Instrument LlamaIndex and register stats collector (idempotent).
                 # Runs after CrawlerAgent construction so it reuses whatever
@@ -1857,7 +1903,10 @@ class CrawlerAgentService:
             getattr(shared_state, "plan", None),
             getattr(shared_state, "current_subgoal", None),
         )
-        return {"stop_kind": stop_kind, "guided_progress": guided_progress}
+        auth_note = self._auth_session.skipped_reason if self._auth_session else None
+        if auth_note:
+            logger.warning("Run note: %s", auth_note)
+        return {"stop_kind": stop_kind, "guided_progress": guided_progress, "auth_note": auth_note}
 
     @staticmethod
     def _is_max_step_completion_reason(reason: str) -> bool:

@@ -562,6 +562,28 @@ class TestCrawlerAgentServiceErrorHandling:
         assert "No App Account exists for com.c" in goal_c.description
         ucs.close()
 
+    def test_goal_starts_with_authentication_scenario_and_exposes_auth_tools(self, crawler_agent_service, tmp_path):
+        from mobile_crawler.config.config_manager import ConfigManager
+        from mobile_crawler.infrastructure.app_account_store import AppAccount, AppAccountStore
+        from mobile_crawler.infrastructure.user_config_store import UserConfigStore
+
+        ucs = UserConfigStore(tmp_path / "u2.db")
+        ucs.create_schema()
+        AppAccountStore(ucs).save("com.a", AppAccount("alice", "pw-a"))
+        crawler_agent_service.config_manager = ConfigManager(ucs)
+
+        with_account = crawler_agent_service._create_exploration_goal("com.a", 10).description
+        assert "FIRST GUIDED SCENARIO - AUTHENTICATION" in with_account and "log in" in with_account.lower()
+        without = crawler_agent_service._create_exploration_goal("com.c", 10).description
+        assert "sign up" in without.lower() and "save_app_account" in without
+        assert set(crawler_agent_service._auth_session.tools()) == {
+            "get_email_code",
+            "get_sms_code",
+            "save_app_account",
+            "skip_authentication",
+        }
+        ucs.close()
+
     def test_create_exploration_goal_includes_dialog_dismissal(self, crawler_agent_service):
         """Goal must instruct the LLM to dismiss update/blocking dialogs.
 

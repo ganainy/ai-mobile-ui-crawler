@@ -93,6 +93,14 @@ When exploration_progress shows low discovery or you're revisiting screens repea
 - **Look for hamburger menus (☰)**: Often contain navigation to many screens
 - **Check corners**: Settings, profile icons are often in screen corners
 
+## Authentication Tools
+When the goal contains an AUTHENTICATION scenario, do it first. Beyond UI actions you may call:
+- `get_email_code`: newest email verification code or link for the sign-up address
+- `get_sms_code`: newest SMS verification code on the device
+- `save_app_account`: save the account you just created (call right after sign-up succeeds)
+- `skip_authentication`: give up on auth and explore what is reachable (also do this when a tool says the attempt cap is reached)
+Never invent verification codes; never retry a code tool after it reports failure or the attempt cap.
+
 ## Test Credentials
 {test_credentials}
 

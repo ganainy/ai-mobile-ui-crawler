@@ -10,6 +10,7 @@ Exploration logic: action execution/verification, screen and state tracking, OCR
 ## Modules
 - [[code/domain/action_verifier|domain.action_verifier]] - Post-action verification for UI state transitions.
 - [[code/domain/adb_action_executor|domain.adb_action_executor]] - ADB-based action executor for mobile crawler.
+- [[code/domain/authentication|domain.authentication]] - Authentication as the first Guided Scenario (see CONTEXT.md: App Account, Verification Challenge).
 - [[code/domain/context_guard|domain.context_guard]] - Device context capture and UI dump validation module for crawl step guardrails.
 - [[code/domain/crawler_agent/_index|domain.crawler_agent]] - Droidrun - A framework for controlling Android devices through LLM agents.
 - [[code/domain/crawler_agent_service|domain.crawler_agent_service]] - Internal crawler-agent service integration for Mobile Crawler.

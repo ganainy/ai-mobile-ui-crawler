@@ -57,6 +57,7 @@ from mobile_crawler.infrastructure.step_log_repository import StepLogRepository
 from mobile_crawler.infrastructure.step_phase_repository import StepPhaseRepository
 from mobile_crawler.infrastructure.telemetry_client import build_telemetry_client_factory
 from mobile_crawler.infrastructure.user_config_store import UserConfigStore
+from mobile_crawler.ui.human_fallback_dialog import QtHumanPrompter
 from mobile_crawler.ui.log_cleaner import LogCleaner
 from mobile_crawler.ui.mobsf_startup_worker import MobSFStartupWorker
 from mobile_crawler.ui.omniparser_startup_worker import OmniParserStartupWorker
@@ -357,6 +358,9 @@ class MainWindow(QMainWindow):
 
         # Guided Scenarios generation state
         self._guided_scenarios_worker = None
+
+        # Human Fallback dialog for authentication (created on the GUI thread, called from the crawl thread)
+        self._human_prompter = QtHumanPrompter(self)
 
         # MobSF startup state
         self._mobsf_docker_service = None
@@ -873,6 +877,7 @@ class MainWindow(QMainWindow):
             event_listeners=event_listeners,
             ai_interaction_repository=ai_repo,
             report_generator=self._services.get("report_generator"),
+            human_prompter=self._human_prompter,
         )
 
     def _on_crawl_finished(self) -> None:

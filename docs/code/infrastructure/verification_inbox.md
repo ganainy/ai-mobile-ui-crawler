@@ -25,3 +25,7 @@ Source: `src/mobile_crawler/infrastructure/verification_inbox.py`
 
 ## Imports
 - [[code/infrastructure/user_config_store|infrastructure.user_config_store]]
+
+## Imported by
+- [[code/domain/authentication|domain.authentication]]
+- [[code/domain/crawler_agent_service|domain.crawler_agent_service]]

@@ -20,6 +20,8 @@ Source: `src/mobile_crawler/infrastructure/app_account_store.py`
 - [[code/infrastructure/user_config_store|infrastructure.user_config_store]]
 
 ## Imported by
+- [[code/domain/authentication|domain.authentication]]
+- [[code/domain/crawler_agent_service|domain.crawler_agent_service]]
 - [[code/domain/input_dictionary|domain.input_dictionary]]
 - [[code/domain/prompt_builder|domain.prompt_builder]]
 - [[code/ui/main_window|ui.main_window]]

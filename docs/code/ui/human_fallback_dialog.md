@@ -15,3 +15,6 @@ Source: `src/mobile_crawler/ui/human_fallback_dialog.py`
 
 ## Imports
 - [[code/domain/human_fallback|domain.human_fallback]]
+
+## Imported by
+- [[code/ui/main_window|ui.main_window]]
