@@ -287,13 +287,15 @@ class CrawlerAgentService:
                 "provider": droid_provider,
                 "model": ai_model,
                 "temperature": 0.1,
-                "kwargs": {"max_tokens": 2048},
+                "kwargs": {"max_tokens": 8192},
             },
+            # Gemini thinking tokens count against max_tokens, so small limits
+            # truncate the visible answer (MAX_TOKENS) before the action is emitted.
             "executor": {
                 "provider": droid_provider,
                 "model": ai_model,
                 "temperature": 0.0,
-                "kwargs": {"max_tokens": 512},
+                "kwargs": {"max_tokens": 4096},
             },
             "fast_agent": {
                 "provider": droid_provider,
@@ -305,7 +307,7 @@ class CrawlerAgentService:
                 "provider": droid_provider,
                 "model": ai_model,
                 "temperature": 0.0,
-                "kwargs": {"max_tokens": 512},
+                "kwargs": {"max_tokens": 2048},
             },
             "structured_output": {
                 "provider": droid_provider,
