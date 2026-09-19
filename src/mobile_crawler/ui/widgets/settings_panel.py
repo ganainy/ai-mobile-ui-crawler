@@ -515,8 +515,8 @@ class SettingsPanel(QWidget):
         local_url_layout.setContentsMargins(0, 0, 0, 0)
         local_url_layout.addWidget(QLabel("Local OmniParser URL:"))
         self.omniparser_local_url_input = QLineEdit()
-        self.omniparser_local_url_input.setText("http://localhost:8000")
-        self.omniparser_local_url_input.setPlaceholderText("e.g. http://localhost:8000")
+        self.omniparser_local_url_input.setText("http://localhost:8001")
+        self.omniparser_local_url_input.setPlaceholderText("e.g. http://localhost:8001")
         self.omniparser_local_url_input.setToolTip("Local server URL for OmniParser (must include port)")
         local_url_layout.addWidget(self.omniparser_local_url_input)
         self.local_url_container.setLayout(local_url_layout)
@@ -643,7 +643,7 @@ class SettingsPanel(QWidget):
         mobsf_url_layout = QHBoxLayout()
         mobsf_url_layout.addWidget(QLabel("API URL:"))
         self.mobsf_api_url_input = QLineEdit()
-        self.mobsf_api_url_input.setPlaceholderText("http://localhost:8000")
+        self.mobsf_api_url_input.setPlaceholderText("http://localhost:8001")
         self.mobsf_api_url_input.setEnabled(False)
         mobsf_url_layout.addWidget(self.mobsf_api_url_input)
         mobsf_layout.addLayout(mobsf_url_layout)
@@ -891,7 +891,7 @@ class SettingsPanel(QWidget):
         auto_run_mobsf = self._config_store.get_setting("auto_run_mobsf_after_crawl", default=False)
         self.auto_run_mobsf_after_crawl_checkbox.setChecked(auto_run_mobsf)
 
-        mobsf_api_url = self._config_store.get_setting("mobsf_api_url", default="http://localhost:8000")
+        mobsf_api_url = self._config_store.get_setting("mobsf_api_url", default="http://localhost:8001")
         self.mobsf_api_url_input.setText(mobsf_api_url)
 
         # Load Crawler Agent settings
@@ -911,7 +911,10 @@ class SettingsPanel(QWidget):
         omniparser_backend = self._config_store.get_setting("omniparser_backend", default="replicate")
         self.omniparser_backend_combo.setCurrentText(omniparser_backend)
 
-        omniparser_local_url = self._config_store.get_setting("omniparser_local_url", default="http://localhost:8000")
+        omniparser_local_url = self._config_store.get_setting("omniparser_local_url", default="http://localhost:8001")
+        # Port 8000 is MobSF's; the old OmniParser default collided with it.
+        if omniparser_local_url.rstrip("/") in ("http://localhost:8000", "http://127.0.0.1:8000"):
+            omniparser_local_url = "http://localhost:8001"
         self.omniparser_local_url_input.setText(omniparser_local_url)
 
         omniparser_local_parse_timeout = self._config_store.get_setting(
@@ -1072,7 +1075,7 @@ class SettingsPanel(QWidget):
                 if mobsf_api_url:
                     self._config_store.set_setting("mobsf_api_url", mobsf_api_url, "string")
                 else:
-                    self._config_store.set_setting("mobsf_api_url", "http://localhost:8000", "string")
+                    self._config_store.set_setting("mobsf_api_url", "http://localhost:8001", "string")
 
                 # Save Crawler Agent settings
                 crawler_reasoning = self.crawler_reasoning_checkbox.isChecked()
@@ -1643,7 +1646,7 @@ class SettingsPanel(QWidget):
             QMessageBox.warning(
                 self,
                 "Invalid MobSF API URL",
-                "MobSF API URL must start with http:// or https://\n\nExample: http://localhost:8000",
+                "MobSF API URL must start with http:// or https://\n\nExample: http://localhost:8001",
             )
             return False
 
@@ -1656,14 +1659,14 @@ class SettingsPanel(QWidget):
                 QMessageBox.warning(
                     self,
                     "Invalid MobSF API URL",
-                    "MobSF API URL appears to be malformed.\n\nExample: http://localhost:8000",
+                    "MobSF API URL appears to be malformed.\n\nExample: http://localhost:8001",
                 )
                 return False
         except Exception:
             QMessageBox.warning(
                 self,
                 "Invalid MobSF API URL",
-                "MobSF API URL appears to be malformed.\n\nExample: http://localhost:8000",
+                "MobSF API URL appears to be malformed.\n\nExample: http://localhost:8001",
             )
             return False
 

@@ -232,12 +232,10 @@ class TestCrawlerLoopLifecycle:
         )
         mock_traffic_manager.start_capture_async.assert_awaited_once_with(
             run_id=1,
-            step_num=0,
             session_path="/tmp/session",
         )
         mock_traffic_manager.stop_capture_and_pull_async.assert_awaited_once_with(
             run_id=1,
-            step_num=0,
         )
         assert order == ["traffic_start", "explore", "traffic_stop"]
         assert any(
@@ -287,7 +285,6 @@ class TestCrawlerLoopLifecycle:
 
         mock_traffic_manager.stop_capture_and_pull_async.assert_awaited_once_with(
             run_id=1,
-            step_num=0,
         )
 
     @patch('mobile_crawler.core.crawler_loop.TrafficCaptureManager')

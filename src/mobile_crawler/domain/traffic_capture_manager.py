@@ -118,14 +118,12 @@ class TrafficCaptureManager:
     async def start_capture_async(
         self,
         run_id: int | None = None,
-        step_num: int | None = None,
         session_path: str | None = None,
     ) -> tuple[bool, str]:
         """Starts PCAPdroid traffic capture using the official API.
 
         Args:
             run_id: Optional run ID for filename generation
-            step_num: Optional step number for filename generation
             session_path: Optional session directory path for output
 
         Returns:
@@ -196,7 +194,7 @@ class TrafficCaptureManager:
         sanitized_package = re.sub(r"[^\w.-]+", "_", target_app_package)
         timestamp = time.strftime("%Y%m%d_%H%M%S")
         self.pcap_filename_on_device = (
-            f"{sanitized_package}_run{run_id or 'X'}_step{step_num or 'Y'}_{timestamp}.pcap"
+            f"{sanitized_package}_run{run_id or 'X'}_{timestamp}.pcap"
         )
 
         # Resolve output directory - PCAP files go to "pcap" folder
@@ -352,14 +350,11 @@ class TrafficCaptureManager:
         logger.info(f"Traffic capture readiness passed: {self.pcap_filename_on_device}")
         return True, "Traffic capture started successfully"
 
-    async def stop_capture_and_pull_async(
-        self, run_id: int, step_num: int
-    ) -> str | None:
+    async def stop_capture_and_pull_async(self, run_id: int) -> str | None:
         """Stops PCAPdroid capture, pulls the file, and optionally cleans up.
 
         Args:
             run_id: Run ID for logging
-            step_num: Step number for logging
 
         Returns:
             Path to the saved PCAP file, or None if failed

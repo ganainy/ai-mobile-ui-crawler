@@ -142,7 +142,7 @@ class TestTrafficCaptureManager:
                 adb_client=Mock(),
             )
             success, _ = asyncio.run(manager.start_capture_async(
-                run_id=1, step_num=1, session_path=temp_dir
+                run_id=1, session_path=temp_dir
             ))
 
         assert success is True
@@ -177,7 +177,7 @@ class TestTrafficCaptureManager:
             )
 
             success, message = asyncio.run(manager.start_capture_async(
-                run_id=1, step_num=1, session_path=temp_dir
+                run_id=1, session_path=temp_dir
             ))
 
             assert success is True
@@ -227,7 +227,7 @@ class TestTrafficCaptureManager:
                 adb_client=Mock(),
             )
             success, _ = asyncio.run(manager.start_capture_async(
-                run_id=1, step_num=0, session_path=temp_dir
+                run_id=1, session_path=temp_dir
             ))
 
         assert success is True
@@ -254,7 +254,7 @@ class TestTrafficCaptureManager:
             adb_client=mock_adb_client,
         )
 
-        success, message = asyncio.run(manager.start_capture_async(run_id=1, step_num=1))
+        success, message = asyncio.run(manager.start_capture_async(run_id=1))
 
         assert success is False
         assert "not enabled" in message
@@ -290,11 +290,11 @@ class TestTrafficCaptureManager:
             adb_client=Mock(),
         )
         # First start capture to set state
-        asyncio.run(manager.start_capture_async(run_id=1, step_num=1))
+        asyncio.run(manager.start_capture_async(run_id=1))
         assert manager._is_currently_capturing is True
 
         # Now start again - should succeed after stopping first
-        success, message = asyncio.run(manager.start_capture_async(run_id=1, step_num=1))
+        success, message = asyncio.run(manager.start_capture_async(run_id=1))
 
         assert success is True
         assert "started successfully" in message
@@ -314,7 +314,7 @@ class TestTrafficCaptureManager:
             adb_client=mock_adb_client,
         )
 
-        success, message = asyncio.run(manager.start_capture_async(run_id=1, step_num=1))
+        success, message = asyncio.run(manager.start_capture_async(run_id=1))
 
         assert success is False
         assert "APP_PACKAGE not configured" in message
@@ -326,7 +326,7 @@ class TestTrafficCaptureManager:
             adb_client=mock_adb_client,
         )
 
-        result = asyncio.run(manager.stop_capture_and_pull_async(run_id=1, step_num=1))
+        result = asyncio.run(manager.stop_capture_and_pull_async(run_id=1))
 
         assert result is None
 
@@ -361,14 +361,13 @@ class TestTrafficCaptureManager:
 
         # Run the async function to set the filename
         with tempfile.TemporaryDirectory() as temp_dir:
-            asyncio.run(manager.start_capture_async(run_id=42, step_num=5, session_path=temp_dir))
+            asyncio.run(manager.start_capture_async(run_id=42, session_path=temp_dir))
             filename = manager.pcap_filename_on_device
 
         assert filename is not None
         # Package name dots are preserved in filename
         assert "com.test.app" in filename
         assert "run42" in filename
-        assert "step5" in filename
         assert filename.endswith(".pcap")
 
     @patch.object(TrafficCaptureManager, '_run_adb_command_async')
@@ -401,7 +400,7 @@ class TestTrafficCaptureManager:
         )
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            asyncio.run(manager.start_capture_async(run_id=1, step_num=1, session_path=temp_dir))
+            asyncio.run(manager.start_capture_async(run_id=1, session_path=temp_dir))
             pcap_path = manager.local_pcap_file_path
 
         assert pcap_path is not None
@@ -433,7 +432,7 @@ class TestTrafficCaptureManager:
         manager.pcap_filename_on_device = "capture.pcap"
         manager.local_pcap_file_path = os.path.join(tempfile.gettempdir(), "capture.pcap")
 
-        asyncio.run(manager.stop_capture_and_pull_async(run_id=1, step_num=0))
+        asyncio.run(manager.stop_capture_and_pull_async(run_id=1))
 
         stop_commands = [
             call.args[0]
@@ -669,7 +668,7 @@ class TestTrafficCaptureManager:
 
         with tempfile.TemporaryDirectory() as temp_dir:
             success, message = asyncio.run(
-                manager.start_capture_async(run_id=1, step_num=1, session_path=temp_dir)
+                manager.start_capture_async(run_id=1, session_path=temp_dir)
             )
 
         assert success is False
@@ -706,7 +705,7 @@ class TestTrafficCaptureManager:
 
         with tempfile.TemporaryDirectory() as temp_dir, caplog.at_level("INFO"):
             success, _ = asyncio.run(
-                manager.start_capture_async(run_id=1, step_num=1, session_path=temp_dir)
+                manager.start_capture_async(run_id=1, session_path=temp_dir)
             )
 
         assert success is True
@@ -751,7 +750,7 @@ class TestTrafficCaptureManager:
 
         with tempfile.TemporaryDirectory() as temp_dir, caplog.at_level("INFO"):
             success, _ = asyncio.run(
-                manager.start_capture_async(run_id=1, step_num=1, session_path=temp_dir)
+                manager.start_capture_async(run_id=1, session_path=temp_dir)
             )
 
         assert success is True
@@ -800,7 +799,7 @@ class TestTrafficCaptureManager:
 
         with tempfile.TemporaryDirectory() as temp_dir:
             success, _ = asyncio.run(
-                manager.start_capture_async(run_id=1, step_num=1, session_path=temp_dir)
+                manager.start_capture_async(run_id=1, session_path=temp_dir)
             )
 
         assert success is True
@@ -853,7 +852,7 @@ class TestTrafficCaptureManager:
 
         with tempfile.TemporaryDirectory() as temp_dir:
             success, _ = asyncio.run(
-                manager.start_capture_async(run_id=1, step_num=1, session_path=temp_dir)
+                manager.start_capture_async(run_id=1, session_path=temp_dir)
             )
 
         assert success is True
@@ -901,7 +900,7 @@ class TestTrafficCaptureManager:
 
         with tempfile.TemporaryDirectory() as temp_dir:
             success, message = asyncio.run(
-                manager.start_capture_async(run_id=1, step_num=1, session_path=temp_dir)
+                manager.start_capture_async(run_id=1, session_path=temp_dir)
             )
 
         assert success is False
@@ -950,7 +949,7 @@ class TestTrafficCaptureManager:
 
         with tempfile.TemporaryDirectory() as temp_dir:
             success, _ = asyncio.run(
-                manager.start_capture_async(run_id=1, step_num=1, session_path=temp_dir)
+                manager.start_capture_async(run_id=1, session_path=temp_dir)
             )
 
         assert success is False
@@ -1042,7 +1041,7 @@ class TestTrafficCaptureManager:
         }
 
         with caplog.at_level("INFO"):
-            result = asyncio.run(manager.stop_capture_and_pull_async(run_id=1, step_num=1))
+            result = asyncio.run(manager.stop_capture_and_pull_async(run_id=1))
 
         assert result is None
         assert "/sdcard/Download/PCAPdroid/expected.pcap" in caplog.text

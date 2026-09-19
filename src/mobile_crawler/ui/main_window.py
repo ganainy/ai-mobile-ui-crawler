@@ -13,6 +13,7 @@ from PySide6.QtCore import Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QApplication,
+    QCheckBox,
     QDialog,
     QMainWindow,
     QMessageBox,
@@ -45,6 +46,7 @@ from mobile_crawler.infrastructure.database import DatabaseManager
 # Service imports
 from mobile_crawler.infrastructure.device_detection import DeviceDetection
 from mobile_crawler.infrastructure.mobsf_docker import MobSFDockerService
+from mobile_crawler.infrastructure.omniparser_docker import OmniParserDockerService
 from mobile_crawler.infrastructure.mobsf_manager import MobSFManager
 from mobile_crawler.infrastructure.run_repository import RunRepository
 from mobile_crawler.infrastructure.run_stats_repository import RunStatsRepository
@@ -55,6 +57,7 @@ from mobile_crawler.infrastructure.step_phase_repository import StepPhaseReposit
 from mobile_crawler.infrastructure.user_config_store import UserConfigStore
 from mobile_crawler.ui.log_cleaner import LogCleaner
 from mobile_crawler.ui.mobsf_startup_worker import MobSFStartupWorker
+from mobile_crawler.ui.omniparser_startup_worker import OmniParserStartupWorker
 
 # Signal adapter
 from mobile_crawler.ui.signal_adapter import QtSignalAdapter
@@ -358,6 +361,8 @@ class MainWindow(QMainWindow):
         # MobSF startup state
         self._mobsf_docker_service = None
         self._mobsf_startup_worker = None
+        self._omniparser_docker_service = None
+        self._omniparser_startup_worker = None
 
         # Load step-by-step preference from config store
         config_store = self._services["user_config_store"]
@@ -590,12 +595,54 @@ class MainWindow(QMainWindow):
         except Exception as e:
             self._show_error("Failed to start crawl", str(e))
 
+    def _show_omniparser_starting_dialog(self, worker) -> None:
+        """Show OmniParser startup status, refreshed every 3s, and announce when the server is ready."""
+        service = self._omniparser_docker_service
+
+        def status_text() -> str:
+            return (
+                "The local OmniParser server is still starting.\n\n"
+                f"Status: {service.status if service else 'Starting...'}\n\n"
+                "Hint: if you don't want to wait for it, switch the OmniParser Backend to "
+                "'replicate' (remote server) in Settings."
+            )
+
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Information)
+        box.setWindowTitle("OmniParser Starting")
+        box.setText(status_text())
+        box.setStandardButtons(QMessageBox.StandardButton.Ok)
+
+        timer = QTimer(box)
+
+        def refresh() -> None:
+            if worker.isRunning():
+                box.setText(status_text())
+                return
+            timer.stop()
+            if service is not None and service.status == "Ready":
+                box.setIcon(QMessageBox.Icon.Information)
+                box.setText("The local OmniParser server is ready. You can start the crawl now.")
+            else:
+                box.setIcon(QMessageBox.Icon.Warning)
+                box.setText("OmniParser did not start. See the log for details.")
+
+        timer.timeout.connect(refresh)
+        timer.start(3000)
+        box.exec()
+        timer.stop()
+
     def _can_start_crawl(self) -> bool:
         """Check if crawl can be started with current configuration.
 
         Returns:
             True if all requirements are met
         """
+        omniparser_worker = getattr(self, "_omniparser_startup_worker", None)
+        if omniparser_worker is not None and omniparser_worker.isRunning():
+            self._show_omniparser_starting_dialog(omniparser_worker)
+            return False
+
         if not self._selected_device:
             self._show_error("No Device Selected", "Please select an Android device first.")
             return False
@@ -2060,34 +2107,86 @@ class MainWindow(QMainWindow):
                 f"MobSF static analysis could not be started:\n\n{message}",
             )
 
-    def _maybe_prompt_mobsf_stop(self) -> None:
-        """Offer to stop the MobSF container if this session started it."""
-        docker_service = getattr(self, "_mobsf_docker_service", None)
-        if docker_service is None or not docker_service.started_by_gui:
+    def start_omniparser_if_enabled(self) -> None:
+        """Start the local OmniParser Docker stack in the background if it will be used.
+
+        Only runs when the parser mode uses OmniParser and the backend is ``local``.
+        """
+        if self.settings_panel.get_ui_parser_mode() == "accessibility":
+            return
+        if self.settings_panel.get_omniparser_backend() != "local":
             return
 
-        try:
-            if not docker_service.is_running():
-                return
-        except Exception:
+        docker_service = OmniParserDockerService(self.settings_panel.get_omniparser_local_url())
+        self._omniparser_docker_service = docker_service
+
+        worker = OmniParserStartupWorker(docker_service)
+        worker.result.connect(self._on_omniparser_startup_result)
+        self._omniparser_startup_worker = worker
+        worker.start()
+
+    def _on_omniparser_startup_result(self, ok: bool, message: str, started_by_gui: bool) -> None:
+        """Handle the OmniParser startup worker result: log it and warn if it failed."""
+        if self._omniparser_docker_service is not None:
+            self._omniparser_docker_service.started_by_gui = started_by_gui
+
+        level = LogLevel.INFO if ok else LogLevel.WARNING
+        self._append_clean_log(level, f"OmniParser: {message}", "omniparser")
+
+        if not ok:
+            QMessageBox.warning(
+                self,
+                "OmniParser Unavailable",
+                f"Local OmniParser could not be started:\n\n{message}",
+            )
+
+    def _maybe_prompt_docker_stop(self) -> None:
+        """Offer to stop the managed Docker containers (MobSF, OmniParser) that are still running.
+
+        Shows one dialog with a checkbox per running container. "Keep Running" leaves
+        everything up; "Stop Selected" stops only the checked ones.
+        """
+        candidates = []
+        for label, attr in (("MobSF", "_mobsf_docker_service"), ("OmniParser", "_omniparser_docker_service")):
+            service = getattr(self, attr, None)
+            if service is None:
+                continue
+            try:
+                if service.is_running():
+                    candidates.append((label, service))
+            except Exception:
+                continue
+
+        if not candidates:
             return
 
         box = QMessageBox(self)
         box.setIcon(QMessageBox.Icon.Question)
-        box.setWindowTitle("MobSF")
-        box.setText("MobSF is still running.")
-        box.setInformativeText("Keep it running, or stop the container?")
-        keep_btn = box.addButton("Keep Running", QMessageBox.ButtonRole.YesRole)
-        stop_btn = box.addButton("Stop MobSF", QMessageBox.ButtonRole.NoRole)
+        box.setWindowTitle("Docker containers still running")
+        box.setText("Select the containers to stop. Leave all unchecked to keep them running.")
+
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        checkboxes = []
+        for label, service in candidates:
+            checkbox = QCheckBox(f"Stop {label}")
+            layout.addWidget(checkbox)
+            checkboxes.append((checkbox, service))
+        box.layout().addWidget(container, box.layout().rowCount(), 0, 1, box.layout().columnCount())
+
+        keep_btn = box.addButton("Keep Running", QMessageBox.ButtonRole.RejectRole)
+        stop_btn = box.addButton("Stop Selected", QMessageBox.ButtonRole.AcceptRole)
         box.setDefaultButton(keep_btn)
         box.exec()
 
         if box.clickedButton() is stop_btn:
-            docker_service.stop()
+            for checkbox, service in checkboxes:
+                if checkbox.isChecked():
+                    service.stop()
 
     def closeEvent(self, event):
         """Handle window close event."""
-        self._maybe_prompt_mobsf_stop()
+        self._maybe_prompt_docker_stop()
 
         try:
             if self.settings_panel:
@@ -2119,6 +2218,12 @@ class MainWindow(QMainWindow):
                     startup_worker.terminate()
                     startup_worker.wait()
 
+            omniparser_worker = getattr(self, "_omniparser_startup_worker", None)
+            if omniparser_worker and omniparser_worker.isRunning():
+                if not omniparser_worker.wait(10000):
+                    omniparser_worker.terminate()
+                    omniparser_worker.wait()
+
             # Wait briefly for the Guided Scenarios worker to avoid a running-thread warning
             guided_scenarios_worker = getattr(self, "_guided_scenarios_worker", None)
             if guided_scenarios_worker and guided_scenarios_worker.isRunning():
@@ -2148,6 +2253,7 @@ def run():
     window = MainWindow()
     window.showMaximized()
     window.start_mobsf_if_enabled()
+    window.start_omniparser_if_enabled()
 
     sys.exit(app.exec())
 

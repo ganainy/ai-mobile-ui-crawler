@@ -36,7 +36,7 @@ def mock_config_manager():
         "crawler_telemetry_enabled": False,
         "ui_parser_mode": "omniparser",
         "omniparser_backend": "replicate",
-        "omniparser_local_url": "http://localhost:8000",
+        "omniparser_local_url": "http://localhost:8001",
         "omniparser_local_parse_timeout_seconds": 120,
         "max_steps": 15,
         "max_crawl_steps": 15,
@@ -683,7 +683,7 @@ class TestCrawlerAgentServiceConfig:
     def test_get_crawler_agent_config_includes_omniparser_timeout(self, crawler_agent_service, mock_config_manager):
         """Test local OmniParser parse timeout is passed to crawler-agent config."""
         config = crawler_agent_service._get_crawler_agent_config()
-        assert config["omniparser_local_url"] == "http://localhost:8000"
+        assert config["omniparser_local_url"] == "http://localhost:8001"
         assert config["omniparser_local_parse_timeout_seconds"] == 120
 
 

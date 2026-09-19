@@ -99,7 +99,7 @@ class TestMainWindowConfig:
         window.settings_panel.get_mobsf_api_url.return_value = ""
         window.settings_panel.get_ui_parser_mode.return_value = "boost"
         window.settings_panel.get_omniparser_backend.return_value = "local"
-        window.settings_panel.get_omniparser_local_url.return_value = "http://localhost:8000"
+        window.settings_panel.get_omniparser_local_url.return_value = "http://localhost:8001"
         window.settings_panel.get_omniparser_local_parse_timeout_seconds.return_value = 180
         window.settings_panel.get_replicate_api_key.return_value = ""
         window.settings_panel.get_exploration_objective.return_value = ""

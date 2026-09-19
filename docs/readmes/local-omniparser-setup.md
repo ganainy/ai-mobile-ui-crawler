@@ -26,7 +26,7 @@ Desktop + WSL2 GPU passthrough), configuration (`HF_TOKEN` for faster weight dow
 reasoning behind its non-obvious choices (base image, dependency overrides, etc.). It's been
 verified working end-to-end against an RTX 5070 (Blackwell).
 
-Once running, it listens on `http://localhost:8000` — the same default `omniparser_local_url`
+Once running, it listens on `http://localhost:8001` (host port 8000 is reserved for MobSF) — the same default `omniparser_local_url`
 `mobile-crawler` already expects, so no client config changes are needed beyond switching the
 **OmniParser Backend** setting to `local` (see [Connecting to mobile-crawler UI](#-connecting-to-mobile-crawler-ui) below).
 
@@ -162,6 +162,8 @@ The `mobile-crawler` Settings panel is fully integrated with this local setup (D
 2. Open the **Settings Panel** (under Crawler/Exploration settings).
 3. Under the **UI Parser** configuration:
    - Change the **OmniParser Backend** to `local`.
-   - Set the **Local OmniParser URL** to `http://localhost:8000` (default).
+   - Set the **Local OmniParser URL** to `http://localhost:8001` (default).
    - Keep **Local Parse Timeout** at `120` seconds for CPU inference, or lower it if your GPU setup consistently returns faster.
 4. Save and launch your crawl loop! The crawler will now bypass the cloud APIs and use your lightning-fast local CPU/GPU inference instead.
+
+> `mobile-crawler` starts this Docker stack automatically at GUI launch when the UI parser mode uses OmniParser and the backend is `local`.

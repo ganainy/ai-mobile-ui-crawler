@@ -277,7 +277,6 @@ class CrawlerLoop:
                                 )
                         started, message = await self._traffic_capture_manager.start_capture_async(
                             run_id=run_id,
-                            step_num=0,
                             session_path=session_path,
                         )
                         status_text = "started" if started else "not started"
@@ -355,7 +354,6 @@ class CrawlerLoop:
                         try:
                             pcap_path = await self._traffic_capture_manager.stop_capture_and_pull_async(
                                 run_id=run_id,
-                                step_num=0,
                             )
                             if pcap_path:
                                 self._emit_event(

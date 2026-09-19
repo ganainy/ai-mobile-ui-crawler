@@ -154,7 +154,7 @@ class AndroidStateProvider(StateProvider):
         ui_parser_mode: str = "omniparser",  # "boost", "omniparser", or "accessibility"
         omniparser_backend: str = "replicate",
         omniparser_api_key: str | None = None,
-        omniparser_local_url: str = "http://localhost:8000",
+        omniparser_local_url: str = "http://localhost:8001",
         omniparser_local_parse_timeout_seconds: int | float = 120,
         omniparser_box_threshold: float = 0.05,
         omniparser_a11y_threshold: int = 5,
@@ -447,6 +447,16 @@ class AndroidStateProvider(StateProvider):
                 local_parse_timeout_seconds=self.omniparser_local_parse_timeout_seconds,
                 box_threshold=self.omniparser_box_threshold,
             )
+            if self._omni_client is None and self.omniparser_backend == "local" and api_key:
+                logger.warning(
+                    f"Local OmniParser at {self.omniparser_local_url} is unavailable; "
+                    "falling back to the Replicate backend."
+                )
+                self._omni_client = create_omni_parser_client(
+                    backend="replicate",
+                    api_key=api_key,
+                    box_threshold=self.omniparser_box_threshold,
+                )
         except Exception as e:
             logger.warning(f"Failed to initialize OmniParser: {e}")
             self._omni_client = None

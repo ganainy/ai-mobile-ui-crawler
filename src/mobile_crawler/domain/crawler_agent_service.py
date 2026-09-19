@@ -256,7 +256,7 @@ class CrawlerAgentService:
             "ui_parser_mode": self.config_manager.get("ui_parser_mode", "omniparser"),
             "omniparser_backend": self.config_manager.get("omniparser_backend", "replicate"),
             "omniparser_api_key": resolve_api_key("replicate_api_key", ["REPLICATE_API_KEY"]) or "",
-            "omniparser_local_url": self.config_manager.get("omniparser_local_url", "http://localhost:8000"),
+            "omniparser_local_url": self.config_manager.get("omniparser_local_url", "http://localhost:8001"),
             "omniparser_local_parse_timeout_seconds": self.config_manager.get(
                 "omniparser_local_parse_timeout_seconds", 120
             ),

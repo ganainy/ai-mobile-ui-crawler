@@ -45,7 +45,7 @@ class OmniParserClient:
             self._backend = OmniParserBackend.LOCAL if backend == "local" else OmniParserBackend.REPLICATE
 
     def check_local_available(self) -> bool:
-        local_url = self.config_manager.get("omniparser_local_url", "http://localhost:8000")
+        local_url = self.config_manager.get("omniparser_local_url", "http://localhost:8001")
         try:
             response = requests.get(f"{local_url}/probe/", timeout=2)
             if response.status_code == 200:
@@ -93,7 +93,7 @@ class OmniParserClient:
             raise RuntimeError(f"OmniParser Replicate error: {e}") from e
 
     def _parse_local(self, image_bytes: bytes) -> list[dict[str, Any]]:
-        local_url = self.config_manager.get("omniparser_local_url", "http://localhost:8000")
+        local_url = self.config_manager.get("omniparser_local_url", "http://localhost:8001")
         box_threshold = self.config_manager.get("omniparser_box_threshold", 0.05)
         timeout_seconds = float(
             self.config_manager.get(

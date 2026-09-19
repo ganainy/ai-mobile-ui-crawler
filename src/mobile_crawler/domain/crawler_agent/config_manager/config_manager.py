@@ -169,7 +169,7 @@ class ToolsConfig:
     ui_parser_mode: str = "omniparser"
     omniparser_backend: str = "replicate"  # "replicate" or "local"
     omniparser_api_key: str = ""  # API key for Replicate
-    omniparser_local_url: str = "http://localhost:8000"
+    omniparser_local_url: str = "http://localhost:8001"
     omniparser_local_parse_timeout_seconds: int = 120
     omniparser_box_threshold: float = 0.05
     omniparser_a11y_threshold: int = 5  # Minimum a11y elements before triggering fallback
@@ -201,7 +201,7 @@ class CrawlerConfig:
     ui_parser_mode: str = "omniparser"
     omniparser_backend: str = "replicate"
     omniparser_api_key: str = ""
-    omniparser_local_url: str = "http://localhost:8000"
+    omniparser_local_url: str = "http://localhost:8001"
     omniparser_local_parse_timeout_seconds: int = 120
     omniparser_box_threshold: float = 0.05
     omniparser_a11y_threshold: int = 5
@@ -338,7 +338,7 @@ class CrawlerConfig:
             ui_parser_mode=data.get("ui_parser_mode", "omniparser"),
             omniparser_backend=data.get("omniparser_backend", "replicate"),
             omniparser_api_key=data.get("omniparser_api_key", ""),
-            omniparser_local_url=data.get("omniparser_local_url", "http://localhost:8000"),
+            omniparser_local_url=data.get("omniparser_local_url", "http://localhost:8001"),
             omniparser_local_parse_timeout_seconds=data.get(
                 "omniparser_local_parse_timeout_seconds", 120
             ),

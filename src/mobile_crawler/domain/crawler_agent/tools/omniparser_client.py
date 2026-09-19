@@ -106,7 +106,7 @@ class OmniParserClient:
         self,
         backend: str = "replicate",
         api_key: str | None = None,
-        local_url: str = "http://localhost:8000",
+        local_url: str = "http://localhost:8001",
         local_parse_timeout_seconds: int | float = DEFAULT_LOCAL_PARSE_TIMEOUT_SECONDS,
         box_threshold: float = 0.05,
     ):
@@ -474,7 +474,7 @@ class OmniParserClient:
 def create_omni_parser_client(
     backend: str = "replicate",
     api_key: str | None = None,
-    local_url: str = "http://localhost:8000",
+    local_url: str = "http://localhost:8001",
     local_parse_timeout_seconds: int | float = DEFAULT_LOCAL_PARSE_TIMEOUT_SECONDS,
     box_threshold: float = 0.05,
 ) -> OmniParserClient | None:

@@ -69,7 +69,7 @@ DEFAULTS: dict[str, Any] = {
     # False, MobSF can still be run manually from Run History.
     "auto_run_mobsf_after_crawl": False,
     # MobSF server API URL (must be running and accessible)
-    "mobsf_api_url": "http://localhost:8000",
+    "mobsf_api_url": "http://localhost:8001",
     # MobSF API key (required for API access)
     "mobsf_api_key": None,
     # Maximum time to wait for scan completion (in seconds)
@@ -95,7 +95,7 @@ DEFAULTS: dict[str, Any] = {
     # UI parser strategy: OmniParser (vision) as primary mode
     "ui_parser_mode": "omniparser",
     "omniparser_backend": "replicate",
-    "omniparser_local_url": "http://localhost:8000",
+    "omniparser_local_url": "http://localhost:8001",
     "omniparser_local_parse_timeout_seconds": 120,
     "omniparser_box_threshold": 0.05,
     "omniparser_cache_ttl_days": 30,

@@ -23,7 +23,7 @@ docker compose up --build
 
 First run downloads ~GB of model weights from HuggingFace into `docker/omniparser/weights/`
 (bind-mounted, so this only happens once — later rebuilds reuse it). The server listens on
-`localhost:8000`, which is `mobile-crawler`'s existing default `omniparser_local_url` — no client
+`localhost:8001` (override with `OMNIPARSER_PORT`; 8000 is left free for MobSF), which is `mobile-crawler`'s default `omniparser_local_url` — no client
 config changes needed, just switch the **OmniParser Backend** setting to `local`.
 
 ## Non-obvious choices
@@ -53,4 +53,4 @@ config changes needed, just switch the **OmniParser Backend** setting to `local`
 ## Verified working
 
 Built and run end-to-end against an RTX 5070 (Blackwell) on 2026-09-16: `docker compose up
---build` serves `GET /probe/` → `200 {"message":"Omniparser API ready"}` on `localhost:8000`.
+--build` serves `GET /probe/` → `200 {"message":"Omniparser API ready"}` on `localhost:8001`.

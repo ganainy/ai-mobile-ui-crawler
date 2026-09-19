@@ -181,7 +181,7 @@ class CrawlerAgent(Workflow):
             ui_parser_mode=config.ui_parser_mode if config else "omniparser",
             omniparser_backend=config.omniparser_backend if config else "replicate",
             omniparser_api_key=config.omniparser_api_key if config else "",
-            omniparser_local_url=config.omniparser_local_url if config else "http://localhost:8000",
+            omniparser_local_url=config.omniparser_local_url if config else "http://localhost:8001",
             omniparser_local_parse_timeout_seconds=(
                 config.omniparser_local_parse_timeout_seconds if config else 120
             ),
