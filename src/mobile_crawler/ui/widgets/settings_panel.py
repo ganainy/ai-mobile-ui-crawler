@@ -277,6 +277,36 @@ class SettingsPanel(QWidget):
         credentials_group.setLayout(credentials_layout)
         layout.addWidget(credentials_group)
 
+        # Verification Inbox group (Gmail over IMAP)
+        inbox_group = QGroupBox("Verification Inbox")
+        inbox_layout = QVBoxLayout()
+        inbox_layout.setSpacing(8)
+        inbox_layout.setContentsMargins(15, 20, 15, 20)
+
+        inbox_hint = QLabel(
+            "Gmail inbox the crawler reads over IMAP to get email verification codes and links. "
+            "Use a dedicated test account, not your personal one. Create an app password "
+            "(Google Account > Security > 2-Step Verification > App passwords) and enable IMAP in Gmail. "
+            "Sign-up addresses default to name+<package>@gmail.com."
+        )
+        inbox_hint.setWordWrap(True)
+        inbox_hint.setStyleSheet("color: #666; font-size: 11px;")
+        inbox_layout.addWidget(inbox_hint)
+
+        self.verification_inbox_address_input = QLineEdit()
+        self.verification_inbox_address_input.setPlaceholderText("name@gmail.com")
+        inbox_layout.addWidget(QLabel("Gmail address:"))
+        inbox_layout.addWidget(self.verification_inbox_address_input)
+
+        self.verification_inbox_password_input = QLineEdit()
+        self.verification_inbox_password_input.setPlaceholderText("App password")
+        self.verification_inbox_password_input.setEchoMode(QLineEdit.EchoMode.Password)
+        inbox_layout.addWidget(QLabel("App password:"))
+        inbox_layout.addWidget(self.verification_inbox_password_input)
+
+        inbox_group.setLayout(inbox_layout)
+        layout.addWidget(inbox_group)
+
         layout.addStretch()
         return self._wrap_in_scroll_area(tab)
 
@@ -906,6 +936,14 @@ class SettingsPanel(QWidget):
         test_phone = self._config_store.get_setting("test_phone", default="")
         self.test_phone_input.setText(test_phone)
 
+        # Load verification inbox
+        self.verification_inbox_address_input.setText(
+            self._config_store.get_setting("verification_inbox_address", default="") or ""
+        )
+        self.verification_inbox_password_input.setText(
+            self._config_store.get_secret_plaintext("verification_inbox_password") or ""
+        )
+
         # Load traffic capture settings
         enable_traffic_capture = self._config_store.get_setting("enable_traffic_capture", default=False)
         self.enable_traffic_capture_checkbox.setChecked(enable_traffic_capture)
@@ -1068,6 +1106,17 @@ class SettingsPanel(QWidget):
                     self._config_store.set_setting("test_phone", test_phone, "string")
                 else:
                     self._config_store.delete_setting("test_phone")
+
+                inbox_address = self.verification_inbox_address_input.text().strip()
+                inbox_password = self.verification_inbox_password_input.text().strip()
+                if inbox_address:
+                    self._config_store.set_setting("verification_inbox_address", inbox_address, "string")
+                else:
+                    self._config_store.delete_setting("verification_inbox_address")
+                if inbox_address and inbox_password:
+                    self._config_store.set_secret_plaintext("verification_inbox_password", inbox_password)
+                else:
+                    self._config_store.delete_secret("verification_inbox_password")
 
                 # Cleanup old config keys
                 self._config_store.delete_setting("test_gmail_account")
@@ -1603,6 +1652,8 @@ class SettingsPanel(QWidget):
         self.test_address_input.setText("Kaiserstraße 12, 60311 Frankfurt am Main, Germany")
         self.test_email_input.setText("testuser@example.com")
         self.test_phone_input.clear()
+        self.verification_inbox_address_input.clear()
+        self.verification_inbox_password_input.clear()
         self.exploration_objective_input.setPlainText(DEFAULT_EXPLORATION_OBJECTIVE)
         self.ui_parser_mode_combo.setCurrentText("boost")
         self.omniparser_local_parse_timeout_input.setValue(120)

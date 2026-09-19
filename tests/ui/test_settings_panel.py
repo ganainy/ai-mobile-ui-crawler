@@ -835,3 +835,36 @@ class TestStatusBarExclusionPreview:
         # Guards the logger reference in _on_status_bar_preview_failed.
         panel._on_status_bar_preview_failed("boom")
         assert not panel.screenshot_preview.has_screenshot()
+
+
+class TestVerificationInboxGroup:
+    """Tests for the Verification Inbox (Gmail IMAP) settings group."""
+
+    def test_group_exists_and_password_is_masked(self, qt_app, mock_config_store):
+        from PySide6.QtWidgets import QGroupBox
+
+        panel = _create_settings_panel(mock_config_store)
+        assert "Verification Inbox" in {g.title() for g in panel.findChildren(QGroupBox)}
+        assert panel.verification_inbox_password_input.echoMode() == QLineEdit.EchoMode.Password
+
+    def test_save_and_reload_round_trip(self, qt_app, mock_config_store):
+        panel = _create_settings_panel(mock_config_store)
+        panel.verification_inbox_address_input.setText("bot@gmail.com")
+        panel.verification_inbox_password_input.setText("abcd efgh ijkl mnop")
+        panel._on_save_clicked()
+
+        assert mock_config_store.get_setting("verification_inbox_address") == "bot@gmail.com"
+        assert mock_config_store.get_secret_plaintext("verification_inbox_password") == "abcd efgh ijkl mnop"
+        reloaded = _create_settings_panel(mock_config_store)
+        assert reloaded.verification_inbox_address_input.text() == "bot@gmail.com"
+        assert reloaded.verification_inbox_password_input.text() == "abcd efgh ijkl mnop"
+
+    def test_empty_address_clears_inbox(self, qt_app, mock_config_store):
+        mock_config_store.set_setting("verification_inbox_address", "bot@gmail.com", "string")
+        mock_config_store.set_secret_plaintext("verification_inbox_password", "pw")
+        panel = _create_settings_panel(mock_config_store)
+        panel.verification_inbox_address_input.clear()
+        panel.verification_inbox_password_input.clear()
+        panel._on_save_clicked()
+        assert mock_config_store.get_setting("verification_inbox_address") is None
+        assert mock_config_store.get_secret_plaintext("verification_inbox_password") is None
