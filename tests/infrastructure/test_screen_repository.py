@@ -17,7 +17,10 @@ def temp_db_path():
         path = Path(f.name)
     yield path
     # Cleanup with retry for Windows file locking
+    import gc
     import time
+
+    gc.collect()  # DatabaseManager.get_connection() leaks connections that lock the file on Windows
     for _ in range(10):
         try:
             if path.exists():
@@ -45,24 +48,18 @@ def db_manager_with_run(temp_db_path):
     # Create a test run that screens can reference
     conn = manager.get_connection()
     cursor = conn.cursor()
-    cursor.execute("""
+    cursor.execute(
+        """
         INSERT INTO runs (
             device_id, app_package, start_activity, start_time, status
         ) VALUES (?, ?, ?, ?, ?)
-    """, ("test-device", "com.test.app", "com.test.app.Main", "2024-01-01T12:00:00", "RUNNING"))
+    """,
+        ("test-device", "com.test.app", "com.test.app.Main", "2024-01-01T12:00:00", "RUNNING"),
+    )
     conn.commit()
 
     yield manager
-    manager.close()
-    # Cleanup with retry for Windows file locking
-    import time
-    for _ in range(10):
-        try:
-            if temp_db_path.exists():
-                temp_db_path.unlink()
-            break
-        except PermissionError:
-            time.sleep(0.1)
+    manager.close()  # temp_db_path removes the file
 
 
 @pytest.fixture
@@ -81,7 +78,7 @@ def sample_screen():
         screenshot_path="/path/to/screenshot1.png",
         activity_name="com.example.app.MainActivity",
         first_seen_run_id=1,
-        first_seen_step=5
+        first_seen_step=5,
     )
 
 
@@ -95,7 +92,7 @@ def similar_screen():
         screenshot_path="/path/to/screenshot2.png",
         activity_name="com.example.app.SecondActivity",
         first_seen_run_id=1,
-        first_seen_step=10
+        first_seen_step=10,
     )
 
 
@@ -239,11 +236,14 @@ class TestScreenRepository:
         # Create another run for testing
         conn = screen_repository_with_run.db_manager.get_connection()
         cursor = conn.cursor()
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT INTO runs (
                 device_id, app_package, start_activity, start_time, status
             ) VALUES (?, ?, ?, ?, ?)
-        """, ("device-2", "com.test.app2", "com.test.app2.Main", "2024-01-01T13:00:00", "RUNNING"))
+        """,
+            ("device-2", "com.test.app2", "com.test.app2.Main", "2024-01-01T13:00:00", "RUNNING"),
+        )
         conn.commit()
 
         # Create screens for different runs
@@ -255,7 +255,7 @@ class TestScreenRepository:
             screenshot_path="/path/to/screenshot3.png",
             activity_name="com.example.app.ThirdActivity",
             first_seen_run_id=2,  # Different run
-            first_seen_step=1
+            first_seen_step=1,
         )
 
         id1 = screen_repository_with_run.create_screen(screen1)
@@ -286,7 +286,7 @@ class TestScreenRepository:
             screenshot_path="/path/to/screenshot4.png",
             activity_name="com.example.app.MainActivity",  # Same activity
             first_seen_run_id=1,
-            first_seen_step=15
+            first_seen_step=15,
         )
         screen3 = Screen(
             id=None,
@@ -295,7 +295,7 @@ class TestScreenRepository:
             screenshot_path="/path/to/screenshot5.png",
             activity_name="com.different.app.MainActivity",  # Different activity
             first_seen_run_id=1,
-            first_seen_step=20
+            first_seen_step=20,
         )
 
         id1 = screen_repository_with_run.create_screen(screen1)
@@ -309,7 +309,9 @@ class TestScreenRepository:
         assert screen_ids == {id1, id2}
 
         # Get screens for different activity
-        different_activity_screens = screen_repository_with_run.get_screens_by_activity("com.different.app.MainActivity")
+        different_activity_screens = screen_repository_with_run.get_screens_by_activity(
+            "com.different.app.MainActivity"
+        )
         assert len(different_activity_screens) == 1
         assert different_activity_screens[0].id == id3
 
@@ -330,7 +332,7 @@ class TestScreenRepository:
             screenshot_path="/path/to/screenshot_count.png",
             activity_name="com.example.app.CountActivity",
             first_seen_run_id=1,
-            first_seen_step=100
+            first_seen_step=100,
         )
         screen_repository_with_run.create_screen(screen2)
         assert screen_repository_with_run.get_screen_count() == 2
@@ -346,7 +348,7 @@ class TestScreenRepository:
             screenshot_path="/path/to/screen2.png",
             activity_name="com.example.app.SecondActivity",
             first_seen_run_id=1,
-            first_seen_step=10
+            first_seen_step=10,
         )
         screen3 = Screen(
             id=None,
@@ -355,7 +357,7 @@ class TestScreenRepository:
             screenshot_path="/path/to/screen3.png",
             activity_name="com.example.app.MainActivity",  # Duplicate
             first_seen_run_id=1,
-            first_seen_step=15
+            first_seen_step=15,
         )
         screen4 = Screen(
             id=None,
@@ -364,7 +366,7 @@ class TestScreenRepository:
             screenshot_path="/path/to/screen4.png",
             activity_name=None,  # Null activity
             first_seen_run_id=1,
-            first_seen_step=20
+            first_seen_step=20,
         )
 
         screen_repository_with_run.create_screen(screen1)
@@ -386,9 +388,9 @@ class TestScreenRepository:
             composite_hash="test_hash",
             visual_hash="test_vhash",
             screenshot_path=None,  # None value
-            activity_name=None,    # None value
+            activity_name=None,  # None value
             first_seen_run_id=1,
-            first_seen_step=1
+            first_seen_step=1,
         )
 
         screen_id = screen_repository_with_run.create_screen(screen)
@@ -412,7 +414,7 @@ class TestScreenRepository:
             screenshot_path="/different/path.png",
             activity_name="different.activity",
             first_seen_run_id=2,
-            first_seen_step=1
+            first_seen_step=1,
         )
 
         # This should raise an exception due to UNIQUE constraint

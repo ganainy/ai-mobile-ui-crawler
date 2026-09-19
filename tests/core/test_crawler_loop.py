@@ -186,6 +186,7 @@ class TestCrawlerLoopLifecycle:
         """Traffic capture should start before crawler agent exploration and stop in cleanup."""
         mock_config_manager.get.side_effect = lambda key, default=None: {
             "enable_traffic_capture": True,
+            "pre_crawl_wake_device": False,
             "enable_video_recording": False,
             "limit_type": "steps",
             "max_crawl_steps": 1,
@@ -261,6 +262,7 @@ class TestCrawlerLoopLifecycle:
         """Traffic capture cleanup should run even when crawler agent fails."""
         mock_config_manager.get.side_effect = lambda key, default=None: {
             "enable_traffic_capture": True,
+            "pre_crawl_wake_device": False,
             "enable_video_recording": False,
             "limit_type": "steps",
         }.get(key, default)
@@ -306,6 +308,7 @@ class TestCrawlerLoopLifecycle:
         """PCAPdroid start failure should be logged and exploration should continue."""
         mock_config_manager.get.side_effect = lambda key, default=None: {
             "enable_traffic_capture": True,
+            "pre_crawl_wake_device": False,
             "enable_video_recording": False,
             "limit_type": "steps",
         }.get(key, default)
@@ -358,6 +361,7 @@ class TestCrawlerLoopLifecycle:
         """Unexpected PCAPdroid start errors should not abort the crawl."""
         mock_config_manager.get.side_effect = lambda key, default=None: {
             "enable_traffic_capture": True,
+            "pre_crawl_wake_device": False,
             "enable_video_recording": False,
             "limit_type": "steps",
         }.get(key, default)

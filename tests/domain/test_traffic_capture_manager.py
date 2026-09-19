@@ -3,11 +3,39 @@
 import asyncio
 import os
 import tempfile
+import time
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
 from mobile_crawler.domain.traffic_capture_manager import TrafficCaptureManager
+
+real_sleep = asyncio.sleep
+
+
+class _FakeClock:
+    """Virtual clock: sleeping advances time instantly so timeout/poll loops don't wait."""
+
+    def __init__(self):
+        self.now = 0.0
+
+    def monotonic(self):
+        return self.now
+
+    def strftime(self, fmt):
+        return time.strftime(fmt)
+
+    async def sleep(self, seconds):
+        self.now += max(seconds, 0.001)
+        await real_sleep(0)
+
+
+@pytest.fixture(autouse=True)
+def fake_clock(monkeypatch):
+    clock = _FakeClock()
+    monkeypatch.setattr("mobile_crawler.domain.traffic_capture_manager.time", clock)
+    monkeypatch.setattr("mobile_crawler.domain.traffic_capture_manager.asyncio.sleep", clock.sleep)
+    return clock
 
 
 class TestTrafficCaptureManager:
@@ -102,11 +130,9 @@ class TestTrafficCaptureManager:
         manager._is_currently_capturing = True
         assert manager.is_capturing() is True
 
-    @patch.object(TrafficCaptureManager, '_run_adb_command_async')
-    @patch.object(TrafficCaptureManager, '_maybe_accept_pcapdroid_consent_async', new_callable=AsyncMock)
-    def test_start_flow_calls_consent_helper_after_start_intent(
-        self, mock_consent, mock_run_adb, mock_config_manager
-    ):
+    @patch.object(TrafficCaptureManager, "_run_adb_command_async")
+    @patch.object(TrafficCaptureManager, "_maybe_accept_pcapdroid_consent_async", new_callable=AsyncMock)
+    def test_start_flow_calls_consent_helper_after_start_intent(self, mock_consent, mock_run_adb, mock_config_manager):
         """Start flow should inspect PCAPdroid consent after sending the start intent."""
         events = []
 
@@ -143,9 +169,7 @@ class TestTrafficCaptureManager:
                 config_manager=mock_config_manager,
                 adb_client=Mock(),
             )
-            success, _ = asyncio.run(manager.start_capture_async(
-                run_id=1, session_path=temp_dir
-            ))
+            success, _ = asyncio.run(manager.start_capture_async(run_id=1, session_path=temp_dir))
 
         assert success is True
         # Consent seen -> readiness is held until the start intent is re-sent.
@@ -153,9 +177,10 @@ class TestTrafficCaptureManager:
         assert events[1] == "consent_helper"
         assert events[-1] == "start_intent"
 
-    @patch.object(TrafficCaptureManager, '_run_adb_command_async')
+    @patch.object(TrafficCaptureManager, "_run_adb_command_async")
     def test_start_capture_async_when_enabled(self, mock_run_adb, mock_config_manager):
         """Test starting capture when enabled."""
+
         async def adb_side_effect(cmd, suppress_stderr=False):
             if "pm list packages" in " ".join(cmd):
                 return ("package:com.emanuelef.remote_capture\n", 0)
@@ -181,9 +206,7 @@ class TestTrafficCaptureManager:
                 adb_client=Mock(),
             )
 
-            success, message = asyncio.run(manager.start_capture_async(
-                run_id=1, session_path=temp_dir
-            ))
+            success, message = asyncio.run(manager.start_capture_async(run_id=1, session_path=temp_dir))
 
             assert success is True
             assert "successfully" in message
@@ -193,7 +216,7 @@ class TestTrafficCaptureManager:
             assert manager._last_capture_readiness_diagnostics["readiness_source"] == "vpn_or_service"
             assert manager._last_capture_readiness_diagnostics["final_reason"] == "api_readiness_confirmed"
 
-    @patch.object(TrafficCaptureManager, '_run_adb_command_async')
+    @patch.object(TrafficCaptureManager, "_run_adb_command_async")
     def test_start_command_includes_pcap_tls_filter_name_and_api_key(self, mock_run_adb, mock_config_manager):
         """Start intent should include the PCAP file mode, app filter, TLS flag, name, and API key."""
         mock_config_manager.get.side_effect = lambda key, default=None: {
@@ -231,9 +254,7 @@ class TestTrafficCaptureManager:
                 config_manager=mock_config_manager,
                 adb_client=Mock(),
             )
-            success, _ = asyncio.run(manager.start_capture_async(
-                run_id=1, session_path=temp_dir
-            ))
+            success, _ = asyncio.run(manager.start_capture_async(run_id=1, session_path=temp_dir))
 
         assert success is True
         start_commands = [
@@ -266,9 +287,10 @@ class TestTrafficCaptureManager:
         assert manager._is_currently_capturing is False
         mock_adb_client.execute_async.assert_not_called()
 
-    @patch.object(TrafficCaptureManager, '_run_adb_command_async')
+    @patch.object(TrafficCaptureManager, "_run_adb_command_async")
     def test_start_capture_async_already_capturing(self, mock_run_adb, mock_config_manager):
         """Test starting capture when already capturing stops first then restarts."""
+
         async def adb_side_effect(cmd, suppress_stderr=False):
             if "pm list packages" in " ".join(cmd):
                 return ("package:com.emanuelef.remote_capture\n", 0)
@@ -335,9 +357,10 @@ class TestTrafficCaptureManager:
 
         assert result is None
 
-    @patch.object(TrafficCaptureManager, '_run_adb_command_async')
+    @patch.object(TrafficCaptureManager, "_run_adb_command_async")
     def test_generates_correct_filename(self, mock_run_adb, mock_config_manager):
         """Test that filenames are generated with correct format."""
+
         async def adb_side_effect(cmd, suppress_stderr=False):
             if "pm list packages" in " ".join(cmd):
                 return ("package:com.emanuelef.remote_capture\n", 0)
@@ -375,9 +398,10 @@ class TestTrafficCaptureManager:
         assert "run42" in filename
         assert filename.endswith(".pcap")
 
-    @patch.object(TrafficCaptureManager, '_run_adb_command_async')
+    @patch.object(TrafficCaptureManager, "_run_adb_command_async")
     def test_output_dir_resolution_with_session_path(self, mock_run_adb, mock_config_manager):
         """Test that output directory is correctly resolved when session_path is provided."""
+
         async def adb_side_effect(cmd, suppress_stderr=False):
             if "pm list packages" in " ".join(cmd):
                 return ("package:com.emanuelef.remote_capture\n", 0)
@@ -412,9 +436,10 @@ class TestTrafficCaptureManager:
         # Should be in the pcap subdirectory of session path
         assert os.path.basename(os.path.dirname(pcap_path)) == "pcap"
 
-    @patch.object(TrafficCaptureManager, '_run_adb_command_async')
+    @patch.object(TrafficCaptureManager, "_run_adb_command_async")
     def test_stop_command_includes_api_key_when_configured(self, mock_run_adb, mock_config_manager):
         """Stop intent should pass the configured API key."""
+
         async def adb_side_effect(cmd, suppress_stderr=False):
             joined = " ".join(cmd)
             if "action stop" in joined:
@@ -442,9 +467,7 @@ class TestTrafficCaptureManager:
         stop_commands = [
             call.args[0]
             for call in mock_run_adb.call_args_list
-            if "action" in call.args[0]
-            and "stop" in call.args[0]
-            and "api_key" in call.args[0]
+            if "action" in call.args[0] and "stop" in call.args[0] and "api_key" in call.args[0]
         ]
         assert stop_commands
         assert stop_commands[0][stop_commands[0].index("api_key") + 1] == "test_api_key"
@@ -620,15 +643,14 @@ class TestTrafficCaptureManager:
 
         assert accepted is False
         tap_calls = [
-            call for call in manager._run_adb_command_async.await_args_list
+            call
+            for call in manager._run_adb_command_async.await_args_list
             if "input" in call.args[0] and "tap" in call.args[0]
         ]
         assert tap_calls == []
 
-    @patch.object(TrafficCaptureManager, '_run_adb_command_async')
-    def test_start_capture_fails_when_consent_dialog_remains(
-        self, mock_run_adb, mock_config_manager
-    ):
+    @patch.object(TrafficCaptureManager, "_run_adb_command_async")
+    def test_start_capture_fails_when_consent_dialog_remains(self, mock_run_adb, mock_config_manager):
         """Startup should fail and clear state if a PCAPdroid/VPN dialog remains."""
         mock_config_manager.get.side_effect = lambda key, default=None: {
             "enable_traffic_capture": True,
@@ -672,9 +694,7 @@ class TestTrafficCaptureManager:
         manager = TrafficCaptureManager(config_manager=mock_config_manager, adb_client=Mock())
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            success, message = asyncio.run(
-                manager.start_capture_async(run_id=1, session_path=temp_dir)
-            )
+            success, message = asyncio.run(manager.start_capture_async(run_id=1, session_path=temp_dir))
 
         assert success is False
         assert "did not become ready" in message
@@ -682,11 +702,10 @@ class TestTrafficCaptureManager:
         assert manager.pcap_filename_on_device is None
         assert manager.local_pcap_file_path is None
 
-    @patch.object(TrafficCaptureManager, '_run_adb_command_async')
-    def test_successful_start_records_readiness_without_claiming_file(
-        self, mock_run_adb, mock_config_manager, caplog
-    ):
+    @patch.object(TrafficCaptureManager, "_run_adb_command_async")
+    def test_successful_start_records_readiness_without_claiming_file(self, mock_run_adb, mock_config_manager, caplog):
         """Successful startup should log readiness, not local PCAP production."""
+
         async def adb_side_effect(cmd, suppress_stderr=False):
             joined = " ".join(cmd)
             if "pm list packages" in joined:
@@ -709,19 +728,15 @@ class TestTrafficCaptureManager:
         manager = TrafficCaptureManager(config_manager=mock_config_manager, adb_client=Mock())
 
         with tempfile.TemporaryDirectory() as temp_dir, caplog.at_level("INFO"):
-            success, _ = asyncio.run(
-                manager.start_capture_async(run_id=1, session_path=temp_dir)
-            )
+            success, _ = asyncio.run(manager.start_capture_async(run_id=1, session_path=temp_dir))
 
         assert success is True
         assert manager._capture_startup_readiness_passed is True
         assert "capture readiness checked" in caplog.text
         assert "PCAP file saved" not in caplog.text
 
-    @patch.object(TrafficCaptureManager, '_run_adb_command_async')
-    def test_start_accepts_api_status_running_without_vpn_signal(
-        self, mock_run_adb, mock_config_manager, caplog
-    ):
+    @patch.object(TrafficCaptureManager, "_run_adb_command_async")
+    def test_start_accepts_api_status_running_without_vpn_signal(self, mock_run_adb, mock_config_manager, caplog):
         """API status running=true should be treated as readiness without any UI fallback taps."""
         ui_xml = """<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
 <hierarchy rotation="0">
@@ -754,20 +769,16 @@ class TestTrafficCaptureManager:
         manager = TrafficCaptureManager(config_manager=mock_config_manager, adb_client=Mock())
 
         with tempfile.TemporaryDirectory() as temp_dir, caplog.at_level("INFO"):
-            success, _ = asyncio.run(
-                manager.start_capture_async(run_id=1, session_path=temp_dir)
-            )
+            success, _ = asyncio.run(manager.start_capture_async(run_id=1, session_path=temp_dir))
 
         assert success is True
         assert manager._capture_startup_readiness_passed is True
         assert manager._last_capture_readiness_diagnostics["readiness_source"] == "api_status_running"
         assert manager._last_capture_readiness_diagnostics["api_status"]["running"] is True
 
-    @patch.object(TrafficCaptureManager, '_run_adb_command_async')
-    @patch.object(TrafficCaptureManager, '_maybe_accept_pcapdroid_consent_async', new_callable=AsyncMock)
-    def test_start_resends_api_start_after_consent(
-        self, mock_consent, mock_run_adb, mock_config_manager
-    ):
+    @patch.object(TrafficCaptureManager, "_run_adb_command_async")
+    @patch.object(TrafficCaptureManager, "_maybe_accept_pcapdroid_consent_async", new_callable=AsyncMock)
+    def test_start_resends_api_start_after_consent(self, mock_consent, mock_run_adb, mock_config_manager):
         """When consent was accepted, startup should resend the start intent once to apply settings."""
         status_calls = {"count": 0}
 
@@ -803,9 +814,7 @@ class TestTrafficCaptureManager:
         manager = TrafficCaptureManager(config_manager=mock_config_manager, adb_client=Mock())
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            success, _ = asyncio.run(
-                manager.start_capture_async(run_id=1, session_path=temp_dir)
-            )
+            success, _ = asyncio.run(manager.start_capture_async(run_id=1, session_path=temp_dir))
 
         assert success is True
         start_commands = [
@@ -816,10 +825,8 @@ class TestTrafficCaptureManager:
         assert len(start_commands) == 2
         assert manager._last_capture_readiness_diagnostics["api_start_resent_after_consent"] is True
 
-    @patch.object(TrafficCaptureManager, '_run_adb_command_async')
-    def test_start_taps_action_start_fallback_when_visible(
-        self, mock_run_adb, mock_config_manager
-    ):
+    @patch.object(TrafficCaptureManager, "_run_adb_command_async")
+    def test_start_taps_action_start_fallback_when_visible(self, mock_run_adb, mock_config_manager):
         """If still idle after API polling, startup may tap only PCAPdroid action_start."""
         tapped = {"value": False}
         ui_xml = """<hierarchy>
@@ -856,23 +863,17 @@ class TestTrafficCaptureManager:
         manager = TrafficCaptureManager(config_manager=mock_config_manager, adb_client=Mock())
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            success, _ = asyncio.run(
-                manager.start_capture_async(run_id=1, session_path=temp_dir)
-            )
+            success, _ = asyncio.run(manager.start_capture_async(run_id=1, session_path=temp_dir))
 
         assert success is True
         assert manager._last_capture_readiness_diagnostics["ui_action_start_tapped"] is True
         tap_calls = [
-            call.args[0]
-            for call in mock_run_adb.call_args_list
-            if " ".join(call.args[0]).startswith("shell input tap")
+            call.args[0] for call in mock_run_adb.call_args_list if " ".join(call.args[0]).startswith("shell input tap")
         ]
         assert len(tap_calls) == 1
 
-    @patch.object(TrafficCaptureManager, '_run_adb_command_async')
-    def test_start_fails_when_not_ready_after_api_polling(
-        self, mock_run_adb, mock_config_manager
-    ):
+    @patch.object(TrafficCaptureManager, "_run_adb_command_async")
+    def test_start_fails_when_not_ready_after_api_polling(self, mock_run_adb, mock_config_manager):
         """Startup should fail when API status and diagnostics never show active capture."""
         ui_xml = """<hierarchy>
   <node package="com.emanuelef.remote_capture" text="" bounds="[0,0][1080,2400]" />
@@ -904,9 +905,7 @@ class TestTrafficCaptureManager:
         manager = TrafficCaptureManager(config_manager=mock_config_manager, adb_client=Mock())
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            success, message = asyncio.run(
-                manager.start_capture_async(run_id=1, session_path=temp_dir)
-            )
+            success, message = asyncio.run(manager.start_capture_async(run_id=1, session_path=temp_dir))
 
         assert success is False
         assert "did not become ready" in message
@@ -916,10 +915,8 @@ class TestTrafficCaptureManager:
         assert manager.pcap_filename_on_device is None
         assert manager.local_pcap_file_path is None
 
-    @patch.object(TrafficCaptureManager, '_run_adb_command_async')
-    def test_start_does_not_attempt_start_button_taps_during_api_polling(
-        self, mock_run_adb, mock_config_manager
-    ):
+    @patch.object(TrafficCaptureManager, "_run_adb_command_async")
+    def test_start_does_not_attempt_start_button_taps_during_api_polling(self, mock_run_adb, mock_config_manager):
         """Capture startup should not issue generic input tap commands for start controls."""
         ui_xml = """<hierarchy>
   <node package="com.emanuelef.remote_capture" text="" bounds="[0,0][1080,2400]" />
@@ -953,14 +950,12 @@ class TestTrafficCaptureManager:
         manager = TrafficCaptureManager(config_manager=mock_config_manager, adb_client=Mock())
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            success, _ = asyncio.run(
-                manager.start_capture_async(run_id=1, session_path=temp_dir)
-            )
+            success, _ = asyncio.run(manager.start_capture_async(run_id=1, session_path=temp_dir))
 
         assert success is False
         assert manager._last_capture_readiness_diagnostics["final_reason"] == "not_ready_after_api_polling"
 
-    @patch.object(TrafficCaptureManager, '_run_adb_command_async')
+    @patch.object(TrafficCaptureManager, "_run_adb_command_async")
     def test_readiness_uses_ui_running_status_hint(self, mock_run_adb, mock_config_manager):
         """Status view 'running' should count as readiness even without explicit VPN hint."""
         ui_xml = """<hierarchy>
@@ -1004,11 +999,10 @@ class TestTrafficCaptureManager:
         assert accepted is False
         manager._run_adb_command_async.assert_not_awaited()
 
-    @patch.object(TrafficCaptureManager, '_run_adb_command_async')
-    def test_missing_pcap_logs_expected_path_and_likely_causes(
-        self, mock_run_adb, mock_config_manager, caplog
-    ):
+    @patch.object(TrafficCaptureManager, "_run_adb_command_async")
+    def test_missing_pcap_logs_expected_path_and_likely_causes(self, mock_run_adb, mock_config_manager, caplog):
         """Missing expected PCAP should produce diagnostics without claiming success."""
+
         async def adb_side_effect(cmd, suppress_stderr=False):
             joined = " ".join(cmd)
             if "action stop" in joined:
@@ -1024,7 +1018,7 @@ class TestTrafficCaptureManager:
             if "uiautomator dump /sdcard/ui_dump.xml" in joined:
                 return ("UI hierchary dumped to: /sdcard/ui_dump.xml", 0)
             if "cat /sdcard/ui_dump.xml" in joined:
-                return ("<hierarchy><node text=\"PCAPdroid\" /></hierarchy>", 0)
+                return ('<hierarchy><node text="PCAPdroid" /></hierarchy>', 0)
             if "dumpsys connectivity" in joined:
                 return ("NetworkAgentInfo{network{150} ni{VPN CONNECTED extra: VPN:com.emanuelef.remote_capture}}", 0)
             return ("", 0)
