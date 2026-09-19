@@ -96,8 +96,41 @@ class TrafficCaptureManager:
         """Returns the internal state of whether capture is thought to be active."""
         return self._is_currently_capturing
 
+    async def _is_pcapdroid_active_async(self) -> bool:
+        """Return True when PCAPdroid's capture service or VPN is actually running.
+
+        Deliberately strict: the generic "vpn" string in ``dumpsys connectivity``
+        (e.g. ``VpnNetworkProvider``) is always present and must not count.
+        """
+        package_name = "com.emanuelef.remote_capture"
+        services_output, services_retcode = await self._run_adb_command_async(
+            ["shell", "dumpsys", "activity", "services", package_name],
+            suppress_stderr=True,
+        )
+        if (
+            services_retcode == 0
+            and "ServiceRecord" in services_output
+            and package_name in services_output
+        ):
+            return True
+
+        connectivity_output, connectivity_retcode = await self._run_adb_command_async(
+            ["shell", "dumpsys", "connectivity"],
+            suppress_stderr=True,
+        )
+        if connectivity_retcode != 0:
+            return False
+        return any(
+            "NetworkAgentInfo" in line
+            and "VPN" in line
+            and package_name in line
+            and "CONNECTED" in line
+            and "DISCONNECTED" not in line
+            for line in connectivity_output.splitlines()
+        )
+
     async def _stop_any_existing_capture_async(self) -> None:
-        """Stop any running capture as a precaution."""
+        """Stop any running capture and confirm PCAPdroid is really down."""
         pcapdroid_activity = "com.emanuelef.remote_capture/.activities.CaptureCtrl"
         stop_command_args = [
             "shell",
@@ -110,10 +143,38 @@ class TrafficCaptureManager:
             "action",
             "stop",
         ]
+        api_key = self.config_manager.get("pcapdroid_api_key")
+        if api_key:
+            stop_command_args.extend(["-e", "api_key", str(api_key)])
+
+        if await self._is_pcapdroid_active_async():
+            logger.warning(
+                "PCAPdroid is still capturing from a previous run; stopping it before starting"
+            )
+
         logger.debug("[DEBUG] Sending precautionary STOP command to PCAPdroid...")
         await self._run_adb_command_async(stop_command_args, suppress_stderr=True)
-        # Brief wait to ensure PCAPdroid has time to stop and release resources
+
+        timeout = float(self.config_manager.get("pcapdroid_stop_timeout_seconds", 10.0))
+        deadline = time.monotonic() + max(timeout, 0.0)
+        while True:
+            await asyncio.sleep(1.0)
+            if not await self._is_pcapdroid_active_async():
+                logger.debug("[DEBUG] PCAPdroid confirmed stopped")
+                return
+            if time.monotonic() >= deadline:
+                break
+
+        logger.warning(
+            f"PCAPdroid still active {timeout:.0f}s after STOP; force-stopping the app"
+        )
+        await self._run_adb_command_async(
+            ["shell", "am", "force-stop", "com.emanuelef.remote_capture"],
+            suppress_stderr=True,
+        )
         await asyncio.sleep(1.0)
+        if await self._is_pcapdroid_active_async():
+            logger.error("PCAPdroid could not be stopped; the new capture may fail to start")
 
     async def start_capture_async(
         self,
@@ -347,8 +408,38 @@ class TrafficCaptureManager:
             self._clear_capture_state()
             return False, error_msg
 
+        if not await self._wait_for_device_pcap_file_async(device_pcap_base_dir):
+            error_msg = (
+                "PCAPdroid reported ready but the capture file never appeared on the device: "
+                f"{self.pcap_filename_on_device}"
+            )
+            logger.error(error_msg)
+            await self._stop_any_existing_capture_async()
+            self._clear_capture_state()
+            return False, error_msg
+
         logger.info(f"Traffic capture readiness passed: {self.pcap_filename_on_device}")
         return True, "Traffic capture started successfully"
+
+    async def _wait_for_device_pcap_file_async(self, device_pcap_base_dir: str) -> bool:
+        """Wait until the expected PCAP file exists on the device."""
+        if not self.pcap_filename_on_device:
+            return False
+        timeout = float(self.config_manager.get("pcapdroid_file_verify_timeout_seconds", 8.0))
+        device_path = os.path.join(device_pcap_base_dir, self.pcap_filename_on_device).replace(
+            "\\", "/"
+        )
+        deadline = time.monotonic() + max(timeout, 0.0)
+        while True:
+            stdout, retcode = await self._run_adb_command_async(
+                ["shell", "stat", "-c", "%s", device_path], suppress_stderr=True
+            )
+            if retcode == 0:
+                logger.debug(f"[DEBUG] PCAP file present on device ({stdout.strip()} bytes)")
+                return True
+            if time.monotonic() >= deadline:
+                return False
+            await asyncio.sleep(1.0)
 
     async def stop_capture_and_pull_async(self, run_id: int) -> str | None:
         """Stops PCAPdroid capture, pulls the file, and optionally cleans up.
@@ -614,13 +705,19 @@ class TrafficCaptureManager:
         vpn_hint = (
             (
                 connectivity_retcode == 0
-                and "vpn" in connectivity_lower
-                and package_name in connectivity_lower
+                and any(
+                    "NetworkAgentInfo" in line
+                    and "VPN" in line
+                    and package_name in line
+                    and "CONNECTED" in line
+                    and "DISCONNECTED" not in line
+                    for line in connectivity_output.splitlines()
+                )
             )
             or (
                 services_retcode == 0
+                and "servicerecord" in services_lower
                 and package_name in services_lower
-                and any(term in services_lower for term in ("vpn", "capture", "pcap"))
             )
         )
         readiness_source = None
@@ -682,6 +779,17 @@ class TrafficCaptureManager:
                 }
             )
             last_readiness = readiness
+
+            # A bare VPN/service hint right after consent isn't enough: PCAPdroid
+            # only applies the start settings once the intent is re-sent.
+            if (
+                readiness.get("ready")
+                and readiness.get("readiness_source") == "vpn_or_service"
+                and consent_seen_during_startup
+                and not restarted_after_consent
+            ):
+                readiness["ready"] = False
+                readiness["readiness_source"] = None
 
             if readiness.get("ready"):
                 readiness["final_reason"] = "api_readiness_confirmed"

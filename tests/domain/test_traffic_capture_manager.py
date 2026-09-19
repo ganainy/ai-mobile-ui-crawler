@@ -30,6 +30,8 @@ class TestTrafficCaptureManager:
             "pcapdroid_tls_decryption": False,
             "pcapdroid_consent_timeout_seconds": 0.0,
             "pcapdroid_consent_poll_interval_seconds": 0.01,
+            "pcapdroid_stop_timeout_seconds": 0.0,
+            "pcapdroid_file_verify_timeout_seconds": 0.0,
         }.get(key, default)
         config.set = Mock()
         return config
@@ -115,7 +117,7 @@ class TestTrafficCaptureManager:
             if "dumpsys package" in joined:
                 return ("android.permission.INTERNET\nandroid.permission.ACCESS_NETWORK_STATE\n", 0)
             if "dumpsys connectivity" in joined:
-                return ("VPN com.emanuelef.remote_capture NetworkAgentInfo", 0)
+                return ("NetworkAgentInfo{network{150} ni{VPN CONNECTED extra: VPN:com.emanuelef.remote_capture}}", 0)
             if "am start" in joined and "pcap_dump_mode" in joined:
                 events.append("start_intent")
                 return ("Starting: Intent { cmp=com.emanuelef.remote_capture/.activities.CaptureCtrl }\n", 0)
@@ -146,7 +148,10 @@ class TestTrafficCaptureManager:
             ))
 
         assert success is True
-        assert events == ["start_intent", "consent_helper"]
+        # Consent seen -> readiness is held until the start intent is re-sent.
+        assert events[0] == "start_intent"
+        assert events[1] == "consent_helper"
+        assert events[-1] == "start_intent"
 
     @patch.object(TrafficCaptureManager, '_run_adb_command_async')
     def test_start_capture_async_when_enabled(self, mock_run_adb, mock_config_manager):
@@ -157,7 +162,7 @@ class TestTrafficCaptureManager:
             if "dumpsys package" in " ".join(cmd):
                 return ("android.permission.INTERNET\n", 0)
             if "dumpsys connectivity" in " ".join(cmd):
-                return ("VPN com.emanuelef.remote_capture NetworkAgentInfo", 0)
+                return ("NetworkAgentInfo{network{150} ni{VPN CONNECTED extra: VPN:com.emanuelef.remote_capture}}", 0)
             if "am start" in " ".join(cmd):
                 return ("Starting: Intent { cmp=com.emanuelef.remote_capture/.activities.CaptureCtrl }\n", 0)
             if "test -d" in " ".join(cmd):
@@ -208,7 +213,7 @@ class TestTrafficCaptureManager:
             if "dumpsys package" in joined:
                 return ("android.permission.INTERNET\nandroid.permission.ACCESS_NETWORK_STATE\n", 0)
             if "dumpsys connectivity" in joined:
-                return ("VPN com.emanuelef.remote_capture NetworkAgentInfo", 0)
+                return ("NetworkAgentInfo{network{150} ni{VPN CONNECTED extra: VPN:com.emanuelef.remote_capture}}", 0)
             if "am start" in joined:
                 return ("Starting: Intent { cmp=com.emanuelef.remote_capture/.activities.CaptureCtrl }\n", 0)
             if "test -d" in joined:
@@ -270,7 +275,7 @@ class TestTrafficCaptureManager:
             if "dumpsys package" in " ".join(cmd):
                 return ("android.permission.INTERNET\n", 0)
             if "dumpsys connectivity" in " ".join(cmd):
-                return ("VPN com.emanuelef.remote_capture NetworkAgentInfo", 0)
+                return ("NetworkAgentInfo{network{150} ni{VPN CONNECTED extra: VPN:com.emanuelef.remote_capture}}", 0)
             if "am start" in " ".join(cmd) and "action stop" in " ".join(cmd):
                 return ("", 0)
             if "am start" in " ".join(cmd):
@@ -339,7 +344,7 @@ class TestTrafficCaptureManager:
             if "dumpsys package" in " ".join(cmd):
                 return ("android.permission.INTERNET\n", 0)
             if "dumpsys connectivity" in " ".join(cmd):
-                return ("VPN com.emanuelef.remote_capture NetworkAgentInfo", 0)
+                return ("NetworkAgentInfo{network{150} ni{VPN CONNECTED extra: VPN:com.emanuelef.remote_capture}}", 0)
             if "am start" in " ".join(cmd) and "action stop" in " ".join(cmd):
                 return ("", 0)
             if "am start" in " ".join(cmd):
@@ -379,7 +384,7 @@ class TestTrafficCaptureManager:
             if "dumpsys package" in " ".join(cmd):
                 return ("android.permission.INTERNET\n", 0)
             if "dumpsys connectivity" in " ".join(cmd):
-                return ("VPN com.emanuelef.remote_capture NetworkAgentInfo", 0)
+                return ("NetworkAgentInfo{network{150} ni{VPN CONNECTED extra: VPN:com.emanuelef.remote_capture}}", 0)
             if "am start" in " ".join(cmd) and "action stop" in " ".join(cmd):
                 return ("", 0)
             if "am start" in " ".join(cmd):
@@ -650,7 +655,7 @@ class TestTrafficCaptureManager:
             if "dumpsys package" in joined:
                 return ("android.permission.INTERNET\nandroid.permission.ACCESS_NETWORK_STATE\n", 0)
             if "dumpsys connectivity" in joined:
-                return ("VPN com.emanuelef.remote_capture NetworkAgentInfo", 0)
+                return ("NetworkAgentInfo{network{150} ni{VPN CONNECTED extra: VPN:com.emanuelef.remote_capture}}", 0)
             if "am start" in joined:
                 return ("Starting: Intent { cmp=com.emanuelef.remote_capture/.activities.CaptureCtrl }\n", 0)
             if "test -d" in joined:
@@ -689,7 +694,7 @@ class TestTrafficCaptureManager:
             if "dumpsys package" in joined:
                 return ("android.permission.INTERNET\nandroid.permission.ACCESS_NETWORK_STATE\n", 0)
             if "dumpsys connectivity" in joined:
-                return ("VPN com.emanuelef.remote_capture NetworkAgentInfo", 0)
+                return ("NetworkAgentInfo{network{150} ni{VPN CONNECTED extra: VPN:com.emanuelef.remote_capture}}", 0)
             if "am start" in joined:
                 return ("Starting: Intent { cmp=com.emanuelef.remote_capture/.activities.CaptureCtrl }\n", 0)
             if "test -d" in joined:
@@ -1021,7 +1026,7 @@ class TestTrafficCaptureManager:
             if "cat /sdcard/ui_dump.xml" in joined:
                 return ("<hierarchy><node text=\"PCAPdroid\" /></hierarchy>", 0)
             if "dumpsys connectivity" in joined:
-                return ("VPN com.emanuelef.remote_capture NetworkAgentInfo", 0)
+                return ("NetworkAgentInfo{network{150} ni{VPN CONNECTED extra: VPN:com.emanuelef.remote_capture}}", 0)
             return ("", 0)
 
         mock_run_adb.side_effect = adb_side_effect
