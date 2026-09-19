@@ -2149,6 +2149,13 @@ class MainWindow(QMainWindow):
         candidates = []
         for label, attr in (("MobSF", "_mobsf_docker_service"), ("OmniParser", "_omniparser_docker_service")):
             service = getattr(self, attr, None)
+            if service is None and attr == "_omniparser_docker_service":
+                # Not started this session (e.g. parser mode/backend differed at
+                # launch), but the stack may still be up from an earlier run.
+                try:
+                    service = OmniParserDockerService(self.settings_panel.get_omniparser_local_url())
+                except Exception:
+                    continue
             if service is None:
                 continue
             try:
@@ -2177,12 +2184,61 @@ class MainWindow(QMainWindow):
         keep_btn = box.addButton("Keep Running", QMessageBox.ButtonRole.RejectRole)
         stop_btn = box.addButton("Stop Selected", QMessageBox.ButtonRole.AcceptRole)
         box.setDefaultButton(keep_btn)
+
+        # "Stop Selected" is only meaningful when at least one box is checked.
+        stop_btn.setEnabled(False)
+
+        def _update_stop_enabled() -> None:
+            stop_btn.setEnabled(any(cb.isChecked() for cb, _ in checkboxes))
+
+        for checkbox, _ in checkboxes:
+            checkbox.toggled.connect(_update_stop_enabled)
+
         box.exec()
 
         if box.clickedButton() is stop_btn:
-            for checkbox, service in checkboxes:
-                if checkbox.isChecked():
+            to_stop = [(label, svc) for (cb, svc), (label, _) in zip(checkboxes, candidates) if cb.isChecked()]
+            self._stop_containers_with_progress(to_stop)
+
+    def _stop_containers_with_progress(self, services: list) -> None:
+        """Stop the given (label, service) pairs off the UI thread behind a busy dialog."""
+        import threading
+
+        from PySide6.QtCore import QEventLoop
+        from PySide6.QtWidgets import QProgressDialog
+
+        names = ", ".join(label for label, _ in services)
+        progress = QProgressDialog(f"Stopping {names}...", None, 0, 0, self)
+        progress.setWindowTitle("Stopping containers")
+        progress.setWindowModality(Qt.WindowModality.ApplicationModal)
+        progress.setMinimumDuration(0)
+        progress.setCancelButton(None)
+        progress.setAutoClose(False)
+        progress.setAutoReset(False)
+
+        def _work() -> None:
+            for _, service in services:
+                try:
                     service.stop()
+                except Exception:
+                    logger.warning("Failed to stop container", exc_info=True)
+
+        thread = threading.Thread(target=_work, daemon=True)
+        loop = QEventLoop()
+        poll = QTimer()
+        poll.setInterval(100)
+
+        def _check() -> None:
+            if not thread.is_alive():
+                poll.stop()
+                loop.quit()
+
+        poll.timeout.connect(_check)
+        thread.start()
+        poll.start()
+        progress.show()
+        loop.exec()
+        progress.close()
 
     def closeEvent(self, event):
         """Handle window close event."""
@@ -2252,6 +2308,17 @@ def run():
     # Create window after setting the app icon
     window = MainWindow()
     window.showMaximized()
+
+    # The taskbar button is sometimes created before Windows picks up the icon
+    # (intermittent blank logo). Re-apply it once the native window exists.
+    def _reapply_icon():
+        icon = QIcon(_get_gui_icon_path())
+        app.setWindowIcon(icon)
+        window.setWindowIcon(icon)
+
+    QTimer.singleShot(0, _reapply_icon)
+    QTimer.singleShot(1000, _reapply_icon)
+
     window.start_mobsf_if_enabled()
     window.start_omniparser_if_enabled()
 

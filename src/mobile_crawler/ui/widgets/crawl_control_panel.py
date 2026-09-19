@@ -34,6 +34,7 @@ class CrawlControlPanel(QWidget):
         self._validation_passed: bool = False
         self._pause_available: bool = True
         self._step_by_step_available: bool = True
+        self._stopping: bool = False
         self._setup_ui()
 
     def _setup_ui(self):
@@ -74,7 +75,8 @@ class CrawlControlPanel(QWidget):
         self.stop_button.setObjectName("stopButton")
         self.stop_button.setEnabled(False)
         self.stop_button.setMinimumWidth(100)
-        self.stop_button.clicked.connect(self.stop_requested.emit)
+        self.stop_button.setToolTip("Stop the crawl. It ends once the current step finishes.")
+        self.stop_button.clicked.connect(self._on_stop_clicked)
         control_layout.addWidget(self.stop_button)
 
         # Next Step button (for step-by-step mode)
@@ -103,12 +105,22 @@ class CrawlControlPanel(QWidget):
         # Set the layout for this widget
         self.setLayout(layout)
 
+    def _on_stop_clicked(self):
+        """Emit stop_requested once; show the hint immediately instead of graying out."""
+        if self._stopping:
+            return
+        self._stopping = True
+        self.status_label.setText("Stopping... the crawler will stop once the current step finishes")
+        self.status_label.setStyleSheet("color: orange; font-weight: bold;")
+        self.stop_requested.emit()
+
     def update_state(self, state: CrawlState):
         """Update button states based on crawl state.
 
         Args:
             state: Current CrawlState
         """
+        self._stopping = state == CrawlState.STOPPING
         # Reset all buttons
         self.start_button.setEnabled(False)
         self.pause_button.setEnabled(False)
@@ -158,9 +170,10 @@ class CrawlControlPanel(QWidget):
             self.next_step_button.setVisible(True)
 
         elif state == CrawlState.STOPPING:
-            self.status_label.setText("Stopping...")
+            self.status_label.setText("Stopping... the crawler will stop once the current step finishes")
             self.status_label.setStyleSheet("color: orange; font-weight: bold;")
-            self.stop_button.setEnabled(False)
+            # Stay enabled (not grayed out); extra clicks are ignored in _on_stop_clicked.
+            self.stop_button.setEnabled(True)
             self.pause_button.setVisible(True)
             self.resume_button.setVisible(False)
 
