@@ -97,9 +97,7 @@ class ManagerAgent(Workflow):
         self.action_ctx = action_ctx
         self.state_provider = state_provider
         self.save_trajectory = save_trajectory
-        self._stream_screenshots = os.environ.get(
-            "DROIDRUN_STREAM_SCREENSHOTS", ""
-        ).lower() in ("1", "true")
+        self._stream_screenshots = os.environ.get("DROIDRUN_STREAM_SCREENSHOTS", "").lower() in ("1", "true")
         self.shared_state = shared_state
         self.registry = registry
         self.output_model = output_model
@@ -119,9 +117,7 @@ class ManagerAgent(Workflow):
         if not self.app_card_config.enabled:
 
             class DisabledProvider(AppCardProvider):
-                async def load_app_card(
-                    self, package_name: str, instruction: str = ""
-                ) -> str:
+                async def load_app_card(self, package_name: str, instruction: str = "") -> str:
                     return ""
 
             return DisabledProvider()
@@ -129,15 +125,11 @@ class ManagerAgent(Workflow):
         mode = self.app_card_config.mode.lower()
 
         if mode == "local":
-            return LocalAppCardProvider(
-                app_cards_dir=self.app_card_config.app_cards_dir
-            )
+            return LocalAppCardProvider(app_cards_dir=self.app_card_config.app_cards_dir)
         elif mode == "server":
             if not self.app_card_config.server_url:
                 logger.warning("Server mode but no server_url, falling back to local")
-                return LocalAppCardProvider(
-                    app_cards_dir=self.app_card_config.app_cards_dir
-                )
+                return LocalAppCardProvider(app_cards_dir=self.app_card_config.app_cards_dir)
             return ServerAppCardProvider(
                 server_url=self.app_card_config.server_url,
                 timeout=self.app_card_config.server_timeout,
@@ -145,12 +137,8 @@ class ManagerAgent(Workflow):
             )
         elif mode == "composite":
             if not self.app_card_config.server_url:
-                logger.warning(
-                    "Composite mode but no server_url, falling back to local"
-                )
-                return LocalAppCardProvider(
-                    app_cards_dir=self.app_card_config.app_cards_dir
-                )
+                logger.warning("Composite mode but no server_url, falling back to local")
+                return LocalAppCardProvider(app_cards_dir=self.app_card_config.app_cards_dir)
             return CompositeAppCardProvider(
                 server_url=self.app_card_config.server_url,
                 app_cards_dir=self.app_card_config.app_cards_dir,
@@ -159,9 +147,7 @@ class ManagerAgent(Workflow):
             )
         else:
             logger.warning(f"Unknown app_card mode '{mode}', falling back to local")
-            return LocalAppCardProvider(
-                app_cards_dir=self.app_card_config.app_cards_dir
-            )
+            return LocalAppCardProvider(app_cards_dir=self.app_card_config.app_cards_dir)
 
     async def _build_system_prompt(self) -> str:
         """Build system prompt with all context."""
@@ -199,9 +185,7 @@ class ManagerAgent(Workflow):
         custom_tools_descriptions = ""
         if self.registry:
             _standard = self.standard_tool_names or set()
-            custom_tools_descriptions = self.registry.get_tool_descriptions_text(
-                exclude=_standard
-            )
+            custom_tools_descriptions = self.registry.get_tool_descriptions_text(exclude=_standard)
 
         variables = {
             "instruction": self.shared_state.instruction,
@@ -242,15 +226,11 @@ class ManagerAgent(Workflow):
 
         # Add last action summary
         if self.shared_state.last_summary:
-            parts.append(
-                f"<last_action_description>\n{self.shared_state.last_summary}\n</last_action_description>\n"
-            )
+            parts.append(f"<last_action_description>\n{self.shared_state.last_summary}\n</last_action_description>\n")
 
         return "".join(parts)
 
-    def _build_messages_with_context(
-        self, system_prompt: str, screenshot: bytes | None = None
-    ) -> list[ChatMessage]:
+    def _build_messages_with_context(self, system_prompt: str, screenshot: bytes | None = None) -> list[ChatMessage]:
         """
         Build messages from history and inject current context.
 
@@ -269,9 +249,7 @@ class ManagerAgent(Workflow):
         messages.extend(copy.deepcopy(self.shared_state.message_history))
 
         # Find last user message
-        user_indices = [
-            i for i, msg in enumerate(messages) if msg.role == MessageRole.USER
-        ]
+        user_indices = [i for i, msg in enumerate(messages) if msg.role == MessageRole.USER]
 
         if user_indices:
             last_user_idx = user_indices[-1]
@@ -279,17 +257,13 @@ class ManagerAgent(Workflow):
             # Add memory to last user message
             current_memory = (self.shared_state.manager_memory or "").strip()
             if current_memory:
-                messages[last_user_idx].blocks.append(
-                    TextBlock(text=f"\n<memory>\n{current_memory}\n</memory>\n")
-                )
+                messages[last_user_idx].blocks.append(TextBlock(text=f"\n<memory>\n{current_memory}\n</memory>\n"))
 
             # Add current device state
             current_state = self.shared_state.formatted_device_state.strip()
             if current_state:
                 messages[last_user_idx].blocks.append(
-                    TextBlock(
-                        text=f"\n<device_state>\n{current_state}\n</device_state>\n"
-                    )
+                    TextBlock(text=f"\n<device_state>\n{current_state}\n</device_state>\n")
                 )
 
             # Add screenshot if vision enabled
@@ -302,17 +276,13 @@ class ManagerAgent(Workflow):
                 prev_state = self.shared_state.previous_formatted_device_state.strip()
                 if prev_state:
                     messages[second_last_idx].blocks.append(
-                        TextBlock(
-                            text=f"\n<previous_device_state>\n{prev_state}\n</previous_device_state>\n"
-                        )
+                        TextBlock(text=f"\n<previous_device_state>\n{prev_state}\n</previous_device_state>\n")
                     )
 
         messages = filter_empty_messages(messages)
         return messages
 
-    async def _validate_and_retry(
-        self, messages: list[ChatMessage], initial_response: str
-    ) -> tuple[str, list[dict]]:
+    async def _validate_and_retry(self, messages: list[ChatMessage], initial_response: str) -> tuple[str, list[dict]]:
         """Validate LLM response and retry if needed."""
         output = initial_response
         parsed = parse_manager_response(output)
@@ -342,8 +312,7 @@ class ManagerAgent(Workflow):
                 )
             elif not parsed["plan"]:
                 error_message = (
-                    "You must provide a plan to complete the task. "
-                    "Please provide a plan with the correct format."
+                    "You must provide a plan to complete the task. " "Please provide a plan with the correct format."
                 )
             else:
                 break  # Valid: plan without answer
@@ -357,9 +326,7 @@ class ManagerAgent(Workflow):
                         "attempt": retry_count,
                     }
                 )
-                logger.warning(
-                    f"Manager response invalid (retry {retry_count}/{max_retries}): {error_message}"
-                )
+                logger.warning(f"Manager response invalid (retry {retry_count}/{max_retries}): {error_message}")
 
                 # Build retry messages
                 retry_messages = messages + [
@@ -368,9 +335,7 @@ class ManagerAgent(Workflow):
                 ]
 
                 try:
-                    response = await acall_with_retries(
-                        self.llm, retry_messages, stream=self.agent_config.streaming
-                    )
+                    response = await acall_with_retries(self.llm, retry_messages, stream=self.agent_config.streaming)
                     output = response.message.content
                     parsed = parse_manager_response(output)
                 except Exception as e:
@@ -391,19 +356,24 @@ class ManagerAgent(Workflow):
     # ========================================================================
 
     @step
-    async def prepare_context(
-        self, ctx: Context, ev: StartEvent
-    ) -> ManagerContextEvent:
+    async def prepare_context(self, ctx: Context, ev: StartEvent) -> ManagerContextEvent:
         """Gather context and prepare manager prompt."""
         logger.debug("💬 Preparing manager context...")
 
+        # Parse state first: get_state may relaunch the target app, so the
+        # screenshot shown to the Manager must be the one the parsed elements
+        # came from, not an earlier capture of a different screen.
+        ui_state = await self.state_provider.get_state()
+
         # Always capture — even with vision off, the screenshot is still
         # needed for the Statistics/AI Monitor "reference only" display.
-        screenshot = None
+        screenshot = getattr(ui_state, "screenshot_bytes", None)
         try:
-            _screenshot_start = time.perf_counter()
-            screenshot = await self.action_ctx.driver.screenshot()
-            _screenshot_ms = (time.perf_counter() - _screenshot_start) * 1000
+            _screenshot_ms = 0.0
+            if screenshot is None:
+                _screenshot_start = time.perf_counter()
+                screenshot = await self.action_ctx.driver.screenshot()
+                _screenshot_ms = (time.perf_counter() - _screenshot_start) * 1000
 
             if screenshot:
                 ctx.write_event_to_stream(ScreenshotEvent(screenshot=screenshot, duration_ms=_screenshot_ms))
@@ -411,10 +381,7 @@ class ManagerAgent(Workflow):
                 record_langfuse_screenshot(
                     screenshot,
                     parent_span=parent_span,
-                    screenshots_enabled=bool(
-                        self.tracing_config
-                        and self.tracing_config.langfuse_screenshots
-                    ),
+                    screenshots_enabled=bool(self.tracing_config and self.tracing_config.langfuse_screenshots),
                     vision_enabled=self.vision,
                 )
                 logger.debug("📸 Screenshot captured for Manager")
@@ -423,8 +390,6 @@ class ManagerAgent(Workflow):
         except Exception as e:
             logger.warning(f"Failed to capture screenshot: {e}")
 
-        # Get and format device state
-        ui_state = await self.state_provider.get_state()
         self.action_ctx.ui = ui_state
 
         # State transition graph and loop detection
@@ -439,9 +404,7 @@ class ManagerAgent(Workflow):
                     from_hash = self.state_graph_tracker.history[-1]
                     last_action = self.shared_state.last_action
                     if last_action:
-                        self.state_graph_tracker.record_transition(
-                            from_hash, current_hash, last_action, step_num
-                        )
+                        self.state_graph_tracker.record_transition(from_hash, current_hash, last_action, step_num)
 
                 self.state_graph_tracker.record_state(current_hash, step_num, pkg, act)
 
@@ -461,9 +424,7 @@ class ManagerAgent(Workflow):
                 self.state_graph_tracker.save()
 
         # Update shared state (previous ← current, current ← new)
-        self.shared_state.previous_formatted_device_state = (
-            self.shared_state.formatted_device_state
-        )
+        self.shared_state.previous_formatted_device_state = self.shared_state.formatted_device_state
         self.shared_state.formatted_device_state = ui_state.formatted_text
         self.shared_state.focused_text = ui_state.focused_text
         self.shared_state.a11y_tree = ui_state.elements
@@ -503,8 +464,7 @@ class ManagerAgent(Workflow):
         drained = self.shared_state.drain_user_messages()
         if drained:
             external_block = "\n".join(
-                f"<external_user_message>\n{m.message}\n</external_user_message>"
-                for m in drained
+                f"<external_user_message>\n{m.message}\n</external_user_message>" for m in drained
             )
             user_content += "\n" + external_block + "\n"
             logger.info(
@@ -519,18 +479,14 @@ class ManagerAgent(Workflow):
                 )
             )
 
-        self.shared_state.message_history.append(
-            ChatMessage(role="user", content=user_content)
-        )
+        self.shared_state.message_history.append(ChatMessage(role="user", content=user_content))
 
         event = ManagerContextEvent(app_card_load_ms=app_card_load_ms)
         ctx.write_event_to_stream(event)
         return event
 
     @step
-    async def get_response(
-        self, ctx: Context, ev: ManagerContextEvent
-    ) -> ManagerResponseEvent:
+    async def get_response(self, ctx: Context, ev: ManagerContextEvent) -> ManagerResponseEvent:
         """Get LLM response."""
         logger.debug("🧠 Manager thinking about the plan...")
 
@@ -540,16 +496,12 @@ class ManagerAgent(Workflow):
         system_prompt = await self._build_system_prompt()
 
         # Build messages with context
-        messages = self._build_messages_with_context(
-            system_prompt=system_prompt, screenshot=screenshot
-        )
+        messages = self._build_messages_with_context(system_prompt=system_prompt, screenshot=screenshot)
 
         try:
             logger.info("📋 Manager response:", extra={"color": "cyan"})
             llm_start = time.perf_counter()
-            response = await acall_with_retries(
-                self.llm, messages, stream=self.agent_config.streaming
-            )
+            response = await acall_with_retries(self.llm, messages, stream=self.agent_config.streaming)
             manager_llm_ms = (time.perf_counter() - llm_start) * 1000
             output = response.message.content
         except Exception as e:
@@ -590,9 +542,7 @@ class ManagerAgent(Workflow):
         return event
 
     @step
-    async def process_response(
-        self, ctx: Context, ev: ManagerResponseEvent
-    ) -> ManagerPlanDetailsEvent:
+    async def process_response(self, ctx: Context, ev: ManagerResponseEvent) -> ManagerPlanDetailsEvent:
         """Parse LLM response and update state."""
         logger.debug("⚙️ Processing manager response...")
 
@@ -608,9 +558,7 @@ class ManagerAgent(Workflow):
                 self.shared_state.manager_memory = memory_update
 
         # Append assistant response to message history
-        self.shared_state.message_history.append(
-            ChatMessage(role="assistant", content=output)
-        )
+        self.shared_state.message_history.append(ChatMessage(role="assistant", content=output))
 
         # Update unified state fields
         self.shared_state.previous_plan = self.shared_state.plan

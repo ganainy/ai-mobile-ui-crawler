@@ -7,6 +7,7 @@ updated: 2026-09-19
 Entry point for the Obsidian vault (`docs/`). Claude reads this first each session and updates it before finishing substantive work.
 
 ## Now
+- Auth scenario text now forbids logging in with the generated sign-up credentials (run 174 tried to log in with them on an email-first web form). Runs 172/173: guard relaunched Headspace during its web login in Brave. Guard now tolerates a browser for up to 40 captures; manager screenshot now comes from the same capture as the parsed elements (was mismatched). Tests pass; not tried on a device. `open_app` app-list lookup (~50s, serial dumpsys) now concurrent + cached. See [session](sessions/2026-09-19-browser-login-guard.md).
 - Run 171 died at step 2: executor (Gemini `max_tokens` 512) got `MAX_TOKENS` 3x. Raised LLM profile limits in `crawler_agent_service.py` (manager 8192, executor 4096, app_opener 2048). Verified by the user on a real run. See [session](sessions/2026-09-19-max-tokens-executor.md).
 - Notify-hook debug: spurious toasts come from the async global Stop hook firing when the project Stop hook blocks, and an unmatched Notification hook. Fix proposed, not applied. See [session](sessions/2026-09-19-notify-hook-debug.md).
 - Test Email field removed; "Test" dropped from the Address and Mobile Number labels (email now from App Account override / Verification Inbox); phone auto-detected from SIM via adb, manual field overrides. Uncommitted; not tried on a real device. See [session](sessions/2026-09-19-remove-test-email-detect-phone.md).

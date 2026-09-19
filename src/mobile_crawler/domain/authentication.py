@@ -118,6 +118,9 @@ class AuthenticationSession:
             "If the app asks for an emailed code or link, call get_email_code; for an SMS code call get_sms_code "
             f"(at most {cap} code attempts in total). "
             "As soon as sign-up succeeds, call save_app_account with the username and password you used. "
+            "These credentials are for a NEW account only: never enter them on a log-in form and never try to "
+            "log in (no account exists, so it will fail). If a screen only offers log in, or shows a "
+            "wrong email or password error, look for the app's sign-up / create-account option instead. "
             "If sign-up is impossible or blocked, call skip_authentication and continue exploring "
             "the reachable screens."
         )

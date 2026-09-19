@@ -169,6 +169,58 @@ async def test_state_provider_relaunches_target_before_screenshot_and_omniparser
 
 
 @pytest.mark.asyncio
+async def test_state_provider_lets_agent_work_in_browser_login_flow(android_state_provider):
+    provider, driver = android_state_provider
+    mock_adb = Mock()
+    mock_adb.get_current_package.return_value = "com.brave.browser"
+
+    with patch("mobile_crawler.domain.adb_action_executor.ADBActionExecutor", return_value=mock_adb):
+        await provider.get_state()
+
+    mock_adb.am_start_recovery.assert_not_called()
+    driver.screenshot.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_state_carries_the_screenshot_its_elements_were_parsed_from(android_state_provider):
+    provider, driver = android_state_provider
+    driver.screenshot.return_value = b"the-parsed-image"
+    mock_adb = Mock()
+    mock_adb.get_current_package.return_value = "com.example.app"
+
+    with patch("mobile_crawler.domain.adb_action_executor.ADBActionExecutor", return_value=mock_adb):
+        state = await provider.get_state()
+
+    assert state.screenshot_bytes == b"the-parsed-image"
+
+
+@pytest.mark.asyncio
+async def test_state_provider_relaunches_after_browser_grace_exhausted(android_state_provider):
+    provider, _ = android_state_provider
+    provider.external_grace_captures = 2
+    mock_adb = Mock()
+    mock_adb.get_current_package.side_effect = [
+        "com.brave.browser",
+        "com.brave.browser",
+        "com.brave.browser",
+        "com.example.app",
+    ]
+    mock_adb.am_start_recovery.return_value = CrawlerActionResult(
+        success=True,
+        action_type="am_start_recovery",
+        target="com.example.app",
+    )
+
+    with patch("mobile_crawler.domain.adb_action_executor.ADBActionExecutor", return_value=mock_adb):
+        await provider.get_state()
+        await provider.get_state()
+        mock_adb.am_start_recovery.assert_not_called()
+        await provider.get_state()
+
+    mock_adb.am_start_recovery.assert_called_once_with("com.example.app")
+
+
+@pytest.mark.asyncio
 async def test_state_provider_correct_package_proceeds_to_capture(android_state_provider):
     provider, driver = android_state_provider
     mock_adb = Mock()
@@ -194,8 +246,10 @@ async def test_state_provider_failed_recovery_raises_before_screenshot_or_omnipa
         error_message="not found",
     )
 
-    with patch("mobile_crawler.domain.adb_action_executor.ADBActionExecutor", return_value=mock_adb), \
-         pytest.raises(RuntimeError, match="Unable to recover target app"):
+    with (
+        patch("mobile_crawler.domain.adb_action_executor.ADBActionExecutor", return_value=mock_adb),
+        pytest.raises(RuntimeError, match="Unable to recover target app"),
+    ):
         await provider.get_state()
 
     driver.screenshot.assert_not_awaited()

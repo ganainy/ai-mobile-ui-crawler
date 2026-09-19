@@ -11,13 +11,18 @@ import logging
 import os
 import re
 import subprocess
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from async_adbutils import adb
 
 from mobile_crawler.domain.crawler_agent.tools.driver.base import DeviceDriver
 
+if TYPE_CHECKING:
+    from PIL import Image
+
 logger = logging.getLogger("crawler_agent")
+
+_APP_LABEL_CONCURRENCY = 16
 
 
 class AndroidDriver(DeviceDriver):
@@ -59,6 +64,8 @@ class AndroidDriver(DeviceDriver):
         self._connected = False
         self.status_bar_exclusion_px = status_bar_exclusion_px
         self.bottom_bar_exclusion_px = bottom_bar_exclusion_px
+        # include_system -> (package names, apps with labels)
+        self._apps_cache: dict[bool, tuple[list[str], list[dict[str, str]]]] = {}
 
     # -- lifecycle -----------------------------------------------------------
 
@@ -95,9 +102,7 @@ class AndroidDriver(DeviceDriver):
             if self._serial:
                 try:
                     proc = await asyncio.create_subprocess_exec(
-                        'adb', 'connect', self._serial,
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE
+                        "adb", "connect", self._serial, stdout=subprocess.PIPE, stderr=subprocess.PIPE
                     )
                     stdout, stderr = await proc.communicate()
                     logger.info(
@@ -159,11 +164,11 @@ class AndroidDriver(DeviceDriver):
 
             # Escape special characters for shell
             escaped_text = (
-                text.replace('\\', '\\\\')
+                text.replace("\\", "\\\\")
                 .replace('"', '\\"')
-                .replace('$', '\\$')
-                .replace('`', '\\`')
-                .replace(' ', '%s')
+                .replace("$", "\\$")
+                .replace("`", "\\`")
+                .replace(" ", "%s")
             )
 
             # Use ADB input text
@@ -172,11 +177,11 @@ class AndroidDriver(DeviceDriver):
         except Exception as e:
             if await self._handle_connection_drop(e):
                 escaped_text = (
-                    text.replace('\\', '\\\\')
+                    text.replace("\\", "\\\\")
                     .replace('"', '\\"')
-                    .replace('$', '\\$')
-                    .replace('`', '\\`')
-                    .replace(' ', '%s')
+                    .replace("$", "\\$")
+                    .replace("`", "\\`")
+                    .replace(" ", "%s")
                 )
                 if clear:
                     keycodes = ["123"] + ["67"] * 100
@@ -192,8 +197,7 @@ class AndroidDriver(DeviceDriver):
             button_lower = button.lower()
             if button_lower not in self.supported_buttons:
                 raise ValueError(
-                    f"Button '{button}' not supported. "
-                    f"Supported: {', '.join(sorted(self.supported_buttons))}"
+                    f"Button '{button}' not supported. " f"Supported: {', '.join(sorted(self.supported_buttons))}"
                 )
             await self.device.keyevent(self._BUTTON_KEYCODES[button_lower])
         except Exception as e:
@@ -221,9 +225,7 @@ class AndroidDriver(DeviceDriver):
         try:
             logger.debug(f"Starting app {package} with activity {activity}")
             if not activity:
-                dumpsys_output = await self.device.shell(
-                    f"cmd package resolve-activity --brief {package}"
-                )
+                dumpsys_output = await self.device.shell(f"cmd package resolve-activity --brief {package}")
                 activity = dumpsys_output.splitlines()[1].split("/")[1]
 
             logger.debug(f"Activity: {activity}")
@@ -242,8 +244,7 @@ class AndroidDriver(DeviceDriver):
         grant_permissions = kwargs.get("grant_permissions", True)
 
         logger.debug(
-            f"Installing app: {path} with reinstall: {reinstall} "
-            f"and grant_permissions: {grant_permissions}"
+            f"Installing app: {path} with reinstall: {reinstall} " f"and grant_permissions: {grant_permissions}"
         )
         result = await self.device.install(
             path,
@@ -263,20 +264,28 @@ class AndroidDriver(DeviceDriver):
         filter_flag = "" if include_system else "-3"
         output = await self.device.shell(f"pm list packages {filter_flag}")
 
-        packages = []
-        for line in output.splitlines():
-            line = line.strip()
-            if line.startswith("package:"):
-                package_name = line.replace("package:", "").strip()
-                # Get app label/info
-                label = await self._get_app_label(package_name)
-                packages.append(
-                    {
-                        "package": package_name,
-                        "label": label or package_name,
-                    }
-                )
+        names = [
+            line.strip().replace("package:", "").strip()
+            for line in output.splitlines()
+            if line.strip().startswith("package:")
+        ]
 
+        # One `dumpsys package` per installed package is slow when run
+        # serially (~50s on a phone with hundreds of packages), so fetch labels
+        # concurrently and cache the list: installed apps rarely change mid-run.
+        cached = self._apps_cache.get(include_system)
+        if cached and cached[0] == names:
+            return cached[1]
+
+        semaphore = asyncio.Semaphore(_APP_LABEL_CONCURRENCY)
+
+        async def _label(package_name: str) -> dict[str, str]:
+            async with semaphore:
+                label = await self._get_app_label(package_name)
+            return {"package": package_name, "label": label or package_name}
+
+        packages = list(await asyncio.gather(*(_label(name) for name in names)))
+        self._apps_cache[include_system] = (names, packages)
         return packages
 
     async def _get_app_label(self, package: str) -> str | None:
@@ -380,7 +389,7 @@ class AndroidDriver(DeviceDriver):
 
         raise RuntimeError("Screenshot capture failed after retries")
 
-    def _crop_screen(self, img: "Image.Image") -> "Image.Image":
+    def _crop_screen(self, img: Image.Image) -> Image.Image:
         """Crop the configured Status Bar / Bottom Bar Exclusion off *img*."""
         top = max(0, self.status_bar_exclusion_px)
         bottom = max(0, self.bottom_bar_exclusion_px)

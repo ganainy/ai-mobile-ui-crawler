@@ -32,6 +32,20 @@ _MAX_RETRIES = 7
 # With the schedule above, this fires after ~11s (1+2+3+5).
 _RECOVERY_AFTER_ATTEMPT = 5
 
+# Browsers that host web login / OAuth flows launched from the target app.
+BROWSER_PACKAGES = frozenset(
+    {
+        "com.android.chrome",
+        "com.brave.browser",
+        "org.mozilla.firefox",
+        "com.microsoft.emmx",
+        "com.sec.android.app.sbrowser",
+        "com.opera.browser",
+        "com.duckduckgo.mobile.android",
+        "com.google.android.apps.chrome",
+    }
+)
+
 
 async def fetch_state_with_retry(
     fetch: Callable[[], Awaitable[dict[str, Any]]],
@@ -98,12 +112,7 @@ async def fetch_state_with_retry(
             logger.warning(f"get_state attempt {attempt + 1} failed: {err_desc}{suffix}")
 
             # Mid-retry recovery: restart the a11y service once
-            if (
-                not recovery_attempted
-                and recovery is not None
-                and attempt + 1 >= recovery_after
-                and not is_last
-            ):
+            if not recovery_attempted and recovery is not None and attempt + 1 >= recovery_after and not is_last:
                 recovery_attempted = True
                 logger.info("State retrieval failing, attempting recovery...")
                 try:
@@ -160,6 +169,7 @@ class AndroidStateProvider(StateProvider):
         omniparser_a11y_threshold: int = 5,
         target_package: str | None = None,
         target_recovery_attempts: int = 3,
+        external_grace_captures: int = 40,
         status_bar_exclusion_px: int = 0,
         bottom_bar_exclusion_px: int = 0,
     ) -> None:
@@ -179,6 +189,8 @@ class AndroidStateProvider(StateProvider):
         self.omniparser_a11y_threshold = omniparser_a11y_threshold
         self.target_package = target_package
         self.target_recovery_attempts = target_recovery_attempts
+        self.external_grace_captures = external_grace_captures
+        self._external_captures = 0
         # Status Bar / Bottom Bar Exclusion: driver.screenshot() already
         # cropped this many px off the top/bottom (ADR-0002). OmniParser bbox
         # ratios are relative to that cropped image, so the formatter must
@@ -278,6 +290,7 @@ class AndroidStateProvider(StateProvider):
         layout_hash = None
         try:
             from mobile_crawler.domain.state_graph import StateGraphTracker
+
             tracker = StateGraphTracker(run_id=0)
             layout_hash = tracker.compute_layout_hash(elements)
         except Exception as hash_err:
@@ -295,6 +308,9 @@ class AndroidStateProvider(StateProvider):
             omni_source=omni_source,
             layout_hash=layout_hash,
         )
+        # The exact image the elements were parsed from, so consumers can show
+        # a screenshot that matches the element overlay.
+        ui_state.screenshot_bytes = screenshot_bytes
         ui_state.capture_timing_ms = round((time.perf_counter() - state_started) * 1000, 3)
         ui_state.omniparser_ms = self._last_omniparser_ms
         logger.debug(
@@ -317,9 +333,7 @@ class AndroidStateProvider(StateProvider):
             device_id = getattr(device, "serial", None)
 
         if not device_id:
-            raise RuntimeError(
-                "Cannot verify target app before state capture: Android device serial is unavailable"
-            )
+            raise RuntimeError("Cannot verify target app before state capture: Android device serial is unavailable")
 
         try:
             from mobile_crawler.domain.adb_action_executor import ADBActionExecutor
@@ -331,7 +345,23 @@ class AndroidStateProvider(StateProvider):
         adb_executor = ADBActionExecutor(device_id=device_id)
         current_package = adb_executor.get_current_package()
         if current_package == self.target_package:
+            self._external_captures = 0
             return
+
+        # Web login / OAuth flows open in a browser (custom tab). Yanking the
+        # app back would abandon the flow, so let the agent work there for a
+        # bounded number of captures before recovering.
+        if current_package in BROWSER_PACKAGES and self._external_captures < self.external_grace_captures:
+            self._external_captures += 1
+            logger.info(
+                "Foreground is browser %s (target=%s); allowing capture %s/%s before recovery",
+                current_package,
+                self.target_package,
+                self._external_captures,
+                self.external_grace_captures,
+            )
+            return
+        self._external_captures = 0
 
         logger.warning(
             "Target app mismatch before state capture (current=%s, target=%s). "

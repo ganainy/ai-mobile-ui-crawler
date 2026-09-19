@@ -93,6 +93,7 @@ async def test_signup_saves_created_account():
 def test_goal_section_signup_when_no_account():
     text = make().goal_section()
     assert "sign up" in text.lower()
+    assert "never try to log in" in text.lower()
     assert "crawl+com.foo.app@gmail.com" in text
     assert "save_app_account" in text
 

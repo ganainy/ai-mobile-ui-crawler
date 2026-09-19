@@ -650,8 +650,8 @@ class TestCrawlerAgentServiceConfig:
         assert config["device"]["auto_setup"] is False
         assert "llm_profiles" in config
         assert "manager" in config["llm_profiles"]
-        assert config["llm_profiles"]["manager"]["kwargs"]["max_tokens"] == 2048
-        assert config["llm_profiles"]["executor"]["kwargs"]["max_tokens"] == 512
+        assert config["llm_profiles"]["manager"]["kwargs"]["max_tokens"] == 8192
+        assert config["llm_profiles"]["executor"]["kwargs"]["max_tokens"] == 4096
         assert config["llm_profiles"]["fast_agent"]["kwargs"]["max_tokens"] == 1024
 
     @patch.dict(os.environ, {}, clear=False)
