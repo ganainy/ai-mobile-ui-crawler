@@ -82,7 +82,6 @@ screenshots/
 src/**/speckit*
 tests/**/speckit*
 
-# Understand-Anything scratch/intermediate data (knowledge-graph.json + meta.json are tracked)
-.ua/intermediate/
-.ua/tmp/
-.ua/.trash-*/
+
+# Obsidian vault (docs/) - per-user workspace config
+docs/.obsidian/

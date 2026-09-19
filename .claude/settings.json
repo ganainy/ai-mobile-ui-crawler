@@ -1,0 +1,11 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "python scripts/stop_hook_state_reminder.py" }
+        ]
+      }
+    ]
+  }
+}
