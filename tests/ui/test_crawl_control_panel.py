@@ -117,7 +117,7 @@ class TestStateUpdates:
         assert panel.start_button.isEnabled() is False
         assert panel.pause_button.isEnabled() is False
         assert panel.resume_button.isVisible() is False
-        assert panel.stop_button.isEnabled() is False
+        assert panel.stop_button.isEnabled() is True  # stays enabled; extra clicks are ignored
 
     def test_stopped_state(self, qtbot):
         """Test button states for STOPPED state."""

@@ -8,7 +8,6 @@ import pytest
 
 from mobile_crawler.domain.report_generator import ReportGenerator
 from mobile_crawler.infrastructure.database import DatabaseManager
-from mobile_crawler.infrastructure.run_exporter import RunExporter
 from mobile_crawler.infrastructure.run_repository import Run, RunRepository
 from mobile_crawler.infrastructure.session_folder_manager import SessionFolderManager
 
@@ -18,7 +17,7 @@ class TestArtifactGrouping:
     def temp_dir(self):
         dir_path = tempfile.mkdtemp()
         yield dir_path
-        shutil.rmtree(dir_path)
+        shutil.rmtree(dir_path, ignore_errors=True)
 
     @pytest.fixture
     def db_manager(self, temp_dir):
@@ -36,18 +35,20 @@ class TestArtifactGrouping:
         run_repo = RunRepository(db_manager)
 
         # 1. Create a run
-        run_id = run_repo.create_run(Run(
-            id=None,
-            device_id="test_device",
-            app_package="com.test.app",
-            start_activity="MainActivity",
-            start_time=datetime.now(),
-            end_time=None,
-            status="RUNNING",
-            ai_provider="test_provider",
-            ai_model="test_model"
-        ))
-        run = run_repo.get_run(run_id)
+        run_id = run_repo.create_run(
+            Run(
+                id=None,
+                device_id="test_device",
+                app_package="com.test.app",
+                start_activity="MainActivity",
+                start_time=datetime.now(),
+                end_time=None,
+                status="RUNNING",
+                ai_provider="test_provider",
+                ai_model="test_model",
+            )
+        )
+        run = run_repo.get_run_by_id(run_id)
 
         # 2. Create session folder
         session_path = session_manager.create_session_folder(run_id)
@@ -67,9 +68,8 @@ class TestArtifactGrouping:
         assert os.path.exists(report_path)
         assert Path(report_path).parent.name == "reports"
 
-        # 4. Test RunExporter integration
-        exporter = RunExporter(db_manager)
-        export_path = exporter.export_run(run_id)
-        assert "data" in str(export_path)
-        assert os.path.exists(export_path)
-        assert Path(export_path).parent.name == "data"
+        # 4. The Analysis Bundle lands in the session's analysis folder
+        analysis_dir = Path(session_path) / "analysis"
+        assert (analysis_dir / "analysis.md").exists()
+        assert (analysis_dir / "steps.jsonl").exists()
+        assert (analysis_dir / "run.json").exists()

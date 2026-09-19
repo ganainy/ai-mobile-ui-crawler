@@ -43,6 +43,7 @@ class MockRunRepository:
     def add_run(self, device_id, app_package, status, steps=0, screens=0):
         """Add a test run."""
         from mobile_crawler.infrastructure.run_repository import Run
+
         run = Run(
             id=self._next_id,
             device_id=device_id,
@@ -54,7 +55,7 @@ class MockRunRepository:
             ai_provider="gemini",
             ai_model="gemini-1.5-pro",
             total_steps=steps,
-            unique_screens=screens
+            unique_screens=screens,
         )
         self._runs.append(run)
         self._next_id += 1
@@ -64,8 +65,12 @@ class MockRunRepository:
 class MockReportGenerator:
     """Mock report generator for testing."""
 
-    def generate(self, run_id):
+    def __init__(self):
+        self.calls = []
+
+    def generate(self, run_id, fetch_telemetry=False):
         """Generate a report."""
+        self.calls.append((run_id, fetch_telemetry))
         return f"/path/to/report_{run_id}.pdf"
 
 
@@ -107,11 +112,8 @@ def _create_run_history_view(mock_run_repository, mock_report_generator, mock_mo
         RunHistoryView instance with mock dependencies
     """
     from mobile_crawler.ui.widgets.run_history_view import RunHistoryView
-    return RunHistoryView(
-        mock_run_repository,
-        mock_report_generator,
-        mock_mobsf_manager
-    )
+
+    return RunHistoryView(mock_run_repository, mock_report_generator, mock_mobsf_manager)
 
 
 class TestRunHistoryViewInit:
@@ -121,18 +123,18 @@ class TestRunHistoryViewInit:
         """Test that RunHistoryView initializes correctly."""
         view = _create_run_history_view(mock_run_repository, mock_report_generator, mock_mobsf_manager)
         assert view is not None
-        assert hasattr(view, 'table')
-        assert hasattr(view, 'refresh_button')
-        assert hasattr(view, 'delete_button')
-        assert hasattr(view, 'report_button')
-        assert hasattr(view, 'mobsf_button')
+        assert hasattr(view, "table")
+        assert hasattr(view, "refresh_button")
+        assert hasattr(view, "delete_button")
+        assert hasattr(view, "report_button")
+        assert hasattr(view, "mobsf_button")
 
     def test_has_signals(self, qt_app, mock_run_repository, mock_report_generator, mock_mobsf_manager):
         """Test that signals exist."""
         view = _create_run_history_view(mock_run_repository, mock_report_generator, mock_mobsf_manager)
-        assert hasattr(view, 'run_deleted')
-        assert hasattr(view, 'report_generated')
-        assert hasattr(view, 'mobsf_completed')
+        assert hasattr(view, "run_deleted")
+        assert hasattr(view, "report_generated")
+        assert hasattr(view, "mobsf_completed")
 
     def test_minimum_height_allows_laptop_layout(
         self, qt_app, mock_run_repository, mock_report_generator, mock_mobsf_manager
@@ -215,7 +217,9 @@ class TestRunHistoryTable:
 class TestButtons:
     """Tests for button functionality."""
 
-    def test_buttons_disabled_on_no_selection(self, qt_app, mock_run_repository, mock_report_generator, mock_mobsf_manager):
+    def test_buttons_disabled_on_no_selection(
+        self, qt_app, mock_run_repository, mock_report_generator, mock_mobsf_manager
+    ):
         """Test that buttons are disabled when no row is selected."""
         view = _create_run_history_view(mock_run_repository, mock_report_generator, mock_mobsf_manager)
 
@@ -244,7 +248,9 @@ class TestButtons:
 class TestDeleteRun:
     """Tests for delete run functionality."""
 
-    def test_delete_button_emits_signal(self, qt_app, mock_run_repository, mock_report_generator, mock_mobsf_manager, monkeypatch):
+    def test_delete_button_emits_signal(
+        self, qt_app, mock_run_repository, mock_report_generator, mock_mobsf_manager, monkeypatch
+    ):
         """Test that delete button emits run_deleted signal."""
         run = mock_run_repository.add_run("emulator-5554", "com.example.app", "STOPPED")
         view = _create_run_history_view(mock_run_repository, mock_report_generator, mock_mobsf_manager)
@@ -260,8 +266,8 @@ class TestDeleteRun:
         view.run_deleted.connect(on_run_deleted)
 
         # Mock QMessageBox to return Yes
-        monkeypatch.setattr(QMessageBox, 'question', lambda *args, **kwargs: QMessageBox.StandardButton.Yes)
-        monkeypatch.setattr(QMessageBox, 'information', lambda *args, **kwargs: None)
+        monkeypatch.setattr(QMessageBox, "question", lambda *args, **kwargs: QMessageBox.StandardButton.Yes)
+        monkeypatch.setattr(QMessageBox, "information", lambda *args, **kwargs: None)
 
         # Select first row and click delete
         view.table.selectRow(0)
@@ -270,14 +276,16 @@ class TestDeleteRun:
         assert signal_emitted
         assert emitted_run_id == run.id
 
-    def test_delete_removes_row_from_table(self, qt_app, mock_run_repository, mock_report_generator, mock_mobsf_manager, monkeypatch):
+    def test_delete_removes_row_from_table(
+        self, qt_app, mock_run_repository, mock_report_generator, mock_mobsf_manager, monkeypatch
+    ):
         """Test that delete removes row from table."""
         mock_run_repository.add_run("emulator-5554", "com.example.app", "STOPPED")
         view = _create_run_history_view(mock_run_repository, mock_report_generator, mock_mobsf_manager)
 
         # Mock QMessageBox to return Yes
-        monkeypatch.setattr(QMessageBox, 'question', lambda *args, **kwargs: QMessageBox.StandardButton.Yes)
-        monkeypatch.setattr(QMessageBox, 'information', lambda *args, **kwargs: None)
+        monkeypatch.setattr(QMessageBox, "question", lambda *args, **kwargs: QMessageBox.StandardButton.Yes)
+        monkeypatch.setattr(QMessageBox, "information", lambda *args, **kwargs: None)
 
         # Select first row and click delete
         view.table.selectRow(0)
@@ -285,13 +293,15 @@ class TestDeleteRun:
 
         assert view.table.rowCount() == 0
 
-    def test_delete_with_no_confirmation(self, qt_app, mock_run_repository, mock_report_generator, mock_mobsf_manager, monkeypatch):
+    def test_delete_with_no_confirmation(
+        self, qt_app, mock_run_repository, mock_report_generator, mock_mobsf_manager, monkeypatch
+    ):
         """Test that delete does not proceed when user cancels."""
         mock_run_repository.add_run("emulator-5554", "com.example.app", "STOPPED")
         view = _create_run_history_view(mock_run_repository, mock_report_generator, mock_mobsf_manager)
 
         # Mock QMessageBox to return No
-        monkeypatch.setattr(QMessageBox, 'question', lambda *args, **kwargs: QMessageBox.StandardButton.No)
+        monkeypatch.setattr(QMessageBox, "question", lambda *args, **kwargs: QMessageBox.StandardButton.No)
 
         # Select first row and click delete
         view.table.selectRow(0)
@@ -304,7 +314,9 @@ class TestDeleteRun:
 class TestGenerateReport:
     """Tests for generate report functionality."""
 
-    def test_report_button_emits_signal(self, qt_app, mock_run_repository, mock_report_generator, mock_mobsf_manager, monkeypatch):
+    def test_report_button_emits_signal(
+        self, qt_app, mock_run_repository, mock_report_generator, mock_mobsf_manager, monkeypatch
+    ):
         """Test that report button emits report_generated signal."""
         run = mock_run_repository.add_run("emulator-5554", "com.example.app", "STOPPED")
         view = _create_run_history_view(mock_run_repository, mock_report_generator, mock_mobsf_manager)
@@ -320,8 +332,8 @@ class TestGenerateReport:
         view.report_generated.connect(on_report_generated)
 
         # Mock QMessageBox to return Yes
-        monkeypatch.setattr(QMessageBox, 'question', lambda *args, **kwargs: QMessageBox.StandardButton.Yes)
-        monkeypatch.setattr(QMessageBox, 'information', lambda *args, **kwargs: None)
+        monkeypatch.setattr(QMessageBox, "question", lambda *args, **kwargs: QMessageBox.StandardButton.Yes)
+        monkeypatch.setattr(QMessageBox, "information", lambda *args, **kwargs: None)
 
         # Select first row and click generate report
         view.table.selectRow(0)
@@ -330,14 +342,16 @@ class TestGenerateReport:
         assert signal_emitted
         assert emitted_run_id == run.id
 
-    def test_generate_report_calls_generator(self, qt_app, mock_run_repository, mock_report_generator, mock_mobsf_manager, monkeypatch):
+    def test_generate_report_calls_generator(
+        self, qt_app, mock_run_repository, mock_report_generator, mock_mobsf_manager, monkeypatch
+    ):
         """Test that generate report calls report generator."""
         mock_run_repository.add_run("emulator-5554", "com.example.app", "STOPPED")
         view = _create_run_history_view(mock_run_repository, mock_report_generator, mock_mobsf_manager)
 
         # Mock QMessageBox to return Yes
-        monkeypatch.setattr(QMessageBox, 'question', lambda *args, **kwargs: QMessageBox.StandardButton.Yes)
-        monkeypatch.setattr(QMessageBox, 'information', lambda *args, **kwargs: None)
+        monkeypatch.setattr(QMessageBox, "question", lambda *args, **kwargs: QMessageBox.StandardButton.Yes)
+        monkeypatch.setattr(QMessageBox, "information", lambda *args, **kwargs: None)
 
         # Select first row and click generate report
         view.table.selectRow(0)
@@ -351,7 +365,9 @@ class TestGenerateReport:
 class TestMobSF:
     """Tests for MobSF functionality."""
 
-    def test_mobsf_button_starts_background_worker(self, qt_app, mock_run_repository, mock_report_generator, monkeypatch):
+    def test_mobsf_button_starts_background_worker(
+        self, qt_app, mock_run_repository, mock_report_generator, monkeypatch
+    ):
         """Real MobSF manager API should be executed through a worker thread."""
         from mobile_crawler.ui.widgets import run_history_view as run_history_module
 
@@ -384,7 +400,7 @@ class TestMobSF:
         manager.analyze_run.return_value = Mock(success=True)
         mock_run_repository.add_run("emulator-5554", "com.example.app", "STOPPED")
         view = _create_run_history_view(mock_run_repository, mock_report_generator, manager)
-        monkeypatch.setattr(QMessageBox, 'question', lambda *args, **kwargs: QMessageBox.StandardButton.Yes)
+        monkeypatch.setattr(QMessageBox, "question", lambda *args, **kwargs: QMessageBox.StandardButton.Yes)
         monkeypatch.setattr(run_history_module, "MobSFAnalysisWorker", FakeWorker)
 
         view.table.selectRow(0)
@@ -394,20 +410,24 @@ class TestMobSF:
         assert view.mobsf_button.text() == "Running MobSF..."
         assert not view.mobsf_button.isEnabled()
 
-    def test_mobsf_finished_shows_failure_message(self, qt_app, mock_run_repository, mock_report_generator, monkeypatch):
+    def test_mobsf_finished_shows_failure_message(
+        self, qt_app, mock_run_repository, mock_report_generator, monkeypatch
+    ):
         """Failure dialogs should include the manager error."""
         manager = Mock()
         run = mock_run_repository.add_run("emulator-5554", "com.example.app", "STOPPED")
         view = _create_run_history_view(mock_run_repository, mock_report_generator, manager)
         messages = []
-        monkeypatch.setattr(QMessageBox, 'critical', lambda *args, **kwargs: messages.append(args[2]))
+        monkeypatch.setattr(QMessageBox, "critical", lambda *args, **kwargs: messages.append(args[2]))
 
         view.table.selectRow(0)
         view._on_mobsf_finished(run.id, Mock(success=False, error="Upload failed"))
 
         assert messages == ["Upload failed"]
 
-    def test_mobsf_button_emits_signal(self, qt_app, mock_run_repository, mock_report_generator, mock_mobsf_manager, monkeypatch):
+    def test_mobsf_button_emits_signal(
+        self, qt_app, mock_run_repository, mock_report_generator, mock_mobsf_manager, monkeypatch
+    ):
         """Test that MobSF button emits mobsf_completed signal."""
         run = mock_run_repository.add_run("emulator-5554", "com.example.app", "STOPPED")
         view = _create_run_history_view(mock_run_repository, mock_report_generator, mock_mobsf_manager)
@@ -423,8 +443,8 @@ class TestMobSF:
         view.mobsf_completed.connect(on_mobsf_completed)
 
         # Mock QMessageBox to return Yes
-        monkeypatch.setattr(QMessageBox, 'question', lambda *args, **kwargs: QMessageBox.StandardButton.Yes)
-        monkeypatch.setattr(QMessageBox, 'information', lambda *args, **kwargs: None)
+        monkeypatch.setattr(QMessageBox, "question", lambda *args, **kwargs: QMessageBox.StandardButton.Yes)
+        monkeypatch.setattr(QMessageBox, "information", lambda *args, **kwargs: None)
 
         # Select first row and click MobSF
         view.table.selectRow(0)
@@ -433,14 +453,16 @@ class TestMobSF:
         assert signal_emitted
         assert emitted_run_id == run.id
 
-    def test_mobsf_calls_manager(self, qt_app, mock_run_repository, mock_report_generator, mock_mobsf_manager, monkeypatch):
+    def test_mobsf_calls_manager(
+        self, qt_app, mock_run_repository, mock_report_generator, mock_mobsf_manager, monkeypatch
+    ):
         """Test that MobSF calls MobSF manager."""
         mock_run_repository.add_run("emulator-5554", "com.example.app", "STOPPED")
         view = _create_run_history_view(mock_run_repository, mock_report_generator, mock_mobsf_manager)
 
         # Mock QMessageBox to return Yes
-        monkeypatch.setattr(QMessageBox, 'question', lambda *args, **kwargs: QMessageBox.StandardButton.Yes)
-        monkeypatch.setattr(QMessageBox, 'information', lambda *args, **kwargs: None)
+        monkeypatch.setattr(QMessageBox, "question", lambda *args, **kwargs: QMessageBox.StandardButton.Yes)
+        monkeypatch.setattr(QMessageBox, "information", lambda *args, **kwargs: None)
 
         # Select first row and click MobSF
         view.table.selectRow(0)
@@ -482,7 +504,9 @@ class TestRefresh:
 class TestGetSelectedRunId:
     """Tests for get_selected_run_id method."""
 
-    def test_get_selected_run_id_returns_id(self, qt_app, mock_run_repository, mock_report_generator, mock_mobsf_manager):
+    def test_get_selected_run_id_returns_id(
+        self, qt_app, mock_run_repository, mock_report_generator, mock_mobsf_manager
+    ):
         """Test that get_selected_run_id returns run ID."""
         run = mock_run_repository.add_run("emulator-5554", "com.example.app", "STOPPED")
         view = _create_run_history_view(mock_run_repository, mock_report_generator, mock_mobsf_manager)
@@ -492,10 +516,29 @@ class TestGetSelectedRunId:
 
         assert view.get_selected_run_id() == run.id
 
-    def test_get_selected_run_id_returns_none_when_no_selection(self, qt_app, mock_run_repository, mock_report_generator, mock_mobsf_manager):
+    def test_get_selected_run_id_returns_none_when_no_selection(
+        self, qt_app, mock_run_repository, mock_report_generator, mock_mobsf_manager
+    ):
         """Test that get_selected_run_id returns None when no row is selected."""
         mock_run_repository.add_run("emulator-5554", "com.example.app", "STOPPED")
         view = _create_run_history_view(mock_run_repository, mock_report_generator, mock_mobsf_manager)
 
         # Don't select any row
         assert view.get_selected_run_id() is None
+
+
+class TestManualReportFetchesTelemetry:
+    """The manual report button pulls Phoenix/Langfuse telemetry into the report."""
+
+    def test_report_button_requests_telemetry(
+        self, qt_app, mock_run_repository, mock_report_generator, mock_mobsf_manager, monkeypatch
+    ):
+        run = mock_run_repository.add_run("emulator-5554", "com.example.app", "STOPPED")
+        view = _create_run_history_view(mock_run_repository, mock_report_generator, mock_mobsf_manager)
+        monkeypatch.setattr(QMessageBox, "question", lambda *args, **kwargs: QMessageBox.StandardButton.Yes)
+        monkeypatch.setattr(QMessageBox, "information", lambda *args, **kwargs: None)
+
+        view.table.selectRow(0)
+        view._on_generate_report_clicked()
+
+        assert mock_report_generator.calls == [(run.id, True)]

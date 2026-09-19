@@ -36,6 +36,18 @@ _Avoid_: Web profile cache, scrape cache
 An ordered list of subgoals the crawler must complete before it moves to free-form exploration. Persisted per app package; can be generated from that app's App Web Profile with one LLM call, or edited by hand — generating replaces the list wholesale rather than merging with existing entries.
 _Avoid_: Guided subgoals, exploration checklist
 
+**Run Report**:
+The single output of reporting on one finished crawl run: a human-readable HTML page plus an Analysis Bundle, produced together by one action (auto at run end if enabled, or manually). Replaces the separate HTML report and JSON export.
+_Avoid_: Export, HTML report, run export
+
+**Analysis Bundle**:
+The machine-readable half of a Run Report, meant to be read by an AI to find where the crawler can improve: a compact summary, one line per step (action, AI reasoning, result, timings, screenshot paths), and the full run data with a config snapshot. Screenshots are referenced by path, never embedded.
+_Avoid_: Analysis export, run dump
+
+**Stop Reason**:
+Why a crawl run ended (e.g. step limit, time limit, user stop, error), recorded on the run. Distinct from run status, which only says whether the run is running, stopped or errored.
+_Avoid_: End reason, termination cause
+
 **Status Bar Exclusion**:
 The number of pixels cropped from the top of every screenshot, at capture time, before it's used for hashing, OCR grounding, or AI vision. Calibrated by dragging a line on a live device screenshot in Settings rather than guessing a pixel count blind.
 _Avoid_: Top bar height, top bar exclusion, exclude top bar

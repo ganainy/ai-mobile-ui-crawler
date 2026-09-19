@@ -55,6 +55,7 @@ from mobile_crawler.infrastructure.screen_repository import ScreenRepository
 from mobile_crawler.infrastructure.session_folder_manager import SessionFolderManager
 from mobile_crawler.infrastructure.step_log_repository import StepLogRepository
 from mobile_crawler.infrastructure.step_phase_repository import StepPhaseRepository
+from mobile_crawler.infrastructure.telemetry_client import build_telemetry_client_factory
 from mobile_crawler.infrastructure.user_config_store import UserConfigStore
 from mobile_crawler.ui.log_cleaner import LogCleaner
 from mobile_crawler.ui.mobsf_startup_worker import MobSFStartupWorker
@@ -397,7 +398,6 @@ class MainWindow(QMainWindow):
 
         # History and reporting services
         run_repository = RunRepository(db_manager)
-        report_generator = ReportGenerator(db_manager)
         step_phase_repository = StepPhaseRepository(db_manager)
         session_folder_manager = SessionFolderManager()
 
@@ -405,6 +405,12 @@ class MainWindow(QMainWindow):
         from mobile_crawler.config.config_manager import ConfigManager
 
         config_manager = ConfigManager(user_config_store)
+
+        # Run Report generator; reads Phoenix/Langfuse telemetry back using the current settings
+        report_generator = ReportGenerator(
+            db_manager,
+            telemetry_client_factory=build_telemetry_client_factory(config_manager),
+        )
 
         # MobSF manager (initialized with config, will be fully configured when used)
         mobsf_manager = MobSFManager(
@@ -733,6 +739,10 @@ class MainWindow(QMainWindow):
         config_manager.set("enable_video_recording", enable_video_recording)
         config_manager.set("enable_mobsf_analysis", enable_mobsf_analysis)
         config_manager.set("auto_run_mobsf_after_crawl", auto_run_mobsf)
+        config_manager.set(
+            "auto_generate_report_after_run",
+            self.settings_panel.get_auto_generate_report_after_run(),
+        )
 
         # Verify settings were stored correctly by reading them back
         verified_traffic = config_manager.get("enable_traffic_capture", "NOT_FOUND")
@@ -862,6 +872,7 @@ class MainWindow(QMainWindow):
             session_folder_manager=self._services["session_folder_manager"],
             event_listeners=event_listeners,
             ai_interaction_repository=ai_repo,
+            report_generator=self._services.get("report_generator"),
         )
 
     def _on_crawl_finished(self) -> None:

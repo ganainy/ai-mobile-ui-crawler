@@ -19,5 +19,4 @@ Source: `src/mobile_crawler/infrastructure/step_log_repository.py`
 - [[code/domain/prompt_builder|domain.prompt_builder]]
 - [[code/domain/report_generator|domain.report_generator]]
 - [[code/infrastructure/analysis_bundle|infrastructure.analysis_bundle]]
-- [[code/infrastructure/run_exporter|infrastructure.run_exporter]]
 - [[code/ui/main_window|ui.main_window]]

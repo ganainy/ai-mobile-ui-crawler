@@ -18,4 +18,6 @@ Source: `src/mobile_crawler/domain/run_config_snapshot.py`
 - [[code/domain/guided_scenarios_generator|domain.guided_scenarios_generator]]
 
 ## Imported by
+- [[code/core/crawler_loop|core.crawler_loop]]
+- [[code/domain/report_generator|domain.report_generator]]
 - [[code/infrastructure/analysis_bundle|infrastructure.analysis_bundle]]

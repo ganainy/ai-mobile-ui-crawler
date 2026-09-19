@@ -19,7 +19,7 @@ class TestReportGenerator:
         run_repo = Mock()
         run_repo.get_run_by_id.return_value = None
 
-        with patch('mobile_crawler.domain.report_generator.RunRepository', return_value=run_repo):
+        with patch("mobile_crawler.domain.report_generator.RunRepository", return_value=run_repo):
             generator = ReportGenerator(db_manager)
 
             with pytest.raises(ValueError, match="Run 999 not found"):
@@ -42,7 +42,7 @@ class TestReportGenerator:
             ai_provider="gemini",
             ai_model="gemini-pro",
             total_steps=10,
-            unique_screens=5
+            unique_screens=5,
         )
         run.session_path = str(tmp_path)
 
@@ -66,7 +66,7 @@ class TestReportGenerator:
                 error_message=None,
                 action_duration_ms=100.0,
                 ai_response_time_ms=500.0,
-                ai_reasoning="Button is visible"
+                ai_reasoning="Button is visible",
             ),
             StepLog(
                 id=2,
@@ -83,8 +83,8 @@ class TestReportGenerator:
                 error_message="Element not found",
                 action_duration_ms=50.0,
                 ai_response_time_ms=400.0,
-                ai_reasoning="Input field detected"
-            )
+                ai_reasoning="Input field detected",
+            ),
         ]
 
         step_repo = Mock()
@@ -95,11 +95,13 @@ class TestReportGenerator:
 
         output_path = str(tmp_path / "test_report.html")
 
-        with patch('mobile_crawler.domain.report_generator.RunRepository', return_value=run_repo), \
-             patch('mobile_crawler.domain.report_generator.StepLogRepository', return_value=step_repo), \
-             patch('mobile_crawler.domain.report_generator.AIInteractionRepository', return_value=ai_interaction_repo), \
-             patch('mobile_crawler.domain.report_generator.JinjaReportGenerator') as mock_jinja_cls:
-
+        with (
+            patch("mobile_crawler.domain.report_generator.RunRepository", return_value=run_repo),
+            patch("mobile_crawler.domain.report_generator.StepLogRepository", return_value=step_repo),
+            patch("mobile_crawler.domain.report_generator.AIInteractionRepository", return_value=ai_interaction_repo),
+            patch("mobile_crawler.domain.report_generator.AnalysisBundleWriter"),
+            patch("mobile_crawler.domain.report_generator.JinjaReportGenerator") as mock_jinja_cls,
+        ):
             generator = ReportGenerator(db_manager)
             result_path = generator.generate(1, output_path)
 
@@ -121,7 +123,7 @@ class TestReportGenerator:
             ai_provider="gemini",
             ai_model="gemini-pro",
             total_steps=10,
-            unique_screens=5
+            unique_screens=5,
         )
         run.session_path = str(tmp_path)
 
@@ -134,11 +136,13 @@ class TestReportGenerator:
         ai_interaction_repo = Mock()
         ai_interaction_repo.get_ai_interactions_by_run.return_value = []
 
-        with patch('mobile_crawler.domain.report_generator.RunRepository', return_value=run_repo), \
-             patch('mobile_crawler.domain.report_generator.StepLogRepository', return_value=step_repo), \
-             patch('mobile_crawler.domain.report_generator.AIInteractionRepository', return_value=ai_interaction_repo), \
-             patch('mobile_crawler.domain.report_generator.JinjaReportGenerator') as mock_jinja_cls:
-
+        with (
+            patch("mobile_crawler.domain.report_generator.RunRepository", return_value=run_repo),
+            patch("mobile_crawler.domain.report_generator.StepLogRepository", return_value=step_repo),
+            patch("mobile_crawler.domain.report_generator.AIInteractionRepository", return_value=ai_interaction_repo),
+            patch("mobile_crawler.domain.report_generator.AnalysisBundleWriter"),
+            patch("mobile_crawler.domain.report_generator.JinjaReportGenerator") as mock_jinja_cls,
+        ):
             generator = ReportGenerator(db_manager)
             result_path = generator.generate(1)
 

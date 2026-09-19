@@ -20,9 +20,11 @@ Source: `src/mobile_crawler/cli/commands/crawl.py`
 - [[code/core/crawler_event_listener|core.crawler_event_listener]]
 - [[code/core/crawler_loop|core.crawler_loop]]
 - [[code/domain/models|domain.models]]
+- [[code/domain/report_generator|domain.report_generator]]
 - [[code/infrastructure/database|infrastructure.database]]
 - [[code/infrastructure/run_repository|infrastructure.run_repository]]
 - [[code/infrastructure/session_folder_manager|infrastructure.session_folder_manager]]
+- [[code/infrastructure/telemetry_client|infrastructure.telemetry_client]]
 
 ## Imported by
 - [[code/cli/main|cli.main]]

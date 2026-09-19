@@ -25,21 +25,21 @@
         .stat-box { padding: 1rem; background: #f1f5f9; border-radius: 4px; }
         .label { font-size: 0.875rem; color: #64748b; font-weight: 600; text-transform: uppercase; }
         .value { font-size: 1.125rem; font-weight: 700; }
-        
+
         table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
         th, td { text-align: left; padding: 0.75rem; border-bottom: 1px solid var(--border); }
         th { background: #f1f5f9; font-weight: 600; }
-        
+
         .timeline-step { display: flex; gap: 1.5rem; margin-bottom: 2rem; border-left: 3px solid var(--primary); padding-left: 1.5rem; }
         .step-info { flex: 1; }
         .step-img { width: 250px; border: 1px solid var(--border); border-radius: 4px; }
-        
+
         .finding { padding: 0.75rem; border-radius: 4px; margin-bottom: 0.5rem; border-left: 4px solid #ccc; }
         .finding.high { border-color: var(--high); background: #fee2e2; }
         .finding.medium { border-color: var(--medium); background: #ffedd5; }
-        
+
         .traffic-list { font-family: monospace; font-size: 0.875rem; background: #f1f5f9; padding: 0.5rem; border-radius: 4px; max-height: 200px; overflow-y: auto; }
-        
+
         @media print {
             body { padding: 0; background: white; }
             .section { box-shadow: none; border-color: #eee; break-inside: avoid; }
@@ -64,6 +64,19 @@
             </div>
         </section>
 
+        {% for section in analysis_sections %}
+        <section class="section">
+            <h2>{{ section.title | e }}</h2>
+            {% if section.intro %}<p>{{ section.intro | e }}</p>{% endif %}
+            {% if section.items %}
+            <ul>
+                {% for item in section.items %}<li>{{ item | e }}</li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+        </section>
+        {% endfor %}
+
         {% if security_analysis %}
         <section class="section">
             <h2>Security Analysis (MobSF)</h2>
@@ -71,7 +84,7 @@
                 <div class="stat-box"><div class="label">Security Score</div><div class="value">{{ security_analysis.score }}/100</div></div>
                 <div class="stat-box"><div class="label">Grade</div><div class="value">{{ security_analysis.grade }}</div></div>
             </div>
-            
+
             <h3>High Issues ({{ security_analysis.high_issues | length }})</h3>
             {% for issue in security_analysis.high_issues %}
             <div class="finding high">
@@ -90,7 +103,7 @@
                     <h3>Step {{ step.step_number }}: {{ step.action_type }}</h3>
                     <p class="label">{{ step.timestamp }}</p>
                     <pre style="font-size: 0.8rem; background: #f8fafc; padding: 0.5rem;">{{ step.action_details | tojson(indent=2) }}</pre>
-                    
+
                     {% if step.network_requests %}
                     <h4>Network Traffic during this step ({{ step.network_requests | length }})</h4>
                     <div class="traffic-list">

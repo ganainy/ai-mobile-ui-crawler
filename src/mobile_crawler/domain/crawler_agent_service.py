@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import time
+import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -34,6 +35,7 @@ from mobile_crawler.domain.errors import ErrorContext, FatalError
 from mobile_crawler.domain.guided_scenarios_generator import guided_scenarios_config_key
 from mobile_crawler.domain.models import AIAction, BoundingBox
 from mobile_crawler.domain.prompt_builder import format_login_and_form_data
+from mobile_crawler.domain.run_outcome import build_guided_progress
 from mobile_crawler.domain.stats_collector_span_processor import OTEL_AVAILABLE, StatsCollectorSpanProcessor
 from mobile_crawler.domain.step_phase import StepPhase, StepPhaseStateMachine
 from mobile_crawler.domain.step_phase_models import StepPhaseTransition
@@ -180,6 +182,8 @@ class CrawlerAgentService:
         self._ui_wait_predicate: UIWaitPredicate | None = None
         self._action_verifier: ActionVerifier | None = None
         self._current_run_id: int | None = None
+        # Per-run id set on Phoenix/Langfuse traces so a run's telemetry can be found later.
+        self.trace_session_id: str | None = None
         self._current_step_number: int = 0
         # Dedicated counter for AI Monitor step numbering (Fix 5). Advanced on each
         # new decide cycle (Manager/AppOpener/FastAgent response) instead of reusing
@@ -325,6 +329,7 @@ class CrawlerAgentService:
             "langfuse_secret_key": langfuse_sec,
             "langfuse_public_key": langfuse_pub,
             "langfuse_host": langfuse_host,
+            "langfuse_session_id": self.trace_session_id or "",
         }
 
         # Inject environment variables for OpenTelemetry tracing tools
@@ -447,7 +452,7 @@ class CrawlerAgentService:
             return
 
         logger.info(
-            "Target app is not active before crawler startup (current=%s, target=%s). Launching target app.",
+            "Target app is not active before crawler startup " "(current=%s, target=%s). Launching target app.",
             current_package,
             app_package,
         )
@@ -476,7 +481,7 @@ class CrawlerAgentService:
                 return
 
             logger.warning(
-                "Target app preflight verification failed on attempt %s/%s (current=%s, target=%s)",
+                "Target app preflight verification failed on attempt %s/%s " "(current=%s, target=%s)",
                 attempt,
                 attempts,
                 current_package,
@@ -485,7 +490,7 @@ class CrawlerAgentService:
 
         detail = f"last_error={last_error}" if last_error else f"current_package={current_package}"
         raise RuntimeError(
-            f"Unable to open target app '{app_package}' before crawler startup after {attempts} attempts ({detail})"
+            f"Unable to open target app '{app_package}' before crawler startup after " f"{attempts} attempts ({detail})"
         )
 
     async def _ensure_device_awake_before_crawler(self) -> None:
@@ -576,6 +581,7 @@ class CrawlerAgentService:
             screenshots_dir: Directory to write per-step screenshots (for AI Monitor panel).
         """
         self._current_run_id = run_id
+        self.trace_session_id = f"run-{run_id}-{uuid.uuid4().hex[:8]}"
         self._current_step_number = 0
         self._ai_call_step_number = 0
         self._emit_step_phase_event = emit_step_phase_event
@@ -647,13 +653,16 @@ class CrawlerAgentService:
                 return ""
 
             expensive_state_polling = getattr(state_provider, "ui_parser_mode", None) == "omniparser"
+            grace_delay_s = (
+                self._crawler_agent_config.agent.wait_for_stable_ui if self._crawler_agent_config is not None else 0.3
+            )
             self._ui_wait_predicate = UIWaitPredicate(
                 state_provider=state_provider,
                 config=AdaptiveWaitConfig(self.config_manager),
                 latest_state_provider=latest_state,
                 current_app_provider=current_app if driver else None,
                 expensive_state_polling=expensive_state_polling,
-                grace_delay_s=self._crawler_agent_config.agent.wait_for_stable_ui,
+                grace_delay_s=grace_delay_s,
             )
             if driver:
                 self._action_verifier = ActionVerifier(
@@ -680,7 +689,9 @@ class CrawlerAgentService:
                 adb_executor=adb_executor,
                 context_capture=self._context_capture,
             )
-            logger.info(f"DeviceContextCapture and AppSwitchRecovery wired with target_package={self._target_package}")
+            logger.info(
+                f"DeviceContextCapture and AppSwitchRecovery wired with " f"target_package={self._target_package}"
+            )
 
         # after_sleep_action is now a real delay driven by UIWaitPredicate
         # (wait_for_ui_settled) in the agents — no longer forced to 0.0
@@ -909,7 +920,7 @@ class CrawlerAgentService:
             except Exception as e:
                 logger.warning(f"Failed to emit action timing event: {e}")
 
-        logger.debug(f"Step {self._current_step_number}: tool={tool_name} success={success}")
+        logger.debug(f"Step {self._current_step_number}: tool={tool_name} " f"success={success}")
 
         # --- Context pre-check (D-02): compare package against target ---
         skip_reason = None
@@ -948,7 +959,7 @@ class CrawlerAgentService:
                             # Record transition with abort metadata
                             self._step_phase_machine.transition_to(StepPhase.CHECKPOINT)
                             raise FatalError(
-                                f"Aborting: {len(attempts)} consecutive app-switch recovery failures",
+                                f"Aborting: {len(attempts)} consecutive app-switch " f"recovery failures",
                                 context=ErrorContext(run_id=self._current_run_id),
                             )
                     else:
@@ -1031,7 +1042,7 @@ class CrawlerAgentService:
                     }
                 )
 
-                logger.info(f"Step {self._current_step_number}: skipping DECIDE/EXECUTE due to {skip_reason.value}")
+                logger.info(f"Step {self._current_step_number}: skipping DECIDE/EXECUTE " f"due to {skip_reason.value}")
 
                 # CAPTURE -> CHECKPOINT (skip DECIDE, EXECUTE, RECORD)
                 self._step_phase_machine.transition_to(StepPhase.CHECKPOINT)
@@ -1069,7 +1080,8 @@ class CrawlerAgentService:
                     try:
                         pre_state = await self._action_verifier.capture_pre_state()
                         logger.debug(
-                            f"Step {self._current_step_number}: captured pre_state pkg={pre_state.get('package', '?')}"
+                            f"Step {self._current_step_number}: captured pre_state "
+                            f"pkg={pre_state.get('package', '?')}"
                         )
                     except Exception as e:
                         logger.warning(f"Step {self._current_step_number}: pre_state capture failed: {e}")
@@ -1084,7 +1096,7 @@ class CrawlerAgentService:
                         parent_phase=StepPhase.EXECUTE,
                     )
                     if not settled:
-                        logger.debug(f"UI did not settle after {tool_name} (step {self._current_step_number})")
+                        logger.debug(f"UI did not settle after {tool_name} " f"(step {self._current_step_number})")
 
                 # EXECUTE -> RECORD
                 self._step_phase_machine.transition_to(StepPhase.RECORD)
@@ -1612,6 +1624,11 @@ class CrawlerAgentService:
                         "failed_actions": failed_count,
                         "total_actions": len(action_outcomes),
                         "completion_reason": reason if "reason" in locals() and reason else None,
+                        **self._run_outcome_details(
+                            app_package,
+                            is_timeout,
+                            reason if "reason" in locals() and reason else "",
+                        ),
                     },
                     error_message=error_message,
                     total_duration_ms=duration_ms,
@@ -1666,6 +1683,7 @@ class CrawlerAgentService:
                         "failed_actions": failed_count,
                         "total_actions": len(action_outcomes),
                         "completion_reason": "Cancelled by user",
+                        **self._run_outcome_details(app_package, False, ""),
                     },
                     error_message=None,
                     total_duration_ms=duration_ms,
@@ -1822,6 +1840,24 @@ class CrawlerAgentService:
             return False
         error_lower = error_message.lower()
         return any(token in error_lower for token in self._TRANSIENT_ERROR_TOKENS)
+
+    def _run_outcome_details(self, app_package: str, is_timeout: bool, reason: str) -> dict[str, Any]:
+        """Stop kind and guided-scenario snapshot recorded on the run for the Run Report."""
+        if is_timeout:
+            stop_kind = "duration_limit"
+        elif self._is_max_step_completion_reason(reason):
+            stop_kind = "step_limit"
+        else:
+            stop_kind = None
+
+        scenarios = self.config_manager.get(guided_scenarios_config_key(app_package), [])
+        shared_state = getattr(self._crawler_agent, "shared_state", None)
+        guided_progress = build_guided_progress(
+            scenarios if isinstance(scenarios, list) else None,
+            getattr(shared_state, "plan", None),
+            getattr(shared_state, "current_subgoal", None),
+        )
+        return {"stop_kind": stop_kind, "guided_progress": guided_progress}
 
     @staticmethod
     def _is_max_step_completion_reason(reason: str) -> bool:

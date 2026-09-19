@@ -1054,3 +1054,63 @@ class TestCancelledErrorFilter:
         record.getMessage.return_value = "CancelledError in task"
         record.exc_info = None
         assert f.filter(record) is False
+
+
+class TestRunReportDetails:
+    """Trace session id, stop kind and guided progress that feed the Run Report."""
+
+    @patch("mobile_crawler.domain.crawler_agent_service.StepPhaseStateMachine")
+    @patch("mobile_crawler.domain.crawler_agent_service.StepPhaseRepository")
+    @patch("mobile_crawler.infrastructure.database.DatabaseManager")
+    def test_begin_step_tracking_assigns_a_per_run_trace_session_id(
+        self, mock_db_class, mock_repo_class, mock_machine_class, crawler_agent_service
+    ):
+        crawler_agent_service.begin_step_tracking(run_id=42)
+        first = crawler_agent_service.trace_session_id
+
+        crawler_agent_service.begin_step_tracking(run_id=42)
+        second = crawler_agent_service.trace_session_id
+
+        assert first.startswith("run-42-")
+        assert second.startswith("run-42-")
+        assert first != second
+
+    def test_stop_kind_reports_duration_limit_on_timeout(self, crawler_agent_service):
+        details = crawler_agent_service._run_outcome_details("com.x", is_timeout=True, reason="")
+        assert details["stop_kind"] == "duration_limit"
+
+    def test_stop_kind_reports_step_limit_from_completion_reason(self, crawler_agent_service):
+        details = crawler_agent_service._run_outcome_details(
+            "com.x", is_timeout=False, reason="Reached max step count of 5 steps"
+        )
+        assert details["stop_kind"] == "step_limit"
+
+    def test_stop_kind_is_none_for_other_completions(self, crawler_agent_service):
+        details = crawler_agent_service._run_outcome_details("com.x", is_timeout=False, reason="Goal achieved")
+        assert details["stop_kind"] is None
+
+    def test_guided_progress_snapshot_uses_configured_scenarios_and_last_plan(self, mock_config_manager, mock_ai_repo):
+        base_get = mock_config_manager.get.side_effect
+        mock_config_manager.get.side_effect = lambda key, default=None: (
+            ["Open settings", "Log a meal"] if key == "guided_scenarios::com.x" else base_get(key, default)
+        )
+        service = CrawlerAgentService(
+            config_manager=mock_config_manager,
+            ai_interaction_repository=mock_ai_repo,
+            device_id="d",
+        )
+        service._crawler_agent = Mock()
+        service._crawler_agent.shared_state.plan = "1. Log a meal"
+        service._crawler_agent.shared_state.current_subgoal = "Log a meal"
+
+        details = service._run_outcome_details("com.x", is_timeout=False, reason="")
+
+        assert json.loads(details["guided_progress"]) == {
+            "scenarios": ["Open settings", "Log a meal"],
+            "final_plan": "1. Log a meal",
+            "last_subgoal": "Log a meal",
+        }
+
+    def test_guided_progress_is_none_without_guided_scenarios(self, crawler_agent_service):
+        details = crawler_agent_service._run_outcome_details("com.x", is_timeout=False, reason="")
+        assert details["guided_progress"] is None

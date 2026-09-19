@@ -837,6 +837,27 @@ class TestStatusBarExclusionPreview:
         assert not panel.screenshot_preview.has_screenshot()
 
 
+class TestAutoGenerateReport:
+    """Tests for the 'Generate report after each run' checkbox."""
+
+    def test_checkbox_exists_and_is_on_by_default(self, qt_app, mock_config_store):
+        panel = _create_settings_panel(mock_config_store)
+
+        assert panel.auto_generate_report_checkbox.isChecked()
+        assert panel.get_auto_generate_report_after_run() is True
+
+    def test_unchecked_choice_is_saved_and_reloaded(self, qt_app, mock_config_store, monkeypatch):
+        monkeypatch.setattr(QMessageBox, "information", lambda parent, title, message: None)
+        panel = _create_settings_panel(mock_config_store)
+        panel.auto_generate_report_checkbox.setChecked(False)
+
+        panel._on_save_clicked()
+
+        assert mock_config_store.get_setting("auto_generate_report_after_run", default=True) is False
+        reloaded = _create_settings_panel(mock_config_store)
+        assert reloaded.get_auto_generate_report_after_run() is False
+
+
 class TestVerificationInboxGroup:
     """Tests for the Verification Inbox (Gmail IMAP) settings group."""
 
@@ -868,3 +889,25 @@ class TestVerificationInboxGroup:
         panel._on_save_clicked()
         assert mock_config_store.get_setting("verification_inbox_address") is None
         assert mock_config_store.get_secret_plaintext("verification_inbox_password") is None
+
+
+class TestHumanFallbackGroup:
+    """Tests for the Human Fallback settings group."""
+
+    def test_defaults_off_with_five_minutes(self, qt_app, mock_config_store):
+        panel = _create_settings_panel(mock_config_store)
+        assert not panel.human_fallback_checkbox.isChecked()
+        assert panel.human_fallback_timeout_input.value() == 5
+        assert not panel.human_fallback_timeout_input.isEnabled()
+
+    def test_save_and_reload_round_trip(self, qt_app, mock_config_store):
+        panel = _create_settings_panel(mock_config_store)
+        panel.human_fallback_checkbox.setChecked(True)
+        panel.human_fallback_timeout_input.setValue(9)
+        panel._on_save_clicked()
+
+        assert mock_config_store.get_setting("human_fallback_enabled") is True
+        assert mock_config_store.get_setting("human_fallback_timeout_minutes") == 9
+        reloaded = _create_settings_panel(mock_config_store)
+        assert reloaded.human_fallback_checkbox.isChecked()
+        assert reloaded.human_fallback_timeout_input.value() == 9

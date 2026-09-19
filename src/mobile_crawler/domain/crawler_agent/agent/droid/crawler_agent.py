@@ -153,9 +153,7 @@ class CrawlerAgent(Workflow):
             self.shared_state.custom_variables = variables
 
         # Load credential manager (supports both config and direct dict)
-        credentials_source = (
-            credentials if credentials is not None else (config.credentials if config else None)
-        )
+        credentials_source = credentials if credentials is not None else (config.credentials if config else None)
 
         if isinstance(credentials_source, CredentialManager):
             self.credential_manager = credentials_source
@@ -182,9 +180,7 @@ class CrawlerAgent(Workflow):
             omniparser_backend=config.omniparser_backend if config else "replicate",
             omniparser_api_key=config.omniparser_api_key if config else "",
             omniparser_local_url=config.omniparser_local_url if config else "http://localhost:8001",
-            omniparser_local_parse_timeout_seconds=(
-                config.omniparser_local_parse_timeout_seconds if config else 120
-            ),
+            omniparser_local_parse_timeout_seconds=(config.omniparser_local_parse_timeout_seconds if config else 120),
             omniparser_box_threshold=config.omniparser_box_threshold if config else 0.05,
             omniparser_a11y_threshold=config.omniparser_a11y_threshold if config else 5,
             target_package=config.target_package if config else None,
@@ -225,6 +221,7 @@ class CrawlerAgent(Workflow):
         # Initialize StateGraphTracker
         if not self._using_external_agent:
             from mobile_crawler.domain.state_graph import StateGraphTracker
+
             self.state_graph_tracker = StateGraphTracker(run_id=0)
         else:
             self.state_graph_tracker = None
@@ -242,9 +239,7 @@ class CrawlerAgent(Workflow):
 
                 llms = load_agent_llms(config=self.config, output_model=output_model, **kwargs)
             if isinstance(llms, dict):
-                llms = merge_llms_with_config(
-                    self.config, llms, output_model=output_model, **kwargs
-                )
+                llms = merge_llms_with_config(self.config, llms, output_model=output_model, **kwargs)
             elif isinstance(llms, LLM):
                 pass
             else:
@@ -333,9 +328,7 @@ class CrawlerAgent(Workflow):
     # ========================================================================
 
     @step
-    async def start_handler(
-        self, ctx: Context, ev: StartEvent
-    ) -> FastAgentExecuteEvent | ManagerInputEvent:
+    async def start_handler(self, ctx: Context, ev: StartEvent) -> FastAgentExecuteEvent | ManagerInputEvent:
         logger.info(f"🚀 Running CrawlerAgent to achieve goal: {self.shared_state.instruction}")
         ctx.write_event_to_stream(ev)
 
@@ -355,8 +348,7 @@ class CrawlerAgent(Workflow):
                 if available:
                     agents_str = ", ".join(available)
                     raise ValueError(
-                        f"Failed to load external agent '{agent_name}'.\n"
-                        f"Available agents: {agents_str}"
+                        f"Failed to load external agent '{agent_name}'.\n" f"Available agents: {agents_str}"
                     )
                 raise ValueError(
                     f"External agent '{agent_name}' not found.\n"
@@ -449,9 +441,7 @@ class CrawlerAgent(Workflow):
                 omniparser_backend=self.config.omniparser_backend,
                 omniparser_api_key=self.config.omniparser_api_key,
                 omniparser_local_url=self.config.omniparser_local_url,
-                omniparser_local_parse_timeout_seconds=(
-                    self.config.omniparser_local_parse_timeout_seconds
-                ),
+                omniparser_local_parse_timeout_seconds=(self.config.omniparser_local_parse_timeout_seconds),
                 omniparser_box_threshold=self.config.omniparser_box_threshold,
                 omniparser_a11y_threshold=self.config.omniparser_a11y_threshold,
                 target_package=self.config.target_package,
@@ -483,9 +473,7 @@ class CrawlerAgent(Workflow):
 
         # Config-level filtering
         disabled_tools = (
-            self.config.tools.disabled_tools
-            if self.config.tools and self.config.tools.disabled_tools
-            else []
+            self.config.tools.disabled_tools if self.config.tools and self.config.tools.disabled_tools else []
         )
         if disabled_tools:
             registry.disable(disabled_tools)
@@ -526,12 +514,8 @@ class CrawlerAgent(Workflow):
                 llms={
                     "manager": (self.manager_llm.class_name() if self.manager_llm else "None"),
                     "executor": (self.executor_llm.class_name() if self.executor_llm else "None"),
-                    "fast_agent": (
-                        self.fast_agent_llm.class_name() if self.fast_agent_llm else "None"
-                    ),
-                    "app_opener": (
-                        self.app_opener_llm.class_name() if self.app_opener_llm else "None"
-                    ),
+                    "fast_agent": (self.fast_agent_llm.class_name() if self.fast_agent_llm else "None"),
+                    "app_opener": (self.app_opener_llm.class_name() if self.app_opener_llm else "None"),
                 },
                 tools=",".join(sorted(standard_tool_names)),
                 max_steps=self.config.agent.max_steps,
@@ -555,9 +539,7 @@ class CrawlerAgent(Workflow):
             self.trajectory_writer.write(self.trajectory, stage="init")
 
         if not self.config.agent.reasoning:
-            logger.debug(
-                f"🔄 Direct execution mode - executing goal: {self.shared_state.instruction}"
-            )
+            logger.debug(f"🔄 Direct execution mode - executing goal: {self.shared_state.instruction}")
             event = FastAgentExecuteEvent(instruction=self.shared_state.instruction)
             ctx.write_event_to_stream(event)
             return event
@@ -641,14 +623,10 @@ class CrawlerAgent(Workflow):
             logger.error(f"Error during task execution: {e}")
             if self.config.logging.debug:
                 logger.error(traceback.format_exc())
-            return FastAgentResultEvent(
-                success=False, reason=f"Error: {str(e)}", instruction=ev.instruction
-            )
+            return FastAgentResultEvent(success=False, reason=f"Error: {str(e)}", instruction=ev.instruction)
 
     @step
-    async def handle_fast_agent_result(
-        self, ctx: Context, ev: FastAgentResultEvent
-    ) -> FinalizeEvent:
+    async def handle_fast_agent_result(self, ctx: Context, ev: FastAgentResultEvent) -> FinalizeEvent:
         try:
             return FinalizeEvent(success=ev.success, reason=ev.reason)
 
@@ -666,9 +644,7 @@ class CrawlerAgent(Workflow):
     # ========================================================================
 
     @step
-    async def run_manager(
-        self, ctx: Context, ev: ManagerInputEvent
-    ) -> ManagerPlanEvent | FinalizeEvent:
+    async def run_manager(self, ctx: Context, ev: ManagerInputEvent) -> ManagerPlanEvent | FinalizeEvent:
         """Run Manager planning phase."""
         if self.shared_state.step_number >= self.config.agent.max_steps:
             logger.warning(f"⚠️ Reached maximum steps ({self.config.agent.max_steps})")
@@ -720,8 +696,7 @@ class CrawlerAgent(Workflow):
         if ev.answer.strip():
             if self.shared_state.pending_user_messages:
                 logger.info(
-                    "⏸️ Manager tried to finish but external messages pending, "
-                    "looping back to Manager",
+                    "⏸️ Manager tried to finish but external messages pending, " "looping back to Manager",
                     extra={"color": "cyan"},
                 )
                 return ManagerInputEvent()
@@ -760,9 +735,7 @@ class CrawlerAgent(Workflow):
         )
 
     @step
-    async def handle_executor_result(
-        self, ctx: Context, ev: ExecutorResultEvent
-    ) -> ManagerInputEvent:
+    async def handle_executor_result(self, ctx: Context, ev: ExecutorResultEvent) -> ManagerInputEvent:
         """Process Executor result and continue."""
         err_thresh = self.shared_state.err_to_manager_thresh
 
@@ -778,20 +751,14 @@ class CrawlerAgent(Workflow):
                 self.shared_state.error_flag_plan = False
 
         if self.config.logging.save_trajectory != "none":
-            self.trajectory_writer.write(
-                self.trajectory, stage=f"step_{self.shared_state.step_number}"
-            )
+            self.trajectory_writer.write(self.trajectory, stage=f"step_{self.shared_state.step_number}")
 
         # Step-by-step mode: block until the external caller (CrawlerLoop.advance_step)
         # sends a StepAdvanceEvent into this workflow's Context. This genuinely gates
         # execution — the agent cannot continue to the next decide/execute cycle.
         if self.config.agent.step_by_step:
-            logger.info(
-                f"⏸ Step-by-step: pausing after step {self.shared_state.step_number}. Waiting for advance."
-            )
-            ctx.write_event_to_stream(
-                StepPausedEvent(step_number=self.shared_state.step_number)
-            )
+            logger.info(f"⏸ Step-by-step: pausing after step {self.shared_state.step_number}. Waiting for advance.")
+            ctx.write_event_to_stream(StepPausedEvent(step_number=self.shared_state.step_number))
             try:
                 await ctx.wait_for_event(
                     StepAdvanceEvent,
@@ -809,6 +776,18 @@ class CrawlerAgent(Workflow):
     # ========================================================================
     # Finalize
     # ========================================================================
+
+    def _final_ui_state_required(self, reason: str, final_capture_enabled: bool = True) -> bool:
+        """Whether finalize needs a last parsed UI state.
+
+        At max steps nothing consumes it unless a trajectory is being saved, and
+        the parse is expensive.
+        """
+        if not final_capture_enabled:
+            return False
+        if reason.startswith("Reached maximum steps") and self.config.logging.save_trajectory == "none":
+            return False
+        return True
 
     @step
     async def finalize(self, ctx: Context, ev: FinalizeEvent) -> ResultEvent:
@@ -857,9 +836,7 @@ class CrawlerAgent(Workflow):
                     result.structured_output = extraction_result["structured_output"]
                     logger.debug("✅ Structured output added to final result")
                 else:
-                    logger.warning(
-                        f"⚠️  Structured extraction failed: {extraction_result['error_message']}"
-                    )
+                    logger.warning(f"⚠️  Structured extraction failed: {extraction_result['error_message']}")
 
             except Exception as e:
                 logger.error(f"❌ Error during structured extraction: {e}")
@@ -868,9 +845,7 @@ class CrawlerAgent(Workflow):
 
         # Capture final screenshot and UI state (independent of trajectory persistence)
         vision_any = (
-            self.config.agent.manager.vision
-            or self.config.agent.executor.vision
-            or self.config.agent.fast_agent.vision
+            self.config.agent.manager.vision or self.config.agent.executor.vision or self.config.agent.fast_agent.vision
         )
         if vision_any or self._stream_screenshots or self.config.logging.save_trajectory != "none":
             try:
@@ -888,12 +863,13 @@ class CrawlerAgent(Workflow):
             except Exception as e:
                 logger.warning(f"Failed to capture final screenshot: {e}")
 
-            try:
-                ui_state = await self.state_provider.get_state()
-                ctx.write_event_to_stream(RecordUIStateEvent(ui_state=ui_state.elements))
-                logger.debug("📋 Final UI state captured")
-            except Exception as e:
-                logger.warning(f"Failed to capture final UI state: {e}")
+            if self._final_ui_state_required(ev.reason):
+                try:
+                    ui_state = await self.state_provider.get_state()
+                    ctx.write_event_to_stream(RecordUIStateEvent(ui_state=ui_state.elements))
+                    logger.debug("📋 Final UI state captured")
+                except Exception as e:
+                    logger.warning(f"Failed to capture final UI state: {e}")
 
         # Save trajectory to disk
         if self.config.logging.save_trajectory != "none":

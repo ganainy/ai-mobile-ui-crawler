@@ -18,6 +18,7 @@ Exploration logic: action execution/verification, screen and state tracking, OCR
 - [[code/domain/exploration_journal|domain.exploration_journal]] - Exploration journal for tracking crawl history.
 - [[code/domain/grounding/_index|domain.grounding]] - Grounding module for visual interaction mapping.
 - [[code/domain/guided_scenarios_generator|domain.guided_scenarios_generator]] - Generates a Guided Scenarios list for an app from its App Web Profile.
+- [[code/domain/human_fallback|domain.human_fallback]] - Human Fallback: opt-in prompt for codes and manual auth steps, with timeout (see CONTEXT.md).
 - [[code/domain/input_dictionary|domain.input_dictionary]] - Context-aware form input dictionary for matching UI fields to appropriate test values.
 - [[code/domain/model_adapters|domain.model_adapters]] - Abstract base class for AI model adapters.
 - [[code/domain/models|domain.models]] - Domain models for the mobile crawler.

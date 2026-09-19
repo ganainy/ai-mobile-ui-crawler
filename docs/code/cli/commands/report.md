@@ -12,8 +12,10 @@ Source: `src/mobile_crawler/cli/commands/report.py`
 - `report`
 
 ## Imports
+- [[code/config/config_manager|config.config_manager]]
 - [[code/domain/report_generator|domain.report_generator]]
 - [[code/infrastructure/database|infrastructure.database]]
+- [[code/infrastructure/telemetry_client|infrastructure.telemetry_client]]
 
 ## Imported by
 - [[code/cli/main|cli.main]]

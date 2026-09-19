@@ -47,7 +47,8 @@ class DatabaseManager:
         conn = self.get_connection()
 
         # runs table
-        conn.execute("""
+        conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS runs (
                 id INTEGER PRIMARY KEY,
                 device_id TEXT NOT NULL,
@@ -60,12 +61,17 @@ class DatabaseManager:
                 ai_model TEXT,                  -- model name used
                 total_steps INTEGER DEFAULT 0,
                 unique_screens INTEGER DEFAULT 0,
-                session_path TEXT                -- consolidated directory for artifacts
+                session_path TEXT,               -- consolidated directory for artifacts
+                stop_reason TEXT,                -- why the run ended (step_limit, user_stop, ...)
+                guided_progress_json TEXT,       -- guided scenario completion state
+                trace_id TEXT                    -- Phoenix/Langfuse trace id for telemetry lookup
             )
-        """)
+        """
+        )
 
         # screens table
-        conn.execute("""
+        conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS screens (
                 id INTEGER PRIMARY KEY,
                 composite_hash TEXT UNIQUE NOT NULL,
@@ -76,10 +82,12 @@ class DatabaseManager:
                 first_seen_step INTEGER NOT NULL,
                 FOREIGN KEY (first_seen_run_id) REFERENCES runs(id)
             )
-        """)
+        """
+        )
 
         # step_logs table
-        conn.execute("""
+        conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS step_logs (
                 id INTEGER PRIMARY KEY,
                 run_id INTEGER NOT NULL,
@@ -104,10 +112,12 @@ class DatabaseManager:
                 FOREIGN KEY (from_screen_id) REFERENCES screens(id),
                 FOREIGN KEY (to_screen_id) REFERENCES screens(id)
             )
-        """)
+        """
+        )
 
         # transitions table
-        conn.execute("""
+        conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS transitions (
                 id INTEGER PRIMARY KEY,
                 run_id INTEGER NOT NULL,
@@ -120,10 +130,12 @@ class DatabaseManager:
                 FOREIGN KEY (to_screen_id) REFERENCES screens(id),
                 UNIQUE(run_id, from_screen_id, to_screen_id, action_type)
             )
-        """)
+        """
+        )
 
         # run_stats table
-        conn.execute("""
+        conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS run_stats (
                 id INTEGER PRIMARY KEY,
                 run_id INTEGER NOT NULL UNIQUE,
@@ -204,10 +216,12 @@ class DatabaseManager:
                 FOREIGN KEY (run_id) REFERENCES runs(id),
                 FOREIGN KEY (most_visited_screen_id) REFERENCES screens(id)
             )
-        """)
+        """
+        )
 
         # ai_interactions table
-        conn.execute("""
+        conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS ai_interactions (
                 id INTEGER PRIMARY KEY,
                 run_id INTEGER NOT NULL,
@@ -234,10 +248,12 @@ class DatabaseManager:
 
                 FOREIGN KEY (run_id) REFERENCES runs(id)
             )
-        """)
+        """
+        )
 
         # logs table for general logging
-        conn.execute("""
+        conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS logs (
                 id INTEGER PRIMARY KEY,
                 timestamp TEXT NOT NULL,
@@ -245,10 +261,12 @@ class DatabaseManager:
                 message TEXT NOT NULL,
                 extra_json TEXT
             )
-        """)
+        """
+        )
 
         # omni_parser_cache table for OmniParser results
-        conn.execute("""
+        conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS omni_parser_cache (
                 id INTEGER PRIMARY KEY,
                 screen_key TEXT NOT NULL,
@@ -259,10 +277,12 @@ class DatabaseManager:
                 access_count INTEGER DEFAULT 1,
                 UNIQUE(screen_key, backend)
             )
-        """)
+        """
+        )
 
         # step_phase_transitions table
-        conn.execute("""
+        conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS step_phase_transitions (
                 id INTEGER PRIMARY KEY,
                 run_id INTEGER NOT NULL,
@@ -277,7 +297,8 @@ class DatabaseManager:
                 current_activity TEXT DEFAULT NULL,
                 FOREIGN KEY (run_id) REFERENCES runs(id)
             )
-        """)
+        """
+        )
 
         # Create indexes for performance
         conn.execute("CREATE INDEX IF NOT EXISTS idx_step_logs_run ON step_logs(run_id, step_number)")
@@ -287,7 +308,9 @@ class DatabaseManager:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_ai_interactions_run ON ai_interactions(run_id, step_number)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_logs_timestamp ON logs(timestamp)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_omni_cache_screen ON omni_parser_cache(screen_key)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_phase_transitions_run ON step_phase_transitions(run_id, step_number)")
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_phase_transitions_run ON step_phase_transitions(run_id, step_number)"
+        )
 
         conn.commit()
 
@@ -302,6 +325,11 @@ class DatabaseManager:
             columns = [row["name"] for row in cursor.fetchall()]
             if "session_path" not in columns:
                 conn.execute("ALTER TABLE runs ADD COLUMN session_path TEXT")
+
+            # Migration for Run Report columns on runs
+            for col_name in ("stop_reason", "guided_progress_json", "trace_id"):
+                if col_name not in columns:
+                    conn.execute(f"ALTER TABLE runs ADD COLUMN {col_name} TEXT")
 
             # Migration for step_logs recovery columns
             cursor = conn.execute("PRAGMA table_info(step_logs)")

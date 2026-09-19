@@ -10,9 +10,11 @@ from mobile_crawler.config.config_manager import ConfigManager
 from mobile_crawler.core.crawler_event_listener import CrawlerEventListener
 from mobile_crawler.core.crawler_loop import CrawlerLoop
 from mobile_crawler.domain.models import ActionResult
+from mobile_crawler.domain.report_generator import ReportGenerator
 from mobile_crawler.infrastructure.database import DatabaseManager
 from mobile_crawler.infrastructure.run_repository import Run, RunRepository
 from mobile_crawler.infrastructure.session_folder_manager import SessionFolderManager
+from mobile_crawler.infrastructure.telemetry_client import build_telemetry_client_factory
 
 
 class JSONEventListener(CrawlerEventListener):
@@ -24,7 +26,7 @@ class JSONEventListener(CrawlerEventListener):
             "event": "crawl_started",
             "run_id": run_id,
             "target_package": target_package,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
         print(json.dumps(event), flush=True)
 
@@ -35,17 +37,12 @@ class JSONEventListener(CrawlerEventListener):
             "run_id": run_id,
             "old_state": old_state,
             "new_state": new_state,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
         print(json.dumps(event), flush=True)
 
     def on_crawl_completed(
-        self,
-        run_id: int,
-        total_steps: int,
-        duration_ms: float,
-        reason: str,
-        ocr_avg_ms: float = 0.0
+        self, run_id: int, total_steps: int, duration_ms: float, reason: str, ocr_avg_ms: float = 0.0
     ) -> None:
         """Handle crawl completed event."""
         event = {
@@ -55,7 +52,7 @@ class JSONEventListener(CrawlerEventListener):
             "duration_ms": duration_ms,
             "reason": reason,
             "ocr_avg_ms": ocr_avg_ms,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
         print(json.dumps(event), flush=True)
 
@@ -66,7 +63,7 @@ class JSONEventListener(CrawlerEventListener):
             "run_id": run_id,
             "step_number": step_number,
             "error": str(error),
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
         print(json.dumps(event), flush=True)
 
@@ -76,7 +73,7 @@ class JSONEventListener(CrawlerEventListener):
             "event": "step_started",
             "run_id": run_id,
             "step_number": step_number,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
         print(json.dumps(event), flush=True)
 
@@ -87,7 +84,7 @@ class JSONEventListener(CrawlerEventListener):
             "run_id": run_id,
             "step_number": step_number,
             "screenshot_path": screenshot_path,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
         print(json.dumps(event), flush=True)
 
@@ -98,7 +95,7 @@ class JSONEventListener(CrawlerEventListener):
             "run_id": run_id,
             "step_number": step_number,
             "request_data": request_data,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
         print(json.dumps(event), flush=True)
 
@@ -109,7 +106,7 @@ class JSONEventListener(CrawlerEventListener):
             "run_id": run_id,
             "step_number": step_number,
             "response_data": response_data,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
         print(json.dumps(event), flush=True)
 
@@ -125,9 +122,9 @@ class JSONEventListener(CrawlerEventListener):
                 "action_type": result.action_type,
                 "target": result.target,
                 "duration_ms": result.duration_ms,
-                "error_message": result.error_message
+                "error_message": result.error_message,
             },
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
         print(json.dumps(event), flush=True)
 
@@ -139,18 +136,12 @@ class JSONEventListener(CrawlerEventListener):
             "step_number": step_number,
             "actions_count": actions_count,
             "duration_ms": duration_ms,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
         print(json.dumps(event), flush=True)
 
     def on_screen_processed(
-        self,
-        run_id: int,
-        step_number: int,
-        screen_id: int,
-        is_new: bool,
-        visit_count: int,
-        total_screens: int
+        self, run_id: int, step_number: int, screen_id: int, is_new: bool, visit_count: int, total_screens: int
     ) -> None:
         """Handle screen processed event."""
         event = {
@@ -161,7 +152,7 @@ class JSONEventListener(CrawlerEventListener):
             "is_new": is_new,
             "visit_count": visit_count,
             "total_screens": total_screens,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
         print(json.dumps(event), flush=True)
 
@@ -172,7 +163,7 @@ class JSONEventListener(CrawlerEventListener):
             "run_id": run_id,
             "step_number": step_number,
             "message": message,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
         print(json.dumps(event), flush=True)
 
@@ -184,7 +175,7 @@ class JSONEventListener(CrawlerEventListener):
             "step_number": step_number,
             "duration_ms": duration_ms,
             "element_count": element_count,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
         print(json.dumps(event), flush=True)
 
@@ -195,22 +186,34 @@ class JSONEventListener(CrawlerEventListener):
             "run_id": run_id,
             "step_number": step_number,
             "duration_ms": duration_ms,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
         print(json.dumps(event), flush=True)
 
 
 @click.command()
-@click.option('--device', required=True, help='Device ID to crawl')
-@click.option('--package', required=True, help='App package name to crawl')
-@click.option('--model', required=True, help='AI model to use')
-@click.option('--steps', type=int, help='Maximum number of crawl steps')
-@click.option('--duration', type=int, help='Maximum crawl duration in seconds')
-@click.option('--provider', help='AI provider (gemini, openrouter, ollama)')
-@click.option('--enable-traffic-capture', is_flag=True, help='Enable PCAPdroid traffic capture during crawl')
-@click.option('--enable-video-recording', is_flag=True, help='Enable video recording during crawl')
-@click.option('--enable-mobsf-analysis', is_flag=True, help='Enable MobSF static analysis after crawl')
-def crawl(device: str, package: str, model: str, steps: int | None, duration: int | None, provider: str | None, enable_traffic_capture: bool, enable_video_recording: bool, enable_mobsf_analysis: bool) -> None:
+@click.option("--device", required=True, help="Device ID to crawl")
+@click.option("--package", required=True, help="App package name to crawl")
+@click.option("--model", required=True, help="AI model to use")
+@click.option("--steps", type=int, help="Maximum number of crawl steps")
+@click.option("--duration", type=int, help="Maximum crawl duration in seconds")
+@click.option("--provider", help="AI provider (gemini, openrouter, ollama)")
+@click.option("--enable-traffic-capture", is_flag=True, help="Enable PCAPdroid traffic capture during crawl")
+@click.option("--enable-video-recording", is_flag=True, help="Enable video recording during crawl")
+@click.option("--enable-mobsf-analysis", is_flag=True, help="Enable MobSF static analysis after crawl")
+@click.option("--no-report", is_flag=True, help="Do not generate the run report after the crawl")
+def crawl(
+    device: str,
+    package: str,
+    model: str,
+    steps: int | None,
+    duration: int | None,
+    provider: str | None,
+    enable_traffic_capture: bool,
+    enable_video_recording: bool,
+    enable_mobsf_analysis: bool,
+    no_report: bool,
+) -> None:
     """Start a crawl on the specified device and app."""
     try:
         # Ensure app data directory exists
@@ -223,21 +226,23 @@ def crawl(device: str, package: str, model: str, steps: int | None, duration: in
 
         # Override config with command line options
         if steps:
-            config_manager.set('max_crawl_steps', steps)
+            config_manager.set("max_crawl_steps", steps)
         if duration:
-            config_manager.set('max_crawl_duration_seconds', duration)
+            config_manager.set("max_crawl_duration_seconds", duration)
         if provider:
-            config_manager.set('ai_provider', provider)
-        config_manager.set('ai_model', model)
-        config_manager.set('app_package', package)  # Set app package for features
+            config_manager.set("ai_provider", provider)
+        config_manager.set("ai_model", model)
+        config_manager.set("app_package", package)  # Set app package for features
         if enable_traffic_capture:
-            config_manager.set('enable_traffic_capture', True)
-            config_manager.set('pcapdroid_tls_decryption', True)
+            config_manager.set("enable_traffic_capture", True)
+            config_manager.set("pcapdroid_tls_decryption", True)
         if enable_video_recording:
-            config_manager.set('enable_video_recording', True)
+            config_manager.set("enable_video_recording", True)
         if enable_mobsf_analysis:
-            config_manager.set('enable_mobsf_analysis', True)
-            config_manager.set('auto_run_mobsf_after_crawl', True)
+            config_manager.set("enable_mobsf_analysis", True)
+            config_manager.set("auto_run_mobsf_after_crawl", True)
+        if no_report:
+            config_manager.set("auto_generate_report_after_run", False)
 
         # Initialize database
         db_manager = DatabaseManager()
@@ -254,11 +259,11 @@ def crawl(device: str, package: str, model: str, steps: int | None, duration: in
             start_activity=None,  # Will be determined during crawl
             start_time=datetime.now(),
             end_time=None,
-            status='RUNNING',
+            status="RUNNING",
             ai_provider=provider,
             ai_model=model,
             total_steps=0,
-            unique_screens=0
+            unique_screens=0,
         )
         run_id = run_repo.create_run(run)
 
@@ -267,7 +272,11 @@ def crawl(device: str, package: str, model: str, steps: int | None, duration: in
             config_manager=config_manager,
             run_repository=run_repo,
             session_folder_manager=session_folder_manager,
-            event_listeners=[JSONEventListener()]
+            event_listeners=[JSONEventListener()],
+            report_generator=ReportGenerator(
+                db_manager,
+                telemetry_client_factory=build_telemetry_client_factory(config_manager),
+            ),
         )
 
         # Run the crawl

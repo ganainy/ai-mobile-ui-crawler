@@ -13,7 +13,7 @@ Entry point for the Obsidian vault (`docs/`). Claude reads this first each sessi
 
 ## Next / blockers
 - Issue #6 (Run Report + Analysis Bundle): implemented, uncommitted, not yet run on a real device or against a live Phoenix/Langfuse server. See [session](sessions/2026-09-19-run-report-analysis-bundle.md).
-- Auth / sign-up / OTP support: design agreed 2026-09-19, issues #7-#11 (#11 blocked by #7-#10). #7 App Accounts done ([session](sessions/2026-09-19-app-accounts.md)); #8 Verification Inbox done and pushed (9a000f0, a09e36b; [session](sessions/2026-09-19-verification-inbox.md)); #9 SMS reader committed; #10 in progress in a parallel session; #11 not started. See [session](sessions/2026-09-19-auth-verification-design.md).
+- Auth / sign-up / OTP support: design agreed 2026-09-19, issues #7-#11 (#11 blocked by #7-#10). #7 App Accounts done ([session](sessions/2026-09-19-app-accounts.md)); #8 Verification Inbox done and pushed (9a000f0, a09e36b; [session](sessions/2026-09-19-verification-inbox.md)); #9 SMS reader committed; #10 Human Fallback pushed (1795e86, [session](sessions/2026-09-19-human-fallback.md)), but its Settings group is still uncommitted in `settings_panel.py` alongside #6-#8 hunks; #11 not started. See [session](sessions/2026-09-19-auth-verification-design.md).
 - Uncommitted, unverified fixes for 7 pre-existing test failures (`CrawlerAgent._final_ui_state_required`, None-config guard in `_wire_observers_to_agent`, stale `test_stopping_state`); tests not re-run. #6 commit waits for the #10 session to commit first so the tree is clean.
 - Next: verify #6 on a real run, then run the crawler on ~10 health apps and analyse the bundles.
 

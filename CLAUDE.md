@@ -11,6 +11,11 @@
 - A Stop hook (`.claude/settings.json`) blocks finishing once if `src/` changed but `docs/STATE.md` did not.
 - `CONTEXT.md` stays at the repo root (the domain-modeling skill expects it); `docs/Glossary.md` just points to it.
 
+## Python environment
+
+- Run Python, pytest and pip only through the project venv: `.venv312/Scripts/python.exe -m pytest ...` (Python 3.12, all dependencies and pytest-qt installed). Never use the global `python` / `py -3.x` interpreters for this project.
+- Never `pip install` (or uninstall) into a global interpreter. If a module is missing in `.venv312`, tell the user instead of installing it elsewhere; installing into `.venv312` needs their OK too.
+
 ## Agent skills
 
 ### Issue tracker

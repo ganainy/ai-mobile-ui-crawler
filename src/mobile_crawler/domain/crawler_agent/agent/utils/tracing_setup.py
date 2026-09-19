@@ -23,9 +23,7 @@ _tracing_provider: str | None = None
 _user_id: str = "anonymous"
 
 
-def setup_tracing(
-    tracing_config: TracingConfig, agent: object | None = None
-) -> None:
+def setup_tracing(tracing_config: TracingConfig, agent: object | None = None) -> None:
     global _tracing_initialized, _tracing_provider, _session_id, _user_id
 
     if not tracing_config.enabled:
@@ -44,9 +42,7 @@ def setup_tracing(
         _user_id = "anonymous"
 
     if _tracing_initialized:
-        logger.debug(
-            f"🔍 Tracing already initialized with {_tracing_provider}, skipping setup"
-        )
+        logger.debug(f"🔍 Tracing already initialized with {_tracing_provider}, skipping setup")
         if provider == "langfuse" and agent:
             from mobile_crawler.domain.crawler_agent.telemetry.langfuse_processor import set_current_agent
 
@@ -63,10 +59,7 @@ def setup_tracing(
         _tracing_provider = "langfuse"
         logger.debug(f"🔍 Langfuse tracing enabled | Session: {_session_id}")
     else:
-        logger.warning(
-            f"⚠️  Unknown tracing provider: {provider}. "
-            f"Supported providers: phoenix, langfuse"
-        )
+        logger.warning(f"⚠️  Unknown tracing provider: {provider}. " f"Supported providers: phoenix, langfuse")
 
 
 def _check_phoenix_reachable(endpoint: str, timeout: float = 3.0) -> bool:
@@ -96,18 +89,14 @@ def _setup_phoenix_tracing() -> bool:
     endpoint = os.getenv("PHOENIX_URL") or os.getenv("phoenix_url") or "http://localhost:6006"
     if not _check_phoenix_reachable(endpoint):
         logger.warning(
-            f"⚠️  Phoenix server is not reachable at {endpoint}. "
-            "Tracing will be disabled for this session."
+            f"⚠️  Phoenix server is not reachable at {endpoint}. " "Tracing will be disabled for this session."
         )
         return False
 
     try:
         handler = arize_phoenix_callback_handler()
     except Exception as e:
-        logger.warning(
-            f"⚠️  Failed to set up Phoenix tracing: {e}. "
-            "Tracing will be disabled for this session."
-        )
+        logger.warning(f"⚠️  Failed to set up Phoenix tracing: {e}. " "Tracing will be disabled for this session.")
         return False
 
     llama_index.core.global_handler = handler
@@ -115,9 +104,7 @@ def _setup_phoenix_tracing() -> bool:
     return True
 
 
-def _setup_langfuse_tracing(
-    tracing_config: TracingConfig, agent: object | None = None
-) -> None:
+def _setup_langfuse_tracing(tracing_config: TracingConfig, agent: object | None = None) -> None:
     """
     Set up Langfuse tracing with custom span processor.
 
@@ -143,9 +130,7 @@ def _setup_langfuse_tracing(
         langfuse = Langfuse()
         try:
             if not langfuse.auth_check():
-                logger.error(
-                    "❌ Langfuse authentication failed. Please check your credentials."
-                )
+                logger.error("❌ Langfuse authentication failed. Please check your credentials.")
                 return
         except Exception as e:
             logger.error(
@@ -218,8 +203,8 @@ def _setup_langfuse_tracing(
 
 
 def apply_session_context() -> None:
-    """Apply session context for tracing. Only active when Langfuse tracing is enabled."""
-    if not _tracing_initialized or _tracing_provider != "langfuse":
+    """Apply session context for tracing (Phoenix and Langfuse both group traces by session id)."""
+    if not _tracing_initialized:
         return
 
     from openinference.semconv.trace import SpanAttributes
@@ -264,11 +249,7 @@ def record_langfuse_screenshot(
         image_b64 = base64.b64encode(screenshot).decode()
 
         # Attach to the provided span if valid; otherwise use current span; else root; skip if none.
-        candidate = (
-            parent_span
-            if parent_span and parent_span.get_span_context().is_valid
-            else None
-        )
+        candidate = parent_span if parent_span and parent_span.get_span_context().is_valid else None
         if candidate is None:
             current_span = trace.get_current_span()
             if current_span and current_span.get_span_context().is_valid:

@@ -20,6 +20,12 @@ from mobile_crawler.domain.errors import (
     FatalError,
     RecorderError,
 )
+from mobile_crawler.domain.run_config_snapshot import (
+    build_config_snapshot,
+    current_git_commit,
+    write_config_snapshot,
+)
+from mobile_crawler.domain.run_outcome import derive_stop_reason
 from mobile_crawler.domain.traffic_capture_manager import TrafficCaptureManager
 from mobile_crawler.domain.video_recording_manager import VideoRecordingManager
 from mobile_crawler.infrastructure.mobsf_manager import MobSFManager
@@ -39,6 +45,7 @@ class CrawlerLoop:
         session_folder_manager: SessionFolderManager,
         event_listeners: list[CrawlerEventListener] | None = None,
         ai_interaction_repository=None,
+        report_generator=None,
     ):
         """Initialize the crawler-agent-backed crawl wrapper.
 
@@ -48,12 +55,14 @@ class CrawlerLoop:
             session_folder_manager: SessionFolderManager for artifact organization
             event_listeners: List of event listeners
             ai_interaction_repository: Optional repository for AI interaction persistence
+            report_generator: Optional ReportGenerator used to write the Run Report after a run
         """
         self.config_manager = config_manager
         self.run_repository = run_repository
         self.session_folder_manager = session_folder_manager
         self.event_listeners = event_listeners or []
         self._ai_interaction_repository = ai_interaction_repository
+        self._report_generator = report_generator
 
         self._crawl_thread: threading.Thread | None = None
         self._current_run_id: int | None = None
@@ -90,19 +99,13 @@ class CrawlerLoop:
     def pause(self) -> None:
         """Pause the crawler."""
         self._emit_event(
-            "on_debug_log",
-            self._current_run_id or -1,
-            0,
-            "Pause not supported in internalized crawler mode."
+            "on_debug_log", self._current_run_id or -1, 0, "Pause not supported in internalized crawler mode."
         )
 
     def resume(self) -> None:
         """Resume the crawler."""
         self._emit_event(
-            "on_debug_log",
-            self._current_run_id or -1,
-            0,
-            "Resume not supported in internalized crawler mode."
+            "on_debug_log", self._current_run_id or -1, 0, "Resume not supported in internalized crawler mode."
         )
 
     def stop(self) -> None:
@@ -212,6 +215,15 @@ class CrawlerLoop:
             self.run_repository.update_session_path(run_id, session_path)
             run.session_path = session_path
 
+            try:
+                write_config_snapshot(
+                    session_path,
+                    build_config_snapshot(self.config_manager, run.app_package, git_commit=current_git_commit()),
+                )
+            except Exception as e:
+                # The snapshot is context for the Run Report, never worth aborting a crawl.
+                logger.warning("Could not write config snapshot for run %s: %s", run_id, e)
+
             self._transition_state(CrawlState.INITIALIZING.value, run_id)
             self._transition_state(CrawlState.RUNNING.value, run_id)
             self._emit_event("on_crawl_started", run_id, run.app_package)
@@ -219,7 +231,7 @@ class CrawlerLoop:
             self._crawler_agent_service = CrawlerAgentService(
                 config_manager=self.config_manager,
                 ai_interaction_repository=self._ai_interaction_repository,
-                device_id=run.device_id
+                device_id=run.device_id,
             )
 
             # Initialize step phase tracking per D-01 (wrap at action level)
@@ -230,19 +242,20 @@ class CrawlerLoop:
                 screenshots_dir=self.session_folder_manager.get_subfolder(run, "screenshots"),
             )
 
+            trace_session_id = getattr(self._crawler_agent_service, "trace_session_id", None)
+            if isinstance(trace_session_id, str):
+                self.run_repository.update_trace_id(run_id, trace_session_id)
+
             logs_dir = self.session_folder_manager.get_subfolder(run, "logs")
-            self._crawler_agent_service.configure_run_logging(
-                run_id,
-                logs_dir,
-                self._emit_event,
-                True
-            )
+            self._crawler_agent_service.configure_run_logging(run_id, logs_dir, self._emit_event, True)
 
             exploration_objective = self.config_manager.get("exploration_objective", None)
 
             limit_type = self.config_manager.get("limit_type", "steps")
             max_steps = self.config_manager.get("max_steps", self.config_manager.get("max_crawl_steps", 100))
-            max_duration = self.config_manager.get("max_duration_seconds", self.config_manager.get("max_crawl_duration_seconds", 300))
+            max_duration = self.config_manager.get(
+                "max_duration_seconds", self.config_manager.get("max_crawl_duration_seconds", 300)
+            )
 
             if limit_type == "duration":
                 actual_max_steps = 9999
@@ -272,9 +285,7 @@ class CrawlerLoop:
                                 unlock_swipe=bool(self.config_manager.get("pre_crawl_unlock_swipe", True)),
                             )
                             if not readiness.success:
-                                logger.warning(
-                                    "Device not ready before traffic capture: %s", readiness.error_message
-                                )
+                                logger.warning("Device not ready before traffic capture: %s", readiness.error_message)
                         started, message = await self._traffic_capture_manager.start_capture_async(
                             run_id=run_id,
                             session_path=session_path,
@@ -388,16 +399,13 @@ class CrawlerLoop:
                     # Their __del__ schedules aclose() tasks via create_task(), which only
                     # works while the loop is active.
                     import gc
+
                     gc.collect()
                     # Drain any __del__-scheduled cleanup tasks before the loop closes
-                    pending = [t for t in asyncio.all_tasks()
-                               if t is not asyncio.current_task()]
+                    pending = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
                     if pending:
                         try:
-                            await asyncio.wait_for(
-                                asyncio.gather(*pending, return_exceptions=True),
-                                timeout=5.0
-                            )
+                            await asyncio.wait_for(asyncio.gather(*pending, return_exceptions=True), timeout=5.0)
                         except TimeoutError:
                             for task in pending:
                                 if not task.done():
@@ -411,13 +419,12 @@ class CrawlerLoop:
             with capture_stdout_to_ui(_ui_log_cb):
                 result = self._run_async(run_and_cleanup())
 
-
             duration_ms = (time.time() - start_time) * 1000
             # Extract action statistics from Crawler agent result's final_state
             final_state = result.final_state or {}
-            successful_actions = final_state.get('successful_actions', 0)
-            failed_actions = final_state.get('failed_actions', 0)
-            total_actions = final_state.get('total_actions', 0)
+            successful_actions = final_state.get("successful_actions", 0)
+            failed_actions = final_state.get("failed_actions", 0)
+            total_actions = final_state.get("total_actions", 0)
             completion_reason = final_state.get("completion_reason")
 
             if self._cancel_requested:
@@ -430,12 +437,22 @@ class CrawlerLoop:
                 status = "ERROR"
                 reason = result.error_message or "Crawler agent failed"
 
+            stop_reason = derive_stop_reason(
+                cancel_requested=self._cancel_requested,
+                success=bool(result.success),
+                final_state=final_state,
+                error_message=result.error_message,
+            )
+            guided_progress = final_state.get("guided_progress")
+
             self.run_repository.update_run_stats(
                 run_id=run_id,
                 total_steps=result.steps_completed,
                 unique_screens=0,
                 status=status,
-                end_time=datetime.now()
+                end_time=datetime.now(),
+                stop_reason=stop_reason,
+                guided_progress_json=guided_progress if isinstance(guided_progress, str) else None,
             )
 
             if (
@@ -450,14 +467,9 @@ class CrawlerLoop:
             stats_suffix = f" | successful={successful_actions} failed={failed_actions} total={total_actions}"
             reason_with_stats = reason + stats_suffix
 
-            self._emit_event(
-                "on_crawl_completed",
-                run_id,
-                result.steps_completed,
-                duration_ms,
-                reason_with_stats,
-                0.0
-            )
+            self._emit_event("on_crawl_completed", run_id, result.steps_completed, duration_ms, reason_with_stats, 0.0)
+
+            self._generate_report(run_id)
 
         except CrawlerError as e:
             logger.error(json.dumps(e.to_log_dict()))
@@ -479,6 +491,19 @@ class CrawlerLoop:
                 self._crawler_agent_service.clear_run_logging()
                 self._crawler_agent_service = None
             self._transition_state(CrawlState.STOPPED.value, run_id)
+
+    def _generate_report(self, run_id: int) -> None:
+        """Write the Run Report after a run when enabled; never affects the crawl outcome."""
+        if self._report_generator is None:
+            return
+        if self.config_manager.get("auto_generate_report_after_run", True) is not True:
+            return
+        try:
+            path = self._report_generator.generate(run_id)
+            self._emit_event("on_debug_log", run_id, 0, f"Run report generated: {path}")
+        except Exception as e:
+            logger.warning("Run report generation failed for run %s: %s", run_id, e)
+            self._emit_event("on_debug_log", run_id, 0, f"Run report generation failed: {e}")
 
     def _run_mobsf_analysis(self, run, run_id: int) -> None:
         """Run MobSF after a successful crawl without affecting crawl completion."""
@@ -506,9 +531,7 @@ class CrawlerLoop:
                     # (see mobsf_parser.py's JsonMobSFParser, which hits the same quirk).
                     medium = int(scorecard.get("warning") or scorecard.get("medium") or 0)
                     low = int(scorecard.get("info") or scorecard.get("low") or 0)
-                    self._emit_event(
-                        "on_mobsf_finished", run_id, float(score), high, medium, low
-                    )
+                    self._emit_event("on_mobsf_finished", run_id, float(score), high, medium, low)
             else:
                 self._emit_event(
                     "on_debug_log",
@@ -558,6 +581,4 @@ class CrawlerLoop:
                     raise
                 except Exception as e:
                     # Log but don't halt for non-critical listener failures (UI, logging)
-                    logger.warning(
-                        f"Listener {type(listener).__name__}.{method_name} failed: {e}"
-                    )
+                    logger.warning(f"Listener {type(listener).__name__}.{method_name} failed: {e}")

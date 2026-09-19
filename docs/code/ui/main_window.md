@@ -45,6 +45,7 @@ Source: `src/mobile_crawler/ui/main_window.py`
 - [[code/infrastructure/session_folder_manager|infrastructure.session_folder_manager]]
 - [[code/infrastructure/step_log_repository|infrastructure.step_log_repository]]
 - [[code/infrastructure/step_phase_repository|infrastructure.step_phase_repository]]
+- [[code/infrastructure/telemetry_client|infrastructure.telemetry_client]]
 - [[code/infrastructure/user_config_store|infrastructure.user_config_store]]
 - [[code/ui/log_cleaner|ui.log_cleaner]]
 - [[code/ui/mobsf_startup_worker|ui.mobsf_startup_worker]]

@@ -19,4 +19,8 @@ Source: `src/mobile_crawler/infrastructure/telemetry_client.py`
 - `build_telemetry_client_factory`
 
 ## Imported by
+- [[code/cli/commands/crawl|cli.commands.crawl]]
+- [[code/cli/commands/report|cli.commands.report]]
+- [[code/domain/report_generator|domain.report_generator]]
 - [[code/infrastructure/analysis_bundle|infrastructure.analysis_bundle]]
+- [[code/ui/main_window|ui.main_window]]

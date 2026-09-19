@@ -307,6 +307,33 @@ class SettingsPanel(QWidget):
         inbox_group.setLayout(inbox_layout)
         layout.addWidget(inbox_group)
 
+        # Human Fallback group
+        fallback_group = QGroupBox("Human Fallback")
+        fallback_layout = QVBoxLayout()
+        fallback_layout.setSpacing(8)
+        fallback_layout.setContentsMargins(15, 20, 15, 20)
+        self.human_fallback_checkbox = QCheckBox("Ask me when authentication needs a code or manual step")
+        self.human_fallback_checkbox.setToolTip(
+            "When the crawler cannot solve a verification code or finish sign-in, pause the crawl "
+            "and show a dialog. Off: authentication is skipped immediately on failure."
+        )
+        fallback_layout.addWidget(self.human_fallback_checkbox)
+        timeout_row = QHBoxLayout()
+        timeout_row.addWidget(QLabel("Wait for me (minutes):"))
+        self.human_fallback_timeout_input = QSpinBox()
+        self.human_fallback_timeout_input.setRange(1, 120)
+        self.human_fallback_timeout_input.setValue(5)
+        self.human_fallback_timeout_input.setToolTip(
+            "After this wait, authentication is skipped and the crawl continues."
+        )
+        timeout_row.addWidget(self.human_fallback_timeout_input)
+        timeout_row.addStretch()
+        fallback_layout.addLayout(timeout_row)
+        self.human_fallback_checkbox.toggled.connect(self.human_fallback_timeout_input.setEnabled)
+        self.human_fallback_timeout_input.setEnabled(False)
+        fallback_group.setLayout(fallback_layout)
+        layout.addWidget(fallback_group)
+
         layout.addStretch()
         return self._wrap_in_scroll_area(tab)
 
@@ -695,6 +722,19 @@ class SettingsPanel(QWidget):
         video_group.setLayout(video_layout)
         layout.addWidget(video_group)
 
+        # Run Report
+        report_group = QGroupBox("Run Report")
+        report_layout = QVBoxLayout()
+        self.auto_generate_report_checkbox = QCheckBox("Generate report after each run")
+        self.auto_generate_report_checkbox.setChecked(True)
+        self.auto_generate_report_checkbox.setToolTip(
+            "Writes the HTML report and an AI-readable analysis folder (analysis.md, steps.jsonl, "
+            "run.json) into the run's session folder when a run finishes."
+        )
+        report_layout.addWidget(self.auto_generate_report_checkbox)
+        report_group.setLayout(report_layout)
+        layout.addWidget(report_group)
+
         # MobSF Analysis
         mobsf_group = QGroupBox("MobSF Static Analysis")
         mobsf_layout = QVBoxLayout()
@@ -944,6 +984,14 @@ class SettingsPanel(QWidget):
             self._config_store.get_secret_plaintext("verification_inbox_password") or ""
         )
 
+        # Load human fallback
+        self.human_fallback_checkbox.setChecked(
+            bool(self._config_store.get_setting("human_fallback_enabled", default=False))
+        )
+        self.human_fallback_timeout_input.setValue(
+            int(self._config_store.get_setting("human_fallback_timeout_minutes", default=5))
+        )
+
         # Load traffic capture settings
         enable_traffic_capture = self._config_store.get_setting("enable_traffic_capture", default=False)
         self.enable_traffic_capture_checkbox.setChecked(enable_traffic_capture)
@@ -956,6 +1004,11 @@ class SettingsPanel(QWidget):
         # Load video recording settings
         enable_video_recording = self._config_store.get_setting("enable_video_recording", default=False)
         self.enable_video_recording_checkbox.setChecked(enable_video_recording)
+
+        # Load Run Report settings
+        self.auto_generate_report_checkbox.setChecked(
+            self._config_store.get_setting("auto_generate_report_after_run", default=True)
+        )
 
         # Load MobSF settings
         enable_mobsf_analysis = self._config_store.get_setting("enable_mobsf_analysis", default=False)
@@ -1118,6 +1171,13 @@ class SettingsPanel(QWidget):
                 else:
                     self._config_store.delete_secret("verification_inbox_password")
 
+                self._config_store.set_setting(
+                    "human_fallback_enabled", self.human_fallback_checkbox.isChecked(), "bool"
+                )
+                self._config_store.set_setting(
+                    "human_fallback_timeout_minutes", self.human_fallback_timeout_input.value(), "int"
+                )
+
                 # Cleanup old config keys
                 self._config_store.delete_setting("test_gmail_account")
 
@@ -1134,6 +1194,13 @@ class SettingsPanel(QWidget):
                 # Save video recording settings
                 enable_video_recording = self.enable_video_recording_checkbox.isChecked()
                 self._config_store.set_setting("enable_video_recording", enable_video_recording, "bool")
+
+                # Save Run Report settings
+                self._config_store.set_setting(
+                    "auto_generate_report_after_run",
+                    self.auto_generate_report_checkbox.isChecked(),
+                    "bool",
+                )
 
                 # Save MobSF settings
                 enable_mobsf_analysis = self.enable_mobsf_analysis_checkbox.isChecked()
@@ -1453,6 +1520,10 @@ class SettingsPanel(QWidget):
             True if video recording is enabled
         """
         return self.enable_video_recording_checkbox.isChecked()
+
+    def get_auto_generate_report_after_run(self) -> bool:
+        """Whether the Run Report should be generated automatically after each run."""
+        return self.auto_generate_report_checkbox.isChecked()
 
     def get_enable_mobsf_analysis(self) -> bool:
         """Get the current MobSF analysis enabled state.

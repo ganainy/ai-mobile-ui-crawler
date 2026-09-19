@@ -32,6 +32,7 @@ Source: `src/mobile_crawler/domain/crawler_agent_service.py`
 - [[code/domain/models|domain.models]]
 - [[code/domain/omni_parser_client|domain.omni_parser_client]]
 - [[code/domain/prompt_builder|domain.prompt_builder]]
+- [[code/domain/run_outcome|domain.run_outcome]]
 - [[code/domain/stats_collector_span_processor|domain.stats_collector_span_processor]]
 - [[code/domain/step_phase|domain.step_phase]]
 - [[code/domain/step_phase_models|domain.step_phase_models]]

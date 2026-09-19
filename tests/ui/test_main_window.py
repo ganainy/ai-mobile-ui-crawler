@@ -1,6 +1,6 @@
 """Focused tests for current MainWindow behavior."""
 
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QSplitter, QWidget
@@ -290,3 +290,25 @@ class TestRunFunction:
         mock_window.assert_called_once()
         mock_window_instance.showMaximized.assert_called_once()
         mock_exit.assert_called_once_with(42)
+
+
+class TestAutoReportSettingWiring:
+    """The 'Generate report after each run' checkbox reaches the run's config."""
+
+    @patch("mobile_crawler.ui.main_window.ConfigManager")
+    def test_create_config_manager_passes_auto_report_setting(self, mock_config_manager_cls):
+        window = MainWindow.__new__(MainWindow)
+        window._services = {"user_config_store": Mock()}
+        window._ai_provider = "gemini"
+        window._ai_model = "gemini-pro"
+        window._selected_package = "com.example.app"
+        window.signal_adapter = Mock()
+        window.settings_panel = MagicMock()
+        window.settings_panel.get_auto_generate_report_after_run.return_value = False
+        config_manager = Mock()
+        config_manager.get.side_effect = lambda key, default=None: default
+        mock_config_manager_cls.return_value = config_manager
+
+        window._create_config_manager()
+
+        config_manager.set.assert_any_call("auto_generate_report_after_run", False)

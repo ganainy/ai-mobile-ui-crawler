@@ -21,12 +21,13 @@ Persistence and device integration: SQLite database and repositories (runs, scre
 - [[code/infrastructure/mobsf_docker|infrastructure.mobsf_docker]] - Docker lifecycle management for the MobSF static-analysis server.
 - [[code/infrastructure/mobsf_manager|infrastructure.mobsf_manager]] - MobSF Manager for APK analysis.
 - [[code/infrastructure/omniparser_docker|infrastructure.omniparser_docker]] - Docker lifecycle management for the local OmniParser server.
-- [[code/infrastructure/run_exporter|infrastructure.run_exporter]] - Run exporter for exporting complete run data to JSON.
 - [[code/infrastructure/run_repository|infrastructure.run_repository]] - Repository for managing crawl runs in crawler.db.
 - [[code/infrastructure/run_stats_repository|infrastructure.run_stats_repository]] - Repository for managing runtime statistics in crawler.db.
 - [[code/infrastructure/screen_repository|infrastructure.screen_repository]] - Repository for managing discovered screens in crawler.db.
 - [[code/infrastructure/session_folder_manager|infrastructure.session_folder_manager]] - Session folder management for crawler sessions.
+- [[code/infrastructure/sms_reader|infrastructure.sms_reader]] - Read verification SMS from a connected device over adb (see CONTEXT.md, Verification Challenge).
 - [[code/infrastructure/step_log_repository|infrastructure.step_log_repository]] - Repository for managing step logs in crawler.db.
 - [[code/infrastructure/step_phase_repository|infrastructure.step_phase_repository]] - Repository for managing step phase transitions in crawler.db.
 - [[code/infrastructure/telemetry_client|infrastructure.telemetry_client]] - Reads a run's telemetry back from Phoenix or Langfuse, by the run's trace session id.
 - [[code/infrastructure/user_config_store|infrastructure.user_config_store]] - Database management for user_config.db - user preferences and settings.
+- [[code/infrastructure/verification_inbox|infrastructure.verification_inbox]] - Verification Inbox: read email codes and links from Gmail over IMAP (see CONTEXT.md).

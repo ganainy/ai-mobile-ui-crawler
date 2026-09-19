@@ -1,6 +1,5 @@
 """Tests for default config values."""
 
-
 from mobile_crawler.config.defaults import DEFAULTS
 
 
@@ -94,7 +93,7 @@ class TestDefaultConfigValues:
         ]
         for key in interval_keys:
             value = DEFAULTS[key]
-            assert isinstance(value, (int, float)), f"{key} should be numeric"
+            assert isinstance(value, int | float), f"{key} should be numeric"
             assert value > 0, f"{key} should be positive, got {value}"
 
     def test_paths_are_strings_or_none(self):
@@ -198,3 +197,7 @@ class TestDefaultConfigValues:
         """Test window dimensions are reasonable."""
         assert DEFAULTS["window_width"] >= 800
         assert DEFAULTS["window_height"] >= 600
+
+
+def test_auto_generate_report_after_run_defaults_on():
+    assert DEFAULTS["auto_generate_report_after_run"] is True

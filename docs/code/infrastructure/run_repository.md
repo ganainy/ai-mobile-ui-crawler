@@ -26,7 +26,6 @@ Source: `src/mobile_crawler/infrastructure/run_repository.py`
 - [[code/domain/traffic_capture_manager|domain.traffic_capture_manager]]
 - [[code/infrastructure/analysis_bundle|infrastructure.analysis_bundle]]
 - [[code/infrastructure/mobsf_manager|infrastructure.mobsf_manager]]
-- [[code/infrastructure/run_exporter|infrastructure.run_exporter]]
 - [[code/infrastructure/session_folder_manager|infrastructure.session_folder_manager]]
 - [[code/ui/main_window|ui.main_window]]
 - [[code/ui/widgets/run_history_view|ui.widgets.run_history_view]]

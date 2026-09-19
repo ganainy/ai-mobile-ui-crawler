@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class Run:
     """Data class representing a crawl run."""
+
     id: int | None
     device_id: str
     app_package: str
@@ -27,6 +28,9 @@ class Run:
     total_steps: int = 0
     unique_screens: int = 0
     session_path: str | None = None
+    stop_reason: str | None = None
+    guided_progress_json: str | None = None
+    trace_id: str | None = None
 
 
 class RunRepository:
@@ -53,25 +57,31 @@ class RunRepository:
             with closing(self.db_manager.get_connection()) as conn:
                 cursor = conn.cursor()
 
-                cursor.execute("""
+                cursor.execute(
+                    """
                     INSERT INTO runs (
                         device_id, app_package, start_activity, start_time, end_time,
                         status, ai_provider, ai_model, total_steps, unique_screens,
-                        session_path
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    run.device_id,
-                    run.app_package,
-                    run.start_activity,
-                    run.start_time.isoformat(),
-                    run.end_time.isoformat() if run.end_time else None,
-                    run.status,
-                    run.ai_provider,
-                    run.ai_model,
-                    run.total_steps,
-                    run.unique_screens,
-                    run.session_path
-                ))
+                        session_path, stop_reason, guided_progress_json, trace_id
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                    (
+                        run.device_id,
+                        run.app_package,
+                        run.start_activity,
+                        run.start_time.isoformat(),
+                        run.end_time.isoformat() if run.end_time else None,
+                        run.status,
+                        run.ai_provider,
+                        run.ai_model,
+                        run.total_steps,
+                        run.unique_screens,
+                        run.session_path,
+                        run.stop_reason,
+                        run.guided_progress_json,
+                        run.trace_id,
+                    ),
+                )
 
                 run_id = cursor.lastrowid
                 conn.commit()
@@ -121,10 +131,7 @@ class RunRepository:
         with closing(self.db_manager.get_connection()) as conn:
             cursor = conn.cursor()
 
-            cursor.execute(
-                "SELECT * FROM runs WHERE app_package = ? ORDER BY id DESC",
-                (app_package,)
-            )
+            cursor.execute("SELECT * FROM runs WHERE app_package = ? ORDER BY id DESC", (app_package,))
             rows = cursor.fetchall()
 
             return [self._row_to_run(row) for row in rows]
@@ -141,10 +148,7 @@ class RunRepository:
         with closing(self.db_manager.get_connection()) as conn:
             cursor = conn.cursor()
 
-            cursor.execute(
-                "SELECT * FROM runs WHERE status = ? ORDER BY id DESC",
-                (status,)
-            )
+            cursor.execute("SELECT * FROM runs WHERE status = ? ORDER BY id DESC", (status,))
             rows = cursor.fetchall()
 
             return [self._row_to_run(row) for row in rows]
@@ -165,26 +169,33 @@ class RunRepository:
             with closing(self.db_manager.get_connection()) as conn:
                 cursor = conn.cursor()
 
-                cursor.execute("""
+                cursor.execute(
+                    """
                     UPDATE runs SET
                         device_id = ?, app_package = ?, start_activity = ?, start_time = ?,
                         end_time = ?, status = ?, ai_provider = ?, ai_model = ?,
-                        total_steps = ?, unique_screens = ?, session_path = ?
+                        total_steps = ?, unique_screens = ?, session_path = ?,
+                        stop_reason = ?, guided_progress_json = ?, trace_id = ?
                     WHERE id = ?
-                """, (
-                    run.device_id,
-                    run.app_package,
-                    run.start_activity,
-                    run.start_time.isoformat(),
-                    run.end_time.isoformat() if run.end_time else None,
-                    run.status,
-                    run.ai_provider,
-                    run.ai_model,
-                    run.total_steps,
-                    run.unique_screens,
-                    run.session_path,
-                    run.id
-                ))
+                """,
+                    (
+                        run.device_id,
+                        run.app_package,
+                        run.start_activity,
+                        run.start_time.isoformat(),
+                        run.end_time.isoformat() if run.end_time else None,
+                        run.status,
+                        run.ai_provider,
+                        run.ai_model,
+                        run.total_steps,
+                        run.unique_screens,
+                        run.session_path,
+                        run.stop_reason,
+                        run.guided_progress_json,
+                        run.trace_id,
+                        run.id,
+                    ),
+                )
 
                 updated = cursor.rowcount > 0
                 conn.commit()
@@ -202,7 +213,9 @@ class RunRepository:
         total_steps: int,
         unique_screens: int,
         status: str = None,
-        end_time: 'datetime' = None
+        end_time: "datetime" = None,
+        stop_reason: str | None = None,
+        guided_progress_json: str | None = None,
     ) -> bool:
         """Update the statistics and optionally status/end_time of a run.
 
@@ -212,6 +225,8 @@ class RunRepository:
             unique_screens: New unique screens count
             status: Optional new status (e.g., 'COMPLETED', 'ERROR')
             end_time: Optional end time
+            stop_reason: Optional reason the run ended (see run_outcome.derive_stop_reason)
+            guided_progress_json: Optional guided-scenario progress snapshot
 
         Returns:
             True if run was updated, False if not found
@@ -221,32 +236,73 @@ class RunRepository:
                 cursor = conn.cursor()
 
                 if status is not None and end_time is not None:
-                    cursor.execute("""
+                    cursor.execute(
+                        """
                         UPDATE runs SET total_steps = ?, unique_screens = ?, status = ?, end_time = ?
                         WHERE id = ?
-                    """, (total_steps, unique_screens, status, end_time.isoformat() if end_time else None, run_id))
+                    """,
+                        (total_steps, unique_screens, status, end_time.isoformat() if end_time else None, run_id),
+                    )
                 elif status is not None:
-                    cursor.execute("""
+                    cursor.execute(
+                        """
                         UPDATE runs SET total_steps = ?, unique_screens = ?, status = ?
                         WHERE id = ?
-                    """, (total_steps, unique_screens, status, run_id))
+                    """,
+                        (total_steps, unique_screens, status, run_id),
+                    )
                 elif end_time is not None:
-                    cursor.execute("""
+                    cursor.execute(
+                        """
                         UPDATE runs SET total_steps = ?, unique_screens = ?, end_time = ?
                         WHERE id = ?
-                    """, (total_steps, unique_screens, end_time.isoformat() if end_time else None, run_id))
+                    """,
+                        (total_steps, unique_screens, end_time.isoformat() if end_time else None, run_id),
+                    )
                 else:
-                    cursor.execute("""
+                    cursor.execute(
+                        """
                         UPDATE runs SET total_steps = ?, unique_screens = ?
                         WHERE id = ?
-                    """, (total_steps, unique_screens, run_id))
+                    """,
+                        (total_steps, unique_screens, run_id),
+                    )
 
                 updated = cursor.rowcount > 0
+
+                if stop_reason is not None:
+                    cursor.execute("UPDATE runs SET stop_reason = ? WHERE id = ?", (stop_reason, run_id))
+                if guided_progress_json is not None:
+                    cursor.execute(
+                        "UPDATE runs SET guided_progress_json = ? WHERE id = ?",
+                        (guided_progress_json, run_id),
+                    )
+
                 conn.commit()
                 return updated
         except sqlite3.OperationalError as e:
             raise RecorderError(
                 f"Failed to update run stats for run_id={run_id}: {e}",
+                context=ErrorContext(run_id=run_id),
+                cause=e,
+            ) from e
+
+    def update_trace_id(self, run_id: int, trace_id: str) -> bool:
+        """Record the tracing session id used to find this run's Phoenix/Langfuse traces.
+
+        Returns:
+            True if run was updated, False if not found
+        """
+        try:
+            with closing(self.db_manager.get_connection()) as conn:
+                cursor = conn.cursor()
+                cursor.execute("UPDATE runs SET trace_id = ? WHERE id = ?", (trace_id, run_id))
+                updated = cursor.rowcount > 0
+                conn.commit()
+                return updated
+        except sqlite3.OperationalError as e:
+            raise RecorderError(
+                f"Failed to update trace id for run_id={run_id}: {e}",
                 context=ErrorContext(run_id=run_id),
                 cause=e,
             ) from e
@@ -265,10 +321,7 @@ class RunRepository:
             with closing(self.db_manager.get_connection()) as conn:
                 cursor = conn.cursor()
 
-                cursor.execute(
-                    "UPDATE runs SET session_path = ? WHERE id = ?",
-                    (session_path, run_id)
-                )
+                cursor.execute("UPDATE runs SET session_path = ? WHERE id = ?", (session_path, run_id))
 
                 updated = cursor.rowcount > 0
                 conn.commit()
@@ -348,10 +401,7 @@ class RunRepository:
         with closing(self.db_manager.get_connection()) as conn:
             cursor = conn.cursor()
 
-            cursor.execute(
-                "SELECT * FROM runs ORDER BY id DESC LIMIT ?",
-                (limit,)
-            )
+            cursor.execute("SELECT * FROM runs ORDER BY id DESC LIMIT ?", (limit,))
             rows = cursor.fetchall()
 
             return [self._row_to_run(row) for row in rows]
@@ -377,5 +427,8 @@ class RunRepository:
             ai_model=row["ai_model"],
             total_steps=row["total_steps"],
             unique_screens=row["unique_screens"],
-            session_path=row["session_path"] if "session_path" in row.keys() else None
+            session_path=row["session_path"] if "session_path" in row.keys() else None,
+            stop_reason=row["stop_reason"] if "stop_reason" in row.keys() else None,
+            guided_progress_json=(row["guided_progress_json"] if "guided_progress_json" in row.keys() else None),
+            trace_id=row["trace_id"] if "trace_id" in row.keys() else None,
         )

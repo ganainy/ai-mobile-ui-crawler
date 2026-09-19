@@ -14,6 +14,7 @@ Source: `src/mobile_crawler/reporting/contracts.py`
 - `MobSFAnalysis`
 - `EnrichedStep`
 - `RunSummary`
+- `ReportSection`
 - `RunReportData`
 - `PcapParser`
 - `MobSFParser`

@@ -34,7 +34,7 @@ def crawler_loop(mock_config_manager, mock_run_repository, mock_session_folder_m
         config_manager=mock_config_manager,
         run_repository=mock_run_repository,
         session_folder_manager=mock_session_folder_manager,
-        event_listeners=[mock_listener]
+        event_listeners=[mock_listener],
     )
 
 
@@ -46,7 +46,7 @@ class TestCrawlerLoopInitialization:
         loop = CrawlerLoop(
             config_manager=mock_config_manager,
             run_repository=mock_run_repository,
-            session_folder_manager=mock_session_folder_manager
+            session_folder_manager=mock_session_folder_manager,
         )
         assert loop.config_manager == mock_config_manager
         assert loop.run_repository == mock_run_repository
@@ -55,13 +55,15 @@ class TestCrawlerLoopInitialization:
         assert loop._state == "uninitialized"
         assert not loop.is_running()
 
-    def test_init_with_event_listeners(self, mock_config_manager, mock_run_repository, mock_session_folder_manager, mock_listener):
+    def test_init_with_event_listeners(
+        self, mock_config_manager, mock_run_repository, mock_session_folder_manager, mock_listener
+    ):
         """Test initialization with event listeners."""
         loop = CrawlerLoop(
             config_manager=mock_config_manager,
             run_repository=mock_run_repository,
             session_folder_manager=mock_session_folder_manager,
-            event_listeners=[mock_listener]
+            event_listeners=[mock_listener],
         )
         assert len(loop.event_listeners) == 1
 
@@ -80,8 +82,10 @@ class TestCrawlerLoopInitialization:
 class TestCrawlerLoopLifecycle:
     """Tests for CrawlerLoop lifecycle and state transitions."""
 
-    @patch('mobile_crawler.core.crawler_loop.CrawlerAgentService')
-    def test_run_emits_on_crawl_started(self, mock_crawler_service_class, crawler_loop, mock_run_repository, mock_session_folder_manager, mock_listener):
+    @patch("mobile_crawler.core.crawler_loop.CrawlerAgentService")
+    def test_run_emits_on_crawl_started(
+        self, mock_crawler_service_class, crawler_loop, mock_run_repository, mock_session_folder_manager, mock_listener
+    ):
         """Test that run() emits on_crawl_started event."""
         mock_run = Mock()
         mock_run.app_package = "com.example.app"
@@ -111,8 +115,8 @@ class TestCrawlerLoopLifecycle:
         # Verify on_crawl_started was called
         mock_listener.on_crawl_started.assert_called_once_with(1, "com.example.app")
 
-    @patch('mobile_crawler.core.crawler_loop.VideoRecordingManager')
-    @patch('mobile_crawler.core.crawler_loop.CrawlerAgentService')
+    @patch("mobile_crawler.core.crawler_loop.VideoRecordingManager")
+    @patch("mobile_crawler.core.crawler_loop.CrawlerAgentService")
     def test_run_starts_and_stops_video_recording_when_enabled(
         self,
         mock_crawler_service_class,
@@ -167,8 +171,8 @@ class TestCrawlerLoopLifecycle:
         mock_run_repository.update_run_stats.assert_called_once()
         assert mock_run_repository.update_run_stats.call_args.kwargs["status"] == "COMPLETED"
 
-    @patch('mobile_crawler.core.crawler_loop.TrafficCaptureManager')
-    @patch('mobile_crawler.core.crawler_loop.CrawlerAgentService')
+    @patch("mobile_crawler.core.crawler_loop.TrafficCaptureManager")
+    @patch("mobile_crawler.core.crawler_loop.CrawlerAgentService")
     def test_run_starts_traffic_capture_before_exploration_when_enabled(
         self,
         mock_crawler_service_class,
@@ -243,8 +247,8 @@ class TestCrawlerLoopLifecycle:
             for call in mock_listener.on_debug_log.call_args_list
         )
 
-    @patch('mobile_crawler.core.crawler_loop.TrafficCaptureManager')
-    @patch('mobile_crawler.core.crawler_loop.CrawlerAgentService')
+    @patch("mobile_crawler.core.crawler_loop.TrafficCaptureManager")
+    @patch("mobile_crawler.core.crawler_loop.CrawlerAgentService")
     def test_run_stops_traffic_capture_when_crawler_agent_raises(
         self,
         mock_crawler_service_class,
@@ -287,8 +291,8 @@ class TestCrawlerLoopLifecycle:
             run_id=1,
         )
 
-    @patch('mobile_crawler.core.crawler_loop.TrafficCaptureManager')
-    @patch('mobile_crawler.core.crawler_loop.CrawlerAgentService')
+    @patch("mobile_crawler.core.crawler_loop.TrafficCaptureManager")
+    @patch("mobile_crawler.core.crawler_loop.CrawlerAgentService")
     def test_run_logs_nonfatal_traffic_capture_start_failure(
         self,
         mock_crawler_service_class,
@@ -339,8 +343,8 @@ class TestCrawlerLoopLifecycle:
             for call in mock_listener.on_debug_log.call_args_list
         )
 
-    @patch('mobile_crawler.core.crawler_loop.TrafficCaptureManager')
-    @patch('mobile_crawler.core.crawler_loop.CrawlerAgentService')
+    @patch("mobile_crawler.core.crawler_loop.TrafficCaptureManager")
+    @patch("mobile_crawler.core.crawler_loop.CrawlerAgentService")
     def test_run_continues_when_traffic_capture_start_raises(
         self,
         mock_crawler_service_class,
@@ -391,8 +395,10 @@ class TestCrawlerLoopLifecycle:
             for call in mock_listener.on_debug_log.call_args_list
         )
 
-    @patch('mobile_crawler.core.crawler_loop.CrawlerAgentService')
-    def test_run_transitions_through_states(self, mock_crawler_service_class, crawler_loop, mock_run_repository, mock_session_folder_manager, mock_listener):
+    @patch("mobile_crawler.core.crawler_loop.CrawlerAgentService")
+    def test_run_transitions_through_states(
+        self, mock_crawler_service_class, crawler_loop, mock_run_repository, mock_session_folder_manager, mock_listener
+    ):
         """Test that run() transitions through states uninitialized -> running -> stopped."""
         mock_run = Mock()
         mock_run.app_package = "com.example.app"
@@ -415,8 +421,10 @@ class TestCrawlerLoopLifecycle:
         mock_service.cleanup = Mock()
 
         states = []
+
         def state_tracker(run_id, old_state, new_state):
             states.append((old_state, new_state))
+
         mock_listener.on_state_changed.side_effect = state_tracker
 
         crawler_loop.run(1)
@@ -426,8 +434,8 @@ class TestCrawlerLoopLifecycle:
         assert ("initializing", "running") in states
         assert any(s[1] == "stopped" for s in states)
 
-    @patch('mobile_crawler.core.crawler_loop.MobSFManager')
-    @patch('mobile_crawler.core.crawler_loop.CrawlerAgentService')
+    @patch("mobile_crawler.core.crawler_loop.MobSFManager")
+    @patch("mobile_crawler.core.crawler_loop.CrawlerAgentService")
     def test_run_calls_mobsf_after_success_when_enabled(
         self,
         mock_crawler_service_class,
@@ -477,8 +485,8 @@ class TestCrawlerLoopLifecycle:
 
         mock_mobsf.analyze_run.assert_called_once_with(mock_run, "device123")
 
-    @patch('mobile_crawler.core.crawler_loop.MobSFManager')
-    @patch('mobile_crawler.core.crawler_loop.CrawlerAgentService')
+    @patch("mobile_crawler.core.crawler_loop.MobSFManager")
+    @patch("mobile_crawler.core.crawler_loop.CrawlerAgentService")
     def test_run_skips_mobsf_when_disabled(
         self,
         mock_crawler_service_class,
@@ -518,8 +526,8 @@ class TestCrawlerLoopLifecycle:
 
         mock_mobsf_class.assert_not_called()
 
-    @patch('mobile_crawler.core.crawler_loop.MobSFManager')
-    @patch('mobile_crawler.core.crawler_loop.CrawlerAgentService')
+    @patch("mobile_crawler.core.crawler_loop.MobSFManager")
+    @patch("mobile_crawler.core.crawler_loop.CrawlerAgentService")
     def test_run_skips_mobsf_when_auto_run_disabled(
         self,
         mock_crawler_service_class,
@@ -560,8 +568,8 @@ class TestCrawlerLoopLifecycle:
 
         mock_mobsf_class.assert_not_called()
 
-    @patch('mobile_crawler.core.crawler_loop.MobSFManager')
-    @patch('mobile_crawler.core.crawler_loop.CrawlerAgentService')
+    @patch("mobile_crawler.core.crawler_loop.MobSFManager")
+    @patch("mobile_crawler.core.crawler_loop.CrawlerAgentService")
     def test_run_logs_mobsf_failure_without_erroring_crawl(
         self,
         mock_crawler_service_class,
@@ -611,8 +619,10 @@ class TestCrawlerLoopLifecycle:
             for call in mock_listener.on_debug_log.call_args_list
         )
 
-    @patch('mobile_crawler.core.crawler_loop.CrawlerAgentService')
-    def test_run_handles_exception_and_emits_on_error(self, mock_crawler_service_class, crawler_loop, mock_run_repository, mock_session_folder_manager, mock_listener):
+    @patch("mobile_crawler.core.crawler_loop.CrawlerAgentService")
+    def test_run_handles_exception_and_emits_on_error(
+        self, mock_crawler_service_class, crawler_loop, mock_run_repository, mock_session_folder_manager, mock_listener
+    ):
         """Test that run() handles exceptions and emits on_error."""
         mock_run = Mock()
         mock_run.app_package = "com.example.app"
@@ -787,6 +797,7 @@ class TestCrawlerLoopEventEmission:
     def test_emit_event_raises_on_recorder_error(self, crawler_loop):
         """Test _emit_event re-raises RecorderError."""
         from mobile_crawler.domain.errors import RecorderError
+
         listener = Mock()
         listener.on_debug_log.side_effect = RecorderError("recorder failed")
         crawler_loop.add_event_listener(listener)
@@ -797,6 +808,7 @@ class TestCrawlerLoopEventEmission:
     def test_emit_event_raises_on_checkpoint_error(self, crawler_loop):
         """Test _emit_event re-raises CheckpointError."""
         from mobile_crawler.domain.errors import CheckpointError
+
         listener = Mock()
         listener.on_debug_log.side_effect = CheckpointError("checkpoint failed")
         crawler_loop.add_event_listener(listener)
@@ -819,12 +831,16 @@ class TestCrawlerLoopErrorHandling:
         args = mock_listener.on_error.call_args
         assert args[0][0] == 999  # run_id
         from mobile_crawler.domain.errors import FatalError
+
         assert isinstance(args[0][2], FatalError)
 
-    @patch('mobile_crawler.core.crawler_loop.CrawlerAgentService')
-    def test_run_handles_crawler_error(self, mock_crawler_service_class, crawler_loop, mock_run_repository, mock_session_folder_manager, mock_listener):
+    @patch("mobile_crawler.core.crawler_loop.CrawlerAgentService")
+    def test_run_handles_crawler_error(
+        self, mock_crawler_service_class, crawler_loop, mock_run_repository, mock_session_folder_manager, mock_listener
+    ):
         """Test run() handles CrawlerError gracefully."""
         from mobile_crawler.domain.errors import CrawlerError, ErrorContext
+
         mock_run = Mock()
         mock_run.app_package = "com.example.app"
         mock_run.device_id = "device123"
@@ -865,3 +881,308 @@ class TestCrawlerLoopErrorHandling:
         assert crawler_loop._state == "stopped"
         assert any("Invalid crawl state transition" in record.message for record in caplog.records)
         mock_listener.on_state_changed.assert_called_once_with(1, "uninitialized", "stopped")
+
+
+class TestCrawlerLoopRunReportFields:
+    """The loop records Stop Reason, guided progress and a trace session id on the run."""
+
+    @patch("mobile_crawler.core.crawler_loop.CrawlerAgentService")
+    def test_run_persists_stop_reason_and_guided_progress(
+        self,
+        mock_crawler_service_class,
+        crawler_loop,
+        mock_run_repository,
+        mock_session_folder_manager,
+    ):
+        mock_run = Mock()
+        mock_run.app_package = "com.example.app"
+        mock_run.device_id = "device123"
+        mock_run_repository.get_run_by_id.return_value = mock_run
+        mock_session_folder_manager.create_session_folder.return_value = "/tmp/session"
+
+        mock_service = Mock()
+        mock_service.trace_session_id = "run-1-abcd1234"
+        mock_crawler_service_class.return_value = mock_service
+
+        async def mock_explore(*args, **kwargs):
+            result = Mock()
+            result.success = True
+            result.steps_completed = 3
+            result.error_message = None
+            result.final_state = {
+                "stop_kind": "step_limit",
+                "guided_progress": '{"scenarios": ["a"]}',
+            }
+            return result
+
+        mock_service.execute_exploration_task = mock_explore
+        mock_service.cleanup = Mock()
+
+        crawler_loop.run(1)
+
+        kwargs = mock_run_repository.update_run_stats.call_args.kwargs
+        assert kwargs["stop_reason"] == "step_limit"
+        assert kwargs["guided_progress_json"] == '{"scenarios": ["a"]}'
+        mock_run_repository.update_trace_id.assert_called_once_with(1, "run-1-abcd1234")
+
+    @patch("mobile_crawler.core.crawler_loop.CrawlerAgentService")
+    def test_user_stop_is_recorded_as_stop_reason(
+        self,
+        mock_crawler_service_class,
+        crawler_loop,
+        mock_run_repository,
+        mock_session_folder_manager,
+    ):
+        mock_run = Mock()
+        mock_run.app_package = "com.example.app"
+        mock_run.device_id = "device123"
+        mock_run_repository.get_run_by_id.return_value = mock_run
+        mock_session_folder_manager.create_session_folder.return_value = "/tmp/session"
+
+        mock_service = Mock()
+        mock_crawler_service_class.return_value = mock_service
+
+        async def mock_explore(*args, **kwargs):
+            crawler_loop._cancel_requested = True
+            result = Mock()
+            result.success = True
+            result.steps_completed = 1
+            result.error_message = None
+            result.final_state = {}
+            return result
+
+        mock_service.execute_exploration_task = mock_explore
+        mock_service.cleanup = Mock()
+
+        crawler_loop.run(1)
+
+        assert mock_run_repository.update_run_stats.call_args.kwargs["stop_reason"] == "user_stop"
+
+    @patch("mobile_crawler.core.crawler_loop.CrawlerAgentService")
+    def test_run_writes_config_snapshot_into_session_folder(
+        self,
+        mock_crawler_service_class,
+        crawler_loop,
+        mock_config_manager,
+        mock_run_repository,
+        mock_session_folder_manager,
+        tmp_path,
+    ):
+        mock_config_manager.get.side_effect = lambda key, default=None: {
+            "ai_model": "gemini-x",
+            "max_steps": 12,
+        }.get(key, default)
+        mock_run = Mock()
+        mock_run.app_package = "com.example.app"
+        mock_run.device_id = "device123"
+        mock_run_repository.get_run_by_id.return_value = mock_run
+        mock_session_folder_manager.create_session_folder.return_value = str(tmp_path)
+
+        mock_service = Mock()
+        mock_crawler_service_class.return_value = mock_service
+
+        async def mock_explore(*args, **kwargs):
+            result = Mock()
+            result.success = True
+            result.steps_completed = 1
+            result.error_message = None
+            result.final_state = {}
+            return result
+
+        mock_service.execute_exploration_task = mock_explore
+        mock_service.cleanup = Mock()
+
+        crawler_loop.run(1)
+
+        import json
+
+        snapshot = json.loads((tmp_path / "data" / "config_snapshot.json").read_text(encoding="utf-8"))
+        assert snapshot["ai_model"] == "gemini-x"
+        assert snapshot["max_steps"] == 12
+
+    @patch("mobile_crawler.core.crawler_loop.write_config_snapshot", side_effect=OSError("disk full"))
+    @patch("mobile_crawler.core.crawler_loop.CrawlerAgentService")
+    def test_snapshot_failure_does_not_stop_the_run(
+        self,
+        mock_crawler_service_class,
+        _mock_write,
+        crawler_loop,
+        mock_run_repository,
+        mock_session_folder_manager,
+    ):
+        mock_run = Mock()
+        mock_run.app_package = "com.example.app"
+        mock_run.device_id = "device123"
+        mock_run_repository.get_run_by_id.return_value = mock_run
+        mock_session_folder_manager.create_session_folder.return_value = "/tmp/session"
+
+        mock_service = Mock()
+        mock_crawler_service_class.return_value = mock_service
+
+        async def mock_explore(*args, **kwargs):
+            result = Mock()
+            result.success = True
+            result.steps_completed = 1
+            result.error_message = None
+            result.final_state = {}
+            return result
+
+        mock_service.execute_exploration_task = mock_explore
+        mock_service.cleanup = Mock()
+
+        crawler_loop.run(1)
+
+        assert mock_run_repository.update_run_stats.call_args.kwargs["status"] == "COMPLETED"
+
+
+class TestCrawlerLoopAutoReport:
+    """The loop generates the Run Report after each run when the setting is on."""
+
+    def _setup(self, mock_crawler_service_class, mock_run_repository, mock_session_folder_manager):
+        mock_run = Mock()
+        mock_run.app_package = "com.example.app"
+        mock_run.device_id = "device123"
+        mock_run_repository.get_run_by_id.return_value = mock_run
+        mock_session_folder_manager.create_session_folder.return_value = "/tmp/session"
+
+        mock_service = Mock()
+        mock_crawler_service_class.return_value = mock_service
+
+        async def mock_explore(*args, **kwargs):
+            result = Mock()
+            result.success = True
+            result.steps_completed = 2
+            result.error_message = None
+            result.final_state = {}
+            return result
+
+        mock_service.execute_exploration_task = mock_explore
+        mock_service.cleanup = Mock()
+
+    def _loop(self, config_manager, run_repository, session_folder_manager, listener, report_generator):
+        return CrawlerLoop(
+            config_manager=config_manager,
+            run_repository=run_repository,
+            session_folder_manager=session_folder_manager,
+            event_listeners=[listener],
+            report_generator=report_generator,
+        )
+
+    @patch("mobile_crawler.core.crawler_loop.CrawlerAgentService")
+    def test_generates_report_once_after_run_when_enabled(
+        self,
+        service_cls,
+        mock_config_manager,
+        mock_run_repository,
+        mock_session_folder_manager,
+        mock_listener,
+    ):
+        mock_config_manager.get.side_effect = lambda key, default=None: {
+            "auto_generate_report_after_run": True,
+        }.get(key, default)
+        self._setup(service_cls, mock_run_repository, mock_session_folder_manager)
+        generator = Mock()
+        loop = self._loop(
+            mock_config_manager, mock_run_repository, mock_session_folder_manager, mock_listener, generator
+        )
+
+        loop.run(1)
+
+        generator.generate.assert_called_once_with(1)
+
+    @patch("mobile_crawler.core.crawler_loop.CrawlerAgentService")
+    def test_report_is_generated_after_stats_are_saved(
+        self,
+        service_cls,
+        mock_config_manager,
+        mock_run_repository,
+        mock_session_folder_manager,
+        mock_listener,
+    ):
+        mock_config_manager.get.side_effect = lambda key, default=None: {
+            "auto_generate_report_after_run": True,
+        }.get(key, default)
+        self._setup(service_cls, mock_run_repository, mock_session_folder_manager)
+        order = []
+        mock_run_repository.update_run_stats.side_effect = lambda **kw: order.append("stats")
+        generator = Mock()
+        generator.generate.side_effect = lambda run_id: order.append("report")
+        loop = self._loop(
+            mock_config_manager, mock_run_repository, mock_session_folder_manager, mock_listener, generator
+        )
+
+        loop.run(1)
+
+        assert order == ["stats", "report"]
+
+    @patch("mobile_crawler.core.crawler_loop.CrawlerAgentService")
+    def test_no_report_when_setting_is_off(
+        self,
+        service_cls,
+        mock_config_manager,
+        mock_run_repository,
+        mock_session_folder_manager,
+        mock_listener,
+    ):
+        mock_config_manager.get.side_effect = lambda key, default=None: {
+            "auto_generate_report_after_run": False,
+        }.get(key, default)
+        self._setup(service_cls, mock_run_repository, mock_session_folder_manager)
+        generator = Mock()
+        loop = self._loop(
+            mock_config_manager, mock_run_repository, mock_session_folder_manager, mock_listener, generator
+        )
+
+        loop.run(1)
+
+        generator.generate.assert_not_called()
+
+    @patch("mobile_crawler.core.crawler_loop.CrawlerAgentService")
+    def test_report_failure_does_not_fail_the_run_and_is_logged(
+        self,
+        service_cls,
+        mock_config_manager,
+        mock_run_repository,
+        mock_session_folder_manager,
+        mock_listener,
+    ):
+        mock_config_manager.get.side_effect = lambda key, default=None: {
+            "auto_generate_report_after_run": True,
+        }.get(key, default)
+        self._setup(service_cls, mock_run_repository, mock_session_folder_manager)
+        generator = Mock()
+        generator.generate.side_effect = RuntimeError("template exploded")
+        loop = self._loop(
+            mock_config_manager, mock_run_repository, mock_session_folder_manager, mock_listener, generator
+        )
+
+        loop.run(1)
+
+        assert mock_run_repository.update_run_stats.call_args.kwargs["status"] == "COMPLETED"
+        mock_listener.on_crawl_completed.assert_called_once()
+        logged = [c.args[2] for c in mock_listener.on_debug_log.call_args_list if len(c.args) > 2]
+        assert any("template exploded" in message for message in logged)
+
+    @patch("mobile_crawler.core.crawler_loop.CrawlerAgentService")
+    def test_no_report_generator_means_no_report(
+        self,
+        service_cls,
+        mock_config_manager,
+        mock_run_repository,
+        mock_session_folder_manager,
+        mock_listener,
+    ):
+        mock_config_manager.get.side_effect = lambda key, default=None: {
+            "auto_generate_report_after_run": True,
+        }.get(key, default)
+        self._setup(service_cls, mock_run_repository, mock_session_folder_manager)
+        loop = CrawlerLoop(
+            config_manager=mock_config_manager,
+            run_repository=mock_run_repository,
+            session_folder_manager=mock_session_folder_manager,
+            event_listeners=[mock_listener],
+        )
+
+        loop.run(1)
+
+        mock_listener.on_crawl_completed.assert_called_once()

@@ -58,76 +58,103 @@ class RunStatsDialog(QDialog):
 
         # Group definitions: (section title, list of (display label, attr name))
         groups = [
-            ("Crawl Progress", [
-                ("Total Steps", "total_steps"),
-                ("Successful Steps", "successful_steps"),
-                ("Failed Steps", "failed_steps"),
-                ("Duration (s)", "crawl_duration_seconds"),
-                ("Avg Step (ms)", "avg_step_duration_ms"),
-            ]),
-            ("Screen Discovery", [
-                ("Unique Screens", "unique_screens_visited"),
-                ("Total Visits", "total_screen_visits"),
-                ("Deepest Depth", "deepest_navigation_depth"),
-                ("Unique Activities", "unique_activities_visited"),
-            ]),
-            ("Action Statistics", [
-                ("Actions By Type", "actions_by_type"),
-                ("Successful By Type", "successful_actions_by_type"),
-                ("Failed By Type", "failed_actions_by_type"),
-                ("Avg Duration (ms)", "avg_action_duration_ms"),
-                ("Min Duration (ms)", "min_action_duration_ms"),
-                ("Max Duration (ms)", "max_action_duration_ms"),
-            ]),
-            ("AI Performance", [
-                ("Total AI Calls", "total_ai_calls"),
-                ("Avg Response (ms)", "avg_ai_response_time_ms"),
-                ("Min Response (ms)", "min_ai_response_time_ms"),
-                ("Max Response (ms)", "max_ai_response_time_ms"),
-                ("Timeouts", "ai_timeout_count"),
-                ("Errors", "ai_error_count"),
-                ("Retries", "ai_retry_count"),
-                ("Invalid Responses", "invalid_response_count"),
-                ("Total Tokens", "total_ai_tokens_used"),
-                ("Vision Calls", "vision_call_count"),
-                ("Non-Vision Calls", "non_vision_call_count"),
-                ("AI Success By Type", "ai_success_by_type"),
-                ("AI Total By Type", "ai_total_by_type"),
-            ]),
-            ("Batching", [
-                ("Multi-Action Batches", "multi_action_batch_count"),
-                ("Single Actions", "single_action_count"),
-                ("Total Batch Actions", "total_batch_actions"),
-                ("Avg Batch Size", "avg_batch_size"),
-                ("Max Batch Size", "max_batch_size"),
-            ]),
-            ("Error & Recovery", [
-                ("Stuck Detections", "stuck_detection_count"),
-                ("Stuck Recoveries", "stuck_recovery_success"),
-                ("App Crashes", "app_crash_count"),
-                ("App Relaunches", "app_relaunch_count"),
-                ("Context Losses", "context_loss_count"),
-                ("Context Recoveries", "context_recovery_count"),
-                ("Avg Recovery (ms)", "avg_recovery_time_ms"),
-            ]),
-            ("Device & App", [
-                ("Device", "device_model"),
-                ("Android Version", "android_version"),
-                ("App Package", "app_package"),
-                ("App Version", "app_version"),
-            ]),
-            ("Network & Security", [
-                ("PCAP Size (bytes)", "pcap_file_size_bytes"),
-                ("PCAP Packets", "pcap_packet_count"),
-                ("MobSF Score", "mobsf_security_score"),
-                ("MobSF High", "mobsf_high_issues"),
-                ("MobSF Medium", "mobsf_medium_issues"),
-                ("MobSF Low", "mobsf_low_issues"),
-            ]),
-            ("Coverage", [
-                ("Transitions", "transition_count"),
-                ("Unique Transitions", "unique_transitions"),
-            ]),
+            (
+                "Crawl Progress",
+                [
+                    ("Total Steps", "total_steps"),
+                    ("Successful Steps", "successful_steps"),
+                    ("Failed Steps", "failed_steps"),
+                    ("Duration (s)", "crawl_duration_seconds"),
+                    ("Avg Step (ms)", "avg_step_duration_ms"),
+                ],
+            ),
+            (
+                "Screen Discovery",
+                [
+                    ("Unique Screens", "unique_screens_visited"),
+                    ("Total Visits", "total_screen_visits"),
+                    ("Deepest Depth", "deepest_navigation_depth"),
+                    ("Unique Activities", "unique_activities_visited"),
+                ],
+            ),
+            (
+                "Action Statistics",
+                [
+                    ("Actions By Type", "actions_by_type"),
+                    ("Successful By Type", "successful_actions_by_type"),
+                    ("Failed By Type", "failed_actions_by_type"),
+                    ("Avg Duration (ms)", "avg_action_duration_ms"),
+                    ("Min Duration (ms)", "min_action_duration_ms"),
+                    ("Max Duration (ms)", "max_action_duration_ms"),
+                ],
+            ),
+            (
+                "AI Performance",
+                [
+                    ("Total AI Calls", "total_ai_calls"),
+                    ("Avg Response (ms)", "avg_ai_response_time_ms"),
+                    ("Min Response (ms)", "min_ai_response_time_ms"),
+                    ("Max Response (ms)", "max_ai_response_time_ms"),
+                    ("Timeouts", "ai_timeout_count"),
+                    ("Errors", "ai_error_count"),
+                    ("Retries", "ai_retry_count"),
+                    ("Invalid Responses", "invalid_response_count"),
+                    ("Total Tokens", "total_ai_tokens_used"),
+                    ("Vision Calls", "vision_call_count"),
+                    ("Non-Vision Calls", "non_vision_call_count"),
+                    ("AI Success By Type", "ai_success_by_type"),
+                    ("AI Total By Type", "ai_total_by_type"),
+                ],
+            ),
+            (
+                "Batching",
+                [
+                    ("Multi-Action Batches", "multi_action_batch_count"),
+                    ("Single Actions", "single_action_count"),
+                    ("Total Batch Actions", "total_batch_actions"),
+                    ("Avg Batch Size", "avg_batch_size"),
+                    ("Max Batch Size", "max_batch_size"),
+                ],
+            ),
+            (
+                "Error & Recovery",
+                [
+                    ("Stuck Detections", "stuck_detection_count"),
+                    ("Stuck Recoveries", "stuck_recovery_success"),
+                    ("App Crashes", "app_crash_count"),
+                    ("App Relaunches", "app_relaunch_count"),
+                    ("Context Losses", "context_loss_count"),
+                    ("Context Recoveries", "context_recovery_count"),
+                    ("Avg Recovery (ms)", "avg_recovery_time_ms"),
+                ],
+            ),
+            (
+                "Device & App",
+                [
+                    ("Device", "device_model"),
+                    ("Android Version", "android_version"),
+                    ("App Package", "app_package"),
+                    ("App Version", "app_version"),
+                ],
+            ),
+            (
+                "Network & Security",
+                [
+                    ("PCAP Size (bytes)", "pcap_file_size_bytes"),
+                    ("PCAP Packets", "pcap_packet_count"),
+                    ("MobSF Score", "mobsf_security_score"),
+                    ("MobSF High", "mobsf_high_issues"),
+                    ("MobSF Medium", "mobsf_medium_issues"),
+                    ("MobSF Low", "mobsf_low_issues"),
+                ],
+            ),
+            (
+                "Coverage",
+                [
+                    ("Transitions", "transition_count"),
+                    ("Unique Transitions", "unique_transitions"),
+                ],
+            ),
         ]
 
         scroll = QScrollArea()
@@ -186,7 +213,7 @@ class RunHistoryView(QWidget):
         report_generator: "ReportGenerator",
         mobsf_manager: "MobSFManager",
         run_stats_repository: "RunStatsRepository | None" = None,
-        parent=None
+        parent=None,
     ):
         """Initialize run history view widget.
 
@@ -221,18 +248,9 @@ class RunHistoryView(QWidget):
         # Table for run metadata
         self.table = QTableWidget()
         self.table.setColumnCount(10)
-        self.table.setHorizontalHeaderLabels([
-            "ID",
-            "Device",
-            "Package",
-            "Start Time",
-            "End Time",
-            "Status",
-            "Steps",
-            "Screens",
-            "Model",
-            "Actions"
-        ])
+        self.table.setHorizontalHeaderLabels(
+            ["ID", "Device", "Package", "Start Time", "End Time", "Status", "Steps", "Screens", "Model", "Actions"]
+        )
 
         # Configure table
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
@@ -306,6 +324,7 @@ class RunHistoryView(QWidget):
         # Need session manager to resolve paths
         # We'll create it on fly since it's lightweight, or we could inject it
         from mobile_crawler.infrastructure.session_folder_manager import SessionFolderManager
+
         session_manager = SessionFolderManager()
 
         for row, run in enumerate(runs):
@@ -381,7 +400,7 @@ class RunHistoryView(QWidget):
 
         # Restore selection
         if selected_id is not None:
-             for row in range(self.table.rowCount()):
+            for row in range(self.table.rowCount()):
                 item = self.table.item(row, 0)
                 if item and item.data(Qt.ItemDataRole.UserRole) == selected_id:
                     self.table.selectRow(row)
@@ -474,7 +493,7 @@ class RunHistoryView(QWidget):
             f"Are you sure you want to delete run {run_id}?\n\n"
             "This will delete the run record and all related data from the database.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No
+            QMessageBox.StandardButton.No,
         )
 
         if reply == QMessageBox.StandardButton.Yes:
@@ -484,23 +503,11 @@ class RunHistoryView(QWidget):
                     # Remove row from table
                     self.table.removeRow(row)
                     self.run_deleted.emit(run_id)
-                    QMessageBox.information(
-                        self,
-                        "Run Deleted",
-                        f"Run {run_id} has been deleted successfully."
-                    )
+                    QMessageBox.information(self, "Run Deleted", f"Run {run_id} has been deleted successfully.")
                 else:
-                    QMessageBox.warning(
-                        self,
-                        "Delete Failed",
-                        f"Failed to delete run {run_id}."
-                    )
+                    QMessageBox.warning(self, "Delete Failed", f"Failed to delete run {run_id}.")
             except Exception as e:
-                QMessageBox.critical(
-                    self,
-                    "Error",
-                    f"Failed to delete run {run_id}: {e}"
-                )
+                QMessageBox.critical(self, "Error", f"Failed to delete run {run_id}: {e}")
 
     def _on_generate_report_clicked(self):
         """Handle generate report button click."""
@@ -521,24 +528,16 @@ class RunHistoryView(QWidget):
             "Generate Report",
             f"Generate enhanced report for run {run_id}?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.Yes
+            QMessageBox.StandardButton.Yes,
         )
 
         if reply == QMessageBox.StandardButton.Yes:
             try:
-                report_path = self._report_generator.generate(run_id)
+                report_path = self._report_generator.generate(run_id, fetch_telemetry=True)
                 self.report_generated.emit(run_id)
-                QMessageBox.information(
-                    self,
-                    "Report Generated",
-                    f"Report generated successfully:\n{report_path}"
-                )
+                QMessageBox.information(self, "Report Generated", f"Report generated successfully:\n{report_path}")
             except Exception as e:
-                QMessageBox.critical(
-                    self,
-                    "Error",
-                    f"Failed to generate report: {e}"
-                )
+                QMessageBox.critical(self, "Error", f"Failed to generate report: {e}")
 
     def _on_mobsf_clicked(self):
         """Handle MobSF button click."""
@@ -564,7 +563,7 @@ class RunHistoryView(QWidget):
             "Run MobSF Analysis",
             f"Run MobSF static analysis for package {package}?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.Yes
+            QMessageBox.StandardButton.Yes,
         )
 
         if reply == QMessageBox.StandardButton.Yes:
@@ -579,8 +578,7 @@ class RunHistoryView(QWidget):
                     QMessageBox.information(
                         self,
                         "MobSF Analysis Complete",
-                        f"MobSF analysis completed for {package}.\n"
-                        f"Results saved to session folder."
+                        f"MobSF analysis completed for {package}.\n" f"Results saved to session folder.",
                     )
                     return
 
@@ -594,11 +592,7 @@ class RunHistoryView(QWidget):
                 self._mobsf_worker = worker
                 worker.start()
             except Exception as e:
-                QMessageBox.critical(
-                    self,
-                    "Error",
-                    f"Failed to run MobSF analysis: {e}"
-                )
+                QMessageBox.critical(self, "Error", f"Failed to run MobSF analysis: {e}")
 
     def _get_run_by_id(self, run_id: int):
         """Fetch a run from repositories with or without get_run_by_id."""
@@ -623,15 +617,11 @@ class RunHistoryView(QWidget):
                 details.append(f"PDF: {result.report_path}")
             suffix = "\n" + "\n".join(details) if details else ""
             QMessageBox.information(
-                self,
-                "MobSF Analysis Complete",
-                f"MobSF analysis completed for run {run_id}.{suffix}"
+                self, "MobSF Analysis Complete", f"MobSF analysis completed for run {run_id}.{suffix}"
             )
         else:
             QMessageBox.critical(
-                self,
-                "MobSF Analysis Failed",
-                result.error or "MobSF analysis failed with no error message."
+                self, "MobSF Analysis Failed", result.error or "MobSF analysis failed with no error message."
             )
 
     def _on_mobsf_failed(self, run_id: int, error: str):
@@ -639,11 +629,7 @@ class RunHistoryView(QWidget):
         self.mobsf_button.setText("Run MobSF")
         self.mobsf_button.setEnabled(self.get_selected_run_id() is not None)
         self.refresh()
-        QMessageBox.critical(
-            self,
-            "MobSF Analysis Failed",
-            error or f"MobSF analysis failed for run {run_id}."
-        )
+        QMessageBox.critical(self, "MobSF Analysis Failed", error or f"MobSF analysis failed for run {run_id}.")
 
     def refresh(self):
         """Refresh the run history table."""

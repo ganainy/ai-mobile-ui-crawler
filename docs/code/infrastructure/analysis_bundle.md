@@ -20,3 +20,6 @@ Source: `src/mobile_crawler/infrastructure/analysis_bundle.py`
 - [[code/infrastructure/step_log_repository|infrastructure.step_log_repository]]
 - [[code/infrastructure/telemetry_client|infrastructure.telemetry_client]]
 - [[code/reporting/contracts|reporting.contracts]]
+
+## Imported by
+- [[code/domain/report_generator|domain.report_generator]]

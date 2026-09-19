@@ -19,5 +19,4 @@ Source: `src/mobile_crawler/infrastructure/screen_repository.py`
 - [[code/domain/prompt_builder|domain.prompt_builder]]
 - [[code/domain/screen_tracker|domain.screen_tracker]]
 - [[code/infrastructure/analysis_bundle|infrastructure.analysis_bundle]]
-- [[code/infrastructure/run_exporter|infrastructure.run_exporter]]
 - [[code/ui/main_window|ui.main_window]]

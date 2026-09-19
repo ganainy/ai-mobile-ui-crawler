@@ -9,6 +9,8 @@ DEFAULTS: dict[str, Any] = {
     "max_crawl_steps": 15,
     "max_crawl_duration_seconds": 600,
     "action_delay_ms": 500,
+    # Generate the Run Report (HTML + Analysis Bundle) automatically after each run
+    "auto_generate_report_after_run": True,
     # AI settings
     "ai_timeout_seconds": 30,
     "ai_retry_count": 2,
