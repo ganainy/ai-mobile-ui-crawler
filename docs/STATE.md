@@ -7,6 +7,7 @@ updated: 2026-09-19
 Entry point for the Obsidian vault (`docs/`). Claude reads this first each session and updates it before finishing substantive work.
 
 ## Now
+- Old issues #1 and #5 verified fixed and closed; stray `src/=0.4.26` removed. See [session](sessions/2026-09-19-close-old-issues.md).
 - Issue #7 (App Accounts) committed as cf3196f: per-app account store, Settings "App Account" group, account injected into the agent goal. See [session](sessions/2026-09-19-app-accounts.md).
 - Vault set up 2026-09-19: docs reorganised, shipped feature specs, old plans and fixed-bug handovers deleted (see git history).
 - Recent: local OmniParser Docker auto-start at GUI launch; Docker stop dialog / taskbar icon / Stop button polish; App Web Profile -> Guided Scenarios wired end-to-end.
