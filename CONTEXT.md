@@ -68,6 +68,10 @@ _Avoid_: Test credentials
 A step in sign-up or login that requires proof of control of an email address or phone number, such as an emailed code or link or an SMS one-time password. The crawler tries to solve it automatically first; when it can't and human fallback is enabled, it asks the user.
 _Avoid_: OTP step, verification step, 2FA
 
+**Live Feed**:
+A real-time, read-only video view of the selected device's screen, shown in the Stats panel's device board so the user can watch the crawl as it happens. The parsed-element boxes from the latest capture are drawn over it and fade out, since they describe a past snapshot. When the feed is off or unavailable, the board falls back to the last captured screenshot with its boxes. Distinct from the per-step screenshots the crawler captures for its own use and from the recorded run video: the Live Feed is for the human only, and toggled on or off by the user.
+_Avoid_: Mirror, screen mirroring, stream
+
 **Human Fallback**:
 An opt-in (checkbox) behaviour where, when the crawler cannot solve a Verification Challenge or complete sign-in by itself, it pauses and asks the user to supply the code or finish the step. Times out after a configurable wait, after which authentication is skipped and the crawl continues with whatever is reachable. When off, authentication is skipped immediately on failure.
 _Avoid_: Manual mode, human in the loop

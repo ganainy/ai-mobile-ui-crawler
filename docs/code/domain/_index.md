@@ -31,6 +31,7 @@ Exploration logic: action execution/verification, screen and state tracking, OCR
 - [[code/domain/report_generator|domain.report_generator]] - Enhanced HTML/JSON report generator for crawl runs.
 - [[code/domain/run_config_snapshot|domain.run_config_snapshot]] - Config snapshot captured at run start, so runs can be compared across crawler changes.
 - [[code/domain/run_outcome|domain.run_outcome]] - Derives the Stop Reason and guided-scenario progress recorded on a finished run.
+- [[code/domain/scrcpy_stream|domain.scrcpy_stream]] - Live Feed video source: talks to a vendored scrcpy server over adb.
 - [[code/domain/screen_hash|domain.screen_hash]] - Shared screen hashing utilities.
 - [[code/domain/screen_tracker|domain.screen_tracker]] - Screen tracking service for detecting unique and repeated screens.
 - [[code/domain/state_graph|domain.state_graph]] - State transition graph and layout hashing for AI crawler navigation.

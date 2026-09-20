@@ -14,5 +14,6 @@ Root package: PySide6 desktop GUI plus Click CLI for AI-driven Android app explo
 - [[code/domain/_index|domain]] - Domain layer - business rules and use cases.
 - [[code/infrastructure/_index|infrastructure]] - Infrastructure layer - external services and persistence.
 - [[code/reporting/_index|reporting]]
+- [[code/resources/_index|resources]]
 - [[code/ui/_index|ui]] - User interface components.
 - [[code/utils/_index|utils]] - Utility functions and helpers.

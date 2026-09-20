@@ -58,6 +58,7 @@ from mobile_crawler.infrastructure.step_phase_repository import StepPhaseReposit
 from mobile_crawler.infrastructure.telemetry_client import build_telemetry_client_factory
 from mobile_crawler.infrastructure.user_config_store import UserConfigStore
 from mobile_crawler.ui.human_fallback_dialog import QtHumanPrompter
+from mobile_crawler.ui.live_feed_worker import LiveFeedWorker
 from mobile_crawler.ui.log_cleaner import LogCleaner
 from mobile_crawler.ui.mobsf_startup_worker import MobSFStartupWorker
 from mobile_crawler.ui.omniparser_startup_worker import OmniParserStartupWorker
@@ -347,6 +348,7 @@ class MainWindow(QMainWindow):
 
         # Crawl configuration state
         self._selected_device = None
+        self._live_feed_worker = None
         self._selected_package = None
         self._ai_provider = None
         self._ai_model = None
@@ -881,6 +883,7 @@ class MainWindow(QMainWindow):
 
     def _on_crawl_finished(self) -> None:
         """Handle crawl completion."""
+        self._stop_live_feed()
         self._update_crawl_ui_state(running=False)
         self._save_run_stats()
         self._crawler_worker = None
@@ -895,6 +898,7 @@ class MainWindow(QMainWindow):
             error_msg: Error message
         """
         self._show_error("Crawl Error", error_msg)
+        self._stop_live_feed()
         self._update_crawl_ui_state(running=False)
         self._save_run_stats()
         self._crawler_worker = None
@@ -1400,6 +1404,8 @@ class MainWindow(QMainWindow):
         self.control_panel.setObjectName("crawlControlPanel")
         self.stats_dashboard = StatsDashboard()
         self.stats_dashboard.setObjectName("statsDashboard")
+        self.stats_dashboard.live_feed_toggled.connect(self._on_live_feed_toggled)
+        self.stats_dashboard.live_feed_restart_requested.connect(self._start_live_feed)
 
         layout.addWidget(self.control_panel, 0)
         layout.addWidget(self.stats_dashboard, 1)
@@ -1566,6 +1572,8 @@ class MainWindow(QMainWindow):
             device: AndroidDevice instance
         """
         self._selected_device = device
+        if getattr(self, "_live_feed_worker", None) is not None:
+            self._start_live_feed()  # follow the selection (restarts on the new serial)
         if self.app_selector:
             self.app_selector.set_device_id(device.device_id if device else None)
         self.settings_panel.notify_device_changed(device.device_id if device else None)
@@ -1798,6 +1806,49 @@ class MainWindow(QMainWindow):
 
         # Start elapsed time timer (1-second interval)
         self._elapsed_timer.start(1000)
+
+        self._start_live_feed()
+
+    # ------------------------------------------------------------------
+    # Live Feed
+    # ------------------------------------------------------------------
+
+    def _start_live_feed(self) -> None:
+        """(Re)start the Live Feed for the selected device while a crawl runs."""
+        self._stop_live_feed()
+        if not self.stats_dashboard or not self.stats_dashboard.live_checkbox.isChecked():
+            return
+        if self._selected_device is None or self._crawler_worker is None:
+            return
+        adb_path = str(ConfigManager(self._services["user_config_store"]).get("adb_executable_path", "adb") or "adb")
+        worker = LiveFeedWorker(adb_path, self._selected_device.device_id)
+        worker.frame_ready.connect(self.stats_dashboard.set_live_frame)
+        worker.device_size.connect(self.stats_dashboard.set_live_device_size)
+        worker.failed.connect(self._on_live_feed_failed)
+        self._live_feed_worker = worker
+        worker.start()
+
+    def _stop_live_feed(self) -> None:
+        worker = getattr(self, "_live_feed_worker", None)
+        self._live_feed_worker = None
+        if worker is None:
+            return
+        worker.frame_ready.disconnect()
+        worker.failed.disconnect()
+        worker.stop()
+        if self.stats_dashboard:
+            self.stats_dashboard.stop_live_view()
+
+    def _on_live_feed_failed(self, message: str) -> None:
+        self._live_feed_worker = None
+        if self.stats_dashboard:
+            self.stats_dashboard.stop_live_view(f"Live feed stopped: {message}", offer_restart=True)
+
+    def _on_live_feed_toggled(self, enabled: bool) -> None:
+        if enabled:
+            self._start_live_feed()
+        else:
+            self._stop_live_feed()
 
     def _on_step_completed_stats(self, run_id: int, step_number: int, actions_count: int, duration_ms: float) -> None:
         """Update statistics when a step completes.
@@ -2271,6 +2322,8 @@ class MainWindow(QMainWindow):
                 self.main_splitter.flush_pending_save()
             if self.workspace_splitter:
                 self.workspace_splitter.flush_pending_save()
+
+            self._stop_live_feed()
 
             # Stop crawler if running
             if self._crawler_loop:

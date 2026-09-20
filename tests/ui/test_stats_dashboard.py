@@ -23,6 +23,7 @@ def dashboard(qt_app):
 # Initialisation
 # ---------------------------------------------------------------------------
 
+
 class TestInit:
     def test_creates_without_error(self, dashboard):
         assert dashboard is not None
@@ -42,6 +43,7 @@ class TestInit:
 # ---------------------------------------------------------------------------
 # set_max_steps / set_max_duration / set_progress_mode
 # ---------------------------------------------------------------------------
+
 
 class TestConfiguration:
     def test_set_max_steps_updates_progress_bar(self, dashboard):
@@ -72,6 +74,7 @@ class TestConfiguration:
 # update_stats — content visibility
 # ---------------------------------------------------------------------------
 
+
 class TestContentVisibility:
     def test_stats_content_shown_when_steps_nonzero(self, dashboard):
         dashboard.update_stats(total_steps=1)
@@ -86,6 +89,7 @@ class TestContentVisibility:
 # ---------------------------------------------------------------------------
 # update_stats — step progress
 # ---------------------------------------------------------------------------
+
 
 class TestStepProgress:
     def test_total_steps_label(self, dashboard):
@@ -116,6 +120,7 @@ class TestStepProgress:
 # ---------------------------------------------------------------------------
 # update_stats — Actions section
 # ---------------------------------------------------------------------------
+
 
 class TestActionsSection:
     def test_successful_actions_label(self, dashboard):
@@ -155,6 +160,7 @@ class TestActionsSection:
 # update_stats — AI Performance section
 # ---------------------------------------------------------------------------
 
+
 class TestAIPerformanceSection:
     def test_ai_calls_label(self, dashboard):
         dashboard.update_stats(ai_calls=12)
@@ -177,6 +183,7 @@ class TestAIPerformanceSection:
 # update_stats — Duration section
 # ---------------------------------------------------------------------------
 
+
 class TestDurationSection:
     def test_duration_label(self, dashboard):
         dashboard.update_stats(duration_seconds=75.0)
@@ -191,6 +198,7 @@ class TestDurationSection:
 # get_total_steps
 # ---------------------------------------------------------------------------
 
+
 class TestGetters:
     def test_get_total_steps(self, dashboard):
         dashboard.update_stats(total_steps=33)
@@ -203,6 +211,7 @@ class TestGetters:
 # ---------------------------------------------------------------------------
 # reset
 # ---------------------------------------------------------------------------
+
 
 class TestReset:
     def test_reset_hides_content(self, dashboard):
@@ -226,9 +235,62 @@ class TestReset:
 # stats_updated signal
 # ---------------------------------------------------------------------------
 
+
 class TestSignal:
     def test_update_stats_emits_signal(self, dashboard):
         fired = []
         dashboard.stats_updated.connect(lambda: fired.append(1))
         dashboard.update_stats(total_steps=1)
         assert fired
+
+
+# ---------------------------------------------------------------------------
+# Live Feed
+# ---------------------------------------------------------------------------
+
+
+class TestLiveFeed:
+    def test_first_frame_switches_board_to_live(self, dashboard):
+        from PySide6.QtGui import QImage
+
+        assert not dashboard.is_live_showing()
+        dashboard.set_live_frame(QImage(32, 64, QImage.Format.Format_RGB888))
+        assert dashboard.is_live_showing()
+
+    def test_stop_falls_back_to_static_and_offers_restart(self, dashboard):
+        from PySide6.QtGui import QImage
+
+        dashboard.set_live_frame(QImage(32, 64, QImage.Format.Format_RGB888))
+        dashboard.stop_live_view("Live feed stopped: boom", offer_restart=True)
+        assert not dashboard.is_live_showing()
+        assert not dashboard.live_restart_button.isHidden()
+        assert "boom" in dashboard.screenshot_hint_label.text()
+
+    def test_overlay_boxes_fade_out(self, dashboard):
+        from mobile_crawler.ui.widgets.stats_dashboard import OVERLAY_FADE_SECONDS
+
+        view = dashboard.live_view
+        view.set_boxes([{"index": 1, "bounds": "0,0,10,10"}])
+        start = view._boxes_set_at
+        assert view.overlay_alpha(start) == 1.0
+        assert 0 < view.overlay_alpha(start + OVERLAY_FADE_SECONDS / 2) < 1
+        assert view.overlay_alpha(start + OVERLAY_FADE_SECONDS) == 0.0
+
+    def test_parse_element_boxes_skips_invalid(self):
+        from mobile_crawler.ui.widgets.stats_dashboard import parse_element_boxes
+
+        boxes = parse_element_boxes(
+            [
+                {"index": 1, "bounds": "1,2,3,4"},
+                {"index": 2, "bounds": "bad"},
+                {"index": 3, "bounds": "5,5,5,9"},
+                {"bounds": "1,2,3,4"},
+            ]
+        )
+        assert boxes == [(1, 1, 2, 3, 4)]
+
+    def test_toggle_signal_emitted(self, dashboard):
+        seen = []
+        dashboard.live_feed_toggled.connect(seen.append)
+        dashboard.live_checkbox.setChecked(False)
+        assert seen == [False]

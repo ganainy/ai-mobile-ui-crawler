@@ -48,6 +48,7 @@ Source: `src/mobile_crawler/ui/main_window.py`
 - [[code/infrastructure/telemetry_client|infrastructure.telemetry_client]]
 - [[code/infrastructure/user_config_store|infrastructure.user_config_store]]
 - [[code/ui/human_fallback_dialog|ui.human_fallback_dialog]]
+- [[code/ui/live_feed_worker|ui.live_feed_worker]]
 - [[code/ui/log_cleaner|ui.log_cleaner]]
 - [[code/ui/mobsf_startup_worker|ui.mobsf_startup_worker]]
 - [[code/ui/omniparser_startup_worker|ui.omniparser_startup_worker]]

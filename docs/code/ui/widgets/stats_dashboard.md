@@ -10,7 +10,11 @@ Source: `src/mobile_crawler/ui/widgets/stats_dashboard.py`
 
 ## Classes
 - `_ScreenshotView`
+- `_LiveFeedView`
 - `StatsDashboard`
+
+## Functions
+- `parse_element_boxes`
 
 ## Imports
 - [[code/domain/element_overlay_renderer|domain.element_overlay_renderer]]
