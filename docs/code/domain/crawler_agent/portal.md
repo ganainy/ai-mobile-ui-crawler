@@ -8,11 +8,10 @@ Portal APK management and device communication utilities.
 
 Source: `src/mobile_crawler/domain/crawler_agent/portal.py`
 
+## Classes
+- `PortalStatus`
+
 ## Functions
-- `get_version_mapping`
-- `get_compatible_portal_version`
-- `download_versioned_portal_apk`
-- `get_latest_release_assets`
 - `download_portal_apk`
 - `enable_portal_accessibility`
 - `check_portal_accessibility`
@@ -24,11 +23,12 @@ Source: `src/mobile_crawler/domain/crawler_agent/portal.py`
 - `setup_keyboard`
 - `disable_keyboard`
 - `setup_portal`
+- `get_portal_status`
 - `ensure_portal_ready`
 - `test`
 
 ## Imports
-- [[code/domain/crawler_agent/_index|domain.crawler_agent]]
+- [[code/config/_index|config]]
 - [[code/domain/crawler_agent/tools/driver/android|domain.crawler_agent.tools.driver.android]]
 
 ## Imported by

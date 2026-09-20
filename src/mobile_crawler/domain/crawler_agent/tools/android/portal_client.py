@@ -87,9 +87,7 @@ class PortalClient:
             The auth token string, or None if unavailable.
         """
         try:
-            output = await self.device.shell(
-                "content query --uri content://com.droidrun.portal/auth_token"
-            )
+            output = await self.device.shell("content query --uri content://com.mobilerun.portal/auth_token")
             data = self._parse_content_provider_output(output)
             if data is None:
                 logger.debug("Auth token: unparseable content provider output")
@@ -98,12 +96,7 @@ class PortalClient:
             # Extract token — handle various response shapes
             token = None
             if isinstance(data, dict):
-                token = (
-                    data.get("token")
-                    or data.get("auth_token")
-                    or data.get("result")
-                    or data.get("data")
-                )
+                token = data.get("token") or data.get("auth_token") or data.get("result") or data.get("data")
                 # Unwrap nested dict: {"status": "success", "result": {"token": "..."}}
                 if isinstance(token, dict):
                     token = token.get("token") or token.get("auth_token")
@@ -143,27 +136,18 @@ class PortalClient:
             # Step 1: Fetch auth token before any HTTP calls
             self._auth_token = await self._fetch_auth_token()
             if not self._auth_token:
-                logger.debug(
-                    "No auth token available — Portal may not require auth, "
-                    "proceeding without it"
-                )
+                logger.debug("No auth token available — Portal may not require auth, proceeding without it")
 
             # Step 2: Check for existing forward
             local_port = await self._find_existing_forward()
 
             # Step 3: If no forward exists, create one
             if local_port is None:
-                logger.debug(
-                    f"No existing forward found, creating new forward for port {PORTAL_REMOTE_PORT}"
-                )
+                logger.debug(f"No existing forward found, creating new forward for port {PORTAL_REMOTE_PORT}")
                 local_port = await self.device.forward_port(PORTAL_REMOTE_PORT)
-                logger.debug(
-                    f"Created forward: localhost:{local_port} -> device:{PORTAL_REMOTE_PORT}"
-                )
+                logger.debug(f"Created forward: localhost:{local_port} -> device:{PORTAL_REMOTE_PORT}")
             else:
-                logger.debug(
-                    f"Reusing existing forward: localhost:{local_port} -> device:{PORTAL_REMOTE_PORT}"
-                )
+                logger.debug(f"Reusing existing forward: localhost:{local_port} -> device:{PORTAL_REMOTE_PORT}")
 
             # Store local port
             self.local_tcp_port = local_port
@@ -177,7 +161,7 @@ class PortalClient:
                 # Step 4b: Try enabling the HTTP server via content provider
                 logger.debug("TCP ping failed, trying to enable Portal HTTP server...")
                 await self.device.shell(
-                    "content insert --uri content://com.droidrun.portal/toggle_socket_server --bind enabled:b:true"
+                    "content insert --uri content://com.mobilerun.portal/toggle_socket_server --bind enabled:b:true"
                 )
                 await asyncio.sleep(1)
 
@@ -188,9 +172,7 @@ class PortalClient:
 
                 if await self._test_connection():
                     self.tcp_available = True
-                    logger.debug(
-                        f"✓ TCP mode enabled after starting server: {self.tcp_base_url}"
-                    )
+                    logger.debug(f"✓ TCP mode enabled after starting server: {self.tcp_base_url}")
                 else:
                     logger.warning("TCP unavailable, using content provider fallback")
                     self.tcp_available = False
@@ -212,17 +194,12 @@ class PortalClient:
                 forwards.append(forward)
             # forwards is a list of ForwardItem objects with serial, local, remote attributes
             for forward in forwards:
-                if (
-                    forward.serial == self.device.serial
-                    and forward.remote == f"tcp:{PORTAL_REMOTE_PORT}"
-                ):
+                if forward.serial == self.device.serial and forward.remote == f"tcp:{PORTAL_REMOTE_PORT}":
                     # Extract local port from "tcp:12345"
                     match = re.search(r"tcp:(\d+)", forward.local)
                     if match:
                         local_port = int(match.group(1))
-                        logger.debug(
-                            f"Found existing forward: localhost:{local_port} -> {PORTAL_REMOTE_PORT}"
-                        )
+                        logger.debug(f"Found existing forward: localhost:{local_port} -> {PORTAL_REMOTE_PORT}")
                         return local_port
         except Exception as e:
             logger.debug(f"Failed to check existing forwards: {e}")
@@ -257,9 +234,7 @@ class PortalClient:
         response = await client.request(method, url, headers=headers, **kwargs)
 
         if response.status_code in (401, 403):
-            logger.debug(
-                f"TCP auth rejected ({response.status_code}), re-fetching token..."
-            )
+            logger.debug(f"TCP auth rejected ({response.status_code}), re-fetching token...")
             self._auth_token = await self._fetch_auth_token()
             if self._auth_token:
                 headers = {**self._tcp_headers, **(extra_headers or {})}
@@ -271,17 +246,13 @@ class PortalClient:
         """Test if TCP connection to Portal is working (with auth)."""
         try:
             async with httpx.AsyncClient() as client:
-                response = await self._tcp_request(
-                    client, "GET", f"{self.tcp_base_url}/ping", timeout=5
-                )
+                response = await self._tcp_request(client, "GET", f"{self.tcp_base_url}/ping", timeout=5)
                 return response.status_code == 200
         except Exception as e:
             logger.debug(f"TCP connection test failed: {e}")
             return False
 
-    def _parse_content_provider_output(
-        self, raw_output: str
-    ) -> dict[str, Any] | None:
+    def _parse_content_provider_output(self, raw_output: str) -> dict[str, Any] | None:
         """
         Parse the raw ADB content provider output and extract JSON data.
 
@@ -306,11 +277,7 @@ class PortalClient:
                     # Handle nested "result" or "data" field with JSON string (backward compatible)
                     if isinstance(json_data, dict):
                         # Check for 'result' first (new portal format), then 'data' (legacy)
-                        inner_key = (
-                            "result"
-                            if "result" in json_data
-                            else "data" if "data" in json_data else None
-                        )
+                        inner_key = "result" if "result" in json_data else "data" if "data" in json_data else None
                         if inner_key:
                             inner_value = json_data[inner_key]
                             if isinstance(inner_value, str):
@@ -353,20 +320,14 @@ class PortalClient:
         """Get state via TCP."""
         try:
             async with httpx.AsyncClient() as client:
-                response = await self._tcp_request(
-                    client, "GET", f"{self.tcp_base_url}/state_full", timeout=10
-                )
+                response = await self._tcp_request(client, "GET", f"{self.tcp_base_url}/state_full", timeout=10)
                 if response.status_code == 200:
                     data = response.json()
 
                     # Handle nested "result" or "data" field (backward compatible)
                     if isinstance(data, dict):
                         # Check for 'result' first (new portal format), then 'data' (legacy)
-                        inner_key = (
-                            "result"
-                            if "result" in data
-                            else "data" if "data" in data else None
-                        )
+                        inner_key = "result" if "result" in data else "data" if "data" in data else None
                         if inner_key:
                             inner_value = data[inner_key]
                             if isinstance(inner_value, str):
@@ -378,9 +339,7 @@ class PortalClient:
                                 return inner_value
                     return data
                 else:
-                    logger.debug(
-                        f"TCP get_state failed ({response.status_code}), using fallback"
-                    )
+                    logger.debug(f"TCP get_state failed ({response.status_code}), using fallback")
                     return await self._get_state_content_provider()
         except Exception as e:
             logger.debug(f"TCP get_state error: {e}, using fallback")
@@ -389,9 +348,7 @@ class PortalClient:
     async def _get_state_content_provider(self) -> dict[str, Any]:
         """Get state via content provider (fallback)."""
         try:
-            output = await self.device.shell(
-                "content query --uri content://com.droidrun.portal/state_full"
-            )
+            output = await self.device.shell("content query --uri content://com.mobilerun.portal/state_full")
             state_data = self._parse_content_provider_output(output)
 
             if state_data is None:
@@ -403,11 +360,7 @@ class PortalClient:
             # Handle nested "result" or "data" field if present (backward compatible)
             if isinstance(state_data, dict):
                 # Check for 'result' first (new portal format), then 'data' (legacy)
-                inner_key = (
-                    "result"
-                    if "result" in state_data
-                    else "data" if "data" in state_data else None
-                )
+                inner_key = "result" if "result" in state_data else "data" if "data" in state_data else None
                 if inner_key:
                     inner_value = state_data[inner_key]
                     if isinstance(inner_value, str):
@@ -461,9 +414,7 @@ class PortalClient:
                     logger.debug("TCP input_text successful")
                     return True
                 else:
-                    logger.debug(
-                        f"TCP input_text failed ({response.status_code}), using fallback"
-                    )
+                    logger.debug(f"TCP input_text failed ({response.status_code}), using fallback")
                     return await self._input_text_content_provider(text, clear)
         except Exception as e:
             logger.debug(f"TCP input_text error: {e}, using fallback")
@@ -475,7 +426,7 @@ class PortalClient:
             encoded = base64.b64encode(text.encode()).decode()
             clear_str = "true" if clear else "false"
             cmd = (
-                f'content insert --uri "content://com.droidrun.portal/keyboard/input" '
+                f'content insert --uri "content://com.mobilerun.portal/keyboard/input" '
                 f'--bind base64_text:s:"{encoded}" '
                 f"--bind clear:b:{clear_str}"
             )
@@ -515,22 +466,14 @@ class PortalClient:
                     data = response.json()
                     # Check for 'result' first (new portal format), then 'data' (legacy)
                     if data.get("status") == "success":
-                        inner_key = (
-                            "result"
-                            if "result" in data
-                            else "data" if "data" in data else None
-                        )
+                        inner_key = "result" if "result" in data else "data" if "data" in data else None
                         if inner_key:
                             logger.debug("Screenshot taken via TCP")
                             return base64.b64decode(data[inner_key])
-                    logger.debug(
-                        "TCP screenshot failed (invalid response), using fallback"
-                    )
+                    logger.debug("TCP screenshot failed (invalid response), using fallback")
                     return await self._take_screenshot_adb()
                 else:
-                    logger.debug(
-                        f"TCP screenshot failed ({response.status_code}), using fallback"
-                    )
+                    logger.debug(f"TCP screenshot failed ({response.status_code}), using fallback")
                     return await self._take_screenshot_adb()
         except Exception as e:
             logger.debug(f"TCP screenshot error: {e}, using fallback")
@@ -579,9 +522,7 @@ class PortalClient:
             logger.debug("Getting apps via content provider")
 
             # Query content provider
-            output = await self.device.shell(
-                "content query --uri content://com.droidrun.portal/packages"
-            )
+            output = await self.device.shell("content query --uri content://com.mobilerun.portal/packages")
             packages_data = self._parse_content_provider_output(output)
 
             if not packages_data:
@@ -601,18 +542,12 @@ class PortalClient:
                     packages_list = packages_data["packages"]
                 else:
                     # May be wrapped in result/data
-                    inner_key = (
-                        "result"
-                        if "result" in packages_data
-                        else "data" if "data" in packages_data else None
-                    )
+                    inner_key = "result" if "result" in packages_data else "data" if "data" in packages_data else None
                     if inner_key:
                         inner_value = packages_data[inner_key]
                         if isinstance(inner_value, list):
                             packages_list = inner_value
-                        elif (
-                            isinstance(inner_value, dict) and "packages" in inner_value
-                        ):
+                        elif isinstance(inner_value, dict) and "packages" in inner_value:
                             packages_list = inner_value["packages"]
 
             if not packages_list:
@@ -645,17 +580,11 @@ class PortalClient:
         if self.tcp_available:
             try:
                 async with httpx.AsyncClient() as client:
-                    response = await self._tcp_request(
-                        client, "GET", f"{self.tcp_base_url}/version", timeout=5.0
-                    )
+                    response = await self._tcp_request(client, "GET", f"{self.tcp_base_url}/version", timeout=5.0)
                     if response.status_code == 200:
                         data = response.json()
                         # Check for 'result' first (new portal format), then 'data' (legacy)
-                        inner_key = (
-                            "result"
-                            if "result" in data
-                            else "data" if "data" in data else None
-                        )
+                        inner_key = "result" if "result" in data else "data" if "data" in data else None
                         if inner_key:
                             return data[inner_key]
                         return data.get("status", "unknown")
@@ -664,17 +593,11 @@ class PortalClient:
 
         # Fallback to content provider
         try:
-            output = await self.device.shell(
-                "content query --uri content://com.droidrun.portal/version"
-            )
+            output = await self.device.shell("content query --uri content://com.mobilerun.portal/version")
             result = self._parse_content_provider_output(output)
             if result:
                 # Check for 'result' first (new portal format), then 'data' (legacy)
-                inner_key = (
-                    "result"
-                    if "result" in result
-                    else "data" if "data" in result else None
-                )
+                inner_key = "result" if "result" in result else "data" if "data" in result else None
                 if inner_key:
                     return result[inner_key]
         except Exception:
@@ -693,9 +616,7 @@ class PortalClient:
         if self.tcp_available:
             try:
                 async with httpx.AsyncClient() as client:
-                    response = await self._tcp_request(
-                        client, "GET", f"{self.tcp_base_url}/ping", timeout=5.0
-                    )
+                    response = await self._tcp_request(client, "GET", f"{self.tcp_base_url}/ping", timeout=5.0)
                     if response.status_code == 200:
                         try:
                             tcp_response = response.json() if response.content else {}
@@ -723,9 +644,7 @@ class PortalClient:
         else:
             # Test content provider
             try:
-                output = await self.device.shell(
-                    "content query --uri content://com.droidrun.portal/state_full"
-                )
+                output = await self.device.shell("content query --uri content://com.mobilerun.portal/state_full")
                 if "Row: 0 result=" in output:
                     result = {"status": "success", "method": "content_provider"}
                 else:
