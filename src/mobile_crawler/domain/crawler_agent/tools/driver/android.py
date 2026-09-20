@@ -58,8 +58,12 @@ class AndroidDriver(DeviceDriver):
         serial: str | None = None,
         status_bar_exclusion_px: int = 0,
         bottom_bar_exclusion_px: int = 0,
+        use_accessibility: bool = False,
     ) -> None:
         self._serial = serial
+        # Read the accessibility tree from Portal in get_ui_tree (boost / accessibility modes).
+        self.use_accessibility = use_accessibility
+        self._portal = None
         self.device = None
         self._connected = False
         self.status_bar_exclusion_px = status_bar_exclusion_px
@@ -408,29 +412,44 @@ class AndroidDriver(DeviceDriver):
     async def get_ui_tree(self) -> dict[str, Any]:
         """Get UI state - returns structure expected by provider.
 
-        With OmniParser mode, this returns an empty a11y tree since we're
-        not using Portal. The provider will use screenshot + OmniParser instead.
+        The a11y tree is empty unless ``use_accessibility`` is set, in which case
+        it comes from Portal. If Portal cannot be read, the tree stays empty and
+        ``a11y_error`` says why, so the provider can fall back to OmniParser (boost)
+        or report the problem (accessibility mode).
         """
         try:
             await self.ensure_connected()
-            return {
-                "a11y_tree": [],  # Empty - using OmniParser instead
-                "phone_state": {
-                    "currentApp": await self._get_current_app(),
-                },
-                "device_context": await self._get_device_context(),
-            }
+            return await self._build_ui_tree()
         except Exception as e:
             if await self._handle_connection_drop(e):
-                return {
-                    "a11y_tree": [],
-                    "phone_state": {
-                        "currentApp": await self._get_current_app(),
-                    },
-                    "device_context": await self._get_device_context(),
-                }
+                return await self._build_ui_tree()
             else:
                 raise
+
+    async def _build_ui_tree(self) -> dict[str, Any]:
+        tree: dict[str, Any] = {
+            "a11y_tree": [],
+            "phone_state": {"currentApp": await self._get_current_app()},
+            "device_context": await self._get_device_context(),
+        }
+        if not self.use_accessibility:
+            return tree
+        try:
+            if self._portal is None:
+                from mobile_crawler.domain.crawler_agent.tools.android.portal_client import PortalClient
+
+                self._portal = PortalClient(self.device)
+                await self._portal.connect()
+            state = await self._portal.get_state()
+            if state.get("status") == "error" or "a11y_tree" not in state:
+                raise RuntimeError(state.get("message") or "Portal returned no accessibility tree")
+            tree["a11y_tree"] = state["a11y_tree"]
+            tree["phone_state"] = state.get("phone_state") or tree["phone_state"]
+            tree["device_context"] = state.get("device_context") or tree["device_context"]
+        except Exception as e:
+            logger.warning(f"Portal accessibility tree unavailable: {e}")
+            tree["a11y_error"] = str(e)
+        return tree
 
     async def _get_current_app(self) -> str:
         """Get currently focused app package."""

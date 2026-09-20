@@ -347,9 +347,7 @@ class CrawlerAgent(Workflow):
                 available = list_agents()
                 if available:
                     agents_str = ", ".join(available)
-                    raise ValueError(
-                        f"Failed to load external agent '{agent_name}'.\n" f"Available agents: {agents_str}"
-                    )
+                    raise ValueError(f"Failed to load external agent '{agent_name}'.\nAvailable agents: {agents_str}")
                 raise ValueError(
                     f"External agent '{agent_name}' not found.\n"
                     "No external agents are currently installed.\n"
@@ -409,6 +407,7 @@ class CrawlerAgent(Workflow):
                 serial=device_serial,
                 status_bar_exclusion_px=self.config.status_bar_exclusion_px,
                 bottom_bar_exclusion_px=self.config.bottom_bar_exclusion_px,
+                use_accessibility=self.config.ui_parser_mode in ("boost", "accessibility"),
             )
             await driver.connect()
 
@@ -694,7 +693,7 @@ class CrawlerAgent(Workflow):
         if ev.answer.strip():
             if self.shared_state.pending_user_messages:
                 logger.info(
-                    "⏸️ Manager tried to finish but external messages pending, " "looping back to Manager",
+                    "⏸️ Manager tried to finish but external messages pending, looping back to Manager",
                     extra={"color": "cyan"},
                 )
                 return ManagerInputEvent()

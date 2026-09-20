@@ -12,6 +12,7 @@ Source: `src/mobile_crawler/domain/crawler_agent/tools/driver/android.py`
 - `AndroidDriver`
 
 ## Imports
+- [[code/domain/crawler_agent/tools/android/portal_client|domain.crawler_agent.tools.android.portal_client]]
 - [[code/domain/crawler_agent/tools/driver/base|domain.crawler_agent.tools.driver.base]]
 
 ## Imported by

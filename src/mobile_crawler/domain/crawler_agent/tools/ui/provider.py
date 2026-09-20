@@ -16,6 +16,7 @@ from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
 from mobile_crawler.domain.crawler_agent.tools.driver.base import DeviceDisconnectedError
+from mobile_crawler.domain.crawler_agent.tools.ui.a11y_completeness import count_nodes
 from mobile_crawler.domain.crawler_agent.tools.ui.state import UIState
 from mobile_crawler.domain.crawler_agent.tools.ui.stealth_state import StealthUIState
 
@@ -245,10 +246,12 @@ class AndroidStateProvider(StateProvider):
             screen_height = screen_bounds.get("height", 1920)
             phone_state = ui_tree.get("phone_state", {})
             a11y_tree = ui_tree.get("a11y_tree", [])
+            a11y_error = ui_tree.get("a11y_error")
         except Exception as e:
             logger.warning(f"get_ui_tree failed: {e}")
             phone_state = {}
             a11y_tree = []
+            a11y_error = str(e)
         breakdown["a11y"] = (time.perf_counter() - phase_started) * 1000
 
         # Determine UI parser mode and get elements
@@ -256,9 +259,15 @@ class AndroidStateProvider(StateProvider):
         omni_source = "a11y"
 
         if self.ui_parser_mode == "accessibility":
+            if not a11y_tree:
+                raise RuntimeError(
+                    "Accessibility mode has no accessibility tree"
+                    + (f" ({a11y_error})" if a11y_error else "")
+                    + ". Install and enable Portal on the device, or switch the parser mode to boost."
+                )
             # Use a11y tree only
             filtered = self.tree_filter.filter(a11y_tree, device_context) if a11y_tree else None
-            logger.debug(f"Using accessibility tree ({len(a11y_tree)} elements)")
+            logger.debug(f"Using accessibility tree ({count_nodes(a11y_tree)} nodes)")
 
         elif self.ui_parser_mode == "omniparser":
             # Mode 2: Always use OmniParser (ignore a11y, no fallback)
@@ -274,7 +283,7 @@ class AndroidStateProvider(StateProvider):
 
         else:  # "boost" mode
             # Use a11y if available, otherwise OmniParser
-            if a11y_tree and len(a11y_tree) >= self.omniparser_a11y_threshold:
+            if a11y_tree and count_nodes(a11y_tree) >= self.omniparser_a11y_threshold:
                 filtered = self.tree_filter.filter(a11y_tree, device_context)
             else:
                 # A11y sparse - try OmniParser

@@ -237,6 +237,24 @@ async def test_identical_screenshot_reuses_the_previous_omniparser_parse(android
 
 
 @pytest.mark.asyncio
+async def test_accessibility_mode_without_a_tree_reports_why_instead_of_returning_nothing(android_state_provider):
+    provider, driver = android_state_provider
+    provider.ui_parser_mode = "accessibility"
+    driver.get_ui_tree.return_value = {
+        "a11y_tree": [],
+        "phone_state": {},
+        "device_context": {},
+        "a11y_error": "portal not installed",
+    }
+    mock_adb = Mock()
+    mock_adb.get_current_package.return_value = "com.example.app"
+
+    with patch("mobile_crawler.domain.adb_action_executor.ADBActionExecutor", return_value=mock_adb):
+        with pytest.raises(RuntimeError, match="portal not installed"):
+            await provider.get_state()
+
+
+@pytest.mark.asyncio
 async def test_state_provider_relaunches_after_browser_grace_exhausted(android_state_provider):
     provider, _ = android_state_provider
     provider.external_grace_captures = 2

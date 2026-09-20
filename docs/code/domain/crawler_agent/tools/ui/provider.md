@@ -21,6 +21,7 @@ Source: `src/mobile_crawler/domain/crawler_agent/tools/ui/provider.py`
 - [[code/domain/crawler_agent/tools/filters/_index|domain.crawler_agent.tools.filters]]
 - [[code/domain/crawler_agent/tools/formatters/_index|domain.crawler_agent.tools.formatters]]
 - [[code/domain/crawler_agent/tools/omniparser_client|domain.crawler_agent.tools.omniparser_client]]
+- [[code/domain/crawler_agent/tools/ui/a11y_completeness|domain.crawler_agent.tools.ui.a11y_completeness]]
 - [[code/domain/crawler_agent/tools/ui/state|domain.crawler_agent.tools.ui.state]]
 - [[code/domain/crawler_agent/tools/ui/stealth_state|domain.crawler_agent.tools.ui.stealth_state]]
 - [[code/domain/state_graph|domain.state_graph]]
