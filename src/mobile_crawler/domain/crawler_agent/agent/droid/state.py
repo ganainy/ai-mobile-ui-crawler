@@ -66,9 +66,7 @@ class CrawlerAgentState(BaseModel):
     # ========================================================================
     plan: str = ""  # Current plan
     current_subgoal: str = ""  # Current subgoal for Executor
-    answer: str = (
-        ""  # Final answer (used by both manager completion and complete() tool)
-    )
+    answer: str = ""  # Final answer (used by both manager completion and complete() tool)
 
     # ========================================================================
     # Action Tracking
@@ -123,20 +121,14 @@ class CrawlerAgentState(BaseModel):
 
     async def remember(self, information: str) -> str:
         """Store information in fast_memory for FastAgent context."""
-        if (
-            not information
-            or not isinstance(information, str)
-            or not information.strip()
-        ):
+        if not information or not isinstance(information, str) or not information.strip():
             return "Failed to remember: please provide valid information."
         self.fast_memory.append(information.strip())
         if len(self.fast_memory) > 10:
             self.fast_memory = self.fast_memory[-10:]
         return f"Remembered: {information}"
 
-    async def complete(
-        self, success: bool, reason: str = "", message: str = ""
-    ) -> None:
+    async def complete(self, success: bool, reason: str = "", message: str = "") -> None:
         """Mark task as finished.
 
         Accepts both ``reason`` and ``message`` params — FastAgent XML
@@ -148,6 +140,22 @@ class CrawlerAgentState(BaseModel):
         self.finished = True
         self.success = success
         self.answer = answer or "Task completed successfully."
+
+    def record_executor_result(self, result: dict) -> None:
+        """Append an Executor result to the action history.
+
+        An Action Batch is recorded as one entry per action; a plain result
+        (no ``results`` list) as a single entry. Never touches ``step_number``,
+        so a batch still counts as one step.
+        """
+        entries = result.get("results") or [result]
+        for entry in entries:
+            self.action_history.append(entry["action"])
+            self.summary_history.append(entry["summary"])
+            self.action_outcomes.append(entry["outcome"])
+            self.error_descriptions.append(entry["error"])
+        self.last_action = entries[-1]["action"]
+        self.last_summary = entries[-1]["summary"]
 
     def queue_user_message(self, message: str) -> QueuedUserMessage:
         if not message or not message.strip():

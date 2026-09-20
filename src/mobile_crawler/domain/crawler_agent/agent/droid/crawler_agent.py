@@ -306,6 +306,7 @@ class CrawlerAgent(Workflow):
                 shared_state=self.shared_state,
                 agent_config=self.config.agent,
                 prompt_resolver=self.prompt_resolver,
+                max_actions_per_batch=self.config.agent.max_actions_per_batch,
                 timeout=self.timeout,
             )
         else:
@@ -503,6 +504,7 @@ class CrawlerAgent(Workflow):
             self.manager_agent.state_graph_tracker = self.state_graph_tracker
             self.executor_agent.registry = self.registry
             self.executor_agent.action_ctx = self.action_ctx
+            self.executor_agent.foreground_package = self._foreground_package_reader(driver)
 
         # ── 6. Fetch device date once ─────────────────────────────────
         self.shared_state.device_date = await driver.get_date()
@@ -720,12 +722,7 @@ class CrawlerAgent(Workflow):
         result = await handler
 
         # Update coordination state after execution
-        self.shared_state.action_history.append(result["action"])
-        self.shared_state.summary_history.append(result["summary"])
-        self.shared_state.action_outcomes.append(result["outcome"])
-        self.shared_state.error_descriptions.append(result["error"])
-        self.shared_state.last_action = result["action"]
-        self.shared_state.last_summary = result["summary"]
+        self.shared_state.record_executor_result(result)
 
         return ExecutorResultEvent(
             action=result["action"],
@@ -776,6 +773,23 @@ class CrawlerAgent(Workflow):
     # ========================================================================
     # Finalize
     # ========================================================================
+
+    @staticmethod
+    def _foreground_package_reader(driver):
+        """Async reader of the device's focused package, used to abort an Action Batch.
+
+        Returns None (batch runs unchecked) when the device serial is unknown.
+        """
+        serial = getattr(driver, "_serial", None) or getattr(getattr(driver, "device", None), "serial", None)
+        if not serial:
+            return None
+
+        async def read() -> str | None:
+            from mobile_crawler.domain.adb_action_executor import ADBActionExecutor
+
+            return await asyncio.to_thread(ADBActionExecutor(device_id=serial).get_current_package)
+
+        return read
 
     def _final_ui_state_required(self, reason: str, final_capture_enabled: bool = True) -> bool:
         """Whether finalize needs a last parsed UI state.

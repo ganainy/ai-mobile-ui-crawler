@@ -200,6 +200,7 @@ class ManagerAgent(Workflow):
             "platform": self.shared_state.platform,
             "loop_warning": self.shared_state.loop_warning,
             "loop_hint": self.shared_state.loop_hint,
+            "max_actions_per_batch": self.agent_config.max_actions_per_batch,
         }
 
         custom_prompt = self.prompt_resolver.get_prompt("manager_system")

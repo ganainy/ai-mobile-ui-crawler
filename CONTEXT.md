@@ -36,6 +36,10 @@ _Avoid_: Web profile cache, scrape cache
 An ordered list of subgoals the crawler must complete before it moves to free-form exploration. Persisted per app package; can be generated from that app's App Web Profile with one LLM call, or edited by hand — generating replaces the list wholesale rather than merging with existing entries.
 _Avoid_: Guided subgoals, exploration checklist
 
+**Action Batch**:
+An ordered group of consecutive actions the Executor performs from one Manager subgoal and one screen capture, instead of one action per step. Only the last action may navigate; the batch ends early on the first failure or when the screen no longer matches what it was planned against, and control returns to the Manager. Counts as one step.
+_Avoid_: Macro, compound action, multi-action
+
 **Run Report**:
 The single output of reporting on one finished crawl run: a human-readable HTML page plus an Analysis Bundle, produced together by one action (auto at run end if enabled, or manually). Replaces the separate HTML report and JSON export.
 _Avoid_: Export, HTML report, run export

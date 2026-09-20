@@ -5,7 +5,6 @@ Internal events for streaming to frontend/logging.
 For CrawlerAgent coordination events, see droid/events.py
 """
 
-
 from llama_index.core.workflow import Event
 
 from mobile_crawler.domain.crawler_agent.agent.usage import UsageResult
@@ -55,6 +54,7 @@ class ExecutorActionEvent(Event):
     thought: str
     description: str
     full_response: str = ""
+    actions: list[dict] = []  # ordered Action Batch; empty means use action_json
 
 
 class ExecutorActionResultEvent(Event):
@@ -66,3 +66,4 @@ class ExecutorActionResultEvent(Event):
     summary: str
     thought: str = ""
     full_response: str = ""
+    results: list[dict] = []  # per-action outcomes of an Action Batch

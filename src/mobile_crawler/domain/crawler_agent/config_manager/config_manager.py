@@ -88,6 +88,7 @@ class AgentConfig:
     wait_for_stable_ui: float = 0.3
     use_normalized_coordinates: bool = False
     step_by_step: bool = False  # Enable step-by-step mode
+    max_actions_per_batch: int = 5  # Action Batch size cap; 1 = one action per step
 
     fast_agent: FastAgentConfig = field(default_factory=FastAgentConfig)
     manager: ManagerConfig = field(default_factory=ManagerConfig)
@@ -134,9 +135,7 @@ class TracingConfig:
     langfuse_public_key: str = ""  # Set as LANGFUSE_PUBLIC_KEY env var if not empty
     langfuse_host: str = ""  # Set as LANGFUSE_HOST env var if not empty
     langfuse_user_id: str = "anonymous"
-    langfuse_session_id: str = (
-        ""  # Empty = auto-generate UUID; set to custom value to persist across runs
-    )
+    langfuse_session_id: str = ""  # Empty = auto-generate UUID; set to custom value to persist across runs
 
 
 @dataclass
@@ -257,9 +256,7 @@ class CrawlerConfig:
         """Convert config to dictionary."""
         result = asdict(self)
         # Convert LLMProfile objects to dicts
-        result["llm_profiles"] = {
-            name: asdict(profile) for name, profile in self.llm_profiles.items()
-        }
+        result["llm_profiles"] = {name: asdict(profile) for name, profile in self.llm_profiles.items()}
         return result
 
     @classmethod
@@ -274,9 +271,7 @@ class CrawlerConfig:
         agent_data = data.get("agent", {})
 
         fast_agent_data = agent_data.get("fast_agent", {})
-        fast_agent_config = (
-            FastAgentConfig(**fast_agent_data) if fast_agent_data else FastAgentConfig()
-        )
+        fast_agent_config = FastAgentConfig(**fast_agent_data) if fast_agent_data else FastAgentConfig()
 
         manager_data = agent_data.get("manager", {})
         manager_config = ManagerConfig(**manager_data) if manager_data else ManagerConfig()
@@ -296,6 +291,7 @@ class CrawlerConfig:
             wait_for_stable_ui=agent_data.get("wait_for_stable_ui", 0.3),
             use_normalized_coordinates=agent_data.get("use_normalized_coordinates", False),
             step_by_step=agent_data.get("step_by_step", False),
+            max_actions_per_batch=agent_data.get("max_actions_per_batch", 5),
             fast_agent=fast_agent_config,
             manager=manager_config,
             executor=executor_config,
@@ -339,9 +335,7 @@ class CrawlerConfig:
             omniparser_backend=data.get("omniparser_backend", "replicate"),
             omniparser_api_key=data.get("omniparser_api_key", ""),
             omniparser_local_url=data.get("omniparser_local_url", "http://localhost:8001"),
-            omniparser_local_parse_timeout_seconds=data.get(
-                "omniparser_local_parse_timeout_seconds", 120
-            ),
+            omniparser_local_parse_timeout_seconds=data.get("omniparser_local_parse_timeout_seconds", 120),
             omniparser_box_threshold=data.get("omniparser_box_threshold", 0.05),
             omniparser_a11y_threshold=data.get("omniparser_a11y_threshold", 5),
             target_package=data.get("target_package"),

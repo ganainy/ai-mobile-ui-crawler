@@ -15,6 +15,7 @@ agent:
   after_sleep_action: 1.0
   # Wait duration for UI to stabilize (seconds)
   wait_for_stable_ui: 0.3
+  max_actions_per_batch: 5  # consecutive actions the Executor may run per step; 1 = off
 
   # Coordinate system for swipe and state bounds output
   # false = absolute pixels (default)
@@ -73,7 +74,7 @@ llm_profiles:
     temperature: 0.2
     # kwargs: # optional kwargs, add api_key in kwargs if not already in .env
     #   max_tokens: 8192
-      
+
   # Executor: Selects and executes atomic actions
   executor:
     provider: GoogleGenAI
@@ -81,7 +82,7 @@ llm_profiles:
     temperature: 0.1
     # kwargs:
     #   max_tokens: 4096
-      
+
   # Fast Agent: Direct execution agent (XML tool-calling or code generation)
   fast_agent:
     provider: GoogleGenAI
@@ -89,7 +90,7 @@ llm_profiles:
     temperature: 0.2
     # kwargs:
     #   max_tokens: 8192
-      
+
   # App Opener: Opens apps by name/description
   app_opener:
     provider: GoogleGenAI

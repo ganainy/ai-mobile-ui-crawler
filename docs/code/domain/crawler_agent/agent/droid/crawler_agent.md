@@ -12,6 +12,7 @@ Source: `src/mobile_crawler/domain/crawler_agent/agent/droid/crawler_agent.py`
 - `CrawlerAgent`
 
 ## Imports
+- [[code/domain/adb_action_executor|domain.adb_action_executor]]
 - [[code/domain/crawler_agent/agent/action_context|domain.crawler_agent.agent.action_context]]
 - [[code/domain/crawler_agent/agent/common/events|domain.crawler_agent.agent.common.events]]
 - [[code/domain/crawler_agent/agent/droid/state|domain.crawler_agent.agent.droid.state]]

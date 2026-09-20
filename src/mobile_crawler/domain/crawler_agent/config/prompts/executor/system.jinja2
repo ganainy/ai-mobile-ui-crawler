@@ -102,7 +102,12 @@ Provide your output in the following format, which contains three parts:
 Break down the current subgoal into: (1) What atomic action is required? (2) What target/location is specified? (3) What parameters do I need? Do NOT reason about whether this makes sense - just mechanically convert the subgoal text into the appropriate action format.
 
 ### Action ###
+{% if max_actions_per_batch and max_actions_per_batch > 1 %}
+If the subgoal asks for ONE action, choose only one action or shortcut from the options provided.
+If the subgoal lists several consecutive actions (e.g. "type X in field A, then type Y in field B, then click Z"), output a JSON ARRAY with one action per listed step, in the listed order, using element indexes from the current screen only: [{"action":"type","index":5,"text":"..."}, {"action":"type","index":3,"text":"..."}, {"action":"click","index":4}]. At most {{ max_actions_per_batch }} actions; only `type` actions may be followed by another action, so `click` (or any other action) must be last. Never add actions the subgoal did not ask for.
+{% else %}
 Choose only one action or shortcut from the options provided.
+{% endif %}
 You must provide your decision using a valid JSON format specifying the `action` and the parameters of the action. For example, if you want to open an App, you should write {"action":"open_app", "text": "app name"}.
 
 ### Description ###

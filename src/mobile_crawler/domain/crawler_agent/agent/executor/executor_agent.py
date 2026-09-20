@@ -9,10 +9,10 @@ This agent is responsible for:
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import time
+from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING
 
 from llama_index.core.base.llms.types import ChatMessage, ImageBlock, TextBlock
@@ -52,6 +52,10 @@ class ExecutorAgent(Workflow):
     # Flow-control tools hidden from executor's LLM prompt
     _EXCLUDE_TOOLS = {"remember", "complete"}
 
+    # Actions that leave the screen as it was, so an Action Batch may continue
+    # after them. Anything else navigates and ends the batch.
+    _BATCHABLE_ACTIONS = {"type", "type_secret", "input", "input_text"}
+
     def __init__(
         self,
         llm: LLM,
@@ -60,9 +64,13 @@ class ExecutorAgent(Workflow):
         shared_state: CrawlerAgentState,
         agent_config: AgentConfig,
         prompt_resolver: PromptResolver | None = None,
+        max_actions_per_batch: int = 1,
+        foreground_package: Callable[[], Awaitable[str | None]] | None = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
+        self.max_actions_per_batch = max(1, max_actions_per_batch)
+        self.foreground_package = foreground_package
         self.llm = llm
         self.agent_config = agent_config
         self.config = agent_config.executor
@@ -75,9 +83,7 @@ class ExecutorAgent(Workflow):
         logger.debug("ExecutorAgent initialized.")
 
     @step
-    async def prepare_context(
-        self, ctx: Context, ev: StartEvent
-    ) -> ExecutorContextEvent:
+    async def prepare_context(self, ctx: Context, ev: StartEvent) -> ExecutorContextEvent:
         """Prepare executor context and prompt."""
         subgoal = ev.get("subgoal", "")
         logger.debug(f"🧠 Executor thinking about action for: {subgoal}")
@@ -120,6 +126,7 @@ class ExecutorAgent(Workflow):
             "available_secrets": available_secrets,
             "variables": self.shared_state.custom_variables,
             "platform": self.shared_state.platform,
+            "max_actions_per_batch": self.max_actions_per_batch,
         }
 
         custom_prompt = self.prompt_resolver.get_prompt("executor_system")
@@ -148,9 +155,7 @@ class ExecutorAgent(Workflow):
         return event
 
     @step
-    async def get_response(
-        self, ctx: Context, ev: ExecutorContextEvent
-    ) -> ExecutorResponseEvent:
+    async def get_response(self, ctx: Context, ev: ExecutorContextEvent) -> ExecutorResponseEvent:
         """Get LLM response."""
         logger.debug("Executor getting LLM response...")
 
@@ -164,9 +169,7 @@ class ExecutorAgent(Workflow):
         try:
             logger.info("Executor response:", extra={"color": "green"})
             llm_start = time.perf_counter()
-            response = await acall_with_retries(
-                self.llm, messages, stream=self.agent_config.streaming
-            )
+            response = await acall_with_retries(self.llm, messages, stream=self.agent_config.streaming)
             executor_llm_ms = (time.perf_counter() - llm_start) * 1000
             response_text = str(response)
         except ValueError as e:
@@ -222,9 +225,7 @@ class ExecutorAgent(Workflow):
         return event
 
     @step
-    async def process_response(
-        self, ctx: Context, ev: ExecutorResponseEvent
-    ) -> ExecutorActionEvent:
+    async def process_response(self, ctx: Context, ev: ExecutorResponseEvent) -> ExecutorActionEvent:
         """Parse LLM response and extract action."""
         logger.debug("⚙️ Processing executor response...")
 
@@ -251,58 +252,86 @@ class ExecutorAgent(Workflow):
             thought=parsed["thought"],
             description=parsed["description"],
             full_response=response_text,
+            actions=parsed.get("actions", []),
         )
 
         ctx.write_event_to_stream(event)
         return event
 
+    async def _foreground(self) -> str | None:
+        if self.foreground_package is None:
+            return None
+        try:
+            return await self.foreground_package()
+        except Exception as e:
+            logger.debug(f"Foreground package check failed: {e}")
+            return None
+
     @step
-    async def execute(
-        self, ctx: Context, ev: ExecutorActionEvent
-    ) -> ExecutorActionResultEvent:
+    async def execute(self, ctx: Context, ev: ExecutorActionEvent) -> ExecutorActionResultEvent:
         """Execute the action."""
         logger.debug(f"⚡ Executing action: {ev.description}")
 
-        try:
-            action_dict = json.loads(ev.action_json)
-        except json.JSONDecodeError as e:
-            logger.error(f"❌ Failed to parse action JSON: {e}")
-            event = ExecutorActionResultEvent(
-                action={"action": "invalid"},
-                success=False,
-                error=f"Invalid action JSON: {str(e)}",
-                summary="Failed to parse action",
-                thought=ev.thought,
-                full_response=ev.full_response,
+        if ev.actions:
+            planned = ev.actions
+        else:
+            try:
+                planned = [json.loads(ev.action_json)]
+            except json.JSONDecodeError as e:
+                logger.error(f"❌ Failed to parse action JSON: {e}")
+                event = ExecutorActionResultEvent(
+                    action={"action": "invalid"},
+                    success=False,
+                    error=f"Invalid action JSON: {str(e)}",
+                    summary="Failed to parse action",
+                    thought=ev.thought,
+                    full_response=ev.full_response,
+                )
+                ctx.write_event_to_stream(event)
+                return event
+        planned = planned[: self.max_actions_per_batch]
+
+        baseline = await self._foreground() if len(planned) > 1 else None
+        results: list[dict] = []
+        for position, action_dict in enumerate(planned):
+            action_type = action_dict.get("action", "unknown")
+            action_args = {k: v for k, v in action_dict.items() if k != "action"}
+
+            result = await self.registry.execute(action_type, action_args, self.action_ctx, workflow_ctx=ctx)
+            results.append(
+                {
+                    "action": action_dict,
+                    "outcome": result.success,
+                    "error": "" if result.success else result.summary,
+                    "summary": result.summary,
+                }
             )
-            ctx.write_event_to_stream(event)
-            return event
+            logger.debug(f"{'✅' if result.success else '❌'} Execution complete: {result.summary}")
 
-        # Extract action type and args, dispatch via registry
-        action_type = action_dict.get("action", "unknown")
-        action_args = {k: v for k, v in action_dict.items() if k != "action"}
-
-        result = await self.registry.execute(
-            action_type, action_args, self.action_ctx, workflow_ctx=ctx
-        )
+            if not result.success or position == len(planned) - 1:
+                break
+            if action_type not in self._BATCHABLE_ACTIONS:
+                break
+            if baseline is not None and await self._foreground() != baseline:
+                logger.info("Action Batch aborted: foreground package changed")
+                break
 
         await wait_for_ui_settled_after_action(
             self.action_ctx.state_provider,
-            action_type,
+            results[-1]["action"].get("action", "unknown"),
             self.agent_config.wait_for_stable_ui,
         )
 
-        logger.debug(
-            f"{'✅' if result.success else '❌'} Execution complete: {result.summary}"
-        )
-
+        last = results[-1]
+        failed = next((r for r in results if not r["outcome"]), None)
         event = ExecutorActionResultEvent(
-            action=action_dict,
-            success=result.success,
-            error="" if result.success else result.summary,
-            summary=result.summary,
+            action=last["action"],
+            success=failed is None,
+            error=failed["error"] if failed else "",
+            summary=last["summary"],
             thought=ev.thought,
             full_response=ev.full_response,
+            results=results,
         )
         ctx.write_event_to_stream(event)
         return event
@@ -319,5 +348,6 @@ class ExecutorAgent(Workflow):
                 "error": ev.error,
                 "summary": ev.summary,
                 "thought": ev.thought,
+                "results": ev.results,
             }
         )
