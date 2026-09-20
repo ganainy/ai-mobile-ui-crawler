@@ -44,3 +44,13 @@ Question: which modes detect UI elements, do they work, and what could be better
 - `content query --uri content://com.mobilerun.portal/state_full` returns `{a11y_tree (raw nodes: boundsInScreen, isClickable, children, ...), phone_state, device_context}`, i.e. exactly what `AndroidDriver.get_ui_tree` should return. `a11y_tree` (no `_full`) is the compact indexed form without clickable flags.
 - Read time ~1.2-1.6 s via `adb shell content query` (a bare `adb shell true` is 0.15-0.3 s), vs `uiautomator dump` ~2.3 s. Portal wins on speed and fields; the HTTP/TCP path might be faster still (not measured).
 - Left on the user's phone: Portal installed, its accessibility service enabled (`enabled_accessibility_services` was `null` before), overlay set invisible.
+
+## Built after the spike (commits 2610ff2, effafed)
+- `portal.py`: Mobilerun Portal names, pinned v0.7.25 download verified by SHA-256 and cached in `<app data>/portal/`, overlay hidden after setup, read-only `get_portal_status()`. `portal_client.py`: new content URIs.
+- `AndroidDriver(use_accessibility=True)` reads `state_full` from Portal; failure leaves an empty tree plus `a11y_error`. `crawler_agent.py` sets it for `boost`/`accessibility`. Provider: accessibility mode raises with the reason if there is no tree; boost threshold counts real nodes (`a11y_completeness.count_nodes`; the root is a dict so `len()` had counted its keys).
+- Verified on the phone (launcher screen, boost): source=a11y, 25 elements, OmniParser not called. Capture breakdown: screenshot 2.2-2.7 s, a11y 1.4 s, keyboard 0.15-0.45 s, run one after another over wireless ADB.
+
+## Still to do
+- The four "incomplete a11y" checks (surface class, < 3 clickables, > 40% uncovered, text-only) in `a11y_completeness.py`, logged when they trigger OmniParser.
+- Settings "Install / enable Portal" button + status (uses `get_portal_status` / `setup_portal`); crawl start should only check and warn.
+- `boost` default in the Settings fallback; run screenshot and a11y fetch concurrently (~1.4 s per step); negative phase durations bug; `ui_parser_mode` still defaults to `omniparser` in `config_manager.py`.
