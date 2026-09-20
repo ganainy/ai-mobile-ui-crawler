@@ -6,7 +6,18 @@ from html import escape
 
 from PySide6.QtCore import Signal
 from PySide6.QtGui import QColor, QFont, QTextCursor
-from PySide6.QtWidgets import QComboBox, QGroupBox, QHBoxLayout, QLabel, QPushButton, QTextEdit, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QCheckBox,
+    QComboBox,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
+)
 
 from mobile_crawler.core.logging_service import LogLevel
 
@@ -44,6 +55,7 @@ class LogViewer(QWidget):
         }
         # Stored log entries: list of (LogLevel, timestamp_str, message)
         self._entries: list[tuple[LogLevel, str, str]] = []
+        self._shown = 0  # entries currently displayed
         self._theme = {
             "bg": "#0b0f14",
             "border": "#263241",
@@ -84,12 +96,24 @@ class LogViewer(QWidget):
         self.level_filter.currentTextChanged.connect(self._on_level_filter_changed)
         controls_layout.addWidget(self.level_filter)
 
+        # Text search (case-insensitive substring, or regex when enabled)
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("Search logs...")
+        self.search_input.setClearButtonEnabled(True)
+        self.search_input.textChanged.connect(self._on_search_changed)
+        controls_layout.addWidget(self.search_input, 1)
+
+        self.regex_checkbox = QCheckBox("Regex")
+        self.regex_checkbox.toggled.connect(lambda _checked: self._on_search_changed(self.search_input.text()))
+        controls_layout.addWidget(self.regex_checkbox)
+
+        self.match_label = QLabel("")
+        controls_layout.addWidget(self.match_label)
+
         # Clear button
         self.clear_button = QPushButton("Clear")
         self.clear_button.clicked.connect(self._on_clear_clicked)
         controls_layout.addWidget(self.clear_button)
-
-        controls_layout.addStretch()
         log_layout.addLayout(controls_layout)
 
         # Log text area
@@ -129,11 +153,11 @@ class LogViewer(QWidget):
             QColor for the log level
         """
         level_colors = {
-            "DEBUG": QColor(139, 148, 158),      # Muted gray
-            "INFO": QColor(215, 221, 229),       # Terminal foreground
-            "WARNING": QColor(244, 189, 80),     # Amber
-            "ERROR": QColor(255, 107, 107),      # Red
-            "ACTION": QColor(92, 200, 255),      # Cyan-blue
+            "DEBUG": QColor(139, 148, 158),  # Muted gray
+            "INFO": QColor(215, 221, 229),  # Terminal foreground
+            "WARNING": QColor(244, 189, 80),  # Amber
+            "ERROR": QColor(255, 107, 107),  # Red
+            "ACTION": QColor(92, 200, 255),  # Cyan-blue
         }
         return level_colors.get(level, QColor(0, 0, 0))
 
@@ -156,10 +180,45 @@ class LogViewer(QWidget):
         self._min_level = level_map.get(level_text, LogLevel.DEBUG)
         self._rebuild_display()
 
+    def _on_search_changed(self, _text: str):
+        """Re-render entries when the search text or regex mode changes."""
+        self._rebuild_display()
+
+    def _search_matches(self, message: str) -> bool:
+        """Return True if the message matches the current search text."""
+        query = self.search_input.text()
+        if not query:
+            return True
+        if self.regex_checkbox.isChecked():
+            try:
+                pattern = re.compile(query, re.IGNORECASE)
+            except re.error:
+                self.search_input.setStyleSheet(f"border: 1px solid {self._theme['error']};")
+                return True
+            self.search_input.setStyleSheet("")
+            return pattern.search(message) is not None
+        self.search_input.setStyleSheet("")
+        return query.lower() in message.lower()
+
+    def _passes_filters(self, level: LogLevel, message: str) -> bool:
+        """Check an entry against the level filter and the search text."""
+        if self._level_order.get(level, 0) < self._level_order.get(self._min_level, 0):
+            return False
+        return self._search_matches(message)
+
+    def _update_match_label(self, shown: int):
+        """Show 'shown/total' while a search is active."""
+        if self.search_input.text():
+            self.match_label.setText(f"{shown}/{len(self._entries)}")
+        else:
+            self.match_label.setText("")
+
     def _on_clear_clicked(self):
         """Handle clear button click."""
         self._entries.clear()
+        self._shown = 0
         self.log_text.clear()
+        self.match_label.setText("")
         self.logs_cleared.emit()
 
     def append_log(self, level: LogLevel, message: str):
@@ -179,7 +238,7 @@ class LogViewer(QWidget):
 
         # Trim oldest entries if we exceed the maximum
         if len(self._entries) > self._MAX_ENTRIES:
-            self._entries = self._entries[-self._MAX_ENTRIES:]
+            self._entries = self._entries[-self._MAX_ENTRIES :]
             # Rebuild needed because we dropped entries
             self._rebuild_display()
             return
@@ -195,10 +254,7 @@ class LogViewer(QWidget):
             timestamp: Pre-formatted timestamp string
             message: Log message text
         """
-        level_order = self._level_order.get(level, 0)
-        min_order = self._level_order.get(self._min_level, 0)
-
-        if level_order < min_order:
+        if not self._passes_filters(level, message):
             return
 
         cursor = self.log_text.textCursor()
@@ -206,6 +262,9 @@ class LogViewer(QWidget):
 
         cursor.insertHtml(self._format_entry_html(level, timestamp, message))
         cursor.insertBlock()
+
+        self._shown += 1
+        self._update_match_label(self._shown)
 
         # Auto-scroll to bottom
         scrollbar = self.log_text.verticalScrollBar()
@@ -219,15 +278,18 @@ class LogViewer(QWidget):
         self.log_text.clear()
 
         cursor = self.log_text.textCursor()
-        min_order = self._level_order.get(self._min_level, 0)
+        shown = 0
 
         for level, timestamp, message in self._entries:
-            level_order = self._level_order.get(level, 0)
-            if level_order < min_order:
+            if not self._passes_filters(level, message):
                 continue
 
+            shown += 1
             cursor.insertHtml(self._format_entry_html(level, timestamp, message))
             cursor.insertBlock()
+
+        self._shown = shown
+        self._update_match_label(shown)
 
         # Scroll to bottom after rebuild
         scrollbar = self.log_text.verticalScrollBar()
@@ -256,9 +318,9 @@ class LogViewer(QWidget):
             (
                 "<div style=\"font-family: Consolas, 'Courier New', monospace; "
                 "font-size: 9pt; line-height: 130%; margin: 0 0 2px 0; "
-                f"color: {text_color}; white-space: pre-wrap;\">"
+                f'color: {text_color}; white-space: pre-wrap;">'
                 f"{timestamp_html} {level_html}{source_html} "
-                f"<span style=\"color: {text_color};\">{first_line_html}</span>"
+                f'<span style="color: {text_color};">{first_line_html}</span>'
                 "</div>"
             )
         ]
@@ -372,12 +434,12 @@ class LogViewer(QWidget):
 
     def _badge(self, text: str, color: str, background: str) -> str:
         return (
-            f"<span style=\"color: {color}; background-color: {background}; "
-            f"font-weight: 700;\">[{escape(text)}]</span>"
+            f'<span style="color: {color}; background-color: {background}; '
+            f'font-weight: 700;">[{escape(text)}]</span>'
         )
 
     def _span(self, text: str, color: str) -> str:
-        return f"<span style=\"color: {color};\">{escape(text)}</span>"
+        return f'<span style="color: {color};">{escape(text)}</span>'
 
     def _preserve_spaces(self, text: str) -> str:
         return text.replace(" ", "&nbsp;").replace("\t", "&nbsp;&nbsp;&nbsp;&nbsp;")

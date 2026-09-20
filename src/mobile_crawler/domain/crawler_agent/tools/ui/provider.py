@@ -454,7 +454,7 @@ class AndroidStateProvider(StateProvider):
             return self._omni_client.parse(screenshot_bytes)
         finally:
             self._last_omniparser_ms = (time.perf_counter() - parse_started) * 1000
-            logger.debug(
+            logger.info(
                 "OmniParser parse call '%s' took %.1fms",
                 caller_label,
                 self._last_omniparser_ms,
