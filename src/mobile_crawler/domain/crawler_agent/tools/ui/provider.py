@@ -229,19 +229,35 @@ class AndroidStateProvider(StateProvider):
         await self._dismiss_keyboard()
         breakdown["keyboard"] = (time.perf_counter() - phase_started) * 1000
 
-        # Get screenshot via driver (ADB, no Portal needed)
-        phase_started = time.perf_counter()
-        screenshot_bytes = await self._capture_screenshot_with_retry()
-        breakdown["screenshot"] = (time.perf_counter() - phase_started) * 1000
+        # The screenshot (ADB) and the a11y tree (Portal) are independent reads of the
+        # same screen, so fetch them together instead of one after the other.
+        async def timed(coro):
+            started = time.perf_counter()
+            try:
+                return await coro, (time.perf_counter() - started) * 1000
+            except Exception as exc:
+                return exc, (time.perf_counter() - started) * 1000
+
+        (screenshot_result, breakdown["screenshot"]), (tree_result, breakdown["a11y"]) = await asyncio.gather(
+            timed(self._capture_screenshot_with_retry()),
+            timed(self.driver.get_ui_tree()),
+        )
+        if isinstance(screenshot_result, Exception):
+            raise screenshot_result
+        screenshot_bytes = screenshot_result
 
         # Get device context
         device_context = {}
         screen_width = 1080
         screen_height = 1920
 
-        phase_started = time.perf_counter()
-        try:
-            ui_tree = await self.driver.get_ui_tree()
+        if isinstance(tree_result, Exception):
+            logger.warning(f"get_ui_tree failed: {tree_result}")
+            phone_state = {}
+            a11y_tree = []
+            a11y_error = str(tree_result)
+        else:
+            ui_tree = tree_result
             device_context = ui_tree.get("device_context", {})
             screen_bounds = device_context.get("screen_bounds", {})
             screen_width = screen_bounds.get("width", 1080)
@@ -249,12 +265,6 @@ class AndroidStateProvider(StateProvider):
             phone_state = ui_tree.get("phone_state", {})
             a11y_tree = ui_tree.get("a11y_tree", [])
             a11y_error = ui_tree.get("a11y_error")
-        except Exception as e:
-            logger.warning(f"get_ui_tree failed: {e}")
-            phone_state = {}
-            a11y_tree = []
-            a11y_error = str(e)
-        breakdown["a11y"] = (time.perf_counter() - phase_started) * 1000
 
         # Determine UI parser mode and get elements
         omni_tree = None
