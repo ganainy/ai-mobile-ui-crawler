@@ -68,6 +68,7 @@ class SettingsPanel(QWidget):
     delete_app_account_requested = Signal()  # type: ignore
     _status_bar_preview_captured = Signal(bytes)  # type: ignore
     _status_bar_preview_failed = Signal(str)  # type: ignore
+    _portal_status_ready = Signal(str, bool)  # type: ignore  # status text, ready
 
     def __init__(self, config_store: "UserConfigStore", parent=None):
         """Initialize settings panel widget.
@@ -87,10 +88,12 @@ class SettingsPanel(QWidget):
         self._status_bar_preview_device_id: str | None = None
         self._status_bar_preview_thread: threading.Thread | None = None
         self._status_bar_preview_in_flight = False
+        self._portal_in_flight = False
         self._setup_ui()
         self.omniparser_keepalive_pinged.connect(self._on_keepalive_pinged)
         self._status_bar_preview_captured.connect(self._on_status_bar_preview_captured)
         self._status_bar_preview_failed.connect(self._on_status_bar_preview_failed)
+        self._portal_status_ready.connect(self._on_portal_status_ready)
         self._load_settings()
 
     def _setup_ui(self):
@@ -578,12 +581,41 @@ class SettingsPanel(QWidget):
         parser_mode_layout.addStretch()
         parser_layout.addLayout(parser_mode_layout)
         parser_approach_hint = QLabel(
-            "The agent mainly uses Android Accessibility APIs. In 'boost' mode it uses the a11y tree first, "
-            "and falls back to OmniParser only when accessibility metadata is missing or weak."
+            "In 'boost' mode the agent uses the accessibility tree (read through the Portal app on the device) "
+            "and runs OmniParser only when that tree looks incomplete. 'accessibility' mode needs Portal; "
+            "'omniparser' ignores it."
         )
         parser_approach_hint.setWordWrap(True)
         parser_approach_hint.setStyleSheet("color: #666; font-size: 11px;")
         parser_layout.addWidget(parser_approach_hint)
+
+        # Portal: the on-device accessibility service that supplies the a11y tree.
+        self.portal_container = QWidget()
+        portal_layout = QHBoxLayout()
+        portal_layout.setContentsMargins(0, 0, 0, 0)
+        portal_layout.addWidget(QLabel("Portal (a11y):"))
+        self.portal_status_label = QLabel("Connect a device to check Portal")
+        self.portal_status_label.setWordWrap(True)
+        self.portal_status_label.setStyleSheet("color: #666; font-size: 11px;")
+        portal_layout.addWidget(self.portal_status_label, 1)
+        self.portal_check_button = QPushButton("Check")
+        self.portal_check_button.setToolTip("Check whether Portal is installed and enabled on the selected device.")
+        self.portal_check_button.clicked.connect(self._check_portal)
+        portal_layout.addWidget(self.portal_check_button)
+        self.portal_install_button = QPushButton("Install / enable Portal")
+        self.portal_install_button.setToolTip(
+            "Download the pinned Portal release, install it on the selected device and turn on its "
+            "accessibility service. Without Portal, boost mode uses OmniParser only."
+        )
+        self.portal_install_button.clicked.connect(self._install_portal)
+        portal_layout.addWidget(self.portal_install_button)
+        self.portal_container.setLayout(portal_layout)
+        parser_layout.addWidget(self.portal_container)
+        self._set_portal_buttons_enabled(False)
+        self.ui_parser_mode_combo.currentTextChanged.connect(
+            lambda mode: self.portal_container.setVisible(mode != "omniparser")
+        )
+        self.portal_container.setVisible(self.ui_parser_mode_combo.currentText() != "omniparser")
 
         # Backend selection (Replicate API vs Local Server)
         backend_layout = QHBoxLayout()
@@ -1354,12 +1386,48 @@ class SettingsPanel(QWidget):
         or when the device changes; safe to call repeatedly.
         """
         self._device_id = device_id
+        self._set_portal_buttons_enabled(device_id is not None)
+        if device_id is None:
+            self.portal_status_label.setText("Connect a device to check Portal")
+        else:
+            self._check_portal()
         if device_id is None:
             self._status_bar_preview_device_id = None
             self.screenshot_preview.set_placeholder("Connect a device to preview")
             return
         if device_id != self._status_bar_preview_device_id:
             self._fetch_status_bar_preview()
+
+    def _set_portal_buttons_enabled(self, enabled: bool) -> None:
+        self.portal_check_button.setEnabled(enabled)
+        self.portal_install_button.setEnabled(enabled)
+
+    def _check_portal(self) -> None:
+        self._run_portal_action("Checking Portal...", "check")
+
+    def _install_portal(self) -> None:
+        self._run_portal_action("Installing Portal (this can take a few minutes)...", "install")
+
+    def _run_portal_action(self, busy_text: str, action: str) -> None:
+        if self._device_id is None or self._portal_in_flight:
+            return
+        self._portal_in_flight = True
+        self._set_portal_buttons_enabled(False)
+        self.portal_status_label.setText(busy_text)
+        threading.Thread(target=self._portal_worker, args=(action, self._device_id), daemon=True).start()
+
+    def _portal_worker(self, action: str, device_id: str) -> None:
+        from mobile_crawler.ui import portal_actions
+
+        run = portal_actions.install_portal if action == "install" else portal_actions.check_portal
+        text, ready = run(device_id)
+        self._portal_status_ready.emit(text, ready)
+
+    def _on_portal_status_ready(self, text: str, ready: bool) -> None:
+        self._portal_in_flight = False
+        self._set_portal_buttons_enabled(self._device_id is not None)
+        self.portal_status_label.setText(text)
+        self.portal_status_label.setStyleSheet(f"color: {'#2e7d32' if ready else '#b26a00'}; font-size: 11px;")
 
     def _fetch_status_bar_preview(self) -> None:
         """Capture a fresh screenshot from the selected device for the preview."""

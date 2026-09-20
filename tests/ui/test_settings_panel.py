@@ -836,6 +836,71 @@ class TestStatusBarExclusionPreview:
         assert not panel.screenshot_preview.has_screenshot()
 
 
+class TestPortalControls:
+    """The Portal row in the UI Parser group: status text and Check / Install buttons."""
+
+    def test_buttons_are_disabled_without_a_device(self, qt_app, mock_config_store):
+        panel = _create_settings_panel(mock_config_store)
+        assert not panel.portal_check_button.isEnabled()
+        assert not panel.portal_install_button.isEnabled()
+
+    def test_portal_row_is_hidden_in_omniparser_mode_and_shown_otherwise(self, qt_app, mock_config_store):
+        panel = _create_settings_panel(mock_config_store)
+        panel.ui_parser_mode_combo.setCurrentText("omniparser")
+        assert panel.portal_container.isHidden()
+        panel.ui_parser_mode_combo.setCurrentText("boost")
+        assert not panel.portal_container.isHidden()
+
+    def test_selecting_a_device_checks_portal_and_shows_the_status(self, qt_app, mock_config_store, monkeypatch):
+        from mobile_crawler.ui import portal_actions
+
+        monkeypatch.setattr(portal_actions, "check_portal", lambda device_id: (f"ready on {device_id}", True))
+        panel = _create_settings_panel(mock_config_store)
+        monkeypatch.setattr(
+            "threading.Thread",
+            lambda target, args, daemon: type("T", (), {"start": lambda self: target(*args)})(),
+        )
+
+        panel.notify_device_changed("device-1")
+
+        assert panel.portal_status_label.text() == "ready on device-1"
+        assert panel.portal_install_button.isEnabled()
+
+    def test_install_button_runs_the_install_action(self, qt_app, mock_config_store, monkeypatch):
+        from mobile_crawler.ui import portal_actions
+
+        calls = []
+        monkeypatch.setattr(
+            portal_actions, "install_portal", lambda d: calls.append(d) or ("Portal 0.7.25 is ready", True)
+        )
+        panel = _create_settings_panel(mock_config_store)
+        panel._device_id = "device-1"
+        monkeypatch.setattr(
+            "threading.Thread",
+            lambda target, args, daemon: type("T", (), {"start": lambda self: target(*args)})(),
+        )
+
+        panel._install_portal()
+
+        assert calls == ["device-1"]
+        assert panel.portal_status_label.text() == "Portal 0.7.25 is ready"
+
+    def test_a_second_request_is_ignored_while_one_is_running(self, qt_app, mock_config_store, monkeypatch):
+        panel = _create_settings_panel(mock_config_store)
+        panel._device_id = "device-1"
+        started = []
+        monkeypatch.setattr(
+            "threading.Thread",
+            lambda target, args, daemon: type("T", (), {"start": lambda self: started.append(args)})(),
+        )
+
+        panel._check_portal()
+        panel._check_portal()
+
+        assert len(started) == 1
+        assert not panel.portal_check_button.isEnabled()
+
+
 class TestAutoGenerateReport:
     """Tests for the 'Generate report after each run' checkbox."""
 

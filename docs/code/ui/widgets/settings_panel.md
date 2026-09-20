@@ -16,6 +16,8 @@ Source: `src/mobile_crawler/ui/widgets/settings_panel.py`
 - [[code/domain/omniparser_warmup|domain.omniparser_warmup]]
 - [[code/infrastructure/app_account_store|infrastructure.app_account_store]]
 - [[code/infrastructure/user_config_store|infrastructure.user_config_store]]
+- [[code/ui/_index|ui]]
+- [[code/ui/portal_actions|ui.portal_actions]]
 - [[code/ui/widgets/status_bar_exclusion_preview|ui.widgets.status_bar_exclusion_preview]]
 
 ## Imported by
