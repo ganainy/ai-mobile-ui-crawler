@@ -72,6 +72,14 @@ _Avoid_: Test credentials
 A step in sign-up or login that requires proof of control of an email address or phone number, such as an emailed code or link or an SMS one-time password. The crawler tries to solve it automatically first; when it can't and human fallback is enabled, it asks the user.
 _Avoid_: OTP step, verification step, 2FA
 
+**Portal**:
+The app installed on the target device whose accessibility service supplies the accessibility tree (element bounds, text, clickable flags) that the crawler reads instead of, or before, running OmniParser. Installed and enabled from Settings, never automatically; without it, boost mode uses OmniParser only and accessibility mode reports an error.
+_Avoid_: Accessibility app, helper app
+
+**Incomplete Accessibility Tree**:
+An accessibility tree that boost mode does not trust because it is missing, too small, mostly a WebView/Flutter/game surface, text-only, has too few interactive nodes, or leaves much of the screen uncovered. Only then does boost mode run OmniParser. The checks that fired are logged.
+_Avoid_: Sparse tree, weak a11y
+
 **Live Feed**:
 A real-time, read-only video view of the selected device's screen, shown in the Stats panel's device board so the user can watch the crawl as it happens. The parsed-element boxes from the latest capture are drawn over it and fade out, since they describe a past snapshot. When the feed is off or unavailable, the board falls back to the last captured screenshot with its boxes. Distinct from the per-step screenshots the crawler captures for its own use and from the recorded run video: the Live Feed is for the human only, and toggled on or off by the user.
 _Avoid_: Mirror, screen mirroring, stream

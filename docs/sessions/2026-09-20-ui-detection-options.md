@@ -50,7 +50,17 @@ Question: which modes detect UI elements, do they work, and what could be better
 - `AndroidDriver(use_accessibility=True)` reads `state_full` from Portal; failure leaves an empty tree plus `a11y_error`. `crawler_agent.py` sets it for `boost`/`accessibility`. Provider: accessibility mode raises with the reason if there is no tree; boost threshold counts real nodes (`a11y_completeness.count_nodes`; the root is a dict so `len()` had counted its keys).
 - Verified on the phone (launcher screen, boost): source=a11y, 25 elements, OmniParser not called. Capture breakdown: screenshot 2.2-2.7 s, a11y 1.4 s, keyboard 0.15-0.45 s, run one after another over wireless ADB.
 
-## Still to do
+## Done later the same day (3705690, dfec637, 663aff4, ca6a436, 346f399)
+- `a11y_completeness.evaluate`: no_tree / few_nodes / surface_view / text_only / few_clickables / uncovered_area; boost logs which fired; tunables in `CrawlerConfig.a11y_checks` (config-only). On the phone's app-drawer launcher it reports `uncovered_area`, so OmniParser runs there; real thresholds need tuning from real runs.
+- Screenshot and a11y fetch run in parallel (2.7 s per capture instead of ~3.7 s on the phone); identical-screenshot parse reuse confirmed live (second capture omniparser=0).
+- `boost` is the default everywhere (a saved user choice is unchanged); AndroidDriver skips Portal for 60 s after a failure so a phone without Portal is not retried and warned about every step.
+- Settings: Portal status row with Check and Install / enable buttons (`ui/portal_actions.py`).
+- Fixed negative phase durations: `StepPhaseStateMachine` kept one time per phase, so from step 2 on "next entry minus this entry" went negative. It now keeps an ordered history.
+- [ADR 0005](../adr/0005-download-pinned-portal-instead-of-vendoring.md), glossary entries Portal and Incomplete Accessibility Tree.
+- Deviation from the plan: crawl start does not pre-check Portal; the driver already logs why the tree is unavailable and boost falls back, accessibility mode errors.
+- Full suite 1513 passed, 7 skipped. Not yet run in a full crawl on the device.
+
+## Was still to do (now done, see above)
 - The four "incomplete a11y" checks (surface class, < 3 clickables, > 40% uncovered, text-only) in `a11y_completeness.py`, logged when they trigger OmniParser.
 - Settings "Install / enable Portal" button + status (uses `get_portal_status` / `setup_portal`); crawl start should only check and warn.
 - `boost` default in the Settings fallback; run screenshot and a11y fetch concurrently (~1.4 s per step); negative phase durations bug; `ui_parser_mode` still defaults to `omniparser` in `config_manager.py`.
