@@ -208,22 +208,28 @@ class AndroidStateProvider(StateProvider):
     async def get_state(self) -> UIState:
         state_started = time.perf_counter()
         self._last_omniparser_ms = None
+        # Per-phase wall-clock of this capture (ms), logged once at the end.
+        breakdown: dict[str, float] = {}
+
+        phase_started = time.perf_counter()
         await self._ensure_target_package_active()
+        breakdown["guard"] = (time.perf_counter() - phase_started) * 1000
+
+        phase_started = time.perf_counter()
         await self._dismiss_keyboard()
+        breakdown["keyboard"] = (time.perf_counter() - phase_started) * 1000
 
         # Get screenshot via driver (ADB, no Portal needed)
-        screenshot_started = time.perf_counter()
+        phase_started = time.perf_counter()
         screenshot_bytes = await self._capture_screenshot_with_retry()
-        logger.debug(
-            "State capture screenshot took %.1fms",
-            (time.perf_counter() - screenshot_started) * 1000,
-        )
+        breakdown["screenshot"] = (time.perf_counter() - phase_started) * 1000
 
         # Get device context
         device_context = {}
         screen_width = 1080
         screen_height = 1920
 
+        phase_started = time.perf_counter()
         try:
             ui_tree = await self.driver.get_ui_tree()
             device_context = ui_tree.get("device_context", {})
@@ -236,6 +242,7 @@ class AndroidStateProvider(StateProvider):
             logger.warning(f"get_ui_tree failed: {e}")
             phone_state = {}
             a11y_tree = []
+        breakdown["a11y"] = (time.perf_counter() - phase_started) * 1000
 
         # Determine UI parser mode and get elements
         omni_tree = None
@@ -278,6 +285,9 @@ class AndroidStateProvider(StateProvider):
                     filtered = a11y_tree
                     omni_tree = None
 
+        breakdown["omniparser"] = self._last_omniparser_ms or 0.0
+
+        phase_started = time.perf_counter()
         self.tree_formatter.screen_width = screen_width
         self.tree_formatter.screen_height = screen_height
         self.tree_formatter.use_normalized = self.use_normalized
@@ -313,14 +323,17 @@ class AndroidStateProvider(StateProvider):
         # The exact image the elements were parsed from, so consumers can show
         # a screenshot that matches the element overlay.
         ui_state.screenshot_bytes = screenshot_bytes
+        breakdown["format"] = (time.perf_counter() - phase_started) * 1000
         ui_state.capture_timing_ms = round((time.perf_counter() - state_started) * 1000, 3)
         ui_state.omniparser_ms = self._last_omniparser_ms
-        logger.debug(
-            "State capture completed in %.1fms (mode=%s, source=%s, elements=%s)",
+        ui_state.capture_breakdown_ms = {k: round(v, 1) for k, v in breakdown.items()}
+        logger.info(
+            "State capture %.0fms (mode=%s, source=%s, elements=%s) | %s",
             ui_state.capture_timing_ms,
             self.ui_parser_mode,
             omni_source,
             len(elements) if elements else 0,
+            " ".join(f"{k}={v:.0f}" for k, v in breakdown.items()),
         )
         return ui_state
 

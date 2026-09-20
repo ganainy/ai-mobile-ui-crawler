@@ -195,6 +195,26 @@ async def test_state_carries_the_screenshot_its_elements_were_parsed_from(androi
 
 
 @pytest.mark.asyncio
+async def test_state_records_a_timing_breakdown_per_capture_phase(android_state_provider):
+    provider, driver = android_state_provider
+    mock_adb = Mock()
+    mock_adb.get_current_package.return_value = "com.example.app"
+
+    with patch("mobile_crawler.domain.adb_action_executor.ADBActionExecutor", return_value=mock_adb):
+        state = await provider.get_state()
+
+    assert set(state.capture_breakdown_ms) == {
+        "guard",
+        "keyboard",
+        "screenshot",
+        "a11y",
+        "omniparser",
+        "format",
+    }
+    assert all(ms >= 0 for ms in state.capture_breakdown_ms.values())
+
+
+@pytest.mark.asyncio
 async def test_state_provider_relaunches_after_browser_grace_exhausted(android_state_provider):
     provider, _ = android_state_provider
     provider.external_grace_captures = 2
