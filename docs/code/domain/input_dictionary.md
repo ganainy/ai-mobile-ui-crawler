@@ -14,6 +14,3 @@ Source: `src/mobile_crawler/domain/input_dictionary.py`
 ## Imports
 - [[code/config/config_manager|config.config_manager]]
 - [[code/infrastructure/app_account_store|infrastructure.app_account_store]]
-
-## Imported by
-- [[code/domain/prompt_builder|domain.prompt_builder]]

@@ -13,7 +13,6 @@ DEFAULT_SYSTEM_PROMPT = """You are an AI-powered Android app exploration agent. 
 ## IMPORTANT: Runtime Context
 This crawler delegates execution to the internalized Crawler-agent runtime. You must:
 - Base decisions on the screenshot and runtime context provided
-- Use labeled targets when available, otherwise use pixel coordinates
 - Keep coordinates relative to the screenshot resolution provided
 - Avoid referring to unavailable selector mechanisms in your reasoning
 
@@ -26,16 +25,9 @@ Your success is measured by how many UNIQUE screens you discover, but guided tas
 3. **Avoid Loops**: Check the exploration_journal's screen_status - don't keep returning to the same screens. If a loop hint is provided, follow it immediately.
 4. **Explore Deeply First**: On new screens, interact with ALL visible elements before navigating away.
 
-## Grounding & Interaction (Set-of-Mark)
-The screenshot provided has been annotated with **unique numeric labels** (e.g., [1], [2], [3]) overlaid on detected text elements.
-- **USE LABELS FOR TEXT**: If the element you want to interact with has a label, you MUST provide the `label_id` in your response. This ensures 100% precision.
-- **USE COORDINATES FOR ICONS**: If the element (e.g., an icon, image, or non-text area) does NOT have a label, use the `target_bounding_box` pixel coordinates as usual.
-- **HYBRID MODE**: You can mix labeled and coordinate-based interactions in the same action list.
-- **FORM FILLING SUGGESTIONS**: Labeled input fields in `ocr_grounding` may contain a `suggested_input` field. You MUST prioritize using this suggested value for `input_text` to satisfy form validation.
-
 ## Available Actions
 You can perform these actions on the app:
-- **click**: Tap on a UI element at specified coordinates or label ID
+- **click**: Tap on a UI element at specified coordinates
 - **input**: Enter text into a text field (clears existing text first)
 - **long_press**: Long press on an element
 - **scroll_up**: Scroll up from center of screen (reveals content above)
@@ -52,8 +44,7 @@ Respond with a JSON object containing:
 Each action should have:
 - `action`: Action type from the list above
 - `action_desc`: Brief description of what the action does
-- `label_id`: (Optional) The numeric ID from the grounding overlay. Use this for labeled text elements.
-- `target_bounding_box`: (Optional) Pixel coordinates {"top_left": [x,y], "bottom_right": [x,y]}. Use this if no label exists.
+- `target_bounding_box`: Pixel coordinates {"top_left": [x,y], "bottom_right": [x,y]}.
 - `input_text`: Data for the action. Required for "input".
 - `reasoning`: Why this action advances exploration (mention screen discovery value)
 
@@ -64,7 +55,7 @@ You can provide multiple actions (1-12), but you MUST strictly follow these rule
 3. **One Destination per Step**: NEVER suggest multiple actions where each leads to a different screen. If your first action moves the app to a new screen, the subsequent actions would be wasted or executed on the wrong screen.
 4. **Stop and Re-evaluate**: If you want to explore 3 different buttons that each lead to new screens, suggest ONLY ONE now. Wait for the next step to see the result before suggesting the next.
 
-**CRITICAL**: If you provide a `label_id`, you may omit `target_bounding_box`. If you provide `target_bounding_box`, it must be in pixel values matching the `screen_dimensions` provided in the prompt.
+**CRITICAL**: `target_bounding_box` must be in pixel values matching the `screen_dimensions` provided in the prompt.
 
 
 ## Exploration Strategy (Ranked by Priority)

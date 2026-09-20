@@ -120,10 +120,6 @@ class CrawlStatistics:
     ai_response_times_ms: list[float] = field(default_factory=list)
     last_step_number: int = 0  # Track last seen step to avoid double counting
 
-    # OCR timing (OCR grounding isn't used by the live pipeline — always 0/empty)
-    ocr_total_time_ms: float = 0.0
-    ocr_operation_count: int = 0
-
     # OmniParser vision-parsing timing
     omniparser_total_time_ms: float = 0.0
     omniparser_call_count: int = 0
@@ -166,12 +162,6 @@ class CrawlStatistics:
         if minutes <= 0:
             return 0.0
         return len(self.unique_screen_hashes) / minutes
-
-    def avg_ocr_time_ms(self) -> float:
-        """Average OCR processing time in milliseconds."""
-        if self.ocr_operation_count == 0:
-            return 0.0
-        return self.ocr_total_time_ms / self.ocr_operation_count
 
     def avg_omniparser_time_ms(self) -> float:
         """Average OmniParser vision-parsing call time in milliseconds."""
@@ -509,7 +499,6 @@ class MainWindow(QMainWindow):
         self.signal_adapter.screen_processed.connect(self._on_screen_processed)
         self.signal_adapter.step_paused.connect(self._on_step_paused)
         self.signal_adapter.debug_log.connect(self._on_debug_log)
-        self.signal_adapter.ocr_completed.connect(self._on_ocr_completed)
         self.signal_adapter.screenshot_timing.connect(self._on_screenshot_timing)
         self.signal_adapter.action_timing.connect(self._on_action_timing)
         self.signal_adapter.omniparser_timing.connect(self._on_omniparser_timing)
@@ -1217,21 +1206,6 @@ class MainWindow(QMainWindow):
             self._current_stats.action_total_time_ms += result.execution_time_ms
             self._update_dashboard_stats()
 
-    def _on_ocr_completed(self, run_id: int, step_number: int, duration_ms: float, element_count: int) -> None:
-        """Handle OCR completed event.
-
-        Args:
-            run_id: Run ID
-            step_number: Step number
-            duration_ms: OCR processing time
-            element_count: Number of elements detected
-        """
-        # Accumulate OCR timing for statistics
-        if self._current_stats:
-            self._current_stats.ocr_operation_count += 1
-            self._current_stats.ocr_total_time_ms += duration_ms
-            self._update_dashboard_stats()
-
     def _on_screenshot_timing(self, run_id: int, step_number: int, duration_ms: float) -> None:
         """Handle screenshot timing event.
 
@@ -1318,9 +1292,7 @@ class MainWindow(QMainWindow):
         # Note: Full stats update would require accumulating data from run repository
         # For MVP, we'll keep it simple
 
-    def _on_crawl_completed(
-        self, run_id: int, steps: int, duration_ms: float, reason: str, ocr_avg_ms: float = 0.0
-    ) -> None:
+    def _on_crawl_completed(self, run_id: int, steps: int, duration_ms: float, reason: str) -> None:
         """Handle crawl completed event.
 
         Args:
@@ -1328,11 +1300,8 @@ class MainWindow(QMainWindow):
             steps: Total steps completed
             duration_ms: Total duration in milliseconds
             reason: Completion reason
-            ocr_avg_ms: Average OCR processing time in ms
         """
         message = f"Crawl completed: {steps} steps in {duration_ms / 1000:.1f}s - {reason}"
-        if ocr_avg_ms > 0:
-            message += f" (OCR Avg: {ocr_avg_ms:.0f}ms)"
 
         self._append_clean_log(LogLevel.INFO, message, "ui")
 
@@ -2068,7 +2037,6 @@ class MainWindow(QMainWindow):
             avg_ai_response_time_ms=avg_ai_ms,
             duration_seconds=stats.elapsed_seconds(),
             action_avg_ms=stats.avg_action_time_ms(),
-            ocr_avg_ms=stats.avg_ocr_time_ms(),
             screenshot_avg_ms=stats.avg_screenshot_time_ms(),
             omniparser_avg_ms=stats.avg_omniparser_time_ms(),
             last_action=stats.last_action_type,

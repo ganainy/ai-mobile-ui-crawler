@@ -50,9 +50,7 @@ class CrawlerEventListener(ABC):
         pass
 
     @abstractmethod
-    def on_crawl_completed(
-        self, run_id: int, total_steps: int, total_duration_ms: float, reason: str, ocr_avg_ms: float = 0.0
-    ) -> None:
+    def on_crawl_completed(self, run_id: int, total_steps: int, total_duration_ms: float, reason: str) -> None:
         """Called when a crawl completes."""
         pass
 
@@ -83,11 +81,6 @@ class CrawlerEventListener(ABC):
     @abstractmethod
     def on_debug_log(self, run_id: int, step_number: int, message: str, level: str = "INFO") -> None:
         """Called to emit a log message to the UI. ``level`` is a Python level name (DEBUG..ERROR)."""
-        pass
-
-    @abstractmethod
-    def on_ocr_completed(self, run_id: int, step_number: int, duration_ms: float, element_count: int) -> None:
-        """Called after OCR grounding completes."""
         pass
 
     @abstractmethod

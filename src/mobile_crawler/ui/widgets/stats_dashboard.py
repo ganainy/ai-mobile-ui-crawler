@@ -479,14 +479,6 @@ class StatsDashboard(QWidget):
         grid.addWidget(_make_section_label("Timing"), row, 0, 1, 2)
         row += 1
 
-        self.ocr_avg_label = _make_stat_label(
-            "Avg OCR: n/a (OCR not used)",
-            "Average OCR grounding time per step (OCR is not used in the current pipeline).",
-        )
-        self.ocr_avg_label.setStyleSheet("color: #888;")
-        grid.addWidget(self.ocr_avg_label, row, 0, 1, 2)
-        row += 1
-
         self.action_avg_label = _make_stat_label(
             "Avg Action: —",
             "Average time to execute a single UI action.",
@@ -564,7 +556,6 @@ class StatsDashboard(QWidget):
         ai_calls: int = 0,
         avg_ai_response_time_ms: float = 0.0,
         duration_seconds: float = 0.0,
-        ocr_avg_ms: float = 0.0,
         action_avg_ms: float = 0.0,
         screenshot_avg_ms: float = 0.0,
         omniparser_avg_ms: float = 0.0,
@@ -644,11 +635,6 @@ class StatsDashboard(QWidget):
             self.revisit_ratio_label.setText("Revisit Ratio: —")
 
         # ── Timing ─────────────────────────────────────────
-        # ocr_avg_ms is accepted for caller compatibility but not displayed:
-        # OCR grounding isn't part of the live pipeline (OmniParser/a11y tree
-        # are used instead), so it's always inapplicable rather than "no data
-        # yet" — the label says so explicitly instead of showing "—".
-
         if action_avg_ms > 0:
             self.action_avg_label.setText(f"Avg Action: {action_avg_ms:.0f} ms")
         else:
@@ -687,7 +673,6 @@ class StatsDashboard(QWidget):
         self.unique_screens_label.setText("Unique Screens: —")
         self.total_visits_label.setText("Total Visits: —")
         self.screens_per_min_label.setText("Screens/min: —")
-        self.ocr_avg_label.setText("Avg OCR: n/a (OCR not used)")
         self.action_avg_label.setText("Avg Action: —")
         self.screenshot_avg_label.setText("Avg Screenshot: —")
         self.omniparser_avg_label.setText("Avg OmniParser: —")
@@ -740,7 +725,7 @@ class StatsDashboard(QWidget):
                 self.screenshot_hint_label.setText(_LIVE_HINT)
             elif not vision_enabled:
                 self.screenshot_hint_label.setText(
-                    "Vision disabled this step — shown for reference; " "a text description was sent to the AI instead."
+                    "Vision disabled this step — shown for reference; a text description was sent to the AI instead."
                 )
             else:
                 self.screenshot_hint_label.setText(_LAST_CAPTURE_HINT)

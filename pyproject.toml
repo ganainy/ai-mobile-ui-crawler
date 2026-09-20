@@ -31,7 +31,6 @@ dependencies = [
     "androguard>=4.1.0",
     "google-play-scraper>=1.2.0",
     "pyyaml>=6.0.0",
-    "easyocr>=1.7.0",
     "replicate>=1.0.0",
     # AI / Agent engine
     "llama-index-core>=0.14.4,<0.15.0",

@@ -1,6 +1,5 @@
 """Tests for CrawlerEventListener ABC contract and default implementations."""
 
-
 import pytest
 
 from mobile_crawler.core.crawler_event_listener import CrawlerEventListener
@@ -31,7 +30,7 @@ class ConcreteCrawlerEventListener(CrawlerEventListener):
     def on_step_completed(self, run_id, step_number, actions_count, duration_ms):
         pass
 
-    def on_crawl_completed(self, run_id, total_steps, total_duration_ms, reason, ocr_avg_ms=0.0):
+    def on_crawl_completed(self, run_id, total_steps, total_duration_ms, reason):
         pass
 
     def on_error(self, run_id, step_number, error):
@@ -44,9 +43,6 @@ class ConcreteCrawlerEventListener(CrawlerEventListener):
         pass
 
     def on_debug_log(self, run_id, step_number, message):
-        pass
-
-    def on_ocr_completed(self, run_id, step_number, duration_ms, element_count):
         pass
 
     def on_screenshot_timing(self, run_id, step_number, duration_ms):
@@ -68,6 +64,7 @@ class TestCrawlerEventListenerABC:
 
     def test_omitting_abstract_method_raises_typeerror(self):
         """Test that omitting any abstractmethod raises TypeError."""
+
         class PartialListener(CrawlerEventListener):
             def on_crawl_started(self, run_id, target_package):
                 pass
@@ -103,12 +100,15 @@ class TestCrawlerEventListenerABC:
         """Test that all 14 abstract methods must be implemented."""
         # This verifies the complete contract - any missing method should fail
         with pytest.raises(TypeError, match="abstract"):
+
             class EmptyListener(CrawlerEventListener):
                 pass
+
             EmptyListener()
 
     def test_listener_with_event_data(self):
         """Test that concrete listener can receive and handle event data."""
+
         class TrackingListener(CrawlerEventListener):
             def __init__(self):
                 self.events = []
@@ -134,7 +134,7 @@ class TestCrawlerEventListenerABC:
             def on_step_completed(self, run_id, step_number, actions_count, duration_ms):
                 pass
 
-            def on_crawl_completed(self, run_id, total_steps, total_duration_ms, reason, ocr_avg_ms=0.0):
+            def on_crawl_completed(self, run_id, total_steps, total_duration_ms, reason):
                 self.events.append(("crawl_completed", run_id, total_steps))
 
             def on_error(self, run_id, step_number, error):
@@ -147,9 +147,6 @@ class TestCrawlerEventListenerABC:
                 pass
 
             def on_debug_log(self, run_id, step_number, message):
-                pass
-
-            def on_ocr_completed(self, run_id, step_number, duration_ms, element_count):
                 pass
 
             def on_screenshot_timing(self, run_id, step_number, duration_ms):

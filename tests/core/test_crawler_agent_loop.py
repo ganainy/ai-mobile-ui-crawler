@@ -18,7 +18,7 @@ class TestListener:
     def on_state_changed(self, run_id, old_state, new_state):
         self.events.append(("state", run_id, old_state, new_state))
 
-    def on_crawl_completed(self, run_id, total_steps, duration_ms, reason, ocr_avg_ms=0.0):
+    def on_crawl_completed(self, run_id, total_steps, duration_ms, reason):
         self.events.append(("completed", run_id, total_steps, reason))
 
     def on_error(self, run_id, step_number, error):
@@ -76,7 +76,7 @@ def test_crawler_agent_wrapper_happy_path():
 
 
 class FailingRecorderListener(TestListener):
-    def on_crawl_completed(self, run_id, total_steps, duration_ms, reason, ocr_avg_ms=0.0):
+    def on_crawl_completed(self, run_id, total_steps, duration_ms, reason):
         raise RecorderError(
             "DB write failed",
             context=ErrorContext(run_id=run_id),
@@ -94,7 +94,7 @@ def test_emit_event_propagates_recorder_error():
         event_listeners=[FailingRecorderListener()],
     )
     with pytest.raises(RecorderError):
-        loop._emit_event("on_crawl_completed", 1, 5, 1000.0, "done", 0.0)
+        loop._emit_event("on_crawl_completed", 1, 5, 1000.0, "done")
 
 
 def test_emit_event_continues_on_non_critical_error():

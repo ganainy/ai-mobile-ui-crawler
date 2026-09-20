@@ -38,7 +38,6 @@ class _FakeSignalAdapter:
         self.screen_processed = _Connectable()
         self.step_paused = _Connectable()
         self.debug_log = _Connectable()
-        self.ocr_completed = _Connectable()
         self.screenshot_timing = _Connectable()
         self.step_phase_transition = _Connectable()
         self.action_timing = _Connectable()

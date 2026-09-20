@@ -19,7 +19,6 @@ Source: `src/mobile_crawler/domain/prompt_builder.py`
 
 ## Imports
 - [[code/config/config_manager|config.config_manager]]
-- [[code/domain/input_dictionary|domain.input_dictionary]]
 - [[code/domain/prompts|domain.prompts]]
 - [[code/infrastructure/app_account_store|infrastructure.app_account_store]]
 - [[code/infrastructure/screen_repository|infrastructure.screen_repository]]

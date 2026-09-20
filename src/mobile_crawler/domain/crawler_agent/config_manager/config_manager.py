@@ -206,7 +206,7 @@ class CrawlerConfig:
     omniparser_a11y_threshold: int = 5
     target_package: str | None = None
     # Status Bar Exclusion / Bottom Bar Exclusion: pixels cropped from the
-    # top/bottom of every screenshot at capture time, before hashing/OCR/AI
+    # top/bottom of every screenshot at capture time, before hashing/AI
     # vision. See ADR-0002.
     status_bar_exclusion_px: int = 80
     bottom_bar_exclusion_px: int = 0

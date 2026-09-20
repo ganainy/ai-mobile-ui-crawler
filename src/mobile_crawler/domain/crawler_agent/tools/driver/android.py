@@ -94,8 +94,7 @@ class AndroidDriver(DeviceDriver):
         err_msg = str(exception).lower()
         if any(word in err_msg for word in ["device", "offline", "connection", "closed", "reset", "timeout"]):
             logger.warning(
-                f"AndroidDriver detected connection drop: {exception}. "
-                f"Attempting to reconnect serial {self._serial}..."
+                f"AndroidDriver detected connection drop: {exception}. Attempting to reconnect serial {self._serial}..."
             )
             self._connected = False
 
@@ -207,7 +206,7 @@ class AndroidDriver(DeviceDriver):
             button_lower = button.lower()
             if button_lower not in self.supported_buttons:
                 raise ValueError(
-                    f"Button '{button}' not supported. " f"Supported: {', '.join(sorted(self.supported_buttons))}"
+                    f"Button '{button}' not supported. Supported: {', '.join(sorted(self.supported_buttons))}"
                 )
             await self.device.keyevent(self._BUTTON_KEYCODES[button_lower])
         except Exception as e:
@@ -253,9 +252,7 @@ class AndroidDriver(DeviceDriver):
         reinstall = kwargs.get("reinstall", False)
         grant_permissions = kwargs.get("grant_permissions", True)
 
-        logger.debug(
-            f"Installing app: {path} with reinstall: {reinstall} " f"and grant_permissions: {grant_permissions}"
-        )
+        logger.debug(f"Installing app: {path} with reinstall: {reinstall} and grant_permissions: {grant_permissions}")
         result = await self.device.install(
             path,
             nolaunch=True,
@@ -323,8 +320,8 @@ class AndroidDriver(DeviceDriver):
 
         The top ``status_bar_exclusion_px`` and bottom ``bottom_bar_exclusion_px``
         pixels (Status Bar Exclusion / Bottom Bar Exclusion, see CONTEXT.md)
-        are cropped off before the image reaches any consumer (hashing, OCR
-        grounding, AI vision) — see ADR-0002.
+        are cropped off before the image reaches any consumer (hashing,
+        AI vision) — see ADR-0002.
         """
         await self.ensure_connected()
 

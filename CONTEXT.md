@@ -53,7 +53,7 @@ Why a crawl run ended (e.g. step limit, time limit, user stop, error), recorded 
 _Avoid_: End reason, termination cause
 
 **Status Bar Exclusion**:
-The number of pixels cropped from the top of every screenshot, at capture time, before it's used for hashing, OCR grounding, or AI vision. Calibrated by dragging a line on a live device screenshot in Settings rather than guessing a pixel count blind.
+The number of pixels cropped from the top of every screenshot, at capture time, before it's used for hashing or AI vision. Calibrated by dragging a line on a live device screenshot in Settings rather than guessing a pixel count blind.
 _Avoid_: Top bar height, top bar exclusion, exclude top bar
 
 **Bottom Bar Exclusion**:

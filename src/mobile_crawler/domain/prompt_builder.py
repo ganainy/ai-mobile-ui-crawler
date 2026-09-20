@@ -108,7 +108,6 @@ class PromptBuilder:
         current_screen_is_new: bool | None = None,
         total_unique_screens: int | None = None,
         screen_dimensions: dict[str, int] | None = None,
-        ocr_grounding: list[dict] | None = None,
         app_package: str | None = None,
     ) -> str:
         """Build the user prompt with current context.
@@ -122,8 +121,7 @@ class PromptBuilder:
             current_screen_is_new: Whether the current screen is newly discovered
             total_unique_screens: Total unique screens discovered so far
             screen_dimensions: Original screen dimensions {"width": W, "height": H}
-            ocr_grounding: List of detected text elements with labels and text
-            app_package: Package being crawled (selects the App Account for suggested inputs)
+            app_package: Package being crawled (unused)
 
         Returns:
             JSON-formatted user prompt
@@ -147,45 +145,10 @@ class PromptBuilder:
             total_unique_screens=total_unique_screens,
         )
 
-        # Match input suggestions using ContextAwareInputDictionary
-        if ocr_grounding:
-            try:
-                from mobile_crawler.domain.input_dictionary import ContextAwareInputDictionary
-
-                input_dict = ContextAwareInputDictionary(
-                    self.config_manager,
-                    app_account=self._get_app_account(app_package),
-                    email=get_form_email(self.config_manager, app_package),
-                    phone=get_form_phone(self.config_manager),
-                )
-                for el in ocr_grounding:
-                    is_input_field = False
-                    class_name = str(el.get("className") or el.get("type") or "").lower()
-                    resource_id = str(el.get("resourceId") or "").lower()
-
-                    if (
-                        "edittext" in class_name
-                        or "edit" in resource_id
-                        or "input" in resource_id
-                        or "search" in resource_id
-                        or "search" in class_name
-                    ):
-                        is_input_field = True
-                    elif class_name == "omni_element" and el.get("type") == "text":
-                        is_input_field = True
-
-                    if is_input_field or el.get("type") == "text":
-                        el["suggested_input"] = input_dict.get_suggested_input(el)
-            except Exception as e:
-                import logging
-
-                logging.getLogger("crawler_agent").warning(f"Failed to match suggested inputs in PromptBuilder: {e}")
-
         # Format the user prompt
         prompt_data = {
             "screenshot": screenshot_b64,
             "screen_dimensions": screen_dimensions or {"width": 1080, "height": 2400},
-            "ocr_grounding": ocr_grounding,
             "exploration_progress": exploration_progress,
             "exploration_journal": journal,
             "is_stuck": is_stuck,
@@ -259,10 +222,6 @@ class PromptBuilder:
             return "Moderate discovery. Look for untapped buttons, menus, or navigation elements."
         else:
             return "Good exploration efficiency. Continue systematic coverage."
-
-    def _get_app_account(self, app_package: str | None) -> AppAccount | None:
-        """Get the App Account stored for `app_package`, if any."""
-        return get_app_account(self.config_manager, app_package)
 
     def _get_test_credentials(self, app_package: str | None = None) -> str:
         """Format the package's App Account plus generic Form Fill Data."""

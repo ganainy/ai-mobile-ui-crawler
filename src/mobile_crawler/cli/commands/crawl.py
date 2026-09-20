@@ -46,9 +46,7 @@ class JSONEventListener(CrawlerEventListener):
         }
         print(json.dumps(event), flush=True)
 
-    def on_crawl_completed(
-        self, run_id: int, total_steps: int, duration_ms: float, reason: str, ocr_avg_ms: float = 0.0
-    ) -> None:
+    def on_crawl_completed(self, run_id: int, total_steps: int, duration_ms: float, reason: str) -> None:
         """Handle crawl completed event."""
         event = {
             "event": "crawl_completed",
@@ -56,7 +54,6 @@ class JSONEventListener(CrawlerEventListener):
             "total_steps": total_steps,
             "duration_ms": duration_ms,
             "reason": reason,
-            "ocr_avg_ms": ocr_avg_ms,
             "timestamp": datetime.now().isoformat(),
         }
         print(json.dumps(event), flush=True)
@@ -171,18 +168,6 @@ class JSONEventListener(CrawlerEventListener):
             "step_number": step_number,
             "level": level,
             "message": message,
-            "timestamp": datetime.now().isoformat(),
-        }
-        print(json.dumps(event), flush=True)
-
-    def on_ocr_completed(self, run_id: int, step_number: int, duration_ms: float, element_count: int) -> None:
-        """Handle OCR completed event."""
-        event = {
-            "event": "ocr_completed",
-            "run_id": run_id,
-            "step_number": step_number,
-            "duration_ms": duration_ms,
-            "element_count": element_count,
             "timestamp": datetime.now().isoformat(),
         }
         print(json.dumps(event), flush=True)

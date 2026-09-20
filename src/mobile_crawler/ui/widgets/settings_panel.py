@@ -190,9 +190,7 @@ class SettingsPanel(QWidget):
         self.top_bar_height_input = QSpinBox()
         self.top_bar_height_input.setRange(0, 500)
         self.top_bar_height_input.setValue(80)
-        self.top_bar_height_input.setToolTip(
-            "Exclude the Android status bar from OCR and AI analysis. Typically 80-120px."
-        )
+        self.top_bar_height_input.setToolTip("Exclude the Android status bar from AI analysis. Typically 80-120px.")
         top_bar_layout.addWidget(self.top_bar_height_input)
         self.screenshot_refresh_button = QPushButton("Refresh")
         self.screenshot_refresh_button.setToolTip("Take a fresh screenshot from the connected device.")
@@ -208,7 +206,7 @@ class SettingsPanel(QWidget):
         self.bottom_bar_height_input.setRange(0, 500)
         self.bottom_bar_height_input.setValue(0)
         self.bottom_bar_height_input.setToolTip(
-            "Exclude the Android navigation bar from OCR and AI analysis. 0 if you use gesture navigation."
+            "Exclude the Android navigation bar from AI analysis. 0 if you use gesture navigation."
         )
         bottom_bar_layout.addWidget(self.bottom_bar_height_input)
         bottom_bar_layout.addStretch()
