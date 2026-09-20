@@ -2,7 +2,7 @@
 
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import QTimer, Signal
 from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QMessageBox, QPushButton, QVBoxLayout, QWidget
 
 from mobile_crawler.infrastructure.device_detection import AndroidDevice, DeviceDetection
@@ -10,6 +10,9 @@ from mobile_crawler.ui.async_utils import AsyncOperation
 
 if TYPE_CHECKING:
     from mobile_crawler.infrastructure.user_config_store import UserConfigStore
+
+AUTO_REFRESH_RETRIES = 3
+AUTO_REFRESH_DELAY_MS = 1500
 
 
 class DeviceSelector(QWidget):
@@ -40,6 +43,8 @@ class DeviceSelector(QWidget):
         self.device_detection = device_detection
         self._config_store = config_store
         self._current_device: AndroidDevice = None
+        self._retries_left = 0
+        self._auto_retrying = False
         self._setup_ui()
         self._load_selection()
 
@@ -75,14 +80,23 @@ class DeviceSelector(QWidget):
 
     def _load_selection(self):
         """Load previously saved device selection from config store."""
-        saved_device_id = self._config_store.get_setting("last_device_id", default=None)
-        if saved_device_id:
-            self._saved_device_id = saved_device_id
-        else:
-            self._saved_device_id = None
+        self._saved_device_id = self._config_store.get_setting("last_device_id", default=None)
+
+    def auto_refresh(self, retries: int = AUTO_REFRESH_RETRIES):
+        """Refresh at startup, retrying quietly before any "no devices" error.
+
+        The first adb query often comes back empty while the adb server is
+        still starting; the warning dialog only appears once retries run out.
+        """
+        self._retries_left = retries
+        self._auto_retrying = True
+        self._refresh_devices()
 
     def _refresh_devices(self):
-        """Refresh the list of available devices."""
+        """Refresh the list of available devices (manual: no silent retries)."""
+        if not getattr(self, "_auto_retrying", False):
+            self._retries_left = 0
+        self._auto_retrying = False
         self.status_label.setText("Refreshing devices...")
         self.status_label.setStyleSheet("color: orange; font-style: italic;")
         self.refresh_button.setEnabled(False)
@@ -108,9 +122,23 @@ class DeviceSelector(QWidget):
         Args:
             error: Error message
         """
+        if self._retries_left > 0:
+            self._schedule_retry()
+            return
         self.status_label.setText(f"Error: {error}")
         self.status_label.setStyleSheet("color: red; font-style: italic;")
         QMessageBox.critical(self.parent(), "Device Detection Error", str(error))
+
+    def _schedule_retry(self):
+        """Queue another automatic refresh without showing an error."""
+        self._retries_left -= 1
+        self.status_label.setText("Looking for devices...")
+        self.status_label.setStyleSheet("color: orange; font-style: italic;")
+        QTimer.singleShot(AUTO_REFRESH_DELAY_MS, self._retry_refresh)
+
+    def _retry_refresh(self):
+        self._auto_retrying = True
+        self._refresh_devices()
 
     def _update_device_list(self, devices: list[AndroidDevice]):
         """Update the device dropdown with new list.
@@ -123,8 +151,15 @@ class DeviceSelector(QWidget):
         if current_device_id:
             current_device_id = current_device_id.device_id
 
-        # Clear and repopulate
+        # Read last-used before repopulating: clear()/addItem() fire
+        # _on_device_changed, which would overwrite the stored value.
+        saved_device_id = self._config_store.get_setting("last_device_id", default=None)
+
         self.device_combo.clear()
+
+        if not devices and self._retries_left > 0:
+            self._schedule_retry()
+            return
 
         if not devices:
             self.device_combo.addItem("No devices available", None)
@@ -140,7 +175,7 @@ class DeviceSelector(QWidget):
                 "2. Connect your device via USB\n"
                 "3. Accept the USB debugging authorization prompt\n"
                 "4. Or start an Android emulator\n\n"
-                "Then click 'Refresh' to try again."
+                "Then click 'Refresh' to try again.",
             )
             return
 
@@ -149,35 +184,21 @@ class DeviceSelector(QWidget):
             display_text = device.display_name
             self.device_combo.addItem(display_text, device)
 
-        # Try to restore saved selection first
-        if hasattr(self, '_saved_device_id') and self._saved_device_id:
+        # Prefer the current selection, then the last-used device, else the first
+        for wanted in (current_device_id, saved_device_id):
+            if not wanted:
+                continue
             for i in range(self.device_combo.count()):
                 device = self.device_combo.itemData(i)
-                if device and device.device_id == self._saved_device_id:
-                    self.device_combo.setCurrentIndex(i)
-                    self._update_status_text(device)
-                    self._saved_device_id = None  # Clear after use
-                    return
-            # Saved device not found - show message
-            self.status_label.setText(f"Previously selected device not found: {self._saved_device_id}")
-            self.status_label.setStyleSheet("color: orange; font-style: italic;")
-            self._saved_device_id = None
-
-        # Restore selection if possible
-        if current_device_id:
-            for i in range(self.device_combo.count()):
-                device = self.device_combo.itemData(i)
-                if device and device.device_id == current_device_id:
+                if device and device.device_id == wanted:
                     self.device_combo.setCurrentIndex(i)
                     self._update_status_text(device)
                     return
 
-        # If no previous selection, select first device
-        if self.device_combo.count() > 0:
-            first_device = self.device_combo.itemData(0)
-            if first_device:
-                self.device_combo.setCurrentIndex(0)
-                self._update_status_text(first_device)
+        first_device = self.device_combo.itemData(0)
+        if first_device:
+            self.device_combo.setCurrentIndex(0)
+            self._update_status_text(first_device)
 
     def _update_status_text(self, device: AndroidDevice):
         """Update status label with device information.
@@ -237,5 +258,5 @@ class DeviceSelector(QWidget):
             self._current_device = None
             self.status_label.setText("Select a device")
             self.status_label.setStyleSheet("color: gray; font-style: italic;")
-            # Clear saved device ID when no device selected
-            self._config_store.delete_setting("last_device_id")
+            # Keep last_device_id: the combo is emptied on every refresh and
+            # the last-used device is needed to pick among several.

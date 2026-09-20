@@ -532,7 +532,7 @@ class MainWindow(QMainWindow):
 
         # Auto-refresh devices on startup
         if self.device_selector:
-            self.device_selector._refresh_devices()
+            self.device_selector.auto_refresh()
 
         # Load initial data
         if self.run_history_view:

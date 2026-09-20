@@ -64,7 +64,7 @@ class _FakeSelector(QWidget):
     def current_package(self):
         return ""
 
-    def _refresh_devices(self):
+    def auto_refresh(self):
         pass
 
 

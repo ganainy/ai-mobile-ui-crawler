@@ -42,11 +42,7 @@ def device_selector(qapp, mock_config_store, monkeypatch):
 
     mock_detection = Mock(spec=DeviceDetection)
     parent_widget = QWidget()
-    selector = DeviceSelector(
-        device_detection=mock_detection,
-        config_store=mock_config_store,
-        parent=parent_widget
-    )
+    selector = DeviceSelector(device_detection=mock_detection, config_store=mock_config_store, parent=parent_widget)
     yield selector
     # Cleanup
     selector.deleteLater()
@@ -74,7 +70,7 @@ class TestRefreshDevices:
                 model="Pixel 5",
                 manufacturer="Google",
                 android_version="13",
-                api_level=33
+                api_level=33,
             ),
             AndroidDevice(
                 device_id="emulator-5556",
@@ -82,8 +78,8 @@ class TestRefreshDevices:
                 model="Pixel 6",
                 manufacturer="Google",
                 android_version="14",
-                api_level=34
-            )
+                api_level=34,
+            ),
         ]
 
         device_selector.device_detection.get_available_devices = Mock(return_value=mock_devices)
@@ -106,14 +102,72 @@ class TestRefreshDevices:
 
     def test_refresh_with_error(self, qapp, device_selector):
         """Test refresh with device detection error."""
-        device_selector.device_detection.get_available_devices = Mock(
-            side_effect=DeviceDetectionError("ADB not found")
-        )
+        device_selector.device_detection.get_available_devices = Mock(side_effect=DeviceDetectionError("ADB not found"))
 
         device_selector._refresh_devices()
 
         assert "Error" in device_selector.status_label.text()
         assert "red" in device_selector.status_label.styleSheet()
+
+
+def _device(device_id: str) -> AndroidDevice:
+    return AndroidDevice(
+        device_id=device_id,
+        status="device",
+        model="Pixel",
+        manufacturer="Google",
+        android_version="13",
+        api_level=33,
+    )
+
+
+class TestAutoRefresh:
+    """Startup refresh retries before showing "no devices" and picks last-used."""
+
+    @pytest.fixture(autouse=True)
+    def _inline_timer_and_dialogs(self, monkeypatch):
+        monkeypatch.setattr(
+            "mobile_crawler.ui.widgets.device_selector.QTimer.singleShot",
+            lambda _ms, fn: fn(),
+        )
+        self.warning = Mock()
+        monkeypatch.setattr("mobile_crawler.ui.widgets.device_selector.QMessageBox.warning", self.warning)
+
+    def test_retries_then_selects_device_without_warning(self, qapp, device_selector):
+        device_selector.device_detection.get_available_devices = Mock(side_effect=[[], [], [_device("R58M")]])
+
+        device_selector.auto_refresh()
+
+        assert device_selector.current_device().device_id == "R58M"
+        self.warning.assert_not_called()
+
+    def test_warns_only_after_retries_exhausted(self, qapp, device_selector):
+        get = Mock(return_value=[])
+        device_selector.device_detection.get_available_devices = get
+
+        device_selector.auto_refresh(retries=2)
+
+        assert get.call_count == 3
+        self.warning.assert_called_once()
+
+    def test_manual_refresh_warns_immediately(self, qapp, device_selector):
+        get = Mock(return_value=[])
+        device_selector.device_detection.get_available_devices = get
+
+        device_selector._refresh_devices()
+
+        assert get.call_count == 1
+        self.warning.assert_called_once()
+
+    def test_multiple_devices_selects_last_used(self, qapp, device_selector, mock_config_store):
+        mock_config_store.get_setting.return_value = "emulator-5556"
+        device_selector.device_detection.get_available_devices = Mock(
+            return_value=[_device("emulator-5554"), _device("emulator-5556")]
+        )
+
+        device_selector.auto_refresh()
+
+        assert device_selector.current_device().device_id == "emulator-5556"
 
 
 class TestDeviceSelection:
@@ -128,7 +182,7 @@ class TestDeviceSelection:
                 model="Pixel 5",
                 manufacturer="Google",
                 android_version="13",
-                api_level=33
+                api_level=33,
             )
         ]
 
@@ -160,7 +214,7 @@ class TestDeviceSelection:
                 model="Pixel 5",
                 manufacturer="Google",
                 android_version="13",
-                api_level=33
+                api_level=33,
             )
         ]
 
@@ -187,7 +241,7 @@ class TestDeviceSelection:
                 model="Pixel 5",
                 manufacturer="Google",
                 android_version="13",
-                api_level=33
+                api_level=33,
             ),
             AndroidDevice(
                 device_id="emulator-5556",
@@ -195,8 +249,8 @@ class TestDeviceSelection:
                 model="Pixel 6",
                 manufacturer="Google",
                 android_version="14",
-                api_level=34
-            )
+                api_level=34,
+            ),
         ]
 
         device_selector.device_detection.get_available_devices = Mock(return_value=mock_devices)
@@ -219,7 +273,7 @@ class TestDeviceSelection:
                 model="Pixel 5",
                 manufacturer="Google",
                 android_version="13",
-                api_level=33
+                api_level=33,
             )
         ]
 
@@ -228,12 +282,12 @@ class TestDeviceSelection:
 
         # Try to set non-existent device
         target_device = AndroidDevice(
-                device_id="emulator-5557",
-                status="device",
-                model="Pixel 7",
-                manufacturer="Google",
-                android_version="14",
-                api_level=35
+            device_id="emulator-5557",
+            status="device",
+            model="Pixel 7",
+            manufacturer="Google",
+            android_version="14",
+            api_level=35,
         )
 
         device_selector.set_device(target_device)
@@ -259,7 +313,7 @@ class TestCurrentDevice:
                 model="Pixel 5",
                 manufacturer="Google",
                 android_version="13",
-                api_level=33
+                api_level=33,
             )
         ]
 
@@ -300,7 +354,7 @@ class TestUIComponents:
                 model="Pixel 5",
                 manufacturer="Google",
                 android_version="13",
-                api_level=33
+                api_level=33,
             )
         ]
 
@@ -320,7 +374,7 @@ class TestUIComponents:
                 model="Pixel 5",
                 manufacturer="Google",
                 android_version="13",
-                api_level=33
+                api_level=33,
             )
         ]
 
@@ -353,7 +407,7 @@ class TestDeviceDisplay:
                 model="Pixel 5",
                 manufacturer="Google",
                 android_version="13",
-                api_level=33
+                api_level=33,
             )
         ]
 
@@ -375,7 +429,7 @@ class TestDeviceDisplay:
                 model=None,
                 manufacturer=None,
                 android_version=None,
-                api_level=None
+                api_level=None,
             )
         ]
 
