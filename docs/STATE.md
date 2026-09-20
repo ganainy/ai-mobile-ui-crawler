@@ -30,6 +30,8 @@ Entry point for the Obsidian vault (`docs/`). Claude reads this first each sessi
 - Detection work done 2026-09-20, unit-tested and spot-checked on a phone but not run in a full crawl: Portal-based a11y tree, incomplete-tree checks, parallel capture, unchanged-screen reuse, Settings Portal buttons, `boost` default, phase-duration fix. Open: tune `a11y_checks` from real runs; progress and remaining work are tracked in issue #13 (pushed 2026-09-20, `main` = `22e05f8`). See [session](sessions/2026-09-20-ui-detection-options.md), [ADR 0005](adr/0005-download-pinned-portal-instead-of-vendoring.md).
 - Next: run a real crawl with `boost` on the phone and tune `a11y_checks` from the logged "a11y tree incomplete (...)" lines; then verify #6 on a real run, then run the crawler on ~10 health apps and analyse the bundles.
 
+- Pre-commit no longer runs black, ruff or ruff-format (removed 2026-09-20 at the user's request); it still trims whitespace, fixes file endings, checks yaml/large files and regenerates `docs/code`. `[tool.ruff]`/`[tool.black]` in `pyproject.toml` are unchanged.
+
 ## Map of the vault
 - [Glossary](Glossary.md) - stub pointing at root `CONTEXT.md`
 - [code/](code/_index.md) - generated code-structure notes
