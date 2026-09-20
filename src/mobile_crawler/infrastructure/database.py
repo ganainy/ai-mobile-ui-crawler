@@ -431,6 +431,6 @@ class DatabaseManager:
 
             conn.commit()
         except sqlite3.OperationalError as e:
-            logger.warning(f"Schema migration step skipped (may already exist): {e}")
+            logger.debug(f"Schema migration step skipped (may already exist): {e}")
         finally:
             conn.close()

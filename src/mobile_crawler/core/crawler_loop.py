@@ -308,6 +308,7 @@ class CrawlerLoop:
                             run_id,
                             0,
                             f"Traffic capture start failed: {e}",
+                            "WARNING",
                         )
 
                 if self.config_manager.get("enable_video_recording", False) is True:
@@ -361,6 +362,7 @@ class CrawlerLoop:
                                 run_id,
                                 0,
                                 f"Video recording stop failed: {e}",
+                                "WARNING",
                             )
                         finally:
                             self._video_recording_manager = None
@@ -391,6 +393,7 @@ class CrawlerLoop:
                                 run_id,
                                 0,
                                 f"Traffic capture stop failed: {e}",
+                                "WARNING",
                             )
                         finally:
                             self._traffic_capture_manager = None
@@ -418,7 +421,7 @@ class CrawlerLoop:
             # Build a UI-callback for stdout lines so DroidRun's print() output
             # (step progress emoji lines, manager/executor responses) appears in the log panel.
             def _ui_log_cb(level: LogLevel, message: str) -> None:
-                self._emit_event("on_debug_log", run_id, 0, message)
+                self._emit_event("on_debug_log", run_id, 0, message, level.name)
 
             with capture_stdout_to_ui(_ui_log_cb):
                 result = self._run_async(run_and_cleanup())
@@ -471,7 +474,7 @@ class CrawlerLoop:
             stats_suffix = f" | successful={successful_actions} failed={failed_actions} total={total_actions}"
             reason_with_stats = reason + stats_suffix
 
-            self._emit_event("on_crawl_completed", run_id, result.steps_completed, duration_ms, reason_with_stats, 0.0)
+            self._emit_event("on_crawl_completed", run_id, result.steps_completed, duration_ms, reason_with_stats)
 
             self._generate_report(run_id)
 
@@ -507,7 +510,7 @@ class CrawlerLoop:
             self._emit_event("on_debug_log", run_id, 0, f"Run report generated: {path}")
         except Exception as e:
             logger.warning("Run report generation failed for run %s: %s", run_id, e)
-            self._emit_event("on_debug_log", run_id, 0, f"Run report generation failed: {e}")
+            self._emit_event("on_debug_log", run_id, 0, f"Run report generation failed: {e}", "WARNING")
 
     def _run_mobsf_analysis(self, run, run_id: int) -> None:
         """Run MobSF after a successful crawl without affecting crawl completion."""
@@ -542,10 +545,11 @@ class CrawlerLoop:
                     run_id,
                     0,
                     f"MobSF analysis failed: {result.error or 'Unknown error'}",
+                    "WARNING",
                 )
         except Exception as e:
             logger.warning("MobSF analysis failed for run %s: %s", run_id, e)
-            self._emit_event("on_debug_log", run_id, 0, f"MobSF analysis failed: {e}")
+            self._emit_event("on_debug_log", run_id, 0, f"MobSF analysis failed: {e}", "WARNING")
 
     def get_span_stats(self):
         """Return current OTel span stats from the active agent service, or None."""

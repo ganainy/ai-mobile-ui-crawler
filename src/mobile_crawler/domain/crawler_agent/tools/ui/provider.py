@@ -254,7 +254,7 @@ class AndroidStateProvider(StateProvider):
             )
             if omni_tree:
                 omni_source = "omni"
-                logger.info(f"Using OmniParser only ({len(omni_tree)} elements)")
+                logger.debug(f"Using OmniParser only ({len(omni_tree)} elements)")
             filtered = None  # Will use omni_tree in formatter
             # No fallback - if OmniParser fails, let it propagate
 
@@ -271,7 +271,7 @@ class AndroidStateProvider(StateProvider):
                     )
                     if omni_tree:
                         omni_source = "omni"
-                        logger.info(f"Using OmniParser boost ({len(omni_tree)} elements)")
+                        logger.debug(f"Using OmniParser boost ({len(omni_tree)} elements)")
                     filtered = None
                 except Exception as e:
                     logger.warning(f"OmniParser boost failed: {e}")

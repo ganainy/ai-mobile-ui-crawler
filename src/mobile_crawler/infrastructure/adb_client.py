@@ -48,14 +48,15 @@ class ADBClient:
         full_command = [self.adb_executable] + command_list
 
         try:
+
             def run_sync_subprocess():
                 return subprocess.run(
                     full_command,
                     capture_output=True,
                     text=True,
                     check=False,
-                    encoding='utf-8',
-                    errors='replace',
+                    encoding="utf-8",
+                    errors="replace",
                     timeout=timeout,
                 )
 
@@ -73,13 +74,13 @@ class ADBClient:
             return combined_output, result.returncode
 
         except subprocess.TimeoutExpired:
-            logger.error(f"ADB command timed out after {timeout}s: {' '.join(full_command)}")
+            logger.warning(f"ADB command timed out after {timeout}s: {' '.join(full_command)}")
             return f"Command timed out after {timeout}s", -1
         except FileNotFoundError:
             logger.error(f"ADB executable not found: {self.adb_executable}")
             return "ADB_NOT_FOUND", -1
         except Exception as e:
-            logger.error(f"Exception executing ADB command: {e}", exc_info=True)
+            logger.warning(f"Exception executing ADB command: {e}", exc_info=True)
             return str(e), -1
 
     def execute(self, command: str, timeout: float | None = None) -> str | None:

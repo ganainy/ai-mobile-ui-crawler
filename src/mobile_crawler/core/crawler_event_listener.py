@@ -9,11 +9,13 @@ from mobile_crawler.domain.models import ActionResult
 class CrawlerEventListener(ABC):
     """Protocol for listening to crawler events."""
 
-    def on_mobsf_finished(self, run_id: int, security_score: float, high_issues: int, medium_issues: int, low_issues: int) -> None:
+    def on_mobsf_finished(
+        self, run_id: int, security_score: float, high_issues: int, medium_issues: int, low_issues: int
+    ) -> None:
         """Called when MobSF static analysis completes for a run."""
         return None
 
-    def on_crawl_started(self, run_id: int, target_package: str) -> None:
+    def on_crawl_started(self, run_id: int, target_package: str) -> None:  # noqa: B027
         """Called when a crawl starts."""
         pass
 
@@ -49,12 +51,7 @@ class CrawlerEventListener(ABC):
 
     @abstractmethod
     def on_crawl_completed(
-        self,
-        run_id: int,
-        total_steps: int,
-        total_duration_ms: float,
-        reason: str,
-        ocr_avg_ms: float = 0.0
+        self, run_id: int, total_steps: int, total_duration_ms: float, reason: str, ocr_avg_ms: float = 0.0
     ) -> None:
         """Called when a crawl completes."""
         pass
@@ -78,40 +75,23 @@ class CrawlerEventListener(ABC):
 
     @abstractmethod
     def on_screen_processed(
-        self,
-        run_id: int,
-        step_number: int,
-        screen_id: int,
-        is_new: bool,
-        visit_count: int,
-        total_screens: int
+        self, run_id: int, step_number: int, screen_id: int, is_new: bool, visit_count: int, total_screens: int
     ) -> None:
         """Called when a screen is processed by the screen tracker."""
         pass
 
     @abstractmethod
-    def on_debug_log(self, run_id: int, step_number: int, message: str) -> None:
-        """Called to emit a debug log message to the UI."""
+    def on_debug_log(self, run_id: int, step_number: int, message: str, level: str = "INFO") -> None:
+        """Called to emit a log message to the UI. ``level`` is a Python level name (DEBUG..ERROR)."""
         pass
 
     @abstractmethod
-    def on_ocr_completed(
-        self,
-        run_id: int,
-        step_number: int,
-        duration_ms: float,
-        element_count: int
-    ) -> None:
+    def on_ocr_completed(self, run_id: int, step_number: int, duration_ms: float, element_count: int) -> None:
         """Called after OCR grounding completes."""
         pass
 
     @abstractmethod
-    def on_screenshot_timing(
-        self,
-        run_id: int,
-        step_number: int,
-        duration_ms: float
-    ) -> None:
+    def on_screenshot_timing(self, run_id: int, step_number: int, duration_ms: float) -> None:
         """Called after screenshot capture completes."""
         pass
 
@@ -127,9 +107,7 @@ class CrawlerEventListener(ABC):
         """Called when all recovery attempts are exhausted."""
         return None
 
-    def on_omniparser_timing(
-        self, run_id: int, step_number: int, duration_ms: float, element_count: int
-    ) -> None:
+    def on_omniparser_timing(self, run_id: int, step_number: int, duration_ms: float, element_count: int) -> None:
         """Called after an OmniParser vision-parsing call completes for a step's state fetch."""
         return None
 

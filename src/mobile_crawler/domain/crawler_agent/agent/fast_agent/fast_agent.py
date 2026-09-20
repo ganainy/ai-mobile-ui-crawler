@@ -97,9 +97,7 @@ class FastAgent(Workflow):
         self.action_ctx = action_ctx
         self.state_provider = state_provider
         self.save_trajectory = save_trajectory
-        self._stream_screenshots = os.environ.get(
-            "DROIDRUN_STREAM_SCREENSHOTS", ""
-        ).lower() in ("1", "true")
+        self._stream_screenshots = os.environ.get("DROIDRUN_STREAM_SCREENSHOTS", "").lower() in ("1", "true")
         self.shared_state = shared_state
         self.output_model = output_model
         self.prompt_resolver = prompt_resolver or PromptResolver()
@@ -126,9 +124,7 @@ class FastAgent(Workflow):
             "tool_descriptions": self.tool_descriptions,
             "available_secrets": self._available_secrets,
             "available_tools": set(self.registry.tools.keys()),
-            "variables": (
-                self.shared_state.custom_variables if self.shared_state else {}
-            ),
+            "variables": (self.shared_state.custom_variables if self.shared_state else {}),
             "output_schema": self._output_schema,
             "parallel_tools": self.config.parallel_tools,
             "vision": self.vision,
@@ -156,9 +152,7 @@ class FastAgent(Workflow):
                 custom_user_prompt,
                 {
                     "goal": goal,
-                    "variables": (
-                        self.shared_state.custom_variables if self.shared_state else {}
-                    ),
+                    "variables": (self.shared_state.custom_variables if self.shared_state else {}),
                 },
             )
         else:
@@ -166,9 +160,7 @@ class FastAgent(Workflow):
                 self.agent_config.get_fast_agent_user_prompt_path(),
                 {
                     "goal": goal,
-                    "variables": (
-                        self.shared_state.custom_variables if self.shared_state else {}
-                    ),
+                    "variables": (self.shared_state.custom_variables if self.shared_state else {}),
                 },
             )
         return ChatMessage(role="user", content=user_text)
@@ -185,9 +177,7 @@ class FastAgent(Workflow):
             and self.action_ctx
             and self.action_ctx.credential_manager
         ):
-            self._available_secrets = (
-                await self.action_ctx.credential_manager.get_keys()
-            )
+            self._available_secrets = await self.action_ctx.credential_manager.get_keys()
 
         # Build system prompt (lazy load)
         if self.system_prompt is None:
@@ -208,9 +198,7 @@ class FastAgent(Workflow):
             memory_text = "\n### Remembered Information:\n"
             for idx, item in enumerate(remembered_info, 1):
                 memory_text += f"{idx}. {item}\n"
-            self.shared_state.message_history[0].blocks.append(
-                TextBlock(text=memory_text)
-            )
+            self.shared_state.message_history[0].blocks.append(TextBlock(text=memory_text))
 
         return FastAgentInputEvent()
 
@@ -225,9 +213,7 @@ class FastAgent(Workflow):
         if self.shared_state.step_number >= self.max_steps:
             pending = self.shared_state.drain_user_messages()
             if pending:
-                logger.warning(
-                    f"⚠️ Dropping {len(pending)} external user message(s) at max steps"
-                )
+                logger.warning(f"⚠️ Dropping {len(pending)} external user message(s) at max steps")
                 ctx.write_event_to_stream(
                     ExternalUserMessageDroppedEvent(
                         message_ids=[m.id for m in pending],
@@ -260,10 +246,7 @@ class FastAgent(Workflow):
                 record_langfuse_screenshot(
                     screenshot,
                     parent_span=parent_span,
-                    screenshots_enabled=bool(
-                        self.tracing_config
-                        and self.tracing_config.langfuse_screenshots
-                    ),
+                    screenshots_enabled=bool(self.tracing_config and self.tracing_config.langfuse_screenshots),
                     vision_enabled=self.vision,
                 )
                 await ctx.store.set("screenshot", screenshot)
@@ -279,9 +262,7 @@ class FastAgent(Workflow):
             self.action_ctx.ui = ui_state
 
             # Update shared state (previous ← current, current ← new)
-            self.shared_state.previous_formatted_device_state = (
-                self.shared_state.formatted_device_state
-            )
+            self.shared_state.previous_formatted_device_state = self.shared_state.formatted_device_state
             self.shared_state.formatted_device_state = ui_state.formatted_text
             self.shared_state.focused_text = ui_state.focused_text
             self.shared_state.a11y_tree = ui_state.elements
@@ -301,9 +282,7 @@ class FastAgent(Workflow):
             raise
         except Exception as e:
             err_desc = str(e) or type(e).__name__
-            logger.warning(
-                f"⚠️ Error retrieving state from the connected device: {err_desc}"
-            )
+            logger.warning(f"⚠️ Error retrieving state from the connected device: {err_desc}")
             if self.debug:
                 logger.error("State retrieval error details:", exc_info=True)
 
@@ -316,9 +295,7 @@ class FastAgent(Workflow):
         messages_to_send = [self.system_prompt] + copy.deepcopy(limited_history)
 
         # Inject device state and screenshot into the copy (not the original)
-        user_indices = [
-            i for i, msg in enumerate(messages_to_send) if msg.role == "user"
-        ]
+        user_indices = [i for i, msg in enumerate(messages_to_send) if msg.role == "user"]
         if user_indices:
             last_user_idx = user_indices[-1]
 
@@ -326,16 +303,12 @@ class FastAgent(Workflow):
             current_state = self.shared_state.formatted_device_state.strip()
             if current_state:
                 messages_to_send[last_user_idx].blocks.append(
-                    TextBlock(
-                        text=f"\n<device_state>\n{current_state}\n</device_state>\n"
-                    )
+                    TextBlock(text=f"\n<device_state>\n{current_state}\n</device_state>\n")
                 )
 
             # Screenshot → last user message
             if self.vision and screenshot:
-                messages_to_send[last_user_idx].blocks.append(
-                    ImageBlock(image=screenshot)
-                )
+                messages_to_send[last_user_idx].blocks.append(ImageBlock(image=screenshot))
 
             # Previous device state → second-to-last user message
             if len(user_indices) >= 2:
@@ -343,17 +316,13 @@ class FastAgent(Workflow):
                 prev_state = self.shared_state.previous_formatted_device_state.strip()
                 if prev_state:
                     messages_to_send[second_last_idx].blocks.append(
-                        TextBlock(
-                            text=f"\n<previous_device_state>\n{prev_state}\n</previous_device_state>\n"
-                        )
+                        TextBlock(text=f"\n<previous_device_state>\n{prev_state}\n</previous_device_state>\n")
                     )
 
         # Call LLM (timed for AI Monitor latency metric)
         logger.info("FastAgent response:", extra={"color": "yellow"})
         llm_start = time.perf_counter()
-        response = await acall_with_retries(
-            self.llm, messages_to_send, stream=self.agent_config.streaming
-        )
+        response = await acall_with_retries(self.llm, messages_to_send, stream=self.agent_config.streaming)
         fast_agent_llm_ms = (time.perf_counter() - llm_start) * 1000
 
         if response is None:
@@ -431,9 +400,7 @@ class FastAgent(Workflow):
                 "The tool calls you made will be executed below.\n\n"
                 "Now, describe the next step you will take to address the original goal."
             )
-            self.shared_state.message_history.append(
-                ChatMessage(role="user", content=no_thoughts_text)
-            )
+            self.shared_state.message_history.append(ChatMessage(role="user", content=no_thoughts_text))
         else:
             logger.debug(f"Reasoning: {ev.thought}")
 
@@ -453,15 +420,11 @@ class FastAgent(Workflow):
                 "</invoke>\n"
                 "</function_calls>"
             )
-            self.shared_state.message_history.append(
-                ChatMessage(role="user", content=no_tools_text)
-            )
+            self.shared_state.message_history.append(ChatMessage(role="user", content=no_tools_text))
             return FastAgentInputEvent()
 
     @step
-    async def execute_code(
-        self, ctx: Context, ev: FastAgentToolCallEvent
-    ) -> FastAgentOutputEvent | FastAgentEndEvent:
+    async def execute_code(self, ctx: Context, ev: FastAgentToolCallEvent) -> FastAgentOutputEvent | FastAgentEndEvent:
         """Execute parsed tool calls and return results."""
         tool_calls = await ctx.store.get("pending_tool_calls", [])
 
@@ -512,16 +475,8 @@ class FastAgent(Workflow):
 
                 logger.debug("✅ Task marked as complete via complete() tool")
 
-                success = (
-                    self.shared_state.success
-                    if self.shared_state.success is not None
-                    else False
-                )
-                reason = (
-                    self.shared_state.answer
-                    if self.shared_state.answer
-                    else "Task completed without reason"
-                )
+                success = self.shared_state.success if self.shared_state.success is not None else False
+                reason = self.shared_state.answer if self.shared_state.answer else "Task completed without reason"
                 self.shared_state.finished = False
 
                 event = FastAgentEndEvent(
@@ -534,8 +489,8 @@ class FastAgent(Workflow):
 
         # Format results
         results_xml = format_tool_results(results)
-        logger.info("💡 Tool results:", extra={"color": "dim"})
-        logger.info(f"{results_xml}")
+        logger.debug("💡 Tool results:", extra={"color": "dim"})
+        logger.debug(f"{results_xml}")
         await wait_for_ui_settled_after_action(
             self.action_ctx.state_provider,
             call.name,
@@ -550,17 +505,14 @@ class FastAgent(Workflow):
         return event
 
     @step
-    async def handle_execution_result(
-        self, ctx: Context, ev: FastAgentOutputEvent
-    ) -> FastAgentInputEvent:
+    async def handle_execution_result(self, ctx: Context, ev: FastAgentOutputEvent) -> FastAgentInputEvent:
         """Add execution result to history and loop back."""
         output = ev.output or "Tool executed, but produced no output."
 
         drained = self.shared_state.drain_user_messages()
         if drained:
             external_block = "\n".join(
-                f"<external_user_message>\n{m.message}\n</external_user_message>"
-                for m in drained
+                f"<external_user_message>\n{m.message}\n</external_user_message>" for m in drained
             )
             output += "\n" + external_block
             logger.info(
@@ -576,21 +528,15 @@ class FastAgent(Workflow):
             )
 
         # Add results (+ any external messages) as a single user message
-        self.shared_state.message_history.append(
-            ChatMessage(role="user", content=output)
-        )
+        self.shared_state.message_history.append(ChatMessage(role="user", content=output))
 
         # Step-by-step mode: block until the external caller (CrawlerLoop.advance_step)
         # sends a StepAdvanceEvent into this workflow's Context. Mirrors the pause in
         # CrawlerAgent.handle_executor_result for the Manager/Executor (reasoning=True)
         # path — FastAgent runs its own nested workflow so it needs its own pause point.
         if self.agent_config.step_by_step:
-            logger.info(
-                f"⏸ Step-by-step: pausing after step {self.shared_state.step_number}. Waiting for advance."
-            )
-            ctx.write_event_to_stream(
-                StepPausedEvent(step_number=self.shared_state.step_number)
-            )
+            logger.info(f"⏸ Step-by-step: pausing after step {self.shared_state.step_number}. Waiting for advance.")
+            ctx.write_event_to_stream(StepPausedEvent(step_number=self.shared_state.step_number))
             try:
                 await ctx.wait_for_event(
                     StepAdvanceEvent,

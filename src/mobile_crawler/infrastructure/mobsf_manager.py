@@ -188,9 +188,7 @@ class MobSFManager:
             if method.upper() == "GET":
                 response = requests.get(url, headers=headers, stream=stream, timeout=timeout)
             else:  # POST
-                response = requests.post(
-                    url, headers=headers, data=data, files=files, stream=stream, timeout=timeout
-                )
+                response = requests.post(url, headers=headers, data=data, files=files, stream=stream, timeout=timeout)
 
             if response.status_code == 200:
                 if stream:
@@ -203,25 +201,24 @@ class MobSFManager:
                     return True, response.text
             else:
                 error_msg = f"API Error: {response.status_code} - {response.text[:200]}"
-                logger.error(
-                    f"API request failed: {url}, Status: {response.status_code}, "
-                    f"Response: {response.text[:200]}"
+                logger.debug(
+                    f"API request failed: {url}, Status: {response.status_code}, " f"Response: {response.text[:200]}"
                 )
                 return False, error_msg
         except requests.exceptions.ConnectionError as e:
             error_msg = f"Connection Error: Cannot connect to MobSF server at {url}. Is the server running?"
-            logger.error(f"Request exception for {url}: {str(e)}")
+            logger.debug(f"Request exception for {url}: {str(e)}")
             return False, error_msg
         except requests.exceptions.Timeout as e:
             error_msg = f"Timeout Error: Request to MobSF server timed out after {timeout} seconds"
-            logger.error(f"Request timeout for {url}: {str(e)}")
+            logger.debug(f"Request timeout for {url}: {str(e)}")
             return False, error_msg
         except requests.RequestException as e:
             error_msg = f"Request Error: {str(e)}"
-            logger.error(f"Request exception for {url}: {str(e)}")
+            logger.debug(f"Request exception for {url}: {str(e)}")
             return False, error_msg
         except Exception as e:
-            logger.error(f"Unexpected error during API request to {url}: {str(e)}")
+            logger.debug(f"Unexpected error during API request to {url}: {str(e)}", exc_info=True)
             return False, f"Error: {str(e)}"
 
     def _refresh_runtime_config(self) -> tuple[str, str]:
@@ -266,9 +263,7 @@ class MobSFManager:
 
         if not force_docker_refresh:
             legacy_key = (
-                os.environ.get("CRAWLER_MOBSF_API_KEY")
-                or self.config_manager.get("mobsf_api_key")
-                or ""
+                os.environ.get("CRAWLER_MOBSF_API_KEY") or self.config_manager.get("mobsf_api_key") or ""
             ).strip()
             if legacy_key:
                 return legacy_key
@@ -357,9 +352,7 @@ class MobSFManager:
             command.extend(["-s", device_id])
         return command
 
-    async def _run_adb_command_async(
-        self, command_list: list[str], suppress_stderr: bool = False
-    ) -> tuple[str, int]:
+    async def _run_adb_command_async(self, command_list: list[str], suppress_stderr: bool = False) -> tuple[str, int]:
         """Async helper to run ADB commands.
 
         Args:
@@ -482,9 +475,7 @@ class MobSFManager:
 
         try:
             with open(apk_path, "rb") as apk_file:
-                files = {
-                    "file": (os.path.basename(apk_path), apk_file, "application/octet-stream")
-                }
+                files = {"file": (os.path.basename(apk_path), apk_file, "application/octet-stream")}
                 return self._make_api_request("upload", "POST", files=files)
         except Exception as e:
             logger.error(f"Error uploading APK: {str(e)}")
@@ -541,9 +532,7 @@ class MobSFManager:
         data = {"hash": file_hash}
         return self._make_api_request("download_pdf", "POST", data=data, timeout=timeout)
 
-    def save_pdf_report(
-        self, file_hash: str, output_path: str | None = None, timeout: int | None = None
-    ) -> str | None:
+    def save_pdf_report(self, file_hash: str, output_path: str | None = None, timeout: int | None = None) -> str | None:
         """Save the PDF report to a file.
 
         Args:
@@ -640,6 +629,7 @@ class MobSFManager:
         Returns:
             Tuple of (success, scan_summary)
         """
+
         def _log(message: str, color: str | None = None):
             """Helper to log messages via callback or standard logging."""
             if log_callback:
@@ -805,7 +795,7 @@ class MobSFManager:
                 elif attempt % 15 == 0:  # Log progress every 30 seconds
                     elapsed = attempt * poll_interval
                     _log(f"Scan in progress... ({elapsed:.0f}s / {scan_timeout}s)", "blue")
-                    logger.info(f"MobSF scan for {file_hash} still in progress: {elapsed:.0f}s elapsed")
+                    logger.debug(f"MobSF scan for {file_hash} still in progress: {elapsed:.0f}s elapsed")
 
             time.sleep(poll_interval)
 
@@ -857,9 +847,7 @@ class MobSFManager:
             _log("MobSF analysis timed out - scan may still be in progress", "orange")
             return False, summary
 
-    def analyze_run(
-        self, run: "Run", device_id: str
-    ) -> MobSFAnalysisResult:
+    def analyze_run(self, run: "Run", device_id: str) -> MobSFAnalysisResult:
         """Analyze an APK for a past run (compatibility method for UI).
 
         This method provides compatibility with the old interface used by RunHistoryView.
@@ -873,10 +861,7 @@ class MobSFManager:
             MobSFAnalysisResult with report paths or error
         """
         if not self.config_manager.get("enable_mobsf_analysis", False):
-            return MobSFAnalysisResult(
-                success=False,
-                error="MobSF analysis is disabled in configuration"
-            )
+            return MobSFAnalysisResult(success=False, error="MobSF analysis is disabled in configuration")
 
         # Get session path from run
         session_path = None

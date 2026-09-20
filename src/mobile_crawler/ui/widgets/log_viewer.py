@@ -45,7 +45,7 @@ class LogViewer(QWidget):
             parent: Parent widget
         """
         super().__init__(parent)
-        self._min_level = LogLevel.DEBUG
+        self._min_level = LogLevel.INFO
         self._level_order = {
             LogLevel.DEBUG: 0,
             LogLevel.INFO: 1,
@@ -92,7 +92,7 @@ class LogViewer(QWidget):
         # Level filter dropdown
         self.level_filter = QComboBox()
         self.level_filter.addItems(["DEBUG", "INFO", "WARNING", "ERROR", "ACTION"])
-        self.level_filter.setCurrentText("DEBUG")
+        self.level_filter.setCurrentText("INFO")
         self.level_filter.currentTextChanged.connect(self._on_level_filter_changed)
         controls_layout.addWidget(self.level_filter)
 

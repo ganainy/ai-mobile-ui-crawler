@@ -1024,6 +1024,7 @@ class TestCrawlerLogHandler:
         record = Mock()
         record.getMessage.return_value = "test log message"
         record.levelname = "INFO"
+        record.exc_info = None
 
         handler.emit(record)
 

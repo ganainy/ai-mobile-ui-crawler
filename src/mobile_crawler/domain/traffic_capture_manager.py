@@ -44,9 +44,7 @@ class TrafficCaptureManager:
         self.session_folder_manager = session_folder_manager
         self.device_id = device_id
 
-        self.traffic_capture_enabled: bool = bool(
-            config_manager.get("enable_traffic_capture", False)
-        )
+        self.traffic_capture_enabled: bool = bool(config_manager.get("enable_traffic_capture", False))
         logger.debug(f"TrafficCaptureManager initialized, enabled: {self.traffic_capture_enabled}")
 
         self.pcap_filename_on_device: str | None = None
@@ -66,9 +64,7 @@ class TrafficCaptureManager:
             return ["-s", self.device_id, *command_list]
         return command_list
 
-    async def _run_adb_command_async(
-        self, command_list: list[str], suppress_stderr: bool = False
-    ) -> tuple[str, int]:
+    async def _run_adb_command_async(self, command_list: list[str], suppress_stderr: bool = False) -> tuple[str, int]:
         """Async helper to run ADB commands.
 
         Args:
@@ -79,18 +75,14 @@ class TrafficCaptureManager:
             Tuple of (combined_output, return_code)
         """
         if self.adb_client:
-            return await self.adb_client.execute_async(
-                self._device_scoped_args(command_list), suppress_stderr
-            )
+            return await self.adb_client.execute_async(self._device_scoped_args(command_list), suppress_stderr)
 
         # Fallback: create temporary ADB client
         from mobile_crawler.infrastructure.adb_client import ADBClient
 
         adb_executable = self.config_manager.get("adb_executable_path", "adb")
         temp_client = ADBClient(adb_executable=adb_executable)
-        return await temp_client.execute_async(
-            self._device_scoped_args(command_list), suppress_stderr
-        )
+        return await temp_client.execute_async(self._device_scoped_args(command_list), suppress_stderr)
 
     def is_capturing(self) -> bool:
         """Returns the internal state of whether capture is thought to be active."""
@@ -107,11 +99,7 @@ class TrafficCaptureManager:
             ["shell", "dumpsys", "activity", "services", package_name],
             suppress_stderr=True,
         )
-        if (
-            services_retcode == 0
-            and "ServiceRecord" in services_output
-            and package_name in services_output
-        ):
+        if services_retcode == 0 and "ServiceRecord" in services_output and package_name in services_output:
             return True
 
         connectivity_output, connectivity_retcode = await self._run_adb_command_async(
@@ -148,11 +136,9 @@ class TrafficCaptureManager:
             stop_command_args.extend(["-e", "api_key", str(api_key)])
 
         if await self._is_pcapdroid_active_async():
-            logger.warning(
-                "PCAPdroid is still capturing from a previous run; stopping it before starting"
-            )
+            logger.warning("PCAPdroid is still capturing from a previous run; stopping it before starting")
 
-        logger.debug("[DEBUG] Sending precautionary STOP command to PCAPdroid...")
+        logger.debug("Sending precautionary STOP command to PCAPdroid...")
         await self._run_adb_command_async(stop_command_args, suppress_stderr=True)
 
         timeout = float(self.config_manager.get("pcapdroid_stop_timeout_seconds", 10.0))
@@ -160,14 +146,12 @@ class TrafficCaptureManager:
         while True:
             await asyncio.sleep(1.0)
             if not await self._is_pcapdroid_active_async():
-                logger.debug("[DEBUG] PCAPdroid confirmed stopped")
+                logger.debug("PCAPdroid confirmed stopped")
                 return
             if time.monotonic() >= deadline:
                 break
 
-        logger.warning(
-            f"PCAPdroid still active {timeout:.0f}s after STOP; force-stopping the app"
-        )
+        logger.warning(f"PCAPdroid still active {timeout:.0f}s after STOP; force-stopping the app")
         await self._run_adb_command_async(
             ["shell", "am", "force-stop", "com.emanuelef.remote_capture"],
             suppress_stderr=True,
@@ -190,7 +174,9 @@ class TrafficCaptureManager:
         Returns:
             Tuple of (success, message)
         """
-        logger.info(f"start_capture_async called: traffic_capture_enabled={self.traffic_capture_enabled}, run_id={run_id}, session_path={session_path}")
+        logger.debug(
+            f"start_capture_async called: traffic_capture_enabled={self.traffic_capture_enabled}, run_id={run_id}, session_path={session_path}"
+        )
 
         if not self.traffic_capture_enabled:
             return False, "Traffic capture is not enabled in TrafficCaptureManager"
@@ -207,7 +193,7 @@ class TrafficCaptureManager:
             return False, "APP_PACKAGE not configured"
 
         # Verify PCAPdroid is installed
-        logger.debug("[DEBUG] Checking if PCAPdroid is installed...")
+        logger.debug("Checking if PCAPdroid is installed...")
         check_package_args = ["shell", "pm", "list", "packages", "com.emanuelef.remote_capture"]
         stdout_pkg, retcode_pkg = await self._run_adb_command_async(check_package_args, suppress_stderr=True)
 
@@ -220,14 +206,12 @@ class TrafficCaptureManager:
             logger.error(error_msg)
             return False, error_msg
 
-        logger.debug("[DEBUG] PCAPdroid is installed")
+        logger.debug("PCAPdroid is installed")
 
         # Check if PCAPdroid has the necessary permissions
-        logger.debug("[DEBUG] Checking PCAPdroid permissions...")
+        logger.debug("Checking PCAPdroid permissions...")
         check_perms_args = ["shell", "dumpsys", "package", "com.emanuelef.remote_capture"]
-        stdout_perms, retcode_perms = await self._run_adb_command_async(
-            check_perms_args, suppress_stderr=True
-        )
+        stdout_perms, retcode_perms = await self._run_adb_command_async(check_perms_args, suppress_stderr=True)
 
         if retcode_perms == 0:
             # Check for critical permissions
@@ -239,24 +223,22 @@ class TrafficCaptureManager:
 
             if missing_perms:
                 logger.warning(
-                    f"[DEBUG] PCAPdroid may be missing permissions: {', '.join(missing_perms)}. "
+                    f"PCAPdroid may be missing permissions: {', '.join(missing_perms)}. "
                     "This may affect capture functionality."
                 )
         else:
-            logger.warning("[DEBUG] Could not verify PCAPdroid permissions")
+            logger.warning("Could not verify PCAPdroid permissions")
 
         # PCAPdroid package and activity are fixed values
         # According to PCAPdroid API docs: https://github.com/emanuele-f/PCAPdroid/blob/master/docs/app_api.md
         pcapdroid_activity = "com.emanuelef.remote_capture/.activities.CaptureCtrl"
 
-        logger.info(f"Resolved PCAPdroid activity: {pcapdroid_activity}")
+        logger.debug(f"Resolved PCAPdroid activity: {pcapdroid_activity}")
 
         # Generate filename
         sanitized_package = re.sub(r"[^\w.-]+", "_", target_app_package)
         timestamp = time.strftime("%Y%m%d_%H%M%S")
-        self.pcap_filename_on_device = (
-            f"{sanitized_package}_run{run_id or 'X'}_{timestamp}.pcap"
-        )
+        self.pcap_filename_on_device = f"{sanitized_package}_run{run_id or 'X'}_{timestamp}.pcap"
 
         # Resolve output directory - PCAP files go to "pcap" folder
         if session_path:
@@ -277,9 +259,7 @@ class TrafficCaptureManager:
             traffic_capture_dir = os.path.join("output_data", "traffic_captures")
 
         os.makedirs(traffic_capture_dir, exist_ok=True)
-        self.local_pcap_file_path = os.path.join(
-            traffic_capture_dir, self.pcap_filename_on_device
-        )
+        self.local_pcap_file_path = os.path.join(traffic_capture_dir, self.pcap_filename_on_device)
 
         # According to PCAPdroid API docs:
         # Command format: adb shell am start -e action [ACTION] -e api_key [API_KEY] -e [SETTINGS] -n com.emanuelef.remote_capture/.activities.CaptureCtrl
@@ -340,12 +320,8 @@ class TrafficCaptureManager:
             "ui_action_start_tapped": False,
         }
         consent_accepted_initial = await self._maybe_accept_pcapdroid_consent_async()
-        self._last_capture_startup_diagnostics["consent_accepted_initial"] = bool(
-            consent_accepted_initial
-        )
-        self._last_capture_startup_diagnostics["consent_labels_tapped"] = list(
-            self._last_consent_labels_tapped
-        )
+        self._last_capture_startup_diagnostics["consent_accepted_initial"] = bool(consent_accepted_initial)
+        self._last_capture_startup_diagnostics["consent_labels_tapped"] = list(self._last_consent_labels_tapped)
 
         # Wait for PCAPdroid to initialize (configurable)
         init_wait = float(self.config_manager.get("pcapdroid_init_wait", 3.0))
@@ -353,39 +329,32 @@ class TrafficCaptureManager:
             await asyncio.sleep(init_wait)
 
         # Verify capture actually started by checking status
-        logger.debug("[DEBUG] Sending PCAPdroid capture status query...")
+        logger.debug("Sending PCAPdroid capture status query...")
         status_result = await self.get_capture_status_async()
         if isinstance(status_result, dict) and status_result.get("status") == "query_sent":
-            logger.debug("[DEBUG] PCAPdroid capture status query sent; no running state parsed from intent output")
+            logger.debug("PCAPdroid capture status query sent; no running state parsed from intent output")
         else:
-            logger.debug("[DEBUG] Could not send PCAPdroid capture status query")
+            logger.debug("Could not send PCAPdroid capture status query")
 
         # Additional verification: check if PCAPdroid directory exists and is accessible
-        device_pcap_base_dir = str(
-            self.config_manager.get("device_pcap_dir", "/sdcard/Download/PCAPdroid")
-        )
-        logger.debug(f"[DEBUG] Checking if PCAPdroid directory exists: {device_pcap_base_dir}")
+        device_pcap_base_dir = str(self.config_manager.get("device_pcap_dir", "/sdcard/Download/PCAPdroid"))
+        logger.debug(f"Checking if PCAPdroid directory exists: {device_pcap_base_dir}")
         check_dir_args = ["shell", "test", "-d", device_pcap_base_dir]
-        stdout_dir, retcode_dir = await self._run_adb_command_async(
-            check_dir_args, suppress_stderr=True
-        )
+        stdout_dir, retcode_dir = await self._run_adb_command_async(check_dir_args, suppress_stderr=True)
 
         if retcode_dir != 0:
             logger.warning(
-                f"[DEBUG] PCAPdroid directory does not exist: {device_pcap_base_dir}. "
-                f"Attempting to create it..."
+                f"PCAPdroid directory does not exist: {device_pcap_base_dir}. " f"Attempting to create it..."
             )
             mkdir_args = ["shell", "mkdir", "-p", device_pcap_base_dir]
-            stdout_mkdir, retcode_mkdir = await self._run_adb_command_async(
-                mkdir_args, suppress_stderr=True
-            )
+            stdout_mkdir, retcode_mkdir = await self._run_adb_command_async(mkdir_args, suppress_stderr=True)
             if retcode_mkdir != 0:
                 logger.warning(
-                    f"[DEBUG] Failed to create PCAPdroid directory: {stdout_mkdir}. "
+                    f"Failed to create PCAPdroid directory: {stdout_mkdir}. "
                     f"PCAPdroid may create it automatically when capture starts."
                 )
         else:
-            logger.debug("[DEBUG] PCAPdroid directory exists and is accessible")
+            logger.debug("PCAPdroid directory exists and is accessible")
 
         readiness = await self._ensure_capture_started_after_api_async(start_command_args)
         self._last_capture_readiness_diagnostics = readiness
@@ -426,16 +395,14 @@ class TrafficCaptureManager:
         if not self.pcap_filename_on_device:
             return False
         timeout = float(self.config_manager.get("pcapdroid_file_verify_timeout_seconds", 8.0))
-        device_path = os.path.join(device_pcap_base_dir, self.pcap_filename_on_device).replace(
-            "\\", "/"
-        )
+        device_path = os.path.join(device_pcap_base_dir, self.pcap_filename_on_device).replace("\\", "/")
         deadline = time.monotonic() + max(timeout, 0.0)
         while True:
             stdout, retcode = await self._run_adb_command_async(
                 ["shell", "stat", "-c", "%s", device_path], suppress_stderr=True
             )
             if retcode == 0:
-                logger.debug(f"[DEBUG] PCAP file present on device ({stdout.strip()} bytes)")
+                logger.debug(f"PCAP file present on device ({stdout.strip()} bytes)")
                 return True
             if time.monotonic() >= deadline:
                 return False
@@ -454,9 +421,7 @@ class TrafficCaptureManager:
             return None
 
         if not self._is_currently_capturing or not self.pcap_filename_on_device:
-            logger.warning(
-                "Traffic capture not started by this manager or filename not set. Cannot stop/pull."
-            )
+            logger.warning("Traffic capture not started by this manager or filename not set. Cannot stop/pull.")
             return None
 
         pcapdroid_activity = "com.emanuelef.remote_capture/.activities.CaptureCtrl"
@@ -478,9 +443,7 @@ class TrafficCaptureManager:
         if api_key:
             stop_command_args.extend(["-e", "api_key", str(api_key)])
 
-        stdout_stop, retcode_stop = await self._run_adb_command_async(
-            stop_command_args, suppress_stderr=True
-        )
+        stdout_stop, retcode_stop = await self._run_adb_command_async(stop_command_args, suppress_stderr=True)
         self._is_currently_capturing = False
 
         if retcode_stop != 0:
@@ -489,48 +452,44 @@ class TrafficCaptureManager:
                 f"Output: {stdout_stop}. Proceeding with pull attempt."
             )
         else:
-            logger.debug("[DEBUG] PCAPdroid stop command sent successfully")
+            logger.debug("PCAPdroid stop command sent successfully")
 
         # Wait for file finalization (configurable)
         finalize_wait = float(self.config_manager.get("pcapdroid_finalize_wait", 2.0))
         if finalize_wait > 0:
-            logger.debug(f"[DEBUG] Waiting {finalize_wait}s for PCAP file finalization...")
+            logger.debug(f"Waiting {finalize_wait}s for PCAP file finalization...")
             await asyncio.sleep(finalize_wait)
 
         # Check PCAPdroid status after stop to verify capture ended
-        logger.debug("[DEBUG] Sending PCAPdroid status query after stop...")
+        logger.debug("Sending PCAPdroid status query after stop...")
         status_result = await self.get_capture_status_async()
         if isinstance(status_result, dict) and status_result.get("status") == "query_sent":
-            logger.debug("[DEBUG] PCAPdroid status query after stop sent; no running state parsed from intent output")
+            logger.debug("PCAPdroid status query after stop sent; no running state parsed from intent output")
         else:
-            logger.debug("[DEBUG] Could not send PCAPdroid status query after stop")
+            logger.debug("Could not send PCAPdroid status query after stop")
 
         # Pull the file
         if not self.local_pcap_file_path:
             logger.error("Local PCAP file path not set. Cannot pull.")
             return None
 
-        device_pcap_base_dir = str(
-            self.config_manager.get("device_pcap_dir", "/sdcard/Download/PCAPdroid")
-        )
-        device_pcap_full_path = os.path.join(
-            device_pcap_base_dir, self.pcap_filename_on_device
-        ).replace("\\", "/")
+        device_pcap_base_dir = str(self.config_manager.get("device_pcap_dir", "/sdcard/Download/PCAPdroid"))
+        device_pcap_full_path = os.path.join(device_pcap_base_dir, self.pcap_filename_on_device).replace("\\", "/")
 
         # Verify file exists on device before attempting to pull
-        logger.debug(f"[DEBUG] Checking if PCAP file exists on device: {device_pcap_full_path}")
+        logger.debug(f"Checking if PCAP file exists on device: {device_pcap_full_path}")
         check_file_args = ["shell", "test", "-f", device_pcap_full_path]
         stdout_check, retcode_check = await self._run_adb_command_async(check_file_args, suppress_stderr=True)
 
         if retcode_check != 0:
             logger.warning(f"PCAP file not found at expected location: {device_pcap_full_path}")
-            logger.debug(f"[DEBUG] Listing files in PCAPdroid directory: {device_pcap_base_dir}")
+            logger.debug(f"Listing files in PCAPdroid directory: {device_pcap_base_dir}")
 
             list_files_args = ["shell", "ls", "-la", device_pcap_base_dir]
             stdout_list, retcode_list = await self._run_adb_command_async(list_files_args, suppress_stderr=True)
 
             if retcode_list == 0:
-                logger.debug(f"[DEBUG] Files in {device_pcap_base_dir}:\n{stdout_list}")
+                logger.debug(f"Files in {device_pcap_base_dir}:\n{stdout_list}")
                 find_pcap_args = ["shell", "find", device_pcap_base_dir, "-name", "*.pcap", "-type", "f"]
                 stdout_find, retcode_find = await self._run_adb_command_async(find_pcap_args, suppress_stderr=True)
                 if retcode_find == 0 and stdout_find.strip():
@@ -554,7 +513,7 @@ class TrafficCaptureManager:
             )
             return None
 
-        logger.debug(f"[DEBUG] PCAP file exists on device, attempting to pull: {device_pcap_full_path}")
+        logger.debug(f"PCAP file exists on device, attempting to pull: {device_pcap_full_path}")
         pull_command_args = ["pull", device_pcap_full_path, self.local_pcap_file_path]
         stdout_pull, retcode_pull = await self._run_adb_command_async(pull_command_args)
 
@@ -563,9 +522,7 @@ class TrafficCaptureManager:
                 f"Failed to pull PCAP file '{device_pcap_full_path}'. "
                 f"ADB retcode: {retcode_pull}. Output: {stdout_pull}"
             )
-            logger.error(
-                "  File exists on device but pull failed. Check ADB permissions and device connection."
-            )
+            logger.error("  File exists on device but pull failed. Check ADB permissions and device connection.")
             return None
 
         if os.path.exists(self.local_pcap_file_path):
@@ -575,9 +532,7 @@ class TrafficCaptureManager:
                 logger.info(f"PCAP file saved: {self.local_pcap_file_path}")
                 return os.path.abspath(self.local_pcap_file_path)
             else:
-                logger.error(
-                    f"PCAP file pulled to '{self.local_pcap_file_path}' but it is EMPTY."
-                )
+                logger.error(f"PCAP file pulled to '{self.local_pcap_file_path}' but it is EMPTY.")
                 await self._cleanup_device_pcap_file_async(device_pcap_full_path)
                 return None
         else:
@@ -594,9 +549,7 @@ class TrafficCaptureManager:
             device_pcap_full_path: Full path to PCAP file on device
         """
         rm_command_args = ["shell", "rm", device_pcap_full_path]
-        stdout_rm, retcode_rm = await self._run_adb_command_async(
-            rm_command_args, suppress_stderr=True
-        )
+        stdout_rm, retcode_rm = await self._run_adb_command_async(rm_command_args, suppress_stderr=True)
         if retcode_rm == 0:
             logger.debug(f"Cleaned up device PCAP file: {device_pcap_full_path}")
         else:
@@ -614,24 +567,20 @@ class TrafficCaptureManager:
     async def _maybe_accept_pcapdroid_consent_async(self) -> bool:
         """Best-effort approval for PCAPdroid/API/VPN consent shown during startup."""
         if not bool(self.config_manager.get("pcapdroid_auto_accept_consent", True)):
-            logger.debug("[DEBUG] PCAPdroid consent auto-approval disabled by config")
+            logger.debug("PCAPdroid consent auto-approval disabled by config")
             return False
 
         timeout = float(self.config_manager.get("pcapdroid_consent_timeout_seconds", 15.0))
-        poll_interval = float(
-            self.config_manager.get("pcapdroid_consent_poll_interval_seconds", 1.0)
-        )
+        poll_interval = float(self.config_manager.get("pcapdroid_consent_poll_interval_seconds", 1.0))
         if timeout <= 0:
-            logger.debug("[DEBUG] PCAPdroid consent auto-approval skipped because timeout is 0")
+            logger.debug("PCAPdroid consent auto-approval skipped because timeout is 0")
             return False
 
         deadline = time.monotonic() + timeout
         inspected = False
         accepted_any = False
         while time.monotonic() < deadline:
-            stdout = await self._dump_current_ui_async(
-                purpose="PCAPdroid consent inspection"
-            )
+            stdout = await self._dump_current_ui_async(purpose="PCAPdroid consent inspection")
             if stdout is None:
                 await asyncio.sleep(poll_interval)
                 continue
@@ -650,20 +599,18 @@ class TrafficCaptureManager:
                     accepted_any = True
                     await asyncio.sleep(poll_interval)
                     continue
-                logger.warning(
-                    f"Found PCAPdroid consent button '{label}' but tap failed: {tap_output}"
-                )
+                logger.warning(f"Found PCAPdroid consent button '{label}' but tap failed: {tap_output}")
                 return False
 
             if accepted_any:
-                logger.debug("[DEBUG] No further PCAPdroid capture consent dialog found")
+                logger.debug("No further PCAPdroid capture consent dialog found")
                 return True
             await asyncio.sleep(poll_interval)
 
         if inspected:
-            logger.debug("[DEBUG] No PCAPdroid capture consent dialog found during startup")
+            logger.debug("No PCAPdroid capture consent dialog found during startup")
         else:
-            logger.debug("[DEBUG] PCAPdroid consent dialog could not be inspected")
+            logger.debug("PCAPdroid consent dialog could not be inspected")
         return accepted_any
 
     async def _dump_current_ui_async(self, purpose: str) -> str | None:
@@ -673,7 +620,7 @@ class TrafficCaptureManager:
             suppress_stderr=True,
         )
         if dump_retcode != 0:
-            logger.debug(f"[DEBUG] Could not dump UI for {purpose}. Output: {dump_output}")
+            logger.debug(f"Could not dump UI for {purpose}. Output: {dump_output}")
             return None
 
         stdout, retcode = await self._run_adb_command_async(
@@ -681,7 +628,7 @@ class TrafficCaptureManager:
             suppress_stderr=True,
         )
         if retcode != 0:
-            logger.debug(f"[DEBUG] Could not read UI dump for {purpose}. Output: {stdout}")
+            logger.debug(f"Could not read UI dump for {purpose}. Output: {stdout}")
             return None
         return stdout
 
@@ -699,27 +646,19 @@ class TrafficCaptureManager:
             ["shell", "dumpsys", "activity", "services", "com.emanuelef.remote_capture"],
             suppress_stderr=True,
         )
-        connectivity_lower = connectivity_output.lower()
         services_lower = services_output.lower()
         package_name = "com.emanuelef.remote_capture"
         vpn_hint = (
-            (
-                connectivity_retcode == 0
-                and any(
-                    "NetworkAgentInfo" in line
-                    and "VPN" in line
-                    and package_name in line
-                    and "CONNECTED" in line
-                    and "DISCONNECTED" not in line
-                    for line in connectivity_output.splitlines()
-                )
+            connectivity_retcode == 0
+            and any(
+                "NetworkAgentInfo" in line
+                and "VPN" in line
+                and package_name in line
+                and "CONNECTED" in line
+                and "DISCONNECTED" not in line
+                for line in connectivity_output.splitlines()
             )
-            or (
-                services_retcode == 0
-                and "servicerecord" in services_lower
-                and package_name in services_lower
-            )
-        )
+        ) or (services_retcode == 0 and "servicerecord" in services_lower and package_name in services_lower)
         readiness_source = None
         if not unresolved and api_status_running is True:
             readiness_source = "api_status_running"
@@ -746,9 +685,7 @@ class TrafficCaptureManager:
     async def _ensure_capture_started_after_api_async(self, start_command_args: list[str]) -> dict[str, Any]:
         """Ensure API startup reaches active capture, including post-consent re-send and strict start fallback."""
         timeout = float(self.config_manager.get("pcapdroid_startup_timeout_seconds", 15.0))
-        poll_interval = float(
-            self.config_manager.get("pcapdroid_startup_poll_interval_seconds", 1.0)
-        )
+        poll_interval = float(self.config_manager.get("pcapdroid_startup_poll_interval_seconds", 1.0))
         deadline = time.monotonic() + max(timeout, 0.0)
         api_checks: list[dict[str, Any]] = []
         last_readiness: dict[str, Any] = {}
@@ -765,9 +702,7 @@ class TrafficCaptureManager:
                 api_status_running=api_running if isinstance(api_running, bool) else None
             )
             readiness["startup_phase"] = "api_status_polling"
-            readiness["api_start_sent"] = bool(
-                self._last_capture_startup_diagnostics.get("api_start_sent")
-            )
+            readiness["api_start_sent"] = bool(self._last_capture_startup_diagnostics.get("api_start_sent"))
             readiness["consent_labels_tapped"] = list(self._last_consent_labels_tapped)
             readiness["api_status"] = api_status
             readiness["api_start_resent_after_consent"] = restarted_after_consent
@@ -805,15 +740,11 @@ class TrafficCaptureManager:
                 break
 
             consented = await self._maybe_accept_pcapdroid_consent_async()
-            self._last_capture_startup_diagnostics["consent_labels_tapped"] = list(
-                self._last_consent_labels_tapped
-            )
+            self._last_capture_startup_diagnostics["consent_labels_tapped"] = list(self._last_consent_labels_tapped)
             if consented:
                 consent_seen_during_startup = True
             if consent_seen_during_startup and not restarted_after_consent:
-                logger.info(
-                    "PCAPdroid consent accepted; re-sending API start intent to apply capture settings"
-                )
+                logger.info("PCAPdroid consent accepted; re-sending API start intent to apply capture settings")
                 await asyncio.sleep(1.0)
                 resend_ok, resend_error = await self._send_start_intent_async(start_command_args)
                 if not resend_ok:
@@ -830,11 +761,7 @@ class TrafficCaptureManager:
                     return last_readiness
                 restarted_after_consent = True
                 self._last_capture_startup_diagnostics["api_start_resent_after_consent"] = True
-            elif (
-                not consented
-                and not ui_start_tapped
-                and not bool(readiness.get("unresolved_consent"))
-            ):
+            elif not consented and not ui_start_tapped and not bool(readiness.get("unresolved_consent")):
                 ui_start_tapped = await self._tap_pcapdroid_start_button_if_visible_async()
                 self._last_capture_startup_diagnostics["ui_action_start_tapped"] = ui_start_tapped
             await asyncio.sleep(max(poll_interval, 0.1))
@@ -891,9 +818,7 @@ class TrafficCaptureManager:
                 suppress_stderr=True,
             )
             if tap_retcode != 0:
-                logger.warning(
-                    f"Failed to tap PCAPdroid action_start fallback at ({x}, {y}): {tap_output}"
-                )
+                logger.warning(f"Failed to tap PCAPdroid action_start fallback at ({x}, {y}): {tap_output}")
                 return False
             logger.info(f"Tapped PCAPdroid action_start fallback at ({x}, {y})")
             await asyncio.sleep(1.5)
@@ -912,9 +837,7 @@ class TrafficCaptureManager:
         for node in root.iter("node"):
             resource_id = str(node.attrib.get("resource-id", "")).strip()
             if resource_id.endswith("/status_view"):
-                status_text = str(
-                    node.attrib.get("text", "") or node.attrib.get("content-desc", "")
-                ).strip().lower()
+                status_text = str(node.attrib.get("text", "") or node.attrib.get("content-desc", "")).strip().lower()
                 break
         if not status_text:
             return False
@@ -929,8 +852,7 @@ class TrafficCaptureManager:
         except ET.ParseError:
             return False
         return any(
-            str(node.attrib.get("package", "")).lower() == "com.emanuelef.remote_capture"
-            for node in root.iter("node")
+            str(node.attrib.get("package", "")).lower() == "com.emanuelef.remote_capture" for node in root.iter("node")
         )
 
     async def _log_missing_pcap_diagnostics_async(self) -> None:
@@ -950,10 +872,7 @@ class TrafficCaptureManager:
             f"startup_diagnostics={self._last_capture_startup_diagnostics}, "
             f"last_readiness={self._last_capture_readiness_diagnostics}"
         )
-        logger.error(
-            "Missing PCAP final UI dump snippet: "
-            f"{self._diagnostic_snippet(ui_dump or '')}"
-        )
+        logger.error("Missing PCAP final UI dump snippet: " f"{self._diagnostic_snippet(ui_dump or '')}")
         logger.error(
             "Missing PCAP connectivity diagnostics "
             f"(retcode={connectivity_retcode}): "
@@ -976,13 +895,13 @@ class TrafficCaptureManager:
         """Return the center of a safe consent button when the dump has capture context."""
         xml_text = self._extract_uiautomator_xml(ui_dump)
         if not xml_text:
-            logger.debug("[DEBUG] No XML hierarchy found in UI dump")
+            logger.debug("No XML hierarchy found in UI dump")
             return None
 
         try:
             root = ET.fromstring(xml_text)
         except ET.ParseError as exc:
-            logger.debug(f"[DEBUG] XML parse error while checking PCAPdroid consent: {exc}")
+            logger.debug(f"XML parse error while checking PCAPdroid consent: {exc}")
             return None
 
         context_terms = (
@@ -995,13 +914,12 @@ class TrafficCaptureManager:
         dump_text_parts: list[str] = []
         for node in root.iter("node"):
             dump_text_parts.extend(
-                str(node.attrib.get(attr, ""))
-                for attr in ("text", "content-desc", "resource-id", "package")
+                str(node.attrib.get(attr, "")) for attr in ("text", "content-desc", "resource-id", "package")
             )
         dump_text = " ".join(dump_text_parts).lower()
-        logger.debug(f"[DEBUG] Full UI dump text while checking PCAPdroid consent: {dump_text}")
+        logger.debug(f"Full UI dump text while checking PCAPdroid consent: {dump_text}")
         if not any(term in dump_text for term in context_terms):
-            logger.debug("[DEBUG] No PCAPdroid context terms found in UI dump")
+            logger.debug("No PCAPdroid context terms found in UI dump")
             return None
 
         for node in root.iter("node"):
@@ -1011,11 +929,9 @@ class TrafficCaptureManager:
             bounds = str(node.attrib.get("bounds", ""))
             center = self._bounds_center(bounds)
             if center:
-                logger.debug(f"[DEBUG] Found consent button '{label}' at {center}")
+                logger.debug(f"Found consent button '{label}' at {center}")
                 return center[0], center[1], label
-            logger.debug(
-                f"[DEBUG] Found label '{label}' but could not parse bounds: '{bounds}'"
-            )
+            logger.debug(f"Found label '{label}' but could not parse bounds: '{bounds}'")
         return None
 
     @staticmethod
@@ -1077,8 +993,7 @@ class TrafficCaptureManager:
 
         if retcode != 0:
             logger.error(
-                f"Failed to send 'get_status' command to PCAPdroid. "
-                f"ADB retcode: {retcode}. Output: {stdout}"
+                f"Failed to send 'get_status' command to PCAPdroid. " f"ADB retcode: {retcode}. Output: {stdout}"
             )
             return {
                 "status": "error",

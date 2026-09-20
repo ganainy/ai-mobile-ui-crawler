@@ -85,7 +85,7 @@ class StaleRunCleaner:
         Args:
             run: The stale run to clean up
         """
-        logger.info(f"Cleaning up stale run {run.id} for package {run.app_package}")
+        logger.debug(f"Cleaning up stale run {run.id} for package {run.app_package}")
 
         # Attempt to stop any ongoing recordings (best effort, though process likely dead)
         self._stop_ongoing_recordings(run)
@@ -104,9 +104,9 @@ class StaleRunCleaner:
         # Stop traffic capture if manager available
         if self.traffic_capture_manager:
             try:
-                logger.info(f"Attempting to stop traffic capture for run {run.id}")
+                logger.debug(f"Attempting to stop traffic capture for run {run.id}")
                 self.traffic_capture_manager.stop_and_pull(device_id)
-                logger.info(f"Traffic capture stopped for run {run.id}")
+                logger.debug(f"Traffic capture stopped for run {run.id}")
             except Exception as e:
                 logger.warning(f"Failed to stop traffic capture for run {run.id}: {e}")
 
@@ -119,11 +119,14 @@ class StaleRunCleaner:
         conn = self.db_manager.get_connection()
         cursor = conn.cursor()
 
-        cursor.execute("""
+        cursor.execute(
+            """
             UPDATE runs
             SET status = 'INTERRUPTED', end_time = ?
             WHERE id = ?
-        """, (datetime.now().isoformat(), run.id))
+        """,
+            (datetime.now().isoformat(), run.id),
+        )
 
         conn.commit()
-        logger.info(f"Marked run {run.id} as INTERRUPTED")
+        logger.debug(f"Marked run {run.id} as INTERRUPTED")

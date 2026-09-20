@@ -16,9 +16,14 @@ from mobile_crawler.infrastructure.run_repository import Run, RunRepository
 from mobile_crawler.infrastructure.session_folder_manager import SessionFolderManager
 from mobile_crawler.infrastructure.telemetry_client import build_telemetry_client_factory
 
+_LOG_LEVELS = {"DEBUG": 10, "INFO": 20, "WARNING": 30, "ERROR": 40, "CRITICAL": 50}
+
 
 class JSONEventListener(CrawlerEventListener):
     """Event listener that outputs JSON events to stdout."""
+
+    def __init__(self, log_level: str = "INFO") -> None:
+        self._min_log_level = _LOG_LEVELS.get(log_level.upper(), 20)
 
     def on_crawl_started(self, run_id: int, target_package: str) -> None:
         """Handle crawl started event."""
@@ -156,12 +161,15 @@ class JSONEventListener(CrawlerEventListener):
         }
         print(json.dumps(event), flush=True)
 
-    def on_debug_log(self, run_id: int, step_number: int, message: str) -> None:
-        """Handle debug log event."""
+    def on_debug_log(self, run_id: int, step_number: int, message: str, level: str = "INFO") -> None:
+        """Handle log event; records below the configured ``--log-level`` are dropped."""
+        if _LOG_LEVELS.get(level.upper(), 20) < self._min_log_level:
+            return
         event = {
             "event": "debug_log",
             "run_id": run_id,
             "step_number": step_number,
+            "level": level,
             "message": message,
             "timestamp": datetime.now().isoformat(),
         }
@@ -202,6 +210,11 @@ class JSONEventListener(CrawlerEventListener):
 @click.option("--enable-video-recording", is_flag=True, help="Enable video recording during crawl")
 @click.option("--enable-mobsf-analysis", is_flag=True, help="Enable MobSF static analysis after crawl")
 @click.option("--no-report", is_flag=True, help="Do not generate the run report after the crawl")
+@click.option(
+    "--log-level",
+    type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"], case_sensitive=False),
+    help="Minimum level of log events printed to stdout (default: the log_level setting, INFO)",
+)
 def crawl(
     device: str,
     package: str,
@@ -213,6 +226,7 @@ def crawl(
     enable_video_recording: bool,
     enable_mobsf_analysis: bool,
     no_report: bool,
+    log_level: str | None,
 ) -> None:
     """Start a crawl on the specified device and app."""
     try:
@@ -244,6 +258,8 @@ def crawl(
         if no_report:
             config_manager.set("auto_generate_report_after_run", False)
 
+        effective_log_level = (log_level or config_manager.get("log_level", "INFO") or "INFO").upper()
+
         # Initialize database
         db_manager = DatabaseManager()
         db_manager.migrate_schema()
@@ -272,7 +288,7 @@ def crawl(
             config_manager=config_manager,
             run_repository=run_repo,
             session_folder_manager=session_folder_manager,
-            event_listeners=[JSONEventListener()],
+            event_listeners=[JSONEventListener(effective_log_level)],
             report_generator=ReportGenerator(
                 db_manager,
                 telemetry_client_factory=build_telemetry_client_factory(config_manager),

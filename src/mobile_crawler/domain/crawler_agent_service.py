@@ -105,6 +105,8 @@ class CrawlerLogHandler(logging.Handler):
     def emit(self, record: logging.LogRecord) -> None:
         try:
             message = record.getMessage()
+            if record.exc_info:
+                message = f"{message}\n{logging.Formatter().formatException(record.exc_info)}"
             payload = {
                 "timestamp": time.time(),
                 "level": record.levelname,
@@ -117,7 +119,7 @@ class CrawlerLogHandler(logging.Handler):
 
             if self.enable_ui and self.emit_debug:
                 # emit_debug is CrawlerLoop._emit_event — call with method name first
-                self.emit_debug("on_debug_log", self.run_id, 0, message)
+                self.emit_debug("on_debug_log", self.run_id, 0, message, record.levelname)
         except Exception as e:
             # Log the failure but avoid recursion by not re-emitting
             logger.error(f"CrawlerLogHandler emit failed: {e}", exc_info=True)
@@ -564,7 +566,7 @@ class CrawlerAgentService:
             db_manager = DatabaseManager()
             db_conn = db_manager.get_connection()
             self._ui_context_manager = UIContextManager(db_conn, self._omni_parser_client)
-            logger.info("UIContextManager initialized")
+            logger.debug("UIContextManager initialized")
 
         except Exception as e:
             logger.warning(f"Failed to initialize OmniParser: {e}")
@@ -624,7 +626,7 @@ class CrawlerAgentService:
         self._app_switch_recovery: AppSwitchRecovery | None = None
         self._adb_executor: Any | None = None
 
-        logger.info(f"Step phase tracking initialized for run {run_id}")
+        logger.debug(f"Step phase tracking initialized for run {run_id}")
 
     def _wire_observers_to_agent(self) -> None:
         """Wire UIWaitPredicate, ActionVerifier, and DeviceContextCapture to the agent.
@@ -696,7 +698,7 @@ class CrawlerAgentService:
                 adb_executor=adb_executor,
                 context_capture=self._context_capture,
             )
-            logger.info(
+            logger.debug(
                 f"DeviceContextCapture and AppSwitchRecovery wired with " f"target_package={self._target_package}"
             )
 
@@ -927,7 +929,9 @@ class CrawlerAgentService:
             except Exception as e:
                 logger.warning(f"Failed to emit action timing event: {e}")
 
-        logger.debug(f"Step {self._current_step_number}: tool={tool_name} " f"success={success}")
+        # One INFO line per executed action (the per-step summary the GUI log shows).
+        duration_text = f" in {duration_ms:.0f}ms" if isinstance(duration_ms, int | float) else ""
+        logger.info(f"Step {self._current_step_number}: tool={tool_name} success={success}{duration_text}")
 
         # --- Context pre-check (D-02): compare package against target ---
         skip_reason = None
@@ -1118,7 +1122,7 @@ class CrawlerAgentService:
                             metadata_key="verification_ms",
                             parent_phase=StepPhase.RECORD,
                         )
-                        logger.info(
+                        logger.debug(
                             f"Step {self._current_step_number}: verification "
                             f"result={verification} for action={tool_name}"
                         )
@@ -1357,6 +1361,11 @@ class CrawlerAgentService:
             except Exception as e:
                 logger.warning(f"Failed to persist AI interaction for step {step_number}: {e}")
 
+    def _batch_size_for_log(self) -> Any:
+        """Configured Action Batch size for the run banner, or "?" if the agent config is unavailable."""
+        agent_cfg = getattr(getattr(self, "_crawler_agent_config", None), "agent", None)
+        return getattr(agent_cfg, "max_actions_per_batch", "?")
+
     def _build_auth_session(self, app_package: str) -> AuthenticationSession:
         from mobile_crawler.infrastructure.adb_client import ADBClient
         from mobile_crawler.infrastructure.app_account_store import AppAccountStore
@@ -1542,7 +1551,15 @@ class CrawlerAgentService:
                 self._log_agent_interaction(run_id, goal, None, None)
 
                 # Execute the goal using internal Crawler agent
-                logger.info(f"Executing Crawler agent goal: {goal.description[:100]}...")
+                logger.info(
+                    f"Run {run_id} starting: package={app_package}, "
+                    f"model={self.config_manager.get('ai_model', '?')}, "
+                    f"parser={self.config_manager.get('ui_parser_mode', 'omniparser')}, "
+                    f"max_steps={max_steps}, "
+                    f"actions_per_batch={self._batch_size_for_log()}, "
+                    f"max_duration_s={max_duration_seconds}"
+                )
+                logger.debug(f"Executing Crawler agent goal: {goal.description[:100]}...")
 
                 from mobile_crawler.domain.crawler_agent.agent.droid.crawler_agent import CrawlerAgent
 

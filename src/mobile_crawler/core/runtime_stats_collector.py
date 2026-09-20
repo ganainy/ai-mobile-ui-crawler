@@ -115,7 +115,6 @@ class RuntimeStats:
             "failed_steps": self.failed_steps,
             "crawl_duration_seconds": self.crawl_duration_seconds,
             "avg_step_duration_ms": self.avg_step_duration_ms,
-
             # Screen Discovery
             "unique_screens_visited": self.unique_screens_visited,
             "total_screen_visits": self.total_screen_visits,
@@ -123,7 +122,6 @@ class RuntimeStats:
             "most_visited_screen_id": None,
             "most_visited_screen_count": self.most_visited_screen_count,
             "unique_activities_visited": self.unique_activities_visited,
-
             # Action Statistics (JSON fields)
             "actions_by_type_json": json.dumps(self.actions_by_type),
             "successful_actions_by_type_json": json.dumps(self.successful_actions_by_type),
@@ -131,7 +129,6 @@ class RuntimeStats:
             "avg_action_duration_ms": self.avg_action_duration_ms,
             "min_action_duration_ms": self.min_action_duration_ms,
             "max_action_duration_ms": self.max_action_duration_ms,
-
             # AI Performance
             "total_ai_calls": self.total_ai_calls,
             "avg_ai_response_time_ms": self.avg_ai_response_time_ms,
@@ -146,14 +143,12 @@ class RuntimeStats:
             "ai_total_by_type_json": json.dumps(self.ai_total_by_type),
             "vision_call_count": self.vision_call_count,
             "non_vision_call_count": self.non_vision_call_count,
-
             # Multi-Action Batching
             "multi_action_batch_count": self.multi_action_batch_count,
             "single_action_count": self.single_action_count,
             "total_batch_actions": self.total_batch_actions,
             "avg_batch_size": self.avg_batch_size,
             "max_batch_size": self.max_batch_size,
-
             # Error & Recovery
             "stuck_detection_count": self.stuck_detection_count,
             "stuck_recovery_success": self.stuck_recovery_success,
@@ -163,14 +158,12 @@ class RuntimeStats:
             "context_recovery_count": self.context_recovery_count,
             "invalid_bbox_count": self.invalid_bbox_count,
             "avg_recovery_time_ms": self.avg_recovery_time_ms,
-
             # Device & Session
             "device_model": self.device_model,
             "android_version": self.android_version,
             "screen_width": self.screen_width,
             "screen_height": self.screen_height,
             "app_version": self.app_version,
-
             # Network & Security
             "pcap_file_size_bytes": self.pcap_file_size_bytes,
             "pcap_packet_count": self.pcap_packet_count,
@@ -180,7 +173,6 @@ class RuntimeStats:
             "mobsf_low_issues": self.mobsf_low_issues,
             "video_file_size_bytes": self.video_file_size_bytes,
             "video_duration_seconds": self.video_duration_seconds,
-
             # Coverage
             "transition_count": self.transition_count,
             "unique_transitions": self.unique_transitions,
@@ -215,20 +207,17 @@ class RuntimeStats:
             failed_steps=data.get("failed_steps", 0),
             crawl_duration_seconds=data.get("crawl_duration_seconds", 0.0),
             avg_step_duration_ms=data.get("avg_step_duration_ms", 0.0),
-
             unique_screens_visited=data.get("unique_screens_visited", 0),
             total_screen_visits=data.get("total_screen_visits", 0),
             deepest_navigation_depth=data.get("deepest_navigation_depth", 0),
             most_visited_screen_count=data.get("most_visited_screen_count", 0),
             unique_activities_visited=data.get("unique_activities_visited", 0),
-
             actions_by_type=parse_json_field("actions_by_type_json"),
             successful_actions_by_type=parse_json_field("successful_actions_by_type_json"),
             failed_actions_by_type=parse_json_field("failed_actions_by_type_json"),
             avg_action_duration_ms=data.get("avg_action_duration_ms", 0.0),
             min_action_duration_ms=data.get("min_action_duration_ms"),
             max_action_duration_ms=data.get("max_action_duration_ms"),
-
             total_ai_calls=data.get("total_ai_calls", 0),
             avg_ai_response_time_ms=data.get("avg_ai_response_time_ms", 0.0),
             min_ai_response_time_ms=data.get("min_ai_response_time_ms"),
@@ -242,13 +231,11 @@ class RuntimeStats:
             ai_total_by_type=parse_json_field("ai_total_by_type_json"),
             vision_call_count=data.get("vision_call_count", 0),
             non_vision_call_count=data.get("non_vision_call_count", 0),
-
             multi_action_batch_count=data.get("multi_action_batch_count", 0),
             single_action_count=data.get("single_action_count", 0),
             total_batch_actions=data.get("total_batch_actions", 0),
             avg_batch_size=data.get("avg_batch_size", 0.0),
             max_batch_size=data.get("max_batch_size", 0),
-
             stuck_detection_count=data.get("stuck_detection_count", 0),
             stuck_recovery_success=data.get("stuck_recovery_success", 0),
             app_crash_count=data.get("app_crash_count", 0),
@@ -257,13 +244,11 @@ class RuntimeStats:
             context_recovery_count=data.get("context_recovery_count", 0),
             invalid_bbox_count=data.get("invalid_bbox_count", 0),
             avg_recovery_time_ms=data.get("avg_recovery_time_ms", 0.0),
-
             device_model=data.get("device_model"),
             android_version=data.get("android_version"),
             screen_width=data.get("screen_width"),
             screen_height=data.get("screen_height"),
             app_version=data.get("app_version"),
-
             pcap_file_size_bytes=data.get("pcap_file_size_bytes"),
             pcap_packet_count=data.get("pcap_packet_count"),
             mobsf_security_score=data.get("mobsf_security_score"),
@@ -272,7 +257,6 @@ class RuntimeStats:
             mobsf_low_issues=data.get("mobsf_low_issues", 0),
             video_file_size_bytes=data.get("video_file_size_bytes"),
             video_duration_seconds=data.get("video_duration_seconds"),
-
             transition_count=data.get("transition_count", 0),
             unique_transitions=data.get("unique_transitions", 0),
         )
@@ -333,8 +317,8 @@ class RuntimeStatsCollector:
         if total_steps > 0:
             # Recalculate average
             self._stats.avg_step_duration_ms = (
-                (self._stats.avg_step_duration_ms * (total_steps - 1) + duration_ms) / total_steps
-            )
+                self._stats.avg_step_duration_ms * (total_steps - 1) + duration_ms
+            ) / total_steps
 
     def record_screen_visit(self, screen_id: int | str, navigation_depth: int = 0) -> None:
         """Record a screen visit.
@@ -378,15 +362,20 @@ class RuntimeStatsCollector:
                 self._stats.successful_actions_by_type.get(action_type, 0) + 1
             )
         else:
-            self._stats.failed_actions_by_type[action_type] = (
-                self._stats.failed_actions_by_type.get(action_type, 0) + 1
-            )
+            self._stats.failed_actions_by_type[action_type] = self._stats.failed_actions_by_type.get(action_type, 0) + 1
 
         # Update action duration stats
         self._stats.avg_action_duration_ms = (
-            (self._stats.avg_action_duration_ms * (self._stats.total_ai_calls + self._stats.total_steps - 1) + duration_ms)
-            / (self._stats.total_ai_calls + self._stats.total_steps)
-        ) if (self._stats.total_ai_calls + self._stats.total_steps) > 0 else duration_ms
+            (
+                (
+                    self._stats.avg_action_duration_ms * (self._stats.total_ai_calls + self._stats.total_steps - 1)
+                    + duration_ms
+                )
+                / (self._stats.total_ai_calls + self._stats.total_steps)
+            )
+            if (self._stats.total_ai_calls + self._stats.total_steps) > 0
+            else duration_ms
+        )
 
         if self._stats.min_action_duration_ms is None or duration_ms < self._stats.min_action_duration_ms:
             self._stats.min_action_duration_ms = duration_ms
@@ -394,7 +383,9 @@ class RuntimeStatsCollector:
         if self._stats.max_action_duration_ms is None or duration_ms > self._stats.max_action_duration_ms:
             self._stats.max_action_duration_ms = duration_ms
 
-    def record_ai_call(self, response_time_ms: float, tokens_used: int = 0, success: bool = True, timeout: bool = False) -> None:
+    def record_ai_call(
+        self, response_time_ms: float, tokens_used: int = 0, success: bool = True, timeout: bool = False
+    ) -> None:
         """Record an AI API call.
 
         Args:
@@ -414,9 +405,8 @@ class RuntimeStatsCollector:
         # Update response time stats
         if success:
             self._stats.avg_ai_response_time_ms = (
-                (self._stats.avg_ai_response_time_ms * (self._stats.total_ai_calls - 1) + response_time_ms)
-                / self._stats.total_ai_calls
-            )
+                self._stats.avg_ai_response_time_ms * (self._stats.total_ai_calls - 1) + response_time_ms
+            ) / self._stats.total_ai_calls
 
             if self._stats.min_ai_response_time_ms is None or response_time_ms < self._stats.min_ai_response_time_ms:
                 self._stats.min_ai_response_time_ms = response_time_ms
@@ -439,13 +429,9 @@ class RuntimeStatsCollector:
             call_type: One of "manager", "executor", "fast_agent", "app_opener"
             success: Whether the call succeeded
         """
-        self._stats.ai_total_by_type[call_type] = (
-            self._stats.ai_total_by_type.get(call_type, 0) + 1
-        )
+        self._stats.ai_total_by_type[call_type] = self._stats.ai_total_by_type.get(call_type, 0) + 1
         if success:
-            self._stats.ai_success_by_type[call_type] = (
-                self._stats.ai_success_by_type.get(call_type, 0) + 1
-            )
+            self._stats.ai_success_by_type[call_type] = self._stats.ai_success_by_type.get(call_type, 0) + 1
 
     def record_vision_call(self) -> None:
         """Record an AI call where vision was enabled."""
@@ -516,8 +502,9 @@ class RuntimeStatsCollector:
         """Record an invalid bounding box."""
         self._stats.invalid_bbox_count += 1
 
-    def set_device_info(self, device_id: str, device_model: str, android_version: str,
-                     screen_width: int, screen_height: int) -> None:
+    def set_device_info(
+        self, device_id: str, device_model: str, android_version: str, screen_width: int, screen_height: int
+    ) -> None:
         """Set device information.
 
         Args:
@@ -570,8 +557,9 @@ class RuntimeStatsCollector:
         self._stats.pcap_file_size_bytes = file_size_bytes
         self._stats.pcap_packet_count = packet_count
 
-    def record_mobsf_results(self, security_score: float, high_issues: int,
-                          medium_issues: int, low_issues: int) -> None:
+    def record_mobsf_results(
+        self, security_score: float, high_issues: int, medium_issues: int, low_issues: int
+    ) -> None:
         """Record MobSF static analysis results.
 
         Args:
@@ -654,7 +642,7 @@ class RuntimeStatsCollector:
             # Save to repository
             self._run_stats_repository.save_run_stats(stats_dict)
 
-            logger.info(f"Saved runtime stats for run {self._run_id}")
+            logger.debug(f"Saved runtime stats for run {self._run_id}")
             return True
 
         except Exception as e:
@@ -673,7 +661,9 @@ class RuntimeStatsCollector:
             "failed_steps": self._stats.failed_steps,
             "unique_screens": self._stats.unique_screens_visited,
             "total_ai_calls": self._stats.total_ai_calls,
-            "avg_ai_response_time_ms": round(self._stats.avg_ai_response_time_ms, 2) if self._stats.avg_ai_response_time_ms else 0,
+            "avg_ai_response_time_ms": (
+                round(self._stats.avg_ai_response_time_ms, 2) if self._stats.avg_ai_response_time_ms else 0
+            ),
             "crawl_duration_seconds": round(self._stats.crawl_duration_seconds, 2),
             "screens_per_minute": round(self._stats.screens_per_minute, 2) if self._stats.screens_per_minute else 0,
         }

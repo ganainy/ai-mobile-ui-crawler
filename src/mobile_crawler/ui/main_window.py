@@ -721,7 +721,7 @@ class MainWindow(QMainWindow):
         bottom_height = self.settings_panel.get_bottom_bar_height()
         # Log to UI so user can see it's being picked up
         self.signal_adapter.on_debug_log(
-            0, 0, f"UI: Setting top_bar_height to {top_height}px, bottom_bar_height to {bottom_height}px"
+            0, 0, f"UI: Setting top_bar_height to {top_height}px, bottom_bar_height to {bottom_height}px", "DEBUG"
         )
         config_manager.set("top_bar_height", top_height)
         config_manager.set("bottom_bar_height", bottom_height)
@@ -737,6 +737,7 @@ class MainWindow(QMainWindow):
             0,
             0,
             f"UI: Feature flags - traffic_capture={enable_traffic_capture}, video_recording={enable_video_recording}, mobsf_analysis={enable_mobsf_analysis}, auto_run_mobsf={auto_run_mobsf}",
+            "DEBUG",
         )
 
         config_manager.set("enable_traffic_capture", enable_traffic_capture)
@@ -758,6 +759,7 @@ class MainWindow(QMainWindow):
             0,
             0,
             f"UI: Verified DB write - traffic={verified_traffic}, video={verified_video}, mobsf={verified_mobsf}, auto_run_mobsf={verified_auto_run_mobsf}",
+            "DEBUG",
         )
 
         # Set PCAPdroid configuration (package and activity are fixed, no UI configuration needed)
@@ -779,31 +781,35 @@ class MainWindow(QMainWindow):
         # Set DroidRun UI parser settings from settings panel
         ui_parser_mode = self.settings_panel.get_ui_parser_mode()
         config_manager.set("ui_parser_mode", ui_parser_mode)
-        self.signal_adapter.on_debug_log(0, 0, f"UI: ui_parser_mode = {ui_parser_mode}")
+        self.signal_adapter.on_debug_log(0, 0, f"UI: ui_parser_mode = {ui_parser_mode}", "DEBUG")
 
         omniparser_backend = self.settings_panel.get_omniparser_backend()
         config_manager.set("omniparser_backend", omniparser_backend)
-        self.signal_adapter.on_debug_log(0, 0, f"UI: omniparser_backend = {omniparser_backend}")
+        self.signal_adapter.on_debug_log(0, 0, f"UI: omniparser_backend = {omniparser_backend}", "DEBUG")
 
         omniparser_local_url = self.settings_panel.get_omniparser_local_url()
         config_manager.set("omniparser_local_url", omniparser_local_url)
-        self.signal_adapter.on_debug_log(0, 0, f"UI: omniparser_local_url = {omniparser_local_url}")
+        self.signal_adapter.on_debug_log(0, 0, f"UI: omniparser_local_url = {omniparser_local_url}", "DEBUG")
 
         omniparser_timeout = self.settings_panel.get_omniparser_local_parse_timeout_seconds()
         config_manager.set("omniparser_local_parse_timeout_seconds", omniparser_timeout)
-        self.signal_adapter.on_debug_log(0, 0, f"UI: omniparser_local_parse_timeout_seconds = {omniparser_timeout}")
+        self.signal_adapter.on_debug_log(
+            0, 0, f"UI: omniparser_local_parse_timeout_seconds = {omniparser_timeout}", "DEBUG"
+        )
 
         replicate_api_key = self.settings_panel.get_replicate_api_key()
         if replicate_api_key:
             config_manager.set("replicate_api_key", replicate_api_key)
-            self.signal_adapter.on_debug_log(0, 0, f"UI: replicate_api_key set ({len(replicate_api_key)} chars)")
+            self.signal_adapter.on_debug_log(
+                0, 0, f"UI: replicate_api_key set ({len(replicate_api_key)} chars)", "DEBUG"
+            )
 
         # Set exploration objective from settings panel
         exploration_objective = self.settings_panel.get_exploration_objective()
         if exploration_objective:
             config_manager.set("exploration_objective", exploration_objective)
             self.signal_adapter.on_debug_log(
-                0, 0, f"UI: Using custom exploration objective ({len(exploration_objective)} chars)"
+                0, 0, f"UI: Using custom exploration objective ({len(exploration_objective)} chars)", "DEBUG"
             )
 
         # Set Tracing / Observability settings from settings panel
@@ -826,7 +832,7 @@ class MainWindow(QMainWindow):
         config_manager.set("langfuse_secret_key", langfuse_sec)
 
         self.signal_adapter.on_debug_log(
-            0, 0, f"UI: Tracing settings - enabled={enable_tracing}, provider={tracing_provider}"
+            0, 0, f"UI: Tracing settings - enabled={enable_tracing}, provider={tracing_provider}", "DEBUG"
         )
 
         return config_manager
@@ -1001,9 +1007,16 @@ class MainWindow(QMainWindow):
         """Handle step paused event."""
         self._append_clean_log(LogLevel.INFO, f"Step {step_number} finished. Paused for review.", "ui")
 
-    def _on_debug_log(self, run_id: int, step_number: int, message: str) -> None:
-        """Handle debug log message from crawler (includes crawler agent stdout lines)."""
-        self._append_clean_log(LogLevel.DEBUG, message, "debug_log")
+    def _on_debug_log(self, run_id: int, step_number: int, message: str, level_name: str = "INFO") -> None:
+        """Handle a log message from the crawler (agent logger records and loop events)."""
+        level = {
+            "DEBUG": LogLevel.DEBUG,
+            "INFO": LogLevel.INFO,
+            "WARNING": LogLevel.WARNING,
+            "ERROR": LogLevel.ERROR,
+            "CRITICAL": LogLevel.ERROR,
+        }.get(level_name, LogLevel.INFO)
+        self._append_clean_log(level, message, "debug_log")
 
         if self._current_stats and self._current_stats.run_id == run_id:
             self._parse_crawler_agent_progress(run_id, message)

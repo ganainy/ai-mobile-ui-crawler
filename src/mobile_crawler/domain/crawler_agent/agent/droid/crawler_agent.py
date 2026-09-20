@@ -10,7 +10,6 @@ Architecture:
 import asyncio
 import logging
 import os
-import traceback
 from collections.abc import Awaitable
 from typing import TYPE_CHECKING, Union
 
@@ -622,9 +621,7 @@ class CrawlerAgent(Workflow):
             )
 
         except Exception as e:
-            logger.error(f"Error during task execution: {e}")
-            if self.config.logging.debug:
-                logger.error(traceback.format_exc())
+            logger.error(f"Error during task execution: {e}", exc_info=True)
             return FastAgentResultEvent(success=False, reason=f"Error: {str(e)}", instruction=ev.instruction)
 
     @step
@@ -633,9 +630,7 @@ class CrawlerAgent(Workflow):
             return FinalizeEvent(success=ev.success, reason=ev.reason)
 
         except Exception as e:
-            logger.error(f"❌ Error during CrawlerAgent execution: {e}")
-            if self.config.logging.debug:
-                logger.error(traceback.format_exc())
+            logger.error(f"❌ Error during CrawlerAgent execution: {e}", exc_info=True)
             return FinalizeEvent(
                 success=False,
                 reason=str(e),
@@ -666,6 +661,7 @@ class CrawlerAgent(Workflow):
             )
 
         self.shared_state.step_number += 1
+        # The GUI mines "Step N/M" from this line for the progress bar; keep the wording.
         logger.info(f"🔄 Step {self.shared_state.step_number}/{self.config.agent.max_steps}")
 
         try:
@@ -706,7 +702,7 @@ class CrawlerAgent(Workflow):
             self.shared_state.progress_summary = f"Answer: {ev.answer}"
             return FinalizeEvent(success=success, reason=ev.answer)
 
-        logger.debug(f"▶️  Proceeding to Executor with subgoal: {ev.current_subgoal}")
+        logger.info(f"▶️  Proceeding to Executor with subgoal: {ev.current_subgoal}")
         return ExecutorInputEvent(current_subgoal=ev.current_subgoal)
 
     @step
@@ -853,9 +849,7 @@ class CrawlerAgent(Workflow):
                     logger.warning(f"⚠️  Structured extraction failed: {extraction_result['error_message']}")
 
             except Exception as e:
-                logger.error(f"❌ Error during structured extraction: {e}")
-                if self.config.logging.debug:
-                    logger.error(traceback.format_exc())
+                logger.error(f"❌ Error during structured extraction: {e}", exc_info=True)
 
         # Capture final screenshot and UI state (independent of trajectory persistence)
         vision_any = (

@@ -270,7 +270,7 @@ class ExecutorAgent(Workflow):
     @step
     async def execute(self, ctx: Context, ev: ExecutorActionEvent) -> ExecutorActionResultEvent:
         """Execute the action."""
-        logger.debug(f"⚡ Executing action: {ev.description}")
+        logger.info(f"⚡ Executing action: {ev.description}")
 
         if ev.actions:
             planned = ev.actions
@@ -306,7 +306,8 @@ class ExecutorAgent(Workflow):
                     "summary": result.summary,
                 }
             )
-            logger.debug(f"{'✅' if result.success else '❌'} Execution complete: {result.summary}")
+            # The GUI counts actions by matching "✅/❌ Execution complete:"; keep the wording.
+            logger.info(f"{'✅' if result.success else '❌'} Execution complete: {result.summary}")
 
             if not result.success or position == len(planned) - 1:
                 break

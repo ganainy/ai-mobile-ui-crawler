@@ -31,7 +31,7 @@ class TestLogViewerInit:
         assert log_viewer.level_filter is not None
         assert log_viewer.log_text is not None
         assert log_viewer.clear_button is not None
-        assert log_viewer.get_level_filter() == LogLevel.DEBUG
+        assert log_viewer.get_level_filter() == LogLevel.INFO
 
 
 class TestLevelFilter:
@@ -39,7 +39,7 @@ class TestLevelFilter:
 
     def test_default_level_is_debug(self, log_viewer):
         """Test that default level filter is DEBUG."""
-        assert log_viewer.get_level_filter() == LogLevel.DEBUG
+        assert log_viewer.get_level_filter() == LogLevel.INFO
 
     def test_level_filter_changes(self, log_viewer):
         """Test that level filter changes when dropdown changes."""
@@ -124,13 +124,14 @@ class TestLogDisplay:
 
         text = log_viewer.log_text.toPlainText()
         assert "[INFO] [MANAGER] Manager response:" in text
-        assert '{' in text
+        assert "{" in text
         assert '  "action": "tap",' in text
         assert '  "target": "Sign in"' in text
         assert text.count("[INFO]") == 1
 
     def test_stdout_and_stderr_are_classified_without_losing_content(self, log_viewer):
         """Test captured process streams get source badges and keep content."""
+        log_viewer.level_filter.setCurrentText("DEBUG")
         log_viewer.append_log(LogLevel.DEBUG, "[stdout] Step 1 started")
         log_viewer.append_log(LogLevel.DEBUG, "[stderr] retry timeout")
 

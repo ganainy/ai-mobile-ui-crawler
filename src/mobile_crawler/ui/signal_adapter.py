@@ -36,11 +36,11 @@ class QtSignalAdapter(QObject):
     error_occurred = Signal(int, int, object)  # run_id, step_number, error
     state_changed = Signal(int, str, str)  # run_id, old_state, new_state
     screen_processed = Signal(int, int, int, bool, int, int)  # run_id, step, screen_id, is_new, visit_count, total
-    debug_log = Signal(int, int, str)  # run_id, step_number, message
+    debug_log = Signal(int, int, str, str)  # run_id, step_number, message, level_name
 
     # Timing signals
     ocr_completed = Signal(int, int, float, int)  # run_id, step, duration_ms, element_count
-    screenshot_timing = Signal(int, int, float)   # run_id, step, duration_ms
+    screenshot_timing = Signal(int, int, float)  # run_id, step, duration_ms
     action_timing = Signal(int, int, str, bool, float)  # run_id, step, action_type, success, duration_ms
     omniparser_timing = Signal(int, int, float, int)  # run_id, step, duration_ms, element_count
 
@@ -58,7 +58,9 @@ class QtSignalAdapter(QObject):
     # Python logging bridge signal (level_name, formatted_message)
     python_log = Signal(str, str)  # level_name (e.g. "DEBUG"), message
 
-    def on_mobsf_finished(self, run_id: int, security_score: float, high_issues: int, medium_issues: int, low_issues: int) -> None:
+    def on_mobsf_finished(
+        self, run_id: int, security_score: float, high_issues: int, medium_issues: int, low_issues: int
+    ) -> None:
         """Called when MobSF static analysis completes."""
         self.mobsf_finished.emit(run_id, security_score, high_issues, medium_issues, low_issues)
 
@@ -95,12 +97,7 @@ class QtSignalAdapter(QObject):
         self.step_paused.emit(run_id, step_number)
 
     def on_crawl_completed(
-        self,
-        run_id: int,
-        total_steps: int,
-        total_duration_ms: float,
-        reason: str,
-        ocr_avg_ms: float = 0.0
+        self, run_id: int, total_steps: int, total_duration_ms: float, reason: str, ocr_avg_ms: float = 0.0
     ) -> None:
         """Called when a crawl completes."""
         self.crawl_completed.emit(run_id, total_steps, total_duration_ms, reason, ocr_avg_ms)
@@ -116,24 +113,16 @@ class QtSignalAdapter(QObject):
         self.state_changed.emit(run_id, old_state, new_state)
 
     def on_screen_processed(
-        self,
-        run_id: int,
-        step_number: int,
-        screen_id: int,
-        is_new: bool,
-        visit_count: int,
-        total_screens: int
+        self, run_id: int, step_number: int, screen_id: int, is_new: bool, visit_count: int, total_screens: int
     ) -> None:
         """Called when a screen is processed."""
         self.screen_processed.emit(run_id, step_number, screen_id, is_new, visit_count, total_screens)
 
-    def on_debug_log(self, run_id: int, step_number: int, message: str) -> None:
-        """Called when a debug log message should be displayed."""
-        self.debug_log.emit(run_id, step_number, message)
+    def on_debug_log(self, run_id: int, step_number: int, message: str, level: str = "INFO") -> None:
+        """Called when a log message should be displayed."""
+        self.debug_log.emit(run_id, step_number, message, level)
 
-    def on_ocr_completed(
-        self, run_id: int, step_number: int, duration_ms: float, element_count: int
-    ) -> None:
+    def on_ocr_completed(self, run_id: int, step_number: int, duration_ms: float, element_count: int) -> None:
         """Called after OCR grounding completes."""
         self.ocr_completed.emit(run_id, step_number, duration_ms, element_count)
 
@@ -147,9 +136,7 @@ class QtSignalAdapter(QObject):
         """Called after a tool/action execution completes, with its wall-clock duration."""
         self.action_timing.emit(run_id, step_number, action_type, success, duration_ms)
 
-    def on_omniparser_timing(
-        self, run_id: int, step_number: int, duration_ms: float, element_count: int
-    ) -> None:
+    def on_omniparser_timing(self, run_id: int, step_number: int, duration_ms: float, element_count: int) -> None:
         """Called after an OmniParser vision-parsing call completes for a step's state fetch."""
         self.omniparser_timing.emit(run_id, step_number, duration_ms, element_count)
 
@@ -165,6 +152,8 @@ class QtSignalAdapter(QObject):
         """Called when all recovery attempts are exhausted."""
         self.recovery_exhausted.emit(run_id, step_number, attempts, message)
 
-    def on_step_phase_transition(self, run_id: int, step_number: int, from_phase: str, to_phase: str, duration_ms: float) -> None:
+    def on_step_phase_transition(
+        self, run_id: int, step_number: int, from_phase: str, to_phase: str, duration_ms: float
+    ) -> None:
         """Called when a step phase transition occurs."""
         self.step_phase_transition.emit(run_id, step_number, from_phase, to_phase, duration_ms)

@@ -39,7 +39,7 @@ class ProviderRegistry:
         Returns:
             List of model dictionaries with 'id' and 'name' keys
         """
-        cache_key = 'gemini'
+        cache_key = "gemini"
         if cache_key in self._cache:
             return self._cache[cache_key]
 
@@ -55,49 +55,48 @@ class ProviderRegistry:
             for model in models:
                 model_id = model.name
                 # Strip models/ prefix if present
-                if model_id.startswith('models/'):
-                    model_id = model_id.replace('models/', '')
+                if model_id.startswith("models/"):
+                    model_id = model_id.replace("models/", "")
 
                 model_info = {
-                    'id': model_id,
-                    'name': model.display_name or model_id,
-                    'provider': 'google',
-                    'supports_vision': self._is_gemini_vision_model(model_id, model=model),
+                    "id": model_id,
+                    "name": model.display_name or model_id,
+                    "provider": "google",
+                    "supports_vision": self._is_gemini_vision_model(model_id, model=model),
                 }
                 # Store description and supported_actions if available
-                description = getattr(model, 'description', None)
-                supported_actions = getattr(model, 'supported_actions', None)
+                description = getattr(model, "description", None)
+                supported_actions = getattr(model, "supported_actions", None)
                 if description:
-                    model_info['description'] = description
+                    model_info["description"] = description
                 if supported_actions:
-                    model_info['supported_actions'] = supported_actions
+                    model_info["supported_actions"] = supported_actions
                 result.append(model_info)
                 found_ids.add(model_id)
 
             # Manually ensure Gemini 3 preview models are present if not returned
             gemini_3_models = [
-                {'id': 'gemini-3-pro-preview', 'name': 'Gemini 3 Pro (Preview)'},
-                {'id': 'gemini-3-flash-preview', 'name': 'Gemini 3 Flash (Preview)'},
+                {"id": "gemini-3-pro-preview", "name": "Gemini 3 Pro (Preview)"},
+                {"id": "gemini-3-flash-preview", "name": "Gemini 3 Flash (Preview)"},
             ]
 
             for g3 in gemini_3_models:
-                if g3['id'] not in found_ids:
+                if g3["id"] not in found_ids:
                     # Check if model supports vision (it does)
-                    if self._is_gemini_vision_model(g3['id']):
-                         result.append({
-                            'id': g3['id'],
-                            'name': g3['name'],
-                            'provider': 'google',
-                            'supports_vision': True
-                        })
+                    if self._is_gemini_vision_model(g3["id"]):
+                        result.append(
+                            {"id": g3["id"], "name": g3["name"], "provider": "google", "supports_vision": True}
+                        )
 
             self._cache[cache_key] = result
             self._save_persistent_cache()
             return result
 
         except Exception as e:
-            logger.error(f"Failed to fetch Gemini models: {e}")
-            raise RuntimeError(f"Failed to fetch Gemini models from API. Please check your API key and internet connection: {e}") from e
+            logger.warning(f"Failed to fetch Gemini models: {e}")
+            raise RuntimeError(
+                f"Failed to fetch Gemini models from API. Please check your API key and internet connection: {e}"
+            ) from e
 
     def fetch_openrouter_models(self, api_key: str) -> list[dict[str, Any]]:
         """Fetch available OpenRouter models.
@@ -108,50 +107,48 @@ class ProviderRegistry:
         Returns:
             List of model dictionaries with 'id', 'name', and 'supports_vision' keys
         """
-        cache_key = 'openrouter'
+        cache_key = "openrouter"
         if cache_key in self._cache:
             return self._cache[cache_key]
 
         try:
             response = requests.get(
-                'https://openrouter.ai/api/v1/models',
-                headers={'Authorization': f'Bearer {api_key}'},
-                timeout=10
+                "https://openrouter.ai/api/v1/models", headers={"Authorization": f"Bearer {api_key}"}, timeout=10
             )
             response.raise_for_status()
 
             data = response.json()
             result = []
 
-            for model in data.get('data', []):
-                architecture = model.get('architecture', {})
-                input_modalities = architecture.get('input_modalities', []) if isinstance(architecture, dict) else []
-                pricing_raw = model.get('pricing', {})
+            for model in data.get("data", []):
+                architecture = model.get("architecture", {})
+                input_modalities = architecture.get("input_modalities", []) if isinstance(architecture, dict) else []
+                pricing_raw = model.get("pricing", {})
                 pricing = {}
                 if isinstance(pricing_raw, dict):
                     try:
-                        prompt_price = float(pricing_raw.get('prompt', 0))
-                        completion_price = float(pricing_raw.get('completion', 0))
-                        image_price = float(pricing_raw.get('image', 0))
+                        prompt_price = float(pricing_raw.get("prompt", 0))
+                        completion_price = float(pricing_raw.get("completion", 0))
+                        image_price = float(pricing_raw.get("image", 0))
                         pricing = {
-                            'prompt_per_1M': f"{prompt_price * 1_000_000:.4f}",
-                            'completion_per_1M': f"{completion_price * 1_000_000:.4f}",
-                            'image_per_1M': f"{image_price * 1_000_000:.4f}",
+                            "prompt_per_1M": f"{prompt_price * 1_000_000:.4f}",
+                            "completion_per_1M": f"{completion_price * 1_000_000:.4f}",
+                            "image_per_1M": f"{image_price * 1_000_000:.4f}",
                         }
                     except (ValueError, TypeError):
                         pricing = {
-                            'prompt_per_1M': 'N/A',
-                            'completion_per_1M': 'N/A',
-                            'image_per_1M': 'N/A',
+                            "prompt_per_1M": "N/A",
+                            "completion_per_1M": "N/A",
+                            "image_per_1M": "N/A",
                         }
 
                 model_info = {
-                    'id': model['id'],
-                    'name': model['name'],
-                    'provider': 'openrouter',
-                    'supports_vision': self._is_openrouter_vision_model(model),
-                    'input_modalities': input_modalities,
-                    'pricing': pricing,
+                    "id": model["id"],
+                    "name": model["name"],
+                    "provider": "openrouter",
+                    "supports_vision": self._is_openrouter_vision_model(model),
+                    "input_modalities": input_modalities,
+                    "pricing": pricing,
                 }
                 result.append(model_info)
 
@@ -160,16 +157,44 @@ class ProviderRegistry:
             return result
 
         except Exception as e:
-            logger.error(f"Failed to fetch OpenRouter models: {e}")
+            logger.warning(f"Failed to fetch OpenRouter models: {e}")
             # Return fallback list with known vision models
             return [
-                {'id': 'anthropic/claude-3.5-sonnet', 'name': 'Claude 3.5 Sonnet', 'provider': 'openrouter', 'supports_vision': True, 'input_modalities': ['text', 'image'], 'pricing': {'prompt_per_1M': '3.0000', 'completion_per_1M': '15.0000', 'image_per_1M': '3.0000'}},
-                {'id': 'anthropic/claude-3-opus', 'name': 'Claude 3 Opus', 'provider': 'openrouter', 'supports_vision': True, 'input_modalities': ['text', 'image'], 'pricing': {'prompt_per_1M': '15.0000', 'completion_per_1M': '75.0000', 'image_per_1M': '15.0000'}},
-                {'id': 'anthropic/claude-3-haiku', 'name': 'Claude 3 Haiku', 'provider': 'openrouter', 'supports_vision': True, 'input_modalities': ['text', 'image'], 'pricing': {'prompt_per_1M': '0.2500', 'completion_per_1M': '1.2500', 'image_per_1M': '0.2500'}},
-                {'id': 'google/gemini-pro-1.5', 'name': 'Gemini Pro 1.5', 'provider': 'openrouter', 'supports_vision': True, 'input_modalities': ['text', 'image'], 'pricing': {'prompt_per_1M': '1.2500', 'completion_per_1M': '5.0000', 'image_per_1M': '1.2500'}},
+                {
+                    "id": "anthropic/claude-3.5-sonnet",
+                    "name": "Claude 3.5 Sonnet",
+                    "provider": "openrouter",
+                    "supports_vision": True,
+                    "input_modalities": ["text", "image"],
+                    "pricing": {"prompt_per_1M": "3.0000", "completion_per_1M": "15.0000", "image_per_1M": "3.0000"},
+                },
+                {
+                    "id": "anthropic/claude-3-opus",
+                    "name": "Claude 3 Opus",
+                    "provider": "openrouter",
+                    "supports_vision": True,
+                    "input_modalities": ["text", "image"],
+                    "pricing": {"prompt_per_1M": "15.0000", "completion_per_1M": "75.0000", "image_per_1M": "15.0000"},
+                },
+                {
+                    "id": "anthropic/claude-3-haiku",
+                    "name": "Claude 3 Haiku",
+                    "provider": "openrouter",
+                    "supports_vision": True,
+                    "input_modalities": ["text", "image"],
+                    "pricing": {"prompt_per_1M": "0.2500", "completion_per_1M": "1.2500", "image_per_1M": "0.2500"},
+                },
+                {
+                    "id": "google/gemini-pro-1.5",
+                    "name": "Gemini Pro 1.5",
+                    "provider": "openrouter",
+                    "supports_vision": True,
+                    "input_modalities": ["text", "image"],
+                    "pricing": {"prompt_per_1M": "1.2500", "completion_per_1M": "5.0000", "image_per_1M": "1.2500"},
+                },
             ]
 
-    def fetch_ollama_models(self, base_url: str = 'http://localhost:11434') -> list[dict[str, Any]]:
+    def fetch_ollama_models(self, base_url: str = "http://localhost:11434") -> list[dict[str, Any]]:
         """Fetch available Ollama models.
 
         Args:
@@ -178,24 +203,24 @@ class ProviderRegistry:
         Returns:
             List of model dictionaries with 'id', 'name', and 'supports_vision' keys
         """
-        cache_key = f'ollama_{base_url}'
+        cache_key = f"ollama_{base_url}"
         if cache_key in self._cache:
             return self._cache[cache_key]
 
         try:
-            response = requests.get(f'{base_url}/api/tags', timeout=5)
+            response = requests.get(f"{base_url}/api/tags", timeout=5)
             response.raise_for_status()
 
             data = response.json()
             result = []
 
-            for model in data.get('models', []):
-                model_name = model['name']
+            for model in data.get("models", []):
+                model_name = model["name"]
                 model_info = {
-                    'id': model_name,
-                    'name': model_name,
-                    'provider': 'ollama',
-                    'supports_vision': self._is_ollama_vision_model(model)
+                    "id": model_name,
+                    "name": model_name,
+                    "provider": "ollama",
+                    "supports_vision": self._is_ollama_vision_model(model),
                 }
                 result.append(model_info)
 
@@ -204,7 +229,7 @@ class ProviderRegistry:
             return result
 
         except Exception as e:
-            logger.error(f"Failed to fetch Ollama models: {e}")
+            logger.warning(f"Failed to fetch Ollama models: {e}")
             # Return empty list - no reliable fallback for local models
             return []
 
@@ -228,14 +253,14 @@ class ProviderRegistry:
         # Step 0: Exclude models that are clearly not vision-capable based on name
         # (These are never vision models regardless of other signals)
         always_text_only_patterns = [
-            'text-',
-            'embedding',
-            'aqa',
-            'tuning',
-            'imagen',   # Image generation, not understanding
-            'veo',      # Video generation
-            'lyria',    # Audio generation
-            'gemma',    # Text-only open models (small variants)
+            "text-",
+            "embedding",
+            "aqa",
+            "tuning",
+            "imagen",  # Image generation, not understanding
+            "veo",  # Video generation
+            "lyria",  # Audio generation
+            "gemma",  # Text-only open models (small variants)
         ]
         if any(pattern in model_lower for pattern in always_text_only_patterns):
             return False
@@ -245,31 +270,31 @@ class ProviderRegistry:
         # This filters out embedding-only models (embedContent),
         # video generation (predictLongRunning), and image generation (predict).
         if model is not None:
-            supported_actions = getattr(model, 'supported_actions', None) or []
-            if isinstance(supported_actions, (list, tuple)) and len(supported_actions) > 0:
-                if 'generateContent' not in supported_actions:
+            supported_actions = getattr(model, "supported_actions", None) or []
+            if isinstance(supported_actions, list | tuple) and len(supported_actions) > 0:
+                if "generateContent" not in supported_actions:
                     return False
 
                 # Exclude TTS (text-to-speech) models - they have generateContent
                 # but are for audio generation, not visual analysis
-                if 'bidiGenerateContent' in supported_actions and 'createCachedContent' not in supported_actions:
+                if "bidiGenerateContent" in supported_actions and "createCachedContent" not in supported_actions:
                     return False
 
         # Step 2: Use description-based detection when available
         # The description field sometimes contains "multimodal", "image",
         # "vision", or "video" keywords that confirm vision capability.
         if model is not None:
-            description = getattr(model, 'description', None)
+            description = getattr(model, "description", None)
             if description and isinstance(description, str) and len(description.strip()) > 0:
                 desc_lower = description.lower()
 
                 # Check for text-only signals in description
-                text_only_desc_keywords = ['text-only', 'language model only', 'text generation only']
+                text_only_desc_keywords = ["text-only", "language model only", "text generation only"]
                 if any(kw in desc_lower for kw in text_only_desc_keywords):
                     return False
 
                 # Check for vision-capable signals in description
-                vision_desc_keywords = ['multimodal', 'image', 'vision', 'video']
+                vision_desc_keywords = ["multimodal", "image", "vision", "video"]
                 if any(kw in desc_lower for kw in vision_desc_keywords):
                     return True
 
@@ -278,19 +303,19 @@ class ProviderRegistry:
         # so we fall back to the model ID naming convention.
         #
         # Exclude TTS/audio models by name (these have generateContent but aren't for vision)
-        tts_audio_patterns = ['-tts', '-native-audio', '-live']
+        tts_audio_patterns = ["-tts", "-native-audio", "-live"]
         if any(pattern in model_lower for pattern in tts_audio_patterns):
             return False
 
         # Core Gemini models (1.x, 2.x, 3.x generations) all support vision
         vision_patterns = [
-            'gemini-1.',
-            'gemini-2.',
-            'gemini-3',     # Matches gemini-3-pro-preview, gemini-3-flash-preview
-            'gemini-pro',   # Matches gemini-pro, gemini-pro-vision
-            'gemini-flash',
-            'gemini-ultra',
-            'gemini-exp',
+            "gemini-1.",
+            "gemini-2.",
+            "gemini-3",  # Matches gemini-3-pro-preview, gemini-3-flash-preview
+            "gemini-pro",  # Matches gemini-pro, gemini-pro-vision
+            "gemini-flash",
+            "gemini-ultra",
+            "gemini-exp",
         ]
         return any(pattern in model_lower for pattern in vision_patterns)
 
@@ -303,24 +328,24 @@ class ProviderRegistry:
         Returns:
             True if model supports image input
         """
-        architecture = model.get('architecture', {})
+        architecture = model.get("architecture", {})
         if isinstance(architecture, dict):
-            input_modalities = architecture.get('input_modalities', [])
-            if isinstance(input_modalities, list) and 'image' in input_modalities:
+            input_modalities = architecture.get("input_modalities", [])
+            if isinstance(input_modalities, list) and "image" in input_modalities:
                 return True
 
         # Fallback: check for vision-related keywords in model ID or name
-        model_id = model.get('id', '').lower()
-        model_name = model.get('name', '').lower()
+        model_id = model.get("id", "").lower()
+        model_name = model.get("name", "").lower()
 
         vision_keywords = [
-            'claude-3',
-            'gpt-4-vision',
-            'gpt-4o',
-            'gemini',
-            'llava',
-            'vision',
-            'multimodal',
+            "claude-3",
+            "gpt-4-vision",
+            "gpt-4o",
+            "gemini",
+            "llava",
+            "vision",
+            "multimodal",
         ]
 
         if any(keyword in model_id or keyword in model_name for keyword in vision_keywords):
@@ -328,9 +353,9 @@ class ProviderRegistry:
 
         # Check legacy modals/modalities fields
         if isinstance(architecture, dict):
-            modalities = architecture.get('modals', architecture.get('modalities', []))
+            modalities = architecture.get("modals", architecture.get("modalities", []))
             if isinstance(modalities, list):
-                return 'text+image' in modalities or 'image' in modalities
+                return "text+image" in modalities or "image" in modalities
 
         return False
 
@@ -343,16 +368,16 @@ class ProviderRegistry:
         Returns:
             True if model supports vision
         """
-        model_name = model.get('name', '').lower()
-        details = model.get('details', {})
+        model_name = model.get("name", "").lower()
+        details = model.get("details", {})
 
         # Check for vision-related keywords in model name
         vision_keywords = [
-            'llava',
-            'clip',
-            'vision',
-            'projector',
-            'multimodal',
+            "llava",
+            "clip",
+            "vision",
+            "projector",
+            "multimodal",
         ]
 
         # Check model name
@@ -361,7 +386,7 @@ class ProviderRegistry:
 
         # Check details for projector or clip
         if isinstance(details, dict):
-            if 'projector_type' in details or 'clip' in str(details).lower():
+            if "projector_type" in details or "clip" in str(details).lower():
                 return True
 
         return False
@@ -381,7 +406,7 @@ class ProviderRegistry:
         if self._config_store:
             try:
                 self._config_store.delete_setting("model_cache")
-                logger.info("Cleared persistent model cache")
+                logger.debug("Cleared persistent model cache")
             except Exception as e:
                 logger.warning(f"Failed to clear persistent cache: {e}")
 
@@ -409,7 +434,7 @@ class ProviderRegistry:
             # Check if cache is expired
             cache_age = datetime.now(UTC) - cached_at
             if cache_age > timedelta(days=CACHE_EXPIRATION_DAYS):
-                logger.info(f"Model cache expired ({cache_age.days} days old), ignoring")
+                logger.debug(f"Model cache expired ({cache_age.days} days old), ignoring")
                 return
 
             # Load cached models into memory
@@ -417,7 +442,7 @@ class ProviderRegistry:
             for provider, models in models_by_provider.items():
                 if models:  # Only cache non-empty lists
                     self._cache[provider] = models
-                    logger.info(f"Loaded {len(models)} cached models for {provider}")
+                    logger.debug(f"Loaded {len(models)} cached models for {provider}")
 
         except Exception as e:
             logger.warning(f"Failed to load persistent cache: {e}")
@@ -428,10 +453,7 @@ class ProviderRegistry:
             return
 
         try:
-            cache_data = {
-                "cached_at": datetime.now(UTC).isoformat(),
-                "models": self._cache
-            }
+            cache_data = {"cached_at": datetime.now(UTC).isoformat(), "models": self._cache}
             self._config_store.set_setting("model_cache", cache_data, "json")
             logger.debug(f"Saved {len(self._cache)} provider caches to persistent storage")
         except Exception as e:
