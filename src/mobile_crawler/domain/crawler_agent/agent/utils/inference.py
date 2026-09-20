@@ -56,7 +56,7 @@ async def acall_with_retries(
                 and getattr(response.message, "content", None)
             ):
                 if not stream:
-                    logger.info(f"{response.message.content}")
+                    logger.debug(f"{response.message.content}")
                 return response
             else:
                 logger.warning(f"Attempt {attempt} returned empty content")
@@ -98,10 +98,10 @@ async def _stream_response(llm, messages: list, timeout: float) -> ChatResponse:
         async for chunk in await llm.astream_chat(messages=messages):
             delta = chunk.delta or ""
             if delta:
-                logger.info(delta, extra={"stream": True})
+                logger.debug(delta, extra={"stream": True})
             content += delta
             last_chunk = chunk
-        logger.info("", extra={"stream_end": True})
+        logger.debug("", extra={"stream_end": True})
 
     await asyncio.wait_for(stream_chunks(), timeout=timeout)
 
@@ -109,11 +109,7 @@ async def _stream_response(llm, messages: list, timeout: float) -> ChatResponse:
     # Use last_chunk.message to preserve all blocks (ThinkingBlock, etc.)
     # that providers accumulate during streaming
     response = ChatResponse(
-        message=(
-            last_chunk.message
-            if last_chunk
-            else ChatMessage(role="assistant", content=content)
-        ),
+        message=(last_chunk.message if last_chunk else ChatMessage(role="assistant", content=content)),
         raw=last_chunk.raw if last_chunk else None,
         additional_kwargs=last_chunk.additional_kwargs if last_chunk else {},
     )
@@ -158,7 +154,7 @@ async def acomplete_with_retries(
             # Validate response
             if response is not None and getattr(response, "text", None):
                 if not stream:
-                    logger.info(f"{response.text}")
+                    logger.debug(f"{response.text}")
                 return response
             else:
                 logger.warning(f"Attempt {attempt} returned empty content")
@@ -180,9 +176,7 @@ async def acomplete_with_retries(
     raise ValueError("All attempts returned empty response content")
 
 
-async def _stream_complete_response(
-    llm, prompt: str, timeout: float
-) -> CompletionResponse:
+async def _stream_complete_response(llm, prompt: str, timeout: float) -> CompletionResponse:
     """
     Stream LLM completion response chunks to console and return accumulated response.
 
@@ -202,10 +196,10 @@ async def _stream_complete_response(
         async for chunk in await llm.astream_complete(prompt):
             delta = chunk.delta or ""
             if delta:
-                logger.info(delta, extra={"stream": True})
+                logger.debug(delta, extra={"stream": True})
             content += delta
             last_chunk = chunk
-        logger.info("", extra={"stream_end": True})
+        logger.debug("", extra={"stream_end": True})
 
     await asyncio.wait_for(stream_chunks(), timeout=timeout)
 
@@ -219,7 +213,7 @@ async def _stream_complete_response(
     return response
 
 
-async def astructured_predict_with_retries[T: BaseModel](
+async def astructured_predict_with_retries(
     llm,
     output_cls: type[T],
     prompt: PromptTemplate,
@@ -254,7 +248,7 @@ async def astructured_predict_with_retries[T: BaseModel](
 
             # Validate response
             if result is not None:
-                logger.info(f"{result}")
+                logger.debug(f"{result}")
                 return result
             else:
                 logger.warning(f"Attempt {attempt} returned None")
