@@ -215,6 +215,28 @@ async def test_state_records_a_timing_breakdown_per_capture_phase(android_state_
 
 
 @pytest.mark.asyncio
+async def test_identical_screenshot_reuses_the_previous_omniparser_parse(android_state_provider):
+    provider, driver = android_state_provider
+    del provider._get_omni_parser_elements  # use the real method, mock the client instead
+    provider._omni_initialized = True
+    provider._omni_client = Mock()
+    provider._omni_client.parse.return_value = [{"type": "text", "content": "ok", "bbox": [0, 0, 1, 1]}]
+    mock_adb = Mock()
+    mock_adb.get_current_package.return_value = "com.example.app"
+
+    with patch("mobile_crawler.domain.adb_action_executor.ADBActionExecutor", return_value=mock_adb):
+        first = await provider.get_state()
+        second = await provider.get_state()
+        driver.screenshot.return_value = b"a-different-screen"
+        third = await provider.get_state()
+
+    assert provider._omni_client.parse.call_count == 2  # first + changed screen; second reused
+    assert first.omniparser_ms is not None
+    assert second.omniparser_ms is None
+    assert third.omniparser_ms is not None
+
+
+@pytest.mark.asyncio
 async def test_state_provider_relaunches_after_browser_grace_exhausted(android_state_provider):
     provider, _ = android_state_provider
     provider.external_grace_captures = 2

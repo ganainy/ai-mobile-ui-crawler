@@ -7,6 +7,8 @@ and produces a ``UIState`` snapshot.
 from __future__ import annotations
 
 import asyncio
+import copy
+import hashlib
 import inspect
 import logging
 import time
@@ -204,6 +206,11 @@ class AndroidStateProvider(StateProvider):
         self._omni_client = None
         self._omni_initialized = False
         self._last_omniparser_ms: float | None = None
+        # Last successful parse, keyed by a digest of the exact screenshot bytes.
+        # An identical screenshot (same pixels after the bar crops) yields the
+        # same elements, so the parse is skipped instead of repeated.
+        self._last_parse_digest: str | None = None
+        self._last_parse_elements: list[dict[str, Any]] | None = None
 
     async def get_state(self) -> UIState:
         state_started = time.perf_counter()
@@ -461,10 +468,18 @@ class AndroidStateProvider(StateProvider):
         if screenshot_bytes is None:
             screenshot_bytes = await self.driver.screenshot()
 
+        digest = hashlib.sha256(screenshot_bytes).hexdigest()
+        if digest == self._last_parse_digest and self._last_parse_elements is not None:
+            logger.info("OmniParser parse call '%s' skipped: screenshot unchanged since last parse", caller_label)
+            return copy.deepcopy(self._last_parse_elements)
+
         # Parse with OmniParser
         parse_started = time.perf_counter()
         try:
-            return self._omni_client.parse(screenshot_bytes)
+            elements = self._omni_client.parse(screenshot_bytes)
+            self._last_parse_digest = digest
+            self._last_parse_elements = copy.deepcopy(elements)
+            return elements
         finally:
             self._last_omniparser_ms = (time.perf_counter() - parse_started) * 1000
             logger.info(
