@@ -10,6 +10,7 @@ Source: `src/mobile_crawler/domain/crawler_agent/tools/ui/a11y_completeness.py`
 
 ## Functions
 - `count_nodes`
+- `evaluate`
 
 ## Imported by
 - [[code/domain/crawler_agent/tools/ui/provider|domain.crawler_agent.tools.ui.provider]]

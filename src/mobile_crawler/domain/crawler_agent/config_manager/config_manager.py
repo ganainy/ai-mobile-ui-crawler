@@ -204,6 +204,8 @@ class CrawlerConfig:
     omniparser_local_parse_timeout_seconds: int = 120
     omniparser_box_threshold: float = 0.05
     omniparser_a11y_threshold: int = 5
+    # Boost-mode "a11y looks incomplete" checks; keys as in a11y_completeness.DEFAULT_OPTIONS.
+    a11y_checks: dict[str, Any] = field(default_factory=dict)
     target_package: str | None = None
     # Status Bar Exclusion / Bottom Bar Exclusion: pixels cropped from the
     # top/bottom of every screenshot at capture time, before hashing/AI
@@ -338,6 +340,7 @@ class CrawlerConfig:
             omniparser_local_parse_timeout_seconds=data.get("omniparser_local_parse_timeout_seconds", 120),
             omniparser_box_threshold=data.get("omniparser_box_threshold", 0.05),
             omniparser_a11y_threshold=data.get("omniparser_a11y_threshold", 5),
+            a11y_checks=data.get("a11y_checks", {}),
             target_package=data.get("target_package"),
             status_bar_exclusion_px=data.get("status_bar_exclusion_px", 80),
             bottom_bar_exclusion_px=data.get("bottom_bar_exclusion_px", 0),

@@ -16,7 +16,7 @@ from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
 from mobile_crawler.domain.crawler_agent.tools.driver.base import DeviceDisconnectedError
-from mobile_crawler.domain.crawler_agent.tools.ui.a11y_completeness import count_nodes
+from mobile_crawler.domain.crawler_agent.tools.ui.a11y_completeness import count_nodes, evaluate
 from mobile_crawler.domain.crawler_agent.tools.ui.state import UIState
 from mobile_crawler.domain.crawler_agent.tools.ui.stealth_state import StealthUIState
 
@@ -171,6 +171,7 @@ class AndroidStateProvider(StateProvider):
         omniparser_local_parse_timeout_seconds: int | float = 120,
         omniparser_box_threshold: float = 0.05,
         omniparser_a11y_threshold: int = 5,
+        a11y_checks: dict | None = None,
         target_package: str | None = None,
         target_recovery_attempts: int = 3,
         external_grace_captures: int = 40,
@@ -191,6 +192,7 @@ class AndroidStateProvider(StateProvider):
         self.omniparser_local_parse_timeout_seconds = omniparser_local_parse_timeout_seconds
         self.omniparser_box_threshold = omniparser_box_threshold
         self.omniparser_a11y_threshold = omniparser_a11y_threshold
+        self.a11y_checks = a11y_checks
         self.target_package = target_package
         self.target_recovery_attempts = target_recovery_attempts
         self.external_grace_captures = external_grace_captures
@@ -282,11 +284,21 @@ class AndroidStateProvider(StateProvider):
             # No fallback - if OmniParser fails, let it propagate
 
         else:  # "boost" mode
-            # Use a11y if available, otherwise OmniParser
-            if a11y_tree and count_nodes(a11y_tree) >= self.omniparser_a11y_threshold:
+            # Use a11y when it looks complete, otherwise OmniParser
+            incomplete = evaluate(
+                a11y_tree,
+                device_context,
+                min_nodes=self.omniparser_a11y_threshold,
+                options=self.a11y_checks,
+            )
+            if not incomplete:
                 filtered = self.tree_filter.filter(a11y_tree, device_context)
             else:
-                # A11y sparse - try OmniParser
+                logger.info(
+                    "a11y tree incomplete (%s)%s -> running OmniParser",
+                    ", ".join(incomplete),
+                    f" [{a11y_error}]" if a11y_error else "",
+                )
                 try:
                     omni_tree = await self._get_omni_parser_elements(
                         screenshot_bytes,

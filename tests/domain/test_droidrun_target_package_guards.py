@@ -254,6 +254,51 @@ async def test_accessibility_mode_without_a_tree_reports_why_instead_of_returnin
             await provider.get_state()
 
 
+def _rows(count, *, clickable):
+    height = 2400 // count
+    return [
+        {
+            "className": "android.widget.TextView",
+            "text": "row",
+            "isClickable": clickable,
+            "boundsInScreen": {"left": 0, "top": i * height, "right": 1080, "bottom": (i + 1) * height},
+            "children": [],
+        }
+        for i in range(count)
+    ]
+
+
+async def _boost_state(provider, driver, rows):
+    provider.ui_parser_mode = "boost"
+    driver.get_ui_tree.return_value = {
+        "a11y_tree": {"className": "FrameLayout", "children": rows},
+        "phone_state": {},
+        "device_context": {"screen_bounds": {"width": 1080, "height": 2400}},
+    }
+    mock_adb = Mock()
+    mock_adb.get_current_package.return_value = "com.example.app"
+    with patch("mobile_crawler.domain.adb_action_executor.ADBActionExecutor", return_value=mock_adb):
+        return await provider.get_state()
+
+
+@pytest.mark.asyncio
+async def test_boost_trusts_a_complete_a11y_tree_and_skips_omniparser(android_state_provider):
+    provider, driver = android_state_provider
+    state = await _boost_state(provider, driver, _rows(6, clickable=True))
+
+    provider._get_omni_parser_elements.assert_not_awaited()
+    assert state.omni_source == "a11y"
+
+
+@pytest.mark.asyncio
+async def test_boost_runs_omniparser_when_a11y_has_text_but_nothing_clickable(android_state_provider):
+    provider, driver = android_state_provider
+    state = await _boost_state(provider, driver, _rows(6, clickable=False))
+
+    provider._get_omni_parser_elements.assert_awaited_once()
+    assert state.omni_source == "omni"
+
+
 @pytest.mark.asyncio
 async def test_state_provider_relaunches_after_browser_grace_exhausted(android_state_provider):
     provider, _ = android_state_provider
