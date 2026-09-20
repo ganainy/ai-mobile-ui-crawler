@@ -398,3 +398,42 @@ async def test_open_app_human_name_uses_app_starter():
     ctx.driver.start_app.assert_not_called()
     mock_app_starter.assert_called_once()
     workflow.run.assert_awaited_once_with(app_description="Gmail")
+
+
+def _capture_line(caplog):
+    lines = [r.getMessage() for r in caplog.records if r.levelname == "INFO" and "State capture" in r.getMessage()]
+    assert len(lines) == 1
+    return lines[0]
+
+
+@pytest.mark.asyncio
+async def test_capture_info_line_reports_a11y_time_and_skipped_omniparser(android_state_provider, caplog):
+    provider, driver = android_state_provider
+    with caplog.at_level("INFO"):
+        await _boost_state(provider, driver, _rows(6, clickable=True))
+
+    line = _capture_line(caplog)
+    assert "a11y ok " in line and "used=yes" in line
+    assert "omniparser skipped" in line
+
+
+@pytest.mark.asyncio
+async def test_capture_info_line_reports_omniparser_success(android_state_provider, caplog):
+    provider, driver = android_state_provider
+    provider._get_omni_parser_elements.return_value = [{"type": "text", "content": "ok", "bbox": [0, 0, 1, 1]}]
+    with caplog.at_level("INFO"):
+        await _boost_state(provider, driver, _rows(6, clickable=False))
+
+    line = _capture_line(caplog)
+    assert "used=no" in line
+    assert "omniparser ok " in line
+
+
+@pytest.mark.asyncio
+async def test_capture_info_line_reports_omniparser_failure(android_state_provider, caplog):
+    provider, driver = android_state_provider
+    provider._get_omni_parser_elements.side_effect = RuntimeError("replicate down")
+    with caplog.at_level("INFO"):
+        await _boost_state(provider, driver, _rows(6, clickable=False))
+
+    assert "omniparser failed (replicate down)" in _capture_line(caplog)

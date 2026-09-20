@@ -267,6 +267,8 @@ class FastAgent(Workflow):
             self.shared_state.focused_text = ui_state.focused_text
             self.shared_state.a11y_tree = ui_state.elements
             self.shared_state.omniparser_ms = getattr(ui_state, "omniparser_ms", None)
+            self.shared_state.a11y_ms = getattr(ui_state, "a11y_ms", None)
+            self.shared_state.a11y_used = getattr(ui_state, "a11y_used", None)
             self.shared_state.phone_state = ui_state.phone_state
 
             # Extract and store package/app name
@@ -381,6 +383,8 @@ class FastAgent(Workflow):
             vision_enabled=self.vision,
             elements=self.shared_state.a11y_tree,
             omniparser_ms=self.shared_state.omniparser_ms,
+            a11y_ms=self.shared_state.a11y_ms,
+            a11y_used=self.shared_state.a11y_used,
         )
         ctx.write_event_to_stream(event)
         return event

@@ -35,6 +35,8 @@ class CrawlerAgentState(BaseModel):
     focused_text: str = ""  # Text in focused input field
     a11y_tree: list[dict] = Field(default_factory=list)  # Raw accessibility tree
     omniparser_ms: float | None = None  # OmniParser call duration, when it ran this step
+    a11y_ms: float | None = None  # Portal a11y tree fetch duration this step
+    a11y_used: bool | None = None  # True when the a11y tree (not OmniParser) supplied the elements
     phone_state: dict = Field(default_factory=dict)  # Package, activity, etc.
     screenshot: str | bytes | None = None  # Current screenshot
     width: int = 0

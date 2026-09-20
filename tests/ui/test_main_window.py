@@ -42,6 +42,7 @@ class _FakeSignalAdapter:
         self.step_phase_transition = _Connectable()
         self.action_timing = _Connectable()
         self.omniparser_timing = _Connectable()
+        self.a11y_timing = _Connectable()
         self.mobsf_finished = _Connectable()
 
 

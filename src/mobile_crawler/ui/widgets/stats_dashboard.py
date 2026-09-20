@@ -500,6 +500,21 @@ class StatsDashboard(QWidget):
         grid.addWidget(self.omniparser_avg_label, row, 0, 1, 2)
         row += 1
 
+        self.a11y_avg_label = _make_stat_label(
+            "Avg A11y: —",
+            "Average time to fetch the accessibility tree from Portal.",
+        )
+        grid.addWidget(self.a11y_avg_label, row, 0, 1, 2)
+        row += 1
+
+        self.a11y_used_label = _make_stat_label(
+            "A11y used: —",
+            "Steps where the accessibility tree supplied the elements, out of steps where it was fetched. "
+            "The rest fell back to OmniParser (boost) or ignored it (omniparser mode).",
+        )
+        grid.addWidget(self.a11y_used_label, row, 0, 1, 2)
+        row += 1
+
         grid.addWidget(_make_separator(), row, 0, 1, 2)
         row += 1
 
@@ -559,6 +574,9 @@ class StatsDashboard(QWidget):
         action_avg_ms: float = 0.0,
         screenshot_avg_ms: float = 0.0,
         omniparser_avg_ms: float = 0.0,
+        a11y_avg_ms: float = 0.0,
+        a11y_used_steps: int = 0,
+        a11y_fetch_steps: int = 0,
         last_action: str = "",
         step_progress: str = "",
         success_rate: float = 0.0,
@@ -650,6 +668,16 @@ class StatsDashboard(QWidget):
         else:
             self.omniparser_avg_label.setText("Avg OmniParser: —")
 
+        if a11y_avg_ms > 0:
+            self.a11y_avg_label.setText(f"Avg A11y: {a11y_avg_ms:.0f} ms")
+        else:
+            self.a11y_avg_label.setText("Avg A11y: —")
+
+        if a11y_fetch_steps > 0:
+            self.a11y_used_label.setText(f"A11y used: {a11y_used_steps}/{a11y_fetch_steps} steps")
+        else:
+            self.a11y_used_label.setText("A11y used: —")
+
         # ── Tool Metrics ─────────────────────────────────────
         if tool_calls_per_step > 0:
             self.tool_calls_per_step_label.setText(f"Calls/Step: {tool_calls_per_step:.1f}")
@@ -676,6 +704,8 @@ class StatsDashboard(QWidget):
         self.action_avg_label.setText("Avg Action: —")
         self.screenshot_avg_label.setText("Avg Screenshot: —")
         self.omniparser_avg_label.setText("Avg OmniParser: —")
+        self.a11y_avg_label.setText("Avg A11y: —")
+        self.a11y_used_label.setText("A11y used: —")
         self.update_stats(total_steps=0, successful_steps=0, failed_steps=0, duration_seconds=0.0)
 
     def update_screenshot(

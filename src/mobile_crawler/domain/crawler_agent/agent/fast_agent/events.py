@@ -47,6 +47,11 @@ class FastAgentResponseEvent(Event):
     # actually ran (a11y fallback / omniparser-only mode); None otherwise.
     omniparser_ms: float | None = None
 
+    # Portal a11y fetch duration for this step, and whether the a11y tree was
+    # the element source (False when OmniParser replaced it).
+    a11y_ms: float | None = None
+    a11y_used: bool | None = None
+
 
 class FastAgentToolCallEvent(Event):
     """Tool calls ready to execute."""

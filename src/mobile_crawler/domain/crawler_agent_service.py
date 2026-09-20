@@ -1196,6 +1196,8 @@ class CrawlerAgentService:
         loop_detected = False
         retry_count = 0
         omniparser_ms = None
+        a11y_ms = None
+        a11y_used = None
 
         if isinstance(event, ManagerResponseEvent):
             call_type = "manager"
@@ -1213,6 +1215,8 @@ class CrawlerAgentService:
             retry_count = len(getattr(event, "validation_retries", None) or [])
             loop_detected = getattr(event, "loop_detected", False)
             omniparser_ms = getattr(event, "omniparser_ms", None)
+            a11y_ms = getattr(event, "a11y_ms", None)
+            a11y_used = getattr(event, "a11y_used", None)
         elif isinstance(event, ExecutorResponseEvent):
             call_type = "executor"
             screenshot_bytes = getattr(event, "screenshot", None)
@@ -1249,6 +1253,8 @@ class CrawlerAgentService:
             elements = getattr(event, "elements", None)
             retry_count = len(getattr(event, "validation_retries", None) or [])
             omniparser_ms = getattr(event, "omniparser_ms", None)
+            a11y_ms = getattr(event, "a11y_ms", None)
+            a11y_used = getattr(event, "a11y_used", None)
         elif isinstance(event, AppOpenerResponseEvent):
             call_type = "app_opener"
             prompt_text = event.prompt
@@ -1331,6 +1337,14 @@ class CrawlerAgentService:
                         step_number,
                         omniparser_ms,
                         len(elements) if elements else 0,
+                    )
+                if a11y_ms is not None:
+                    self._emit_step_phase_event(
+                        "on_a11y_timing",
+                        self._current_run_id,
+                        step_number,
+                        a11y_ms,
+                        bool(a11y_used),
                     )
             except Exception as e:
                 logger.warning(f"Failed to emit AI interaction events: {e}")

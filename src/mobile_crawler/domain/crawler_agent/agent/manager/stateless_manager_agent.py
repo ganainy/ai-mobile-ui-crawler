@@ -260,6 +260,8 @@ class StatelessManagerAgent(Workflow):
         self.shared_state.focused_text = ui_state.focused_text
         self.shared_state.a11y_tree = ui_state.elements
         self.shared_state.omniparser_ms = getattr(ui_state, "omniparser_ms", None)
+        self.shared_state.a11y_ms = getattr(ui_state, "a11y_ms", None)
+        self.shared_state.a11y_used = getattr(ui_state, "a11y_used", None)
         self.shared_state.phone_state = ui_state.phone_state
 
         self.shared_state.update_current_app(
@@ -314,6 +316,8 @@ class StatelessManagerAgent(Workflow):
             loop_detected=bool(self.shared_state.loop_warning),
             validation_retries=validation_retries,
             omniparser_ms=self.shared_state.omniparser_ms,
+            a11y_ms=self.shared_state.a11y_ms,
+            a11y_used=self.shared_state.a11y_used,
         )
         ctx.write_event_to_stream(event)
         return event

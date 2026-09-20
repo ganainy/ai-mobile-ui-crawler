@@ -42,6 +42,7 @@ class QtSignalAdapter(QObject):
     screenshot_timing = Signal(int, int, float)  # run_id, step, duration_ms
     action_timing = Signal(int, int, str, bool, float)  # run_id, step, action_type, success, duration_ms
     omniparser_timing = Signal(int, int, float, int)  # run_id, step, duration_ms, element_count
+    a11y_timing = Signal(int, int, float, bool)  # run_id, step, duration_ms, a11y tree used
 
     # Recovery signals (US Story 3)
     recovery_started = Signal(int, int, int)  # run_id, step, attempt
@@ -132,6 +133,10 @@ class QtSignalAdapter(QObject):
     def on_omniparser_timing(self, run_id: int, step_number: int, duration_ms: float, element_count: int) -> None:
         """Called after an OmniParser vision-parsing call completes for a step's state fetch."""
         self.omniparser_timing.emit(run_id, step_number, duration_ms, element_count)
+
+    def on_a11y_timing(self, run_id: int, step_number: int, duration_ms: float, used: bool) -> None:
+        """Called after a step's state fetch, with the Portal a11y fetch time and whether the tree was used."""
+        self.a11y_timing.emit(run_id, step_number, duration_ms, used)
 
     def on_recovery_started(self, run_id: int, step_number: int, attempt_number: int) -> None:
         """Called when a crash recovery attempt starts."""

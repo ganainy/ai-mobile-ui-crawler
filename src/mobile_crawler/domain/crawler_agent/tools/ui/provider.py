@@ -26,6 +26,10 @@ if TYPE_CHECKING:
     from mobile_crawler.domain.crawler_agent.tools.formatters import TreeFormatter
 
 logger = logging.getLogger("crawler_agent")
+# The crawler_agent logger stops propagating during a run and its INFO records do not
+# all reach the GUI log viewer, so the per-step capture summary goes through a
+# mobile_crawler.* logger, which the viewer does show.
+capture_logger = logging.getLogger(__name__)
 
 # Retry schedule: delay in seconds after each failed attempt.
 # Total wait across 7 attempts: 1+2+3+5+8+10 = 29s.
@@ -269,6 +273,15 @@ class AndroidStateProvider(StateProvider):
         # Determine UI parser mode and get elements
         omni_tree = None
         omni_source = "a11y"
+        omni_status = "skipped"
+        if isinstance(tree_result, Exception):
+            a11y_status = f"failed ({tree_result})"
+        elif a11y_error:
+            a11y_status = f"failed ({a11y_error})"
+        elif not a11y_tree:
+            a11y_status = "empty"
+        else:
+            a11y_status = "ok"
 
         if self.ui_parser_mode == "accessibility":
             if not a11y_tree:
@@ -283,10 +296,15 @@ class AndroidStateProvider(StateProvider):
 
         elif self.ui_parser_mode == "omniparser":
             # Mode 2: Always use OmniParser (ignore a11y, no fallback)
-            omni_tree = await self._get_omni_parser_elements(
-                screenshot_bytes,
-                caller_label="get_state:omniparser",
-            )
+            try:
+                omni_tree = await self._get_omni_parser_elements(
+                    screenshot_bytes,
+                    caller_label="get_state:omniparser",
+                )
+            except Exception as e:
+                capture_logger.warning("OmniParser failed after %.0fms: %s", self._last_omniparser_ms or 0.0, e)
+                raise
+            omni_status = "ok" if omni_tree else "empty"
             if omni_tree:
                 omni_source = "omni"
                 logger.debug(f"Using OmniParser only ({len(omni_tree)} elements)")
@@ -314,11 +332,13 @@ class AndroidStateProvider(StateProvider):
                         screenshot_bytes,
                         caller_label="get_state:boost",
                     )
+                    omni_status = "ok" if omni_tree else "empty"
                     if omni_tree:
                         omni_source = "omni"
                         logger.debug(f"Using OmniParser boost ({len(omni_tree)} elements)")
                     filtered = None
                 except Exception as e:
+                    omni_status = f"failed ({e})"
                     logger.warning(f"OmniParser boost failed: {e}")
                     filtered = a11y_tree
                     omni_tree = None
@@ -364,15 +384,26 @@ class AndroidStateProvider(StateProvider):
         breakdown["format"] = (time.perf_counter() - phase_started) * 1000
         ui_state.capture_timing_ms = round((time.perf_counter() - state_started) * 1000, 3)
         ui_state.omniparser_ms = self._last_omniparser_ms
+        ui_state.a11y_ms = round(breakdown["a11y"], 1)
+        ui_state.a11y_used = omni_source == "a11y"
         ui_state.capture_breakdown_ms = {k: round(v, 1) for k, v in breakdown.items()}
-        logger.info(
-            "State capture %.0fms (mode=%s, source=%s, elements=%s) | %s",
+        omni_text = omni_status
+        if omni_status != "skipped" and self._last_omniparser_ms is not None:
+            omni_text = f"{omni_status} {self._last_omniparser_ms:.0f}ms"
+        summary = "State capture %.0fms (mode=%s, source=%s, elements=%s) | a11y %s %.0fms (nodes=%d, used=%s) | omniparser %s | %s" % (
             ui_state.capture_timing_ms,
             self.ui_parser_mode,
             omni_source,
             len(elements) if elements else 0,
+            a11y_status,
+            ui_state.a11y_ms,
+            count_nodes(a11y_tree),
+            "yes" if ui_state.a11y_used else "no",
+            omni_text,
             " ".join(f"{k}={v:.0f}" for k, v in breakdown.items()),
         )
+        capture_logger.info(summary)
+        logger.debug(summary)  # keeps it in the per-run crawler_trace.jsonl
         return ui_state
 
     async def _dismiss_keyboard(self) -> None:

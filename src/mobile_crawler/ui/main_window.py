@@ -124,6 +124,11 @@ class CrawlStatistics:
     omniparser_total_time_ms: float = 0.0
     omniparser_call_count: int = 0
 
+    # Portal a11y tree fetch timing and how often the tree was used as-is
+    a11y_total_time_ms: float = 0.0
+    a11y_fetch_count: int = 0
+    a11y_used_count: int = 0
+
     # Action execution timing
     action_total_time_ms: float = 0.0
     action_count: int = 0
@@ -168,6 +173,12 @@ class CrawlStatistics:
         if self.omniparser_call_count == 0:
             return 0.0
         return self.omniparser_total_time_ms / self.omniparser_call_count
+
+    def avg_a11y_time_ms(self) -> float:
+        """Average Portal a11y tree fetch time in milliseconds."""
+        if self.a11y_fetch_count == 0:
+            return 0.0
+        return self.a11y_total_time_ms / self.a11y_fetch_count
 
     def avg_action_time_ms(self) -> float:
         """Average action execution time in milliseconds."""
@@ -502,6 +513,7 @@ class MainWindow(QMainWindow):
         self.signal_adapter.screenshot_timing.connect(self._on_screenshot_timing)
         self.signal_adapter.action_timing.connect(self._on_action_timing)
         self.signal_adapter.omniparser_timing.connect(self._on_omniparser_timing)
+        self.signal_adapter.a11y_timing.connect(self._on_a11y_timing)
         self.signal_adapter.step_phase_transition.connect(self._on_step_phase_transition)
         self.signal_adapter.mobsf_finished.connect(self._on_mobsf_finished)
         if self.ai_monitor_panel and hasattr(self.signal_adapter, "ai_request_sent"):
@@ -1232,6 +1244,22 @@ class MainWindow(QMainWindow):
         if self._current_stats and self._current_stats.run_id == run_id:
             self._current_stats.omniparser_call_count += 1
             self._current_stats.omniparser_total_time_ms += duration_ms
+            self._update_dashboard_stats()
+
+    def _on_a11y_timing(self, run_id: int, step_number: int, duration_ms: float, used: bool) -> None:
+        """Handle Portal a11y fetch timing event.
+
+        Args:
+            run_id: Run ID
+            step_number: Step number
+            duration_ms: a11y tree fetch duration
+            used: True when the a11y tree supplied the step's elements
+        """
+        if self._current_stats and self._current_stats.run_id == run_id:
+            self._current_stats.a11y_fetch_count += 1
+            self._current_stats.a11y_total_time_ms += duration_ms
+            if used:
+                self._current_stats.a11y_used_count += 1
             self._update_dashboard_stats()
 
     def _on_action_timing(
@@ -2039,6 +2067,9 @@ class MainWindow(QMainWindow):
             action_avg_ms=stats.avg_action_time_ms(),
             screenshot_avg_ms=stats.avg_screenshot_time_ms(),
             omniparser_avg_ms=stats.avg_omniparser_time_ms(),
+            a11y_avg_ms=stats.avg_a11y_time_ms(),
+            a11y_used_steps=stats.a11y_used_count,
+            a11y_fetch_steps=stats.a11y_fetch_count,
             last_action=stats.last_action_type,
             step_progress=stats.current_step_of_max or str(stats.total_steps),
             total_input_tokens=stats.total_input_tokens,

@@ -294,3 +294,23 @@ class TestLiveFeed:
         dashboard.live_feed_toggled.connect(seen.append)
         dashboard.live_checkbox.setChecked(False)
         assert seen == [False]
+
+
+# ---------------------------------------------------------------------------
+# A11y timing
+# ---------------------------------------------------------------------------
+
+
+class TestA11yStats:
+    def test_labels_show_average_and_used_ratio(self, dashboard):
+        dashboard.update_stats(a11y_avg_ms=420.4, a11y_used_steps=14, a11y_fetch_steps=20)
+        assert dashboard.a11y_avg_label.text() == "Avg A11y: 420 ms"
+        assert dashboard.a11y_used_label.text() == "A11y used: 14/20 steps"
+
+    def test_labels_dash_without_data_and_after_reset(self, dashboard):
+        dashboard.update_stats()
+        assert dashboard.a11y_avg_label.text() == "Avg A11y: —"
+        assert dashboard.a11y_used_label.text() == "A11y used: —"
+        dashboard.update_stats(a11y_avg_ms=100, a11y_used_steps=1, a11y_fetch_steps=1)
+        dashboard.reset()
+        assert dashboard.a11y_used_label.text() == "A11y used: —"

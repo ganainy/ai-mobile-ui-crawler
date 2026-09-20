@@ -104,6 +104,10 @@ class CrawlerEventListener(ABC):
         """Called after an OmniParser vision-parsing call completes for a step's state fetch."""
         return None
 
+    def on_a11y_timing(self, run_id: int, step_number: int, duration_ms: float, used: bool) -> None:
+        """Called after a step's state fetch, with the Portal a11y fetch time and whether the tree was used."""
+        return None
+
     def on_action_timing(
         self, run_id: int, step_number: int, action_type: str, success: bool, duration_ms: float
     ) -> None:
