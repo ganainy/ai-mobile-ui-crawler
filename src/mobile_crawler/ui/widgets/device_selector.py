@@ -171,10 +171,18 @@ class DeviceSelector(QWidget):
                 self.parent(),
                 "No Devices Found",
                 "No Android devices were detected. Please:\n\n"
-                "1. Ensure USB debugging is enabled on your device\n"
-                "2. Connect your device via USB\n"
-                "3. Accept the USB debugging authorization prompt\n"
-                "4. Or start an Android emulator\n\n"
+                "1. Enable Developer options on your device\n\n"
+                "USB:\n"
+                "2. Enable USB debugging and connect via USB\n"
+                "3. Accept the USB debugging authorization prompt\n\n"
+                "Wireless debugging (Android 11+):\n"
+                "2. Enable Wireless debugging (same Wi-Fi as this PC)\n"
+                "3. Tap 'Pair device with pairing code', then run:\n"
+                "     adb pair <ip>:<pairing-port>\n"
+                "4. Run: adb connect <ip>:<port>\n"
+                "     (the port shown on the Wireless debugging screen)\n"
+                "5. Check that 'adb devices' lists it as 'device'\n\n"
+                "Or start an Android emulator.\n\n"
                 "Then click 'Refresh' to try again.",
             )
             return
