@@ -41,7 +41,7 @@ from mobile_crawler.domain.run_outcome import build_guided_progress
 from mobile_crawler.domain.stats_collector_span_processor import OTEL_AVAILABLE, StatsCollectorSpanProcessor
 from mobile_crawler.domain.step_phase import StepPhase, StepPhaseStateMachine
 from mobile_crawler.domain.step_phase_models import StepPhaseTransition
-from mobile_crawler.domain.ui_wait_predicate import AdaptiveWaitConfig, UIWaitPredicate
+from mobile_crawler.domain.ui_wait_predicate import AdaptiveWaitConfig, UIWaitPredicate, is_omniparser_backed
 from mobile_crawler.infrastructure.ai_interaction_repository import AIInteraction, AIInteractionRepository
 from mobile_crawler.infrastructure.step_phase_repository import StepPhaseRepository
 
@@ -659,7 +659,7 @@ class CrawlerAgentService:
                     return await driver._get_current_app()
                 return ""
 
-            expensive_state_polling = getattr(state_provider, "ui_parser_mode", None) == "omniparser"
+            expensive_state_polling = is_omniparser_backed(getattr(state_provider, "ui_parser_mode", None))
             grace_delay_s = (
                 self._crawler_agent_config.agent.wait_for_stable_ui if self._crawler_agent_config is not None else 0.3
             )

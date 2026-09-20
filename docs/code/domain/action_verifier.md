@@ -14,5 +14,8 @@ Source: `src/mobile_crawler/domain/action_verifier.py`
 - `VerificationResult`
 - `ActionVerifier`
 
+## Imports
+- [[code/domain/ui_wait_predicate|domain.ui_wait_predicate]]
+
 ## Imported by
 - [[code/domain/crawler_agent_service|domain.crawler_agent_service]]

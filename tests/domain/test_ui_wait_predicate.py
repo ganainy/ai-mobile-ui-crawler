@@ -1,4 +1,5 @@
 """Tests for UI wait predicates."""
+
 from io import BytesIO
 from unittest.mock import AsyncMock, MagicMock
 
@@ -89,15 +90,15 @@ class TestUIWaitPredicate:
         """Returns False when UI never settles within timeout."""
         # Every poll returns a different state
         call_count = 0
+
         async def always_changing():
             nonlocal call_count
             call_count += 1
             return _make_ui_state(f"state_{call_count}")
+
         mock_state_provider.get_state.side_effect = always_changing
 
-        result = await wait_predicate.wait_for_ui_settled(
-            "click", timeout_ms=100
-        )
+        result = await wait_predicate.wait_for_ui_settled("click", timeout_ms=100)
         assert result is False
 
     @pytest.mark.asyncio
@@ -126,6 +127,7 @@ class TestUIWaitPredicate:
             _make_ui_state("same"),
         ]
         import time
+
         start = time.monotonic()
         result = await predicate.wait_for_ui_settled("click", timeout_ms=500)
         time.monotonic() - start
@@ -159,15 +161,15 @@ class TestUIWaitPredicate:
     async def test_custom_timeout_override(self, wait_predicate, mock_state_provider):
         """Custom timeout_ms overrides profile default."""
         call_count = 0
+
         async def always_changing():
             nonlocal call_count
             call_count += 1
             return _make_ui_state(f"state_{call_count}")
+
         mock_state_provider.get_state.side_effect = always_changing
 
-        result = await wait_predicate.wait_for_ui_settled(
-            "click", timeout_ms=50
-        )
+        result = await wait_predicate.wait_for_ui_settled("click", timeout_ms=50)
         assert result is False
         # Should have polled only a few times given 50ms timeout
         assert call_count <= 5
@@ -225,3 +227,39 @@ async def test_screenshot_settled_stable_after_two_polls():
         result = await predicate.wait_for_ui_settled("tap", timeout_ms=500)
 
     assert result is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", ["omniparser", "boost"])
+async def test_omniparser_backed_modes_settle_by_screenshot_not_get_state(mode):
+    """Boost also parses with OmniParser, so waiting must not re-parse state per poll."""
+    provider = AsyncMock()
+    provider.ui_parser_mode = mode
+    buf = BytesIO()
+    Image.new("RGB", (1080, 1920), color="white").save(buf, format="PNG")
+    provider.screenshot.return_value = buf.getvalue()
+
+    predicate = UIWaitPredicate(
+        state_provider=provider,
+        config=AdaptiveWaitConfig(config_manager=None),
+        grace_delay_s=0.001,
+    )
+
+    assert await predicate.wait_for_ui_settled("click", timeout_ms=500) is True
+    provider.get_state.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_accessibility_mode_still_polls_get_state():
+    provider = AsyncMock()
+    provider.ui_parser_mode = "accessibility"
+    provider.get_state.return_value = _make_ui_state("same")
+
+    predicate = UIWaitPredicate(
+        state_provider=provider,
+        config=AdaptiveWaitConfig(config_manager=None),
+        grace_delay_s=0.001,
+    )
+
+    assert await predicate.wait_for_ui_settled("click", timeout_ms=500) is True
+    provider.get_state.assert_awaited()

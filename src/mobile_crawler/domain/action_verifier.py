@@ -3,33 +3,44 @@
 Compares pre-action and post-action UI state to confirm
 the expected transition occurred.
 """
+
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from mobile_crawler.domain.ui_wait_predicate import is_omniparser_backed
+
 logger = logging.getLogger(__name__)
 
 # Actions that are expected to change the UI state
 NAVIGATION_ACTIONS: set[str] = {
-    "back", "home", "click", "tap", "start_app", "launch_app",
+    "back",
+    "home",
+    "click",
+    "tap",
+    "start_app",
+    "launch_app",
     "recent_apps",
 }
 
 
 class StateProvider(Protocol):
     """Protocol for UI state capture."""
+
     async def get_state(self) -> Any: ...
 
 
 class Driver(Protocol):
     """Protocol for current app detection."""
+
     async def _get_current_app(self) -> str: ...
 
 
 @dataclass
 class VerificationResult:
     """Result of post-action UI state verification."""
+
     verified: bool
     package_changed: bool
     ui_tree_changed: bool
@@ -72,7 +83,7 @@ class ActionVerifier:
         self.expensive_state_capture = (
             expensive_state_capture
             if expensive_state_capture is not None
-            else getattr(state_provider, "ui_parser_mode", None) == "omniparser"
+            else is_omniparser_backed(getattr(state_provider, "ui_parser_mode", None))
         )
 
     async def capture_pre_state(self, *, allow_live_capture: bool = True) -> dict[str, Any]:
@@ -129,9 +140,7 @@ class ActionVerifier:
                 details="pre_state unavailable, skipping verification",
             )
 
-        post_state = await self.capture_pre_state(
-            allow_live_capture=not self.expensive_state_capture
-        )
+        post_state = await self.capture_pre_state(allow_live_capture=not self.expensive_state_capture)
 
         if not post_state:
             return VerificationResult(
@@ -171,10 +180,7 @@ class ActionVerifier:
         )
 
         if not verified:
-            logger.warning(
-                f"Navigation action '{action_type}' did not change UI state. "
-                f"{details}"
-            )
+            logger.warning(f"Navigation action '{action_type}' did not change UI state. " f"{details}")
 
         return VerificationResult(
             verified=verified,

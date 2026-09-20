@@ -3,6 +3,7 @@
 Replaces fixed-duration sleeps (ADBActionExecutor._action_delay_ms = 1500)
 with polling-based waits that check UI state readiness.
 """
+
 import asyncio
 import io
 import logging
@@ -34,9 +35,15 @@ class StateProvider(Protocol):
         ...
 
 
+def is_omniparser_backed(ui_parser_mode: str | None) -> bool:
+    """True for parser modes where every get_state() costs an OmniParser call."""
+    return ui_parser_mode in ("omniparser", "boost")
+
+
 @dataclass
 class WaitProfile:
     """Wait configuration for a specific action type."""
+
     timeout_ms: float
     poll_interval_ms: float
 
@@ -153,7 +160,7 @@ class UIWaitPredicate:
         self.expensive_state_polling = (
             expensive_state_polling
             if expensive_state_polling is not None
-            else getattr(state_provider, "ui_parser_mode", None) == "omniparser"
+            else is_omniparser_backed(getattr(state_provider, "ui_parser_mode", None))
         )
         self.grace_delay_s = grace_delay_s
 
@@ -181,9 +188,7 @@ class UIWaitPredicate:
         poll_interval = profile.poll_interval_s
 
         if self.expensive_state_polling:
-            return await self._wait_for_screenshot_settled(
-                action_type, timeout, poll_interval
-            )
+            return await self._wait_for_screenshot_settled(action_type, timeout, poll_interval)
 
         deadline = time.monotonic() + timeout
         latest_state = self.latest_state_provider() if self.latest_state_provider else None
@@ -209,15 +214,10 @@ class UIWaitPredicate:
 
             await asyncio.sleep(poll_interval)
 
-        logger.debug(
-            f"UI wait timed out after {poll_count} polls "
-            f"({action_type}, {timeout:.1f}s)"
-        )
+        logger.debug(f"UI wait timed out after {poll_count} polls " f"({action_type}, {timeout:.1f}s)")
         return False
 
-    async def _wait_for_screenshot_settled(
-        self, action_type: str, timeout: float, poll_interval: float
-    ) -> bool:
+    async def _wait_for_screenshot_settled(self, action_type: str, timeout: float, poll_interval: float) -> bool:
         """Wait until screenshot-hash is stable using cheap screenshot polling.
 
         Replaces the old fixed-delay shortcut. Polls driver.screenshot()
@@ -240,10 +240,7 @@ class UIWaitPredicate:
                 if prev_hash is not None and is_screen_stable(
                     prev_hash, current_hash, threshold=SETTLE_HAMMING_THRESHOLD
                 ):
-                    logger.debug(
-                        f"UI settled after {poll_count} polls "
-                        f"({action_type}, ~{poll_count * 200:.0f}ms)"
-                    )
+                    logger.debug(f"UI settled after {poll_count} polls " f"({action_type}, ~{poll_count * 200:.0f}ms)")
                     return True
 
                 prev_hash = current_hash
@@ -252,10 +249,7 @@ class UIWaitPredicate:
 
             await asyncio.sleep(poll_interval)
 
-        logger.debug(
-            f"UI screenshot wait timed out after {poll_count} polls "
-            f"({action_type}, {timeout:.1f}s)"
-        )
+        logger.debug(f"UI screenshot wait timed out after {poll_count} polls " f"({action_type}, {timeout:.1f}s)")
         return False
 
 
