@@ -175,7 +175,7 @@ class CrawlerAgent(Workflow):
             credentials=config.credentials if config else CredentialsConfig(),
             external_agents=config.external_agents if config else {},
             mcp=config.mcp if config else MCPConfig(),
-            ui_parser_mode=config.ui_parser_mode if config else "omniparser",
+            ui_parser_mode=config.ui_parser_mode if config else "boost",
             omniparser_backend=config.omniparser_backend if config else "replicate",
             omniparser_api_key=config.omniparser_api_key if config else "",
             omniparser_local_url=config.omniparser_local_url if config else "http://localhost:8001",

@@ -95,7 +95,7 @@ DEFAULTS: dict[str, Any] = {
     # only a step retry.
     "crawler_retry_count": 2,
     # UI parser strategy: OmniParser (vision) as primary mode
-    "ui_parser_mode": "omniparser",
+    "ui_parser_mode": "boost",
     "omniparser_backend": "replicate",
     "omniparser_local_url": "http://localhost:8001",
     "omniparser_local_parse_timeout_seconds": 120,

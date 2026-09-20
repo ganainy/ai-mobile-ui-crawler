@@ -266,7 +266,7 @@ class CrawlerAgentService:
                 "serial": self.device_id,
                 "auto_setup": False,  # We handle device setup separately
             },
-            "ui_parser_mode": self.config_manager.get("ui_parser_mode", "omniparser"),
+            "ui_parser_mode": self.config_manager.get("ui_parser_mode", "boost"),
             "omniparser_backend": self.config_manager.get("omniparser_backend", "replicate"),
             "omniparser_api_key": resolve_api_key("replicate_api_key", ["REPLICATE_API_KEY"]) or "",
             "omniparser_local_url": self.config_manager.get("omniparser_local_url", "http://localhost:8001"),
@@ -461,7 +461,7 @@ class CrawlerAgentService:
             return
 
         logger.info(
-            "Target app is not active before crawler startup " "(current=%s, target=%s). Launching target app.",
+            "Target app is not active before crawler startup (current=%s, target=%s). Launching target app.",
             current_package,
             app_package,
         )
@@ -490,7 +490,7 @@ class CrawlerAgentService:
                 return
 
             logger.warning(
-                "Target app preflight verification failed on attempt %s/%s " "(current=%s, target=%s)",
+                "Target app preflight verification failed on attempt %s/%s (current=%s, target=%s)",
                 attempt,
                 attempts,
                 current_package,
@@ -499,7 +499,7 @@ class CrawlerAgentService:
 
         detail = f"last_error={last_error}" if last_error else f"current_package={current_package}"
         raise RuntimeError(
-            f"Unable to open target app '{app_package}' before crawler startup after " f"{attempts} attempts ({detail})"
+            f"Unable to open target app '{app_package}' before crawler startup after {attempts} attempts ({detail})"
         )
 
     async def _ensure_device_awake_before_crawler(self) -> None:
@@ -698,9 +698,7 @@ class CrawlerAgentService:
                 adb_executor=adb_executor,
                 context_capture=self._context_capture,
             )
-            logger.debug(
-                f"DeviceContextCapture and AppSwitchRecovery wired with " f"target_package={self._target_package}"
-            )
+            logger.debug(f"DeviceContextCapture and AppSwitchRecovery wired with target_package={self._target_package}")
 
         # after_sleep_action is now a real delay driven by UIWaitPredicate
         # (wait_for_ui_settled) in the agents — no longer forced to 0.0
@@ -970,7 +968,7 @@ class CrawlerAgentService:
                             # Record transition with abort metadata
                             self._step_phase_machine.transition_to(StepPhase.CHECKPOINT)
                             raise FatalError(
-                                f"Aborting: {len(attempts)} consecutive app-switch " f"recovery failures",
+                                f"Aborting: {len(attempts)} consecutive app-switch recovery failures",
                                 context=ErrorContext(run_id=self._current_run_id),
                             )
                     else:
@@ -1053,7 +1051,7 @@ class CrawlerAgentService:
                     }
                 )
 
-                logger.info(f"Step {self._current_step_number}: skipping DECIDE/EXECUTE " f"due to {skip_reason.value}")
+                logger.info(f"Step {self._current_step_number}: skipping DECIDE/EXECUTE due to {skip_reason.value}")
 
                 # CAPTURE -> CHECKPOINT (skip DECIDE, EXECUTE, RECORD)
                 self._step_phase_machine.transition_to(StepPhase.CHECKPOINT)
@@ -1091,8 +1089,7 @@ class CrawlerAgentService:
                     try:
                         pre_state = await self._action_verifier.capture_pre_state()
                         logger.debug(
-                            f"Step {self._current_step_number}: captured pre_state "
-                            f"pkg={pre_state.get('package', '?')}"
+                            f"Step {self._current_step_number}: captured pre_state pkg={pre_state.get('package', '?')}"
                         )
                     except Exception as e:
                         logger.warning(f"Step {self._current_step_number}: pre_state capture failed: {e}")
@@ -1107,7 +1104,7 @@ class CrawlerAgentService:
                         parent_phase=StepPhase.EXECUTE,
                     )
                     if not settled:
-                        logger.debug(f"UI did not settle after {tool_name} " f"(step {self._current_step_number})")
+                        logger.debug(f"UI did not settle after {tool_name} (step {self._current_step_number})")
 
                 # EXECUTE -> RECORD
                 self._step_phase_machine.transition_to(StepPhase.RECORD)
@@ -1554,7 +1551,7 @@ class CrawlerAgentService:
                 logger.info(
                     f"Run {run_id} starting: package={app_package}, "
                     f"model={self.config_manager.get('ai_model', '?')}, "
-                    f"parser={self.config_manager.get('ui_parser_mode', 'omniparser')}, "
+                    f"parser={self.config_manager.get('ui_parser_mode', 'boost')}, "
                     f"max_steps={max_steps}, "
                     f"actions_per_batch={self._batch_size_for_log()}, "
                     f"max_duration_s={max_duration_seconds}"

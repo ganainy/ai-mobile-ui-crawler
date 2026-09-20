@@ -78,6 +78,23 @@ async def test_portal_error_status_is_reported_not_treated_as_a_tree():
     assert tree["a11y_error"] == "no active window"
 
 
+@pytest.mark.asyncio
+async def test_a_failed_portal_is_not_retried_until_the_backoff_expires():
+    driver = _driver(use_accessibility=True)
+    failing = _portal_client(side_effect=RuntimeError("portal not installed"))
+    with patch(
+        "mobile_crawler.domain.crawler_agent.tools.android.portal_client.PortalClient", return_value=failing
+    ) as portal:
+        first = await driver.get_ui_tree()
+        second = await driver.get_ui_tree()
+        driver._portal_retry_at = 0.0  # backoff elapsed
+        await driver.get_ui_tree()
+
+    assert failing.get_state.await_count == 2
+    assert first["a11y_error"] == second["a11y_error"] == "portal not installed"
+    assert portal.call_count == 1  # the client itself is created once
+
+
 def test_count_nodes_handles_root_dict_list_and_garbage():
     assert count_nodes(PORTAL_STATE["a11y_tree"]) == 2
     assert count_nodes([PORTAL_STATE["a11y_tree"], {"children": []}]) == 3

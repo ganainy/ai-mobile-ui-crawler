@@ -164,7 +164,7 @@ class AndroidStateProvider(StateProvider):
         use_normalized: bool = False,
         stealth: bool = False,
         ui_cls: type[UIState] | None = None,
-        ui_parser_mode: str = "omniparser",  # "boost", "omniparser", or "accessibility"
+        ui_parser_mode: str = "boost",  # "boost", "omniparser", or "accessibility"
         omniparser_backend: str = "replicate",
         omniparser_api_key: str | None = None,
         omniparser_local_url: str = "http://localhost:8001",

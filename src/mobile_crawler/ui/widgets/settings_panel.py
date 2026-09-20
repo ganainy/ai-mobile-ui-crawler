@@ -1027,7 +1027,7 @@ class SettingsPanel(QWidget):
         self.crawler_retry_count_input.setValue(crawler_retry_count)
 
         # Load UI parser mode and Replicate API key
-        ui_parser_mode = self._config_store.get_setting("ui_parser_mode", default="omniparser")
+        ui_parser_mode = self._config_store.get_setting("ui_parser_mode", default="boost")
         self.ui_parser_mode_combo.setCurrentText(ui_parser_mode)
 
         omniparser_backend = self._config_store.get_setting("omniparser_backend", default="replicate")

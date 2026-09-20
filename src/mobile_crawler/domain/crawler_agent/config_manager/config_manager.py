@@ -165,7 +165,7 @@ class ToolsConfig:
     # - "boost": Use a11y with OmniParser fallback when sparse
     # - "omniparser": Always use OmniParser (no a11y)
     # - "accessibility": Always use a11y tree only (no fallback)
-    ui_parser_mode: str = "omniparser"
+    ui_parser_mode: str = "boost"
     omniparser_backend: str = "replicate"  # "replicate" or "local"
     omniparser_api_key: str = ""  # API key for Replicate
     omniparser_local_url: str = "http://localhost:8001"
@@ -197,7 +197,7 @@ class CrawlerConfig:
     external_agents: dict[str, dict[str, Any]] = field(default_factory=dict)
     mcp: MCPConfig = field(default_factory=MCPConfig)
     # OmniParser settings
-    ui_parser_mode: str = "omniparser"
+    ui_parser_mode: str = "boost"
     omniparser_backend: str = "replicate"
     omniparser_api_key: str = ""
     omniparser_local_url: str = "http://localhost:8001"
@@ -333,7 +333,7 @@ class CrawlerConfig:
             credentials=CredentialsConfig(**data.get("credentials", {})),
             external_agents=external_agents,
             mcp=mcp_config,
-            ui_parser_mode=data.get("ui_parser_mode", "omniparser"),
+            ui_parser_mode=data.get("ui_parser_mode", "boost"),
             omniparser_backend=data.get("omniparser_backend", "replicate"),
             omniparser_api_key=data.get("omniparser_api_key", ""),
             omniparser_local_url=data.get("omniparser_local_url", "http://localhost:8001"),

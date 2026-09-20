@@ -11,6 +11,7 @@ import logging
 import os
 import re
 import subprocess
+import time
 from typing import TYPE_CHECKING, Any
 
 from async_adbutils import adb
@@ -21,6 +22,8 @@ if TYPE_CHECKING:
     from PIL import Image
 
 logger = logging.getLogger("crawler_agent")
+
+PORTAL_RETRY_SECONDS = 60.0
 
 _APP_LABEL_CONCURRENCY = 16
 
@@ -64,6 +67,10 @@ class AndroidDriver(DeviceDriver):
         # Read the accessibility tree from Portal in get_ui_tree (boost / accessibility modes).
         self.use_accessibility = use_accessibility
         self._portal = None
+        # After a Portal failure, skip Portal until this monotonic time so a device
+        # without Portal is not retried (and warned about) on every step.
+        self._portal_retry_at = 0.0
+        self._portal_last_error = ""
         self.device = None
         self._connected = False
         self.status_bar_exclusion_px = status_bar_exclusion_px
@@ -434,6 +441,9 @@ class AndroidDriver(DeviceDriver):
         }
         if not self.use_accessibility:
             return tree
+        if time.monotonic() < self._portal_retry_at:
+            tree["a11y_error"] = self._portal_last_error
+            return tree
         try:
             if self._portal is None:
                 from mobile_crawler.domain.crawler_agent.tools.android.portal_client import PortalClient
@@ -447,8 +457,9 @@ class AndroidDriver(DeviceDriver):
             tree["phone_state"] = state.get("phone_state") or tree["phone_state"]
             tree["device_context"] = state.get("device_context") or tree["device_context"]
         except Exception as e:
-            logger.warning(f"Portal accessibility tree unavailable: {e}")
-            tree["a11y_error"] = str(e)
+            logger.warning(f"Portal accessibility tree unavailable: {e} (retrying in {PORTAL_RETRY_SECONDS:.0f}s)")
+            tree["a11y_error"] = self._portal_last_error = str(e)
+            self._portal_retry_at = time.monotonic() + PORTAL_RETRY_SECONDS
         return tree
 
     async def _get_current_app(self) -> str:
