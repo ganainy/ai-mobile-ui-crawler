@@ -44,9 +44,11 @@ class StepPhaseStateMachine:
         """
         self.current_phase = initial_phase
         self._listeners: list[Callable[[StepPhase, StepPhase], None]] = []
-        self._transition_times: dict[StepPhase, float] = {
-            initial_phase: time.monotonic()
-        }
+        # Latest entry time per phase.
+        self._transition_times: dict[StepPhase, float] = {initial_phase: time.monotonic()}
+        # Every phase entry in order, so a phase re-entered on a later step is
+        # measured against the entry that followed *that* visit.
+        self._history: list[tuple[StepPhase, float]] = [(initial_phase, self._transition_times[initial_phase])]
 
     def add_listener(self, callback: Callable[[StepPhase, StepPhase], None]):
         """Add a listener for phase change events.
@@ -75,12 +77,12 @@ class StepPhaseStateMachine:
             ValueError: If the transition is invalid.
         """
         if not self._is_valid_transition(self.current_phase, new_phase):
-            raise ValueError(
-                f"Invalid transition from {self.current_phase.value} to {new_phase.value}"
-            )
+            raise ValueError(f"Invalid transition from {self.current_phase.value} to {new_phase.value}")
 
         old_phase = self.current_phase
-        self._transition_times[new_phase] = time.monotonic()
+        entered_at = time.monotonic()
+        self._transition_times[new_phase] = entered_at
+        self._history.append((new_phase, entered_at))
         self.current_phase = new_phase
         self._notify_listeners(old_phase, new_phase)
 
@@ -115,11 +117,11 @@ class StepPhaseStateMachine:
                 pass
 
     def get_phase_duration(self, phase: StepPhase) -> float | None:
-        """Return seconds spent in a phase based on transition timestamps.
+        """Return seconds spent in the most recent visit to a phase.
 
-        Duration is computed as the entry time of the *next* phase minus the
-        entry time of the given phase. Returns None if the phase was never
-        entered or if no subsequent transition has been recorded yet.
+        Duration is the entry time of the phase that followed that visit minus
+        the visit's entry time. Returns None if the phase was never entered or
+        if no later transition has been recorded yet.
 
         Args:
             phase: The phase to query duration for.
@@ -127,21 +129,9 @@ class StepPhaseStateMachine:
         Returns:
             Duration in seconds, or None if not yet measurable.
         """
-        if phase not in self._transition_times:
-            return None
-
-        phase_entry = self._transition_times[phase]
-
-        # Timestamps alone can't disambiguate ties (time.monotonic() resolution
-        # can put two fast transitions on the same tick), so use insertion order
-        # of _transition_times as a proxy for transition order: entries recorded
-        # after `phase`'s entry are the candidates for "the next phase".
-        keys = list(self._transition_times.keys())
-        phase_index = keys.index(phase)
-        next_entries = [
-            self._transition_times[p] for p in keys[phase_index + 1:]
-        ]
-        if not next_entries:
-            return None
-
-        return min(next_entries) - phase_entry
+        for index in range(len(self._history) - 1, -1, -1):
+            if self._history[index][0] == phase:
+                if index + 1 >= len(self._history):
+                    return None
+                return self._history[index + 1][1] - self._history[index][1]
+        return None

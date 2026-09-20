@@ -1,6 +1,7 @@
 """Tests for step phase state machine."""
 
 import time
+from unittest.mock import patch
 
 import pytest
 
@@ -170,3 +171,39 @@ class TestStepPhaseStateMachine:
         machine = StepPhaseStateMachine()
         # CHECKPOINT was never entered
         assert machine.get_phase_duration(StepPhase.CHECKPOINT) is None
+
+
+class TestPhaseDurationAcrossSteps:
+    """A phase re-entered on later steps must not report negative durations."""
+
+    def test_second_step_durations_are_positive_and_measured_per_visit(self):
+        clock = iter([0.0, 1.0, 1.5, 4.0, 4.1, 4.2, 10.0, 10.5, 12.0, 12.1, 12.2])
+        with patch("mobile_crawler.domain.step_phase.time.monotonic", side_effect=lambda: next(clock)):
+            machine = StepPhaseStateMachine()  # CAPTURE entered at 0.0
+            seen = []
+            machine.add_listener(lambda old, new: seen.append((old, machine.get_phase_duration(old))))
+            for phase in (
+                StepPhase.DECIDE,  # 1.0
+                StepPhase.EXECUTE,  # 1.5
+                StepPhase.RECORD,  # 4.0
+                StepPhase.CHECKPOINT,  # 4.1
+                StepPhase.CAPTURE,  # 4.2  (step 2 begins)
+                StepPhase.DECIDE,  # 10.0
+                StepPhase.EXECUTE,  # 10.5
+                StepPhase.RECORD,  # 12.0
+                StepPhase.CHECKPOINT,  # 12.1
+            ):
+                machine.transition_to(phase)
+
+        durations = {}
+        for old, duration in seen:
+            durations.setdefault(old, []).append(duration)
+        assert durations[StepPhase.CAPTURE] == [pytest.approx(1.0), pytest.approx(5.8)]
+        assert durations[StepPhase.DECIDE] == [pytest.approx(0.5), pytest.approx(0.5)]
+        assert all(d >= 0 for values in durations.values() for d in values)
+
+    def test_phase_with_no_later_transition_has_no_duration(self):
+        machine = StepPhaseStateMachine()
+        machine.transition_to(StepPhase.DECIDE)
+        assert machine.get_phase_duration(StepPhase.DECIDE) is None
+        assert machine.get_phase_duration(StepPhase.RECORD) is None
