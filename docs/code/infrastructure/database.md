@@ -18,6 +18,7 @@ Source: `src/mobile_crawler/infrastructure/database.py`
 - [[code/cli/commands/crawl|cli.commands.crawl]]
 - [[code/cli/commands/delete|cli.commands.delete]]
 - [[code/cli/commands/list|cli.commands.list]]
+- [[code/cli/commands/mobsf_scan|cli.commands.mobsf_scan]]
 - [[code/cli/commands/report|cli.commands.report]]
 - [[code/core/log_sinks|core.log_sinks]]
 - [[code/core/stale_run_cleaner|core.stale_run_cleaner]]

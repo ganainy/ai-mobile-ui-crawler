@@ -228,6 +228,20 @@ def _report_docker_autostart(label: str, result: tuple[bool, str] | None) -> Non
     help="Override the persisted Human Fallback setting for this run only (default: use the configured setting)",
 )
 @click.option(
+    "--parser-mode",
+    type=click.Choice(["accessibility", "boost", "omniparser"], case_sensitive=False),
+    help="UI parser mode for this run only (default: the configured UI Parser Mode)",
+)
+@click.option(
+    "--reasoning-mode/--no-reasoning-mode",
+    default=None,
+    help="Turn the crawler agent's Reasoning Mode on or off for this run only (default: the configured setting)",
+)
+@click.option(
+    "--exploration-objective",
+    help="Exploration Objective for this run only (default: the configured objective)",
+)
+@click.option(
     "--step-by-step",
     is_flag=True,
     help="Pause after each step, print what it did (on stderr) and wait for Enter before the next one",
@@ -245,6 +259,9 @@ def crawl(
     no_report: bool,
     log_level: str | None,
     human_fallback: bool | None,
+    parser_mode: str | None,
+    reasoning_mode: bool | None,
+    exploration_objective: str | None,
     step_by_step: bool,
 ) -> None:
     """Start a crawl on the specified device and app."""
@@ -276,6 +293,13 @@ def crawl(
             config_manager.set("auto_run_mobsf_after_crawl", True)
         if no_report:
             config_manager.set("auto_generate_report_after_run", False)
+        # Single-run overrides: never written to the config store.
+        if parser_mode is not None:
+            config_manager.override("ui_parser_mode", parser_mode)
+        if reasoning_mode is not None:
+            config_manager.override("crawler_reasoning_mode", reasoning_mode)
+        if exploration_objective is not None:
+            config_manager.override("exploration_objective", exploration_objective)
 
         effective_log_level = (log_level or config_manager.get("log_level", "INFO") or "INFO").upper()
 

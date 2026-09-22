@@ -384,3 +384,91 @@ class TestCrawlStepByStep:
         prompter = loop_cls.call_args.kwargs["human_prompter"]
         console = loop_cls.return_value.add_event_listener.call_args.args[0]
         assert console._reader is prompter._reader
+
+
+class TestCrawlRunOverrides:
+    """--parser-mode, --reasoning-mode and --exploration-objective override config for this run only."""
+
+    def _run(self, extra_args):
+        # Config calls made before OmniParser auto-start, for the ordering test.
+        self.calls_before_omniparser = []
+        with (
+            patch("mobile_crawler.cli.commands.crawl.DatabaseManager"),
+            patch("mobile_crawler.cli.commands.crawl.ConfigManager") as config_cls,
+            patch("mobile_crawler.cli.commands.crawl.CrawlerLoop"),
+            patch("mobile_crawler.cli.commands.crawl.RunRepository") as run_repo_cls,
+            patch("mobile_crawler.cli.commands.crawl.get_app_data_dir") as data_dir,
+            patch("mobile_crawler.cli.commands.crawl.ensure_mobsf_running_if_enabled", return_value=None),
+            patch("mobile_crawler.cli.commands.crawl.ensure_omniparser_running_if_enabled") as omniparser,
+        ):
+            data_dir.return_value = Mock()
+            run_repo_cls.return_value.create_run.return_value = 7
+            config = Mock()
+            config.get.return_value = None
+            config_cls.return_value = config
+            omniparser.side_effect = lambda cm: self.calls_before_omniparser.extend(cm.method_calls)
+            result = CliRunner().invoke(
+                cli,
+                [
+                    "crawl",
+                    "--device",
+                    "emulator-5554",
+                    "--package",
+                    "com.example.app",
+                    "--model",
+                    "gemini-pro",
+                    *extra_args,
+                ],
+            )
+        return result, config
+
+    @staticmethod
+    def _keys(calls):
+        return {c.args[0] for c in calls}
+
+    def test_no_overrides_by_default(self):
+        result, config = self._run([])
+
+        assert result.exit_code == 0
+        config.override.assert_not_called()
+
+    def test_parser_mode_overrides_without_persisting(self):
+        result, config = self._run(["--parser-mode", "accessibility"])
+
+        assert result.exit_code == 0
+        config.override.assert_called_once_with("ui_parser_mode", "accessibility")
+        assert "ui_parser_mode" not in self._keys(config.set.call_args_list)
+
+    def test_parser_mode_rejects_unknown_values(self):
+        result, config = self._run(["--parser-mode", "ocr"])
+
+        assert result.exit_code == 2
+        assert "--parser-mode" in result.output
+        config.override.assert_not_called()
+
+    def test_parser_mode_override_applies_before_docker_autostart(self):
+        # OmniParser auto-start reads ui_parser_mode, so the override must already be in place.
+        result, _ = self._run(["--parser-mode", "accessibility"])
+
+        assert result.exit_code == 0
+        assert "override" in [c[0] for c in self.calls_before_omniparser]
+
+    def test_reasoning_mode_flag_overrides_to_true(self):
+        result, config = self._run(["--reasoning-mode"])
+
+        assert result.exit_code == 0
+        config.override.assert_called_once_with("crawler_reasoning_mode", True)
+
+    def test_no_reasoning_mode_flag_overrides_to_false(self):
+        result, config = self._run(["--no-reasoning-mode"])
+
+        assert result.exit_code == 0
+        config.override.assert_called_once_with("crawler_reasoning_mode", False)
+        assert "crawler_reasoning_mode" not in self._keys(config.set.call_args_list)
+
+    def test_exploration_objective_overrides_without_persisting(self):
+        result, config = self._run(["--exploration-objective", "Find the settings screen"])
+
+        assert result.exit_code == 0
+        config.override.assert_called_once_with("exploration_objective", "Find the settings screen")
+        assert "exploration_objective" not in self._keys(config.set.call_args_list)

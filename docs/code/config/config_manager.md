@@ -4,7 +4,7 @@ file: src/mobile_crawler/config/config_manager.py
 ---
 # mobile_crawler.config.config_manager
 
-Configuration manager with precedence: SQLite → environment variables → module defaults.
+Configuration manager with precedence: run overrides → SQLite → environment variables → module defaults.
 
 Source: `src/mobile_crawler/config/config_manager.py`
 
@@ -21,6 +21,7 @@ Source: `src/mobile_crawler/config/config_manager.py`
 ## Imported by
 - [[code/cli/commands/config|cli.commands.config]]
 - [[code/cli/commands/crawl|cli.commands.crawl]]
+- [[code/cli/commands/mobsf_scan|cli.commands.mobsf_scan]]
 - [[code/cli/commands/report|cli.commands.report]]
 - [[code/cli/commands/scenarios|cli.commands.scenarios]]
 - [[code/config/_index|config]]

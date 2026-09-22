@@ -12,5 +12,6 @@ _Add a one-line summary of this package here._
 - [[code/cli/commands/crawl|cli.commands.crawl]]
 - [[code/cli/commands/delete|cli.commands.delete]] - CLI command for deleting runs.
 - [[code/cli/commands/list|cli.commands.list]] - CLI commands for listing runs and devices.
+- [[code/cli/commands/mobsf_scan|cli.commands.mobsf_scan]] - CLI command for running MobSF static analysis on a finished run.
 - [[code/cli/commands/report|cli.commands.report]] - CLI commands for report generation.
 - [[code/cli/commands/scenarios|cli.commands.scenarios]] - CLI commands for an app's Guided Scenarios list (the GUI's Guided Scenarios settings group).
