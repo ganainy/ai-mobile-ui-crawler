@@ -562,3 +562,114 @@ class TestMobSFManager:
         result = manager.config_manager
 
         assert result is config
+
+
+def _stored_run(session_path, package="com.example.app", run_id=7):
+    run = Mock()
+    run.id = run_id
+    run.app_package = package
+    run.device_id = "device123"
+    run.session_path = str(session_path)
+    return run
+
+
+class TestStoredApk:
+    """Scanning a finished run's APK from its session folder, without touching a device."""
+
+    def test_find_stored_apk_returns_package_apk(self, tmp_path):
+        (tmp_path / "apks").mkdir()
+        apk = tmp_path / "apks" / "com.example.app.apk"
+        apk.write_bytes(b"apk")
+        manager = MobSFManager(config_manager=_make_config_manager())
+
+        assert manager.find_stored_apk(_stored_run(tmp_path)) == str(apk)
+
+    def test_find_stored_apk_prefers_split_archive_over_split_files(self, tmp_path):
+        apks = tmp_path / "apks"
+        apks.mkdir()
+        (apks / "00_base.apk").write_bytes(b"base")
+        (apks / "01_split_config.arm64_v8a.apk").write_bytes(b"split")
+        archive = apks / "com.example.app.apks"
+        archive.write_bytes(b"zip")
+        manager = MobSFManager(config_manager=_make_config_manager())
+
+        assert manager.find_stored_apk(_stored_run(tmp_path)) == str(archive)
+
+    def test_find_stored_apk_returns_none_when_folder_empty_or_missing(self, tmp_path):
+        manager = MobSFManager(config_manager=_make_config_manager())
+
+        assert manager.find_stored_apk(_stored_run(tmp_path)) is None
+        (tmp_path / "apks").mkdir()
+        assert manager.find_stored_apk(_stored_run(tmp_path)) is None
+        assert not (tmp_path / "apks" / "com.example.app.apk").exists()
+
+    def test_find_stored_apk_returns_none_without_session_folder(self):
+        manager = MobSFManager(config_manager=_make_config_manager())
+        run = _stored_run("")
+        run.session_path = None
+
+        assert manager.find_stored_apk(run) is None
+
+    @patch.object(MobSFManager, "extract_apk_from_device")
+    @patch.object(MobSFManager, "preflight", return_value=(True, ""))
+    @patch("time.sleep")
+    def test_perform_complete_scan_with_apk_path_skips_device_pull(
+        self, mock_sleep, mock_preflight, mock_extract, tmp_path
+    ):
+        apk = tmp_path / "stored.apk"
+        apk.write_bytes(b"apk")
+        manager = MobSFManager(config_manager=_make_config_manager())
+        uploaded = []
+
+        def api(endpoint, method="GET", data=None, files=None, stream=False, timeout=None):
+            if endpoint == "upload":
+                uploaded.append(files["file"][0])
+                return True, {"hash": "h1"}
+            if endpoint == "report_json":
+                return True, {"x": 1}
+            if endpoint == "download_pdf":
+                return True, b"pdf"
+            if endpoint == "scorecard":
+                return True, {"score": 70}
+            return True, {}
+
+        manager._make_api_request = Mock(side_effect=api)
+
+        success, summary = manager.perform_complete_scan(
+            "com.example.app", session_path=str(tmp_path), apk_path=str(apk)
+        )
+
+        assert success is True
+        assert summary["apk_path"] == str(apk)
+        assert uploaded == ["stored.apk"]
+        mock_extract.assert_not_called()
+
+    @patch.object(MobSFManager, "perform_complete_scan")
+    def test_analyze_run_passes_apk_path_and_log_callback(self, mock_perform, tmp_path):
+        mock_perform.return_value = (True, {"file_hash": "h1"})
+        manager = MobSFManager(config_manager=_make_config_manager())
+        callback = Mock()
+
+        result = manager.analyze_run(
+            _stored_run(tmp_path), "device123", apk_path="/a.apk", log_callback=callback
+        )
+
+        assert result.success is True
+        kwargs = mock_perform.call_args.kwargs
+        assert kwargs["apk_path"] == "/a.apk"
+        assert kwargs["log_callback"] is callback
+
+    @patch.object(MobSFManager, "perform_complete_scan", return_value=(True, {"file_hash": "h1"}))
+    def test_stale_session_path_falls_back_to_folder_manager_for_apk_and_reports(self, mock_perform, tmp_path):
+        found = tmp_path / "run_7_found"
+        (found / "apks").mkdir(parents=True)
+        apk = found / "apks" / "com.example.app.apk"
+        apk.write_bytes(b"apk")
+        folder_manager = Mock()
+        folder_manager.get_session_path.return_value = str(found)
+        manager = MobSFManager(config_manager=_make_config_manager(), session_folder_manager=folder_manager)
+        run = _stored_run(tmp_path / "gone")
+
+        assert manager.find_stored_apk(run) == str(apk)
+        manager.analyze_run(run, "device123", apk_path=str(apk))
+        assert mock_perform.call_args.kwargs["session_path"] == str(found)

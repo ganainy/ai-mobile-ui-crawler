@@ -19,3 +19,6 @@ Source: `src/mobile_crawler/cli/commands/mobsf_scan.py`
 - [[code/infrastructure/mobsf_manager|infrastructure.mobsf_manager]]
 - [[code/infrastructure/run_repository|infrastructure.run_repository]]
 - [[code/infrastructure/session_folder_manager|infrastructure.session_folder_manager]]
+
+## Imported by
+- [[code/cli/main|cli.main]]

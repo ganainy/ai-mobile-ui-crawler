@@ -17,5 +17,6 @@ Source: `src/mobile_crawler/cli/main.py`
 - [[code/cli/commands/crawl|cli.commands.crawl]]
 - [[code/cli/commands/delete|cli.commands.delete]]
 - [[code/cli/commands/list|cli.commands.list]]
+- [[code/cli/commands/mobsf_scan|cli.commands.mobsf_scan]]
 - [[code/cli/commands/report|cli.commands.report]]
 - [[code/cli/commands/scenarios|cli.commands.scenarios]]

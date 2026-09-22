@@ -12,4 +12,5 @@ Source: `src/mobile_crawler/cli/docker_autostart_report.py`
 - `report_docker_autostart`
 
 ## Imported by
+- [[code/cli/commands/crawl|cli.commands.crawl]]
 - [[code/cli/commands/mobsf_scan|cli.commands.mobsf_scan]]

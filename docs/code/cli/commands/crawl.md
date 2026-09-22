@@ -16,6 +16,7 @@ Source: `src/mobile_crawler/cli/commands/crawl.py`
 
 ## Imports
 - [[code/cli/console_reader|cli.console_reader]]
+- [[code/cli/docker_autostart_report|cli.docker_autostart_report]]
 - [[code/cli/step_by_step_console|cli.step_by_step_console]]
 - [[code/cli/terminal_human_prompter|cli.terminal_human_prompter]]
 - [[code/config/_index|config]]
