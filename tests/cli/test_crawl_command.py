@@ -150,6 +150,72 @@ class TestCrawlCommand:
             mock_config_manager.set.assert_any_call("pcapdroid_tls_decryption", True)
 
 
+class TestCrawlDockerAutostart:
+    """The crawl command auto-starts MobSF/OmniParser Docker containers before crawling."""
+
+    def _run(self, extra_args, mobsf_result=None, omniparser_result=None):
+        with (
+            patch("mobile_crawler.cli.commands.crawl.DatabaseManager"),
+            patch("mobile_crawler.cli.commands.crawl.ConfigManager") as config_cls,
+            patch("mobile_crawler.cli.commands.crawl.CrawlerLoop"),
+            patch("mobile_crawler.cli.commands.crawl.RunRepository") as run_repo_cls,
+            patch("mobile_crawler.cli.commands.crawl.get_app_data_dir") as data_dir,
+            patch(
+                "mobile_crawler.cli.commands.crawl.ensure_mobsf_running_if_enabled",
+                return_value=mobsf_result,
+            ) as ensure_mobsf,
+            patch(
+                "mobile_crawler.cli.commands.crawl.ensure_omniparser_running_if_enabled",
+                return_value=omniparser_result,
+            ) as ensure_omniparser,
+        ):
+            data_dir.return_value = Mock()
+            run_repo_cls.return_value.create_run.return_value = 7
+            config_cls.return_value = Mock()
+            result = CliRunner().invoke(
+                cli,
+                [
+                    "crawl",
+                    "--device",
+                    "emulator-5554",
+                    "--package",
+                    "com.example.app",
+                    "--model",
+                    "gemini-pro",
+                    *extra_args,
+                ],
+            )
+        return result, ensure_mobsf, ensure_omniparser
+
+    def test_docker_autostart_is_attempted_before_crawl(self):
+        result, ensure_mobsf, ensure_omniparser = self._run([])
+
+        assert result.exit_code == 0
+        ensure_mobsf.assert_called_once()
+        ensure_omniparser.assert_called_once()
+
+    def test_successful_start_is_reported_on_stderr_not_stdout(self):
+        result, _, _ = self._run([], mobsf_result=(True, "MobSF is ready"))
+
+        assert result.exit_code == 0
+        assert "MobSF: MobSF is ready" in result.stderr
+        assert "MobSF: MobSF is ready" not in result.stdout
+
+    def test_failed_start_is_a_warning_not_a_failure(self):
+        result, _, _ = self._run([], mobsf_result=(False, "Docker is not available"))
+
+        assert result.exit_code == 0
+        assert "Docker is not available" in result.stderr
+        assert "Docker is not available" not in result.stdout
+
+    def test_skipped_autostart_reports_nothing(self):
+        result, _, _ = self._run([], mobsf_result=None, omniparser_result=None)
+
+        assert result.exit_code == 0
+        assert "MobSF" not in result.output
+        assert "OmniParser" not in result.output
+
+
 class TestCrawlRunReport:
     """The crawl command passes a report generator to the loop and can opt out of auto-reports."""
 

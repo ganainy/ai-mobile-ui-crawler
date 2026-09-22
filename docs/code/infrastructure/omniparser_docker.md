@@ -15,5 +15,6 @@ Source: `src/mobile_crawler/infrastructure/omniparser_docker.py`
 - [[code/infrastructure/mobsf_docker|infrastructure.mobsf_docker]]
 
 ## Imported by
+- [[code/infrastructure/docker_autostart|infrastructure.docker_autostart]]
 - [[code/ui/main_window|ui.main_window]]
 - [[code/ui/omniparser_startup_worker|ui.omniparser_startup_worker]]

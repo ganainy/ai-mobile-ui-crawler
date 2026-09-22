@@ -13,6 +13,10 @@ from mobile_crawler.core.crawler_loop import CrawlerLoop
 from mobile_crawler.domain.models import ActionResult
 from mobile_crawler.domain.report_generator import ReportGenerator
 from mobile_crawler.infrastructure.database import DatabaseManager
+from mobile_crawler.infrastructure.docker_autostart import (
+    ensure_mobsf_running_if_enabled,
+    ensure_omniparser_running_if_enabled,
+)
 from mobile_crawler.infrastructure.run_repository import Run, RunRepository
 from mobile_crawler.infrastructure.session_folder_manager import SessionFolderManager
 from mobile_crawler.infrastructure.telemetry_client import build_telemetry_client_factory
@@ -185,6 +189,21 @@ class JSONEventListener(CrawlerEventListener):
         print(json.dumps(event), flush=True)
 
 
+def _report_docker_autostart(label: str, result: tuple[bool, str] | None) -> None:
+    """Echo the outcome of a Docker container auto-start attempt (a no-op if `result` is None).
+
+    Always writes to stderr, never stdout: stdout is reserved for the
+    newline-delimited JSON events a consumer of this command parses.
+    """
+    if result is None:
+        return
+    ok, message = result
+    if ok:
+        click.echo(f"{label}: {message}", err=True)
+    else:
+        click.echo(f"Warning: {label} could not be started automatically: {message}", err=True)
+
+
 @click.command()
 @click.option("--device", required=True, help="Device ID to crawl")
 @click.option("--package", required=True, help="App package name to crawl")
@@ -251,6 +270,9 @@ def crawl(
             config_manager.set("auto_generate_report_after_run", False)
 
         effective_log_level = (log_level or config_manager.get("log_level", "INFO") or "INFO").upper()
+
+        _report_docker_autostart("MobSF", ensure_mobsf_running_if_enabled(config_manager))
+        _report_docker_autostart("OmniParser", ensure_omniparser_running_if_enabled(config_manager))
 
         # Initialize database
         db_manager = DatabaseManager()

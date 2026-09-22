@@ -20,19 +20,5 @@ class MobSFStartupWorker(QThread):
         self._docker = docker_service
 
     def run(self):
-        ok, message = self._docker.ensure_running()
-        if not ok:
-            self.result.emit(False, message, self._docker.started_by_gui)
-            return
-
-        api_key = self._docker.wait_for_api_key()
-        if not api_key:
-            self.result.emit(
-                False,
-                "MobSF is running but its REST API key could not be discovered from Docker logs.",
-                self._docker.started_by_gui,
-            )
-            return
-
-        self._docker.save_api_key(api_key)
-        self.result.emit(True, "MobSF is ready", self._docker.started_by_gui)
+        ok, message = self._docker.prepare()
+        self.result.emit(ok, message, self._docker.started_by_gui)

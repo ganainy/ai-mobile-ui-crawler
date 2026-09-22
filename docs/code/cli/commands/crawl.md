@@ -23,6 +23,7 @@ Source: `src/mobile_crawler/cli/commands/crawl.py`
 - [[code/domain/models|domain.models]]
 - [[code/domain/report_generator|domain.report_generator]]
 - [[code/infrastructure/database|infrastructure.database]]
+- [[code/infrastructure/docker_autostart|infrastructure.docker_autostart]]
 - [[code/infrastructure/run_repository|infrastructure.run_repository]]
 - [[code/infrastructure/session_folder_manager|infrastructure.session_folder_manager]]
 - [[code/infrastructure/telemetry_client|infrastructure.telemetry_client]]

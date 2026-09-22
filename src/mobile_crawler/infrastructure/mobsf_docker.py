@@ -208,6 +208,24 @@ class MobSFDockerService:
         """Cache a discovered API key to .mobsf_api_key."""
         save_api_key_file(api_key)
 
+    def prepare(self, timeout: int = 120) -> tuple[bool, str]:
+        """Ensure MobSF is running and its REST API key is discovered and cached.
+
+        Combines :meth:`ensure_running`, :meth:`wait_for_api_key`, and
+        :meth:`save_api_key` into the full startup sequence a caller needs
+        before MobSF can be used for analysis.
+        """
+        ok, message = self.ensure_running(timeout=timeout)
+        if not ok:
+            return False, message
+
+        api_key = self.wait_for_api_key()
+        if not api_key:
+            return False, "MobSF is running but its REST API key could not be discovered from Docker logs."
+
+        self.save_api_key(api_key)
+        return True, "MobSF is ready"
+
     def is_running(self) -> bool:
         """Return True if the MobSF container is currently running."""
         return self.container_state() == "running"

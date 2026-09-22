@@ -134,6 +134,37 @@ class TestApiKey:
                 assert service.wait_for_api_key() == "key123"
 
 
+class TestPrepare:
+    def test_returns_failure_from_ensure_running(self):
+        service = MobSFDockerService()
+        with patch.object(service, "ensure_running", return_value=(False, "Docker is not available")):
+            ok, message = service.prepare()
+        assert ok is False
+        assert message == "Docker is not available"
+
+    def test_returns_failure_when_api_key_not_found(self):
+        service = MobSFDockerService()
+        with (
+            patch.object(service, "ensure_running", return_value=(True, "MobSF is ready")),
+            patch.object(service, "wait_for_api_key", return_value=""),
+        ):
+            ok, message = service.prepare()
+        assert ok is False
+        assert "API key" in message
+
+    def test_saves_api_key_and_succeeds(self):
+        service = MobSFDockerService()
+        with (
+            patch.object(service, "ensure_running", return_value=(True, "MobSF is ready")),
+            patch.object(service, "wait_for_api_key", return_value="key123"),
+            patch.object(service, "save_api_key") as save_api_key,
+        ):
+            ok, message = service.prepare()
+        assert ok is True
+        assert message == "MobSF is ready"
+        save_api_key.assert_called_once_with("key123")
+
+
 class TestStop:
     def test_stop_calls_docker_stop(self):
         service = MobSFDockerService()

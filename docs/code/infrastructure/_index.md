@@ -18,6 +18,7 @@ Persistence and device integration: SQLite database and repositories (runs, scre
 - [[code/infrastructure/credential_store|infrastructure.credential_store]] - Credential store for encrypting sensitive data.
 - [[code/infrastructure/database|infrastructure.database]] - Database management for crawler.db - crawl data storage.
 - [[code/infrastructure/device_detection|infrastructure.device_detection]] - Device detection utilities for Android devices using ADB.
+- [[code/infrastructure/docker_autostart|infrastructure.docker_autostart]] - Auto-start the MobSF/OmniParser Docker containers a crawl will need.
 - [[code/infrastructure/mobsf_docker|infrastructure.mobsf_docker]] - Docker lifecycle management for the MobSF static-analysis server.
 - [[code/infrastructure/mobsf_manager|infrastructure.mobsf_manager]] - MobSF Manager for APK analysis.
 - [[code/infrastructure/omniparser_docker|infrastructure.omniparser_docker]] - Docker lifecycle management for the local OmniParser server.

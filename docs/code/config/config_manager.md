@@ -30,5 +30,6 @@ Source: `src/mobile_crawler/config/config_manager.py`
 - [[code/domain/prompt_builder|domain.prompt_builder]]
 - [[code/domain/traffic_capture_manager|domain.traffic_capture_manager]]
 - [[code/domain/video_recording_manager|domain.video_recording_manager]]
+- [[code/infrastructure/docker_autostart|infrastructure.docker_autostart]]
 - [[code/infrastructure/mobsf_manager|infrastructure.mobsf_manager]]
 - [[code/ui/main_window|ui.main_window]]
