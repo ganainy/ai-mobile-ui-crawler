@@ -20,3 +20,4 @@ Source: `src/mobile_crawler/cli/main.py`
 - [[code/cli/commands/mobsf_scan|cli.commands.mobsf_scan]]
 - [[code/cli/commands/report|cli.commands.report]]
 - [[code/cli/commands/scenarios|cli.commands.scenarios]]
+- [[code/cli/commands/stats|cli.commands.stats]]
