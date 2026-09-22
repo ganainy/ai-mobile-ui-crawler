@@ -21,7 +21,7 @@ The GUI's StepDetailWidget shows a Timing Breakdown per step (phase totals, a11y
 - Left as judgement calls: timing is a plain dict, not a dataclass; `_sections` parameter list grew.
 
 ## Open
-- `step_logs` never being written by the crawler is a pre-existing gap: `steps.jsonl` action fields, "Failed steps"/"Repeated actions" sections and the Summary step counts are empty for real runs. Worth its own issue.
+- `step_logs` never being written by the crawler is a pre-existing gap: `steps.jsonl` action fields, "Failed steps"/"Repeated actions" sections and the Summary step counts are empty for real runs. Filed as #24.
 - Point the GUI's `_build_timing_breakdown` at `build_timing_breakdown` (follow-up).
 
 ## Status
