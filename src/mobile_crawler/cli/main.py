@@ -8,6 +8,7 @@ from mobile_crawler.cli.commands.crawl import crawl
 from mobile_crawler.cli.commands.delete import delete
 from mobile_crawler.cli.commands.list import list
 from mobile_crawler.cli.commands.report import report
+from mobile_crawler.cli.commands.scenarios import scenarios
 
 try:
     from importlib.metadata import version
@@ -33,6 +34,7 @@ cli.add_command(config)
 cli.add_command(report)
 cli.add_command(list)
 cli.add_command(delete)
+cli.add_command(scenarios)
 
 
 def run():

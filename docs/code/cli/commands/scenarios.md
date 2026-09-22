@@ -22,3 +22,6 @@ Source: `src/mobile_crawler/cli/commands/scenarios.py`
 - [[code/config/config_manager|config.config_manager]]
 - [[code/domain/_index|domain]]
 - [[code/domain/guided_scenarios_generator|domain.guided_scenarios_generator]]
+
+## Imported by
+- [[code/cli/main|cli.main]]

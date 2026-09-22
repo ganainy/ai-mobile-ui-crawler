@@ -12,6 +12,7 @@ Source: `src/mobile_crawler/cli/commands/mobsf_scan.py`
 - `mobsf_scan`
 
 ## Imports
+- [[code/cli/docker_autostart_report|cli.docker_autostart_report]]
 - [[code/config/config_manager|config.config_manager]]
 - [[code/infrastructure/database|infrastructure.database]]
 - [[code/infrastructure/docker_autostart|infrastructure.docker_autostart]]

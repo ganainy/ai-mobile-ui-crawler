@@ -18,3 +18,4 @@ Source: `src/mobile_crawler/cli/main.py`
 - [[code/cli/commands/delete|cli.commands.delete]]
 - [[code/cli/commands/list|cli.commands.list]]
 - [[code/cli/commands/report|cli.commands.report]]
+- [[code/cli/commands/scenarios|cli.commands.scenarios]]
