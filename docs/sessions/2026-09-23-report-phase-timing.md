@@ -25,4 +25,4 @@ The GUI's StepDetailWidget shows a Timing Breakdown per step (phase totals, a11y
 - Point the GUI's `_build_timing_breakdown` at `build_timing_breakdown` (follow-up).
 
 ## Status
-Committed on worktree branch `issue-22-phase-timing` (off local `main` d150245); not yet merged into `main`. Tests in `tests/domain/test_run_report_bundle.py`; full suite green before the review fixes (1562 passed, 7 skipped), report tests green after. No typechecker in `.venv312`. Not checked against a real run's database.
+Committed on worktree branch `issue-22-phase-timing` (off local `main` d150245); not yet merged into `main`. Tests in `tests/domain/test_run_report_bundle.py`; full suite green after the review fixes (1564 passed, 7 skipped). No typechecker in `.venv312`. Not checked against a real run's database.
