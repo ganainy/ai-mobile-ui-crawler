@@ -59,16 +59,17 @@ class HumanFallbackConfig:
     timeout_minutes: int = DEFAULT_TIMEOUT_MINUTES
 
     @classmethod
-    def from_store(cls, store) -> "HumanFallbackConfig":
+    def from_store(cls, store, enabled_override: bool | None = None) -> "HumanFallbackConfig":
+        """Build from the persisted setting, unless `enabled_override` is given (a single-run CLI override)."""
         minutes = store.get_setting(FALLBACK_TIMEOUT_KEY, default=DEFAULT_TIMEOUT_MINUTES)
         try:
             minutes = int(minutes)
         except (TypeError, ValueError):
             minutes = DEFAULT_TIMEOUT_MINUTES
-        return cls(
-            enabled=bool(store.get_setting(FALLBACK_ENABLED_KEY, default=False)),
-            timeout_minutes=max(1, minutes),
+        enabled = (
+            bool(store.get_setting(FALLBACK_ENABLED_KEY, default=False)) if enabled_override is None else enabled_override
         )
+        return cls(enabled=enabled, timeout_minutes=max(1, minutes))
 
 
 class HumanFallback:

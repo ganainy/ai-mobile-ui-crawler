@@ -175,6 +175,8 @@ class CrawlerAgentService:
         self._crawler_agent_config = None
         # Set by the crawl loop so Human Fallback can reach the GUI; None means fallback is off.
         self.human_prompter: HumanPrompter | None = None
+        # Set by the crawl loop for a single-run CLI override; None means use the persisted setting.
+        self.human_fallback_enabled_override: bool | None = None
         self._auth_session: AuthenticationSession | None = None
         self._current_handler = None
         self._handler_loop = None
@@ -1397,7 +1399,9 @@ class CrawlerAgentService:
             inbox_config=inbox_config,
             inbox_reader=inbox_reader,
             sms_reader=SmsReader(ADBClient()),
-            human_fallback=HumanFallback(HumanFallbackConfig.from_store(user_store), self.human_prompter),
+            human_fallback=HumanFallback(
+                HumanFallbackConfig.from_store(user_store, self.human_fallback_enabled_override), self.human_prompter
+            ),
         )
 
     async def _detect_device_phone(self) -> None:

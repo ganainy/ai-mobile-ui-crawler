@@ -115,6 +115,45 @@ class TestCrawlerLoopLifecycle:
         # Verify on_crawl_started was called
         mock_listener.on_crawl_started.assert_called_once_with(1, "com.example.app")
 
+    @patch("mobile_crawler.core.crawler_loop.CrawlerAgentService")
+    def test_run_forwards_human_prompter_and_fallback_override_to_agent_service(
+        self, mock_crawler_service_class, mock_config_manager, mock_run_repository, mock_session_folder_manager
+    ):
+        """Human Fallback prompter and single-run enabled override must reach the agent service."""
+        mock_run = Mock()
+        mock_run.app_package = "com.example.app"
+        mock_run.device_id = "device123"
+        mock_run_repository.get_run_by_id.return_value = mock_run
+        mock_session_folder_manager.create_session_folder.return_value = "/tmp/session"
+
+        mock_service = Mock()
+        mock_crawler_service_class.return_value = mock_service
+
+        async def mock_explore(*args, **kwargs):
+            mock_result = Mock()
+            mock_result.success = True
+            mock_result.steps_completed = 1
+            mock_result.error_message = None
+            mock_result.final_state = {}
+            return mock_result
+
+        mock_service.execute_exploration_task = mock_explore
+        mock_service.cleanup = Mock()
+
+        prompter = Mock()
+        loop = CrawlerLoop(
+            config_manager=mock_config_manager,
+            run_repository=mock_run_repository,
+            session_folder_manager=mock_session_folder_manager,
+            human_prompter=prompter,
+            human_fallback_enabled_override=True,
+        )
+
+        loop.run(1)
+
+        assert mock_service.human_prompter is prompter
+        assert mock_service.human_fallback_enabled_override is True
+
     @patch("mobile_crawler.core.crawler_loop.VideoRecordingManager")
     @patch("mobile_crawler.core.crawler_loop.CrawlerAgentService")
     def test_run_starts_and_stops_video_recording_when_enabled(

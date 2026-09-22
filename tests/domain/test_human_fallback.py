@@ -59,3 +59,13 @@ def test_config_from_store_defaults_and_values(tmp_path):
     store.set_setting("human_fallback_enabled", True, "bool")
     store.set_setting("human_fallback_timeout_minutes", 12, "int")
     assert HumanFallbackConfig.from_store(store) == HumanFallbackConfig(True, 12)
+
+
+def test_config_from_store_enabled_override_wins_over_persisted_value(tmp_path):
+    store = UserConfigStore(tmp_path / "c.db")
+    store.create_schema()
+    store.set_setting("human_fallback_enabled", True, "bool")
+
+    assert HumanFallbackConfig.from_store(store, enabled_override=False) == HumanFallbackConfig(False, 5)
+    assert HumanFallbackConfig.from_store(store, enabled_override=True) == HumanFallbackConfig(True, 5)
+    assert HumanFallbackConfig.from_store(store, enabled_override=None) == HumanFallbackConfig(True, 5)

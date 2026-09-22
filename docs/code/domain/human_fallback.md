@@ -19,6 +19,7 @@ Source: `src/mobile_crawler/domain/human_fallback.py`
 - `HumanFallback`
 
 ## Imported by
+- [[code/cli/terminal_human_prompter|cli.terminal_human_prompter]]
 - [[code/domain/authentication|domain.authentication]]
 - [[code/domain/crawler_agent_service|domain.crawler_agent_service]]
 - [[code/ui/human_fallback_dialog|ui.human_fallback_dialog]]

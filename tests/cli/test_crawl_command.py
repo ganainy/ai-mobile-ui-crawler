@@ -198,3 +198,58 @@ class TestCrawlRunReport:
         _, config, _, _ = self._run([])
 
         assert ("auto_generate_report_after_run", False) not in [c.args for c in config.set.call_args_list]
+
+
+class TestCrawlHumanFallback:
+    """The crawl command wires a terminal prompter and passes through the --human-fallback override."""
+
+    def _run(self, extra_args):
+        with (
+            patch("mobile_crawler.cli.commands.crawl.DatabaseManager"),
+            patch("mobile_crawler.cli.commands.crawl.ConfigManager") as config_cls,
+            patch("mobile_crawler.cli.commands.crawl.CrawlerLoop") as loop_cls,
+            patch("mobile_crawler.cli.commands.crawl.RunRepository") as run_repo_cls,
+            patch("mobile_crawler.cli.commands.crawl.get_app_data_dir") as data_dir,
+        ):
+            data_dir.return_value = Mock()
+            run_repo_cls.return_value.create_run.return_value = 7
+            config_cls.return_value = Mock()
+            result = CliRunner().invoke(
+                cli,
+                [
+                    "crawl",
+                    "--device",
+                    "emulator-5554",
+                    "--package",
+                    "com.example.app",
+                    "--model",
+                    "gemini-pro",
+                    *extra_args,
+                ],
+            )
+        return result, loop_cls
+
+    def test_loop_always_receives_a_terminal_prompter(self):
+        result, loop_cls = self._run([])
+
+        assert result.exit_code == 0
+        prompter = loop_cls.call_args.kwargs["human_prompter"]
+        assert type(prompter).__name__ == "TerminalHumanPrompter"
+
+    def test_no_override_by_default(self):
+        result, loop_cls = self._run([])
+
+        assert result.exit_code == 0
+        assert loop_cls.call_args.kwargs["human_fallback_enabled_override"] is None
+
+    def test_human_fallback_flag_overrides_to_true(self):
+        result, loop_cls = self._run(["--human-fallback"])
+
+        assert result.exit_code == 0
+        assert loop_cls.call_args.kwargs["human_fallback_enabled_override"] is True
+
+    def test_no_human_fallback_flag_overrides_to_false(self):
+        result, loop_cls = self._run(["--no-human-fallback"])
+
+        assert result.exit_code == 0
+        assert loop_cls.call_args.kwargs["human_fallback_enabled_override"] is False

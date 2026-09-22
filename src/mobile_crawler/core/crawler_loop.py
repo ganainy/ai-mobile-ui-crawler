@@ -47,6 +47,7 @@ class CrawlerLoop:
         ai_interaction_repository=None,
         report_generator=None,
         human_prompter=None,
+        human_fallback_enabled_override=None,
     ):
         """Initialize the crawler-agent-backed crawl wrapper.
 
@@ -58,6 +59,8 @@ class CrawlerLoop:
             ai_interaction_repository: Optional repository for AI interaction persistence
             report_generator: Optional ReportGenerator used to write the Run Report after a run
             human_prompter: Optional HumanPrompter used by Human Fallback during authentication
+            human_fallback_enabled_override: Optional bool overriding the persisted Human Fallback
+                enabled setting for this run only (None means use the persisted setting)
         """
         self.config_manager = config_manager
         self.run_repository = run_repository
@@ -66,6 +69,7 @@ class CrawlerLoop:
         self._ai_interaction_repository = ai_interaction_repository
         self._report_generator = report_generator
         self._human_prompter = human_prompter
+        self._human_fallback_enabled_override = human_fallback_enabled_override
 
         self._crawl_thread: threading.Thread | None = None
         self._current_run_id: int | None = None
@@ -237,6 +241,7 @@ class CrawlerLoop:
                 device_id=run.device_id,
             )
             self._crawler_agent_service.human_prompter = self._human_prompter
+            self._crawler_agent_service.human_fallback_enabled_override = self._human_fallback_enabled_override
 
             # Initialize step phase tracking per D-01 (wrap at action level)
             self._crawler_agent_service.begin_step_tracking(

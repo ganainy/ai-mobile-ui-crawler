@@ -7,6 +7,7 @@ import click
 
 from mobile_crawler.config import get_app_data_dir
 from mobile_crawler.config.config_manager import ConfigManager
+from mobile_crawler.cli.terminal_human_prompter import TerminalHumanPrompter
 from mobile_crawler.core.crawler_event_listener import CrawlerEventListener
 from mobile_crawler.core.crawler_loop import CrawlerLoop
 from mobile_crawler.domain.models import ActionResult
@@ -200,6 +201,11 @@ class JSONEventListener(CrawlerEventListener):
     type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"], case_sensitive=False),
     help="Minimum level of log events printed to stdout (default: the log_level setting, INFO)",
 )
+@click.option(
+    "--human-fallback/--no-human-fallback",
+    default=None,
+    help="Override the persisted Human Fallback setting for this run only (default: use the configured setting)",
+)
 def crawl(
     device: str,
     package: str,
@@ -212,6 +218,7 @@ def crawl(
     enable_mobsf_analysis: bool,
     no_report: bool,
     log_level: str | None,
+    human_fallback: bool | None,
 ) -> None:
     """Start a crawl on the specified device and app."""
     try:
@@ -278,6 +285,8 @@ def crawl(
                 db_manager,
                 telemetry_client_factory=build_telemetry_client_factory(config_manager),
             ),
+            human_prompter=TerminalHumanPrompter(),
+            human_fallback_enabled_override=human_fallback,
         )
 
         # Run the crawl
