@@ -19,6 +19,7 @@ Source: `src/mobile_crawler/infrastructure/database.py`
 - [[code/cli/commands/delete|cli.commands.delete]]
 - [[code/cli/commands/list|cli.commands.list]]
 - [[code/cli/commands/report|cli.commands.report]]
+- [[code/cli/commands/stats|cli.commands.stats]]
 - [[code/core/log_sinks|core.log_sinks]]
 - [[code/core/stale_run_cleaner|core.stale_run_cleaner]]
 - [[code/domain/crawler_agent_service|domain.crawler_agent_service]]

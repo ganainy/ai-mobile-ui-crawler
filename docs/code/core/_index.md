@@ -15,6 +15,7 @@ Crawl orchestration: crawl controller, state machine, main crawler loop, stuck/p
 - [[code/core/log_sinks|core.log_sinks]] - Log sinks for multi-sink logging architecture.
 - [[code/core/logging_service|core.logging_service]] - Logging service with multi-sink architecture.
 - [[code/core/pre_crawl_validator|core.pre_crawl_validator]] - Pre-crawl validation for ensuring all requirements are met.
+- [[code/core/run_stats_sections|core.run_stats_sections]] - Qt-free layout and formatting of a persisted run_stats record.
 - [[code/core/runtime_stats_collector|core.runtime_stats_collector]] - Runtime statistics collector for crawl sessions.
 - [[code/core/stale_run_cleaner|core.stale_run_cleaner]] - Stale run cleanup for recovering crashed crawl sessions.
 - [[code/core/stuck_detector|core.stuck_detector]] - Stuck detector for identifying when crawler is stuck on the same screen.
