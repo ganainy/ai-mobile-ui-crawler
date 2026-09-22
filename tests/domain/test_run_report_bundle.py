@@ -453,3 +453,142 @@ def test_tracing_disabled_in_snapshot_means_not_configured(problem_run):
     )
 
     assert _run_json(session)["telemetry"]["status"] == "not_configured"
+
+
+# -- phase-level timing breakdown ---------------------------------------------
+
+from mobile_crawler.domain.step_phase_models import StepPhaseTransition  # noqa: E402
+from mobile_crawler.infrastructure.step_phase_repository import StepPhaseRepository  # noqa: E402
+
+
+@pytest.fixture
+def timed_run(seeded_run):
+    """seeded_run with phase transitions for step 1 (sub-phases and one validation retry)."""
+    db, run_id, session = seeded_run
+    phases = StepPhaseRepository(db)
+
+    def record(from_phase, to_phase, second, duration_ms, metadata=None):
+        phases.record_transition(
+            StepPhaseTransition(
+                id=None,
+                run_id=run_id,
+                step_number=1,
+                from_phase=from_phase,
+                to_phase=to_phase,
+                timestamp=datetime(2026, 9, 19, 10, 1, second),
+                duration_ms=duration_ms,
+                metadata_json=json.dumps(metadata) if metadata else None,
+            )
+        )
+
+    record("capture", "decide", 1, 1500.0, {"sub_phases": {"a11y_ms": 400.0, "omniparser_ms": 900.0}})
+    record(
+        "decide",
+        "act",
+        4,
+        3000.0,
+        {
+            "sub_phases": {"manager_llm_ms": 2000.0},
+            "validation_retries": [{"reason": "plan missing subgoal", "attempt": 1, "timestamp": "t"}],
+        },
+    )
+    record("act", "checkpoint", 5, 500.0)
+    return db, run_id, session
+
+
+def _steps_jsonl(session):
+    lines = (session / "analysis" / "steps.jsonl").read_text(encoding="utf-8").splitlines()
+    return [json.loads(line) for line in lines]
+
+
+def test_steps_jsonl_carries_the_phase_timing_breakdown(timed_run):
+    db, run_id, session = timed_run
+    ReportGenerator(db).generate(run_id)
+
+    step1, step2 = _steps_jsonl(session)
+    timing = step1["timing"]
+
+    assert timing["total_step_duration_ms"] == 5000.0
+    assert {"phase": "capture", "metric": "phase total", "duration_ms": 1500.0} in timing["phases"]
+    assert {"phase": "capture", "metric": "a11y_ms", "duration_ms": 400.0} in timing["phases"]
+    assert {"phase": "decide", "metric": "manager_llm_ms", "duration_ms": 2000.0} in timing["phases"]
+    assert timing["validation_retry_count"] == 1
+    assert timing["validation_retries"][0]["reason"] == "plan missing subgoal"
+    assert step2["timing"] is None  # no phase rows recorded for step 2
+
+
+def test_run_json_keeps_the_raw_phase_transitions(timed_run):
+    db, run_id, session = timed_run
+    ReportGenerator(db).generate(run_id)
+
+    transitions = _run_json(session)["step_phase_transitions"]
+
+    assert [t["from_phase"] for t in transitions] == ["capture", "decide", "act"]
+    assert transitions[0]["step_number"] == 1
+    assert json.loads(transitions[1]["metadata_json"])["sub_phases"]["manager_llm_ms"] == 2000.0
+
+
+def test_analysis_md_summarises_phase_timings_and_retries(timed_run):
+    db, run_id, session = timed_run
+    html = open(ReportGenerator(db).generate(run_id), encoding="utf-8").read()
+    text = (session / "analysis" / "analysis.md").read_text(encoding="utf-8")
+
+    assert "## Timing breakdown" in text
+    assert "capture phase total: avg 1500 ms" in text
+    assert "capture a11y_ms: avg 400 ms" in text
+    assert "decide manager_llm_ms: avg 2000 ms" in text
+    assert "Manager validation retries: 1" in text
+    assert "step 1 attempt 1: plan missing subgoal" in text
+    assert "<h2>Timing breakdown</h2>" in html
+
+
+def test_steps_jsonl_has_a_line_for_phase_timed_steps_without_a_step_log(timed_run):
+    # Real crawls record phase transitions but no step_logs rows; their timing must still be exported.
+    db, run_id, session = timed_run
+    StepPhaseRepository(db).record_transition(
+        StepPhaseTransition(
+            id=None,
+            run_id=run_id,
+            step_number=3,
+            from_phase="capture",
+            to_phase="decide",
+            timestamp=datetime(2026, 9, 19, 10, 3, 0),
+            duration_ms=700.0,
+        )
+    )
+    ReportGenerator(db).generate(run_id)
+
+    steps = _steps_jsonl(session)
+
+    assert [s["step_number"] for s in steps] == [1, 2, 3]
+    assert list(steps[2]) == list(steps[0])  # same keys as a step_logs-backed line
+    assert steps[2]["action_type"] is None
+    assert steps[2]["timing"]["total_step_duration_ms"] == 700.0
+
+
+def test_malformed_sub_phase_values_are_skipped_not_fatal():
+    from mobile_crawler.domain.step_phase_models import build_timing_breakdown
+
+    timing = build_timing_breakdown(
+        [
+            StepPhaseTransition(
+                id=None,
+                run_id=1,
+                step_number=1,
+                from_phase="capture",
+                to_phase="decide",
+                timestamp=datetime(2026, 9, 19, 10, 1, 0),
+                metadata_json=json.dumps({"sub_phases": {"a11y_ms": None, "omniparser_ms": "x", "ok_ms": 5}}),
+            )
+        ]
+    )
+
+    assert timing["phases"] == [{"phase": "capture", "metric": "ok_ms", "duration_ms": 5.0}]
+
+
+def test_analysis_md_omits_timing_section_without_phase_rows(seeded_run):
+    db, run_id, session = seeded_run
+    ReportGenerator(db).generate(run_id)
+
+    assert "Timing breakdown" not in (session / "analysis" / "analysis.md").read_text(encoding="utf-8")
+    assert _run_json(session)["step_phase_transitions"] == []

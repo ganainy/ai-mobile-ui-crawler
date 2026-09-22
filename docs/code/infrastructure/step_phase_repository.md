@@ -18,4 +18,5 @@ Source: `src/mobile_crawler/infrastructure/step_phase_repository.py`
 
 ## Imported by
 - [[code/domain/crawler_agent_service|domain.crawler_agent_service]]
+- [[code/infrastructure/analysis_bundle|infrastructure.analysis_bundle]]
 - [[code/ui/main_window|ui.main_window]]

@@ -4,18 +4,20 @@ import json
 import logging
 import os
 import re
-from collections import Counter
+from collections import Counter, defaultdict
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from mobile_crawler.domain.run_config_snapshot import read_config_snapshot
+from mobile_crawler.domain.step_phase_models import StepPhaseTransition, build_timing_breakdown
 from mobile_crawler.infrastructure.ai_interaction_repository import AIInteractionRepository
 from mobile_crawler.infrastructure.database import DatabaseManager
 from mobile_crawler.infrastructure.run_repository import Run, RunRepository
 from mobile_crawler.infrastructure.screen_repository import ScreenRepository
 from mobile_crawler.infrastructure.step_log_repository import StepLogRepository
+from mobile_crawler.infrastructure.step_phase_repository import StepPhaseRepository
 from mobile_crawler.infrastructure.telemetry_client import TelemetrySummary
 from mobile_crawler.reporting.contracts import ReportSection
 
@@ -35,6 +37,7 @@ class AnalysisBundleWriter:
         self.step_log_repository = StepLogRepository(db_manager)
         self.screen_repository = ScreenRepository(db_manager)
         self.ai_interaction_repository = AIInteractionRepository(db_manager)
+        self.step_phase_repository = StepPhaseRepository(db_manager)
 
     def write(self, run_id: int, output_dir: Path, telemetry: TelemetrySummary | None = None) -> Path:
         """Write the bundle for a run into output_dir and return that directory.
@@ -51,9 +54,18 @@ class AnalysisBundleWriter:
         interactions = self.ai_interaction_repository.get_ai_interactions_by_run(run_id)
         statistics = self._statistics(run_id)
         config = read_config_snapshot(run.session_path)
+        phase_transitions = self.step_phase_repository.get_transitions_for_run(run_id)
+        timings = self._step_timings(phase_transitions)
 
         screenshots = {i.step_number: i.screenshot_path for i in interactions}
-        steps = [self._step_record(run, step, screenshots.get(step.step_number)) for step in step_logs]
+        logged_steps = {step.step_number: step for step in step_logs}
+        steps = [
+            self._step_record(run, logged_steps[n], screenshots.get(n), timings.get(n))
+            if n in logged_steps
+            # Crawls record phase transitions without a step_logs row: export the timing on its own line.
+            else self._timing_only_record(n, timings[n])
+            for n in sorted(logged_steps.keys() | timings.keys())
+        ]
 
         with open(output_dir / "steps.jsonl", "w", encoding="utf-8") as f:
             for record in steps:
@@ -66,6 +78,7 @@ class AnalysisBundleWriter:
             "step_logs": self._step_logs(step_logs),
             "transitions": self._transitions(run_id),
             "ai_interactions": self._ai_interactions(interactions),
+            "step_phase_transitions": [asdict(t) for t in phase_transitions],
             "statistics": statistics,
             "config": config,
             "telemetry": asdict(telemetry) if telemetry else None,
@@ -74,7 +87,9 @@ class AnalysisBundleWriter:
             json.dump(run_data, f, indent=2, ensure_ascii=False, default=str)
 
         (output_dir / "analysis.md").write_text(
-            self._render_markdown(run, self._sections(run, statistics, step_logs, interactions, config, telemetry)),
+            self._render_markdown(
+                run, self._sections(run, statistics, step_logs, interactions, config, timings, telemetry)
+            ),
             encoding="utf-8",
         )
 
@@ -83,7 +98,36 @@ class AnalysisBundleWriter:
 
     # -- steps.jsonl -------------------------------------------------------
 
-    def _step_record(self, run: Run, step, screenshot_path: str | None) -> dict[str, Any]:
+    # Keys of every steps.jsonl line, in _step_record's order.
+    _STEP_RECORD_KEYS = (
+        "step_number",
+        "timestamp",
+        "action_type",
+        "action_description",
+        "input_text",
+        "execution_success",
+        "error_message",
+        "action_duration_ms",
+        "ai_response_time_ms",
+        "ai_reasoning",
+        "from_screen_id",
+        "to_screen_id",
+        "screenshot",
+        "timing",
+    )
+
+    @staticmethod
+    def _step_timings(transitions: list[StepPhaseTransition]) -> dict[int, dict[str, Any]]:
+        """Timing Breakdown per step number, for steps whose transitions carry timing data."""
+        by_step: dict[int, list[StepPhaseTransition]] = defaultdict(list)
+        for transition in transitions:
+            by_step[transition.step_number].append(transition)
+        timings = {step_number: build_timing_breakdown(rows) for step_number, rows in by_step.items()}
+        return {step_number: timing for step_number, timing in timings.items() if timing}
+
+    def _step_record(
+        self, run: Run, step, screenshot_path: str | None, timing: dict[str, Any] | None
+    ) -> dict[str, Any]:
         return {
             "step_number": step.step_number,
             "timestamp": step.timestamp.isoformat() if step.timestamp else None,
@@ -98,7 +142,13 @@ class AnalysisBundleWriter:
             "from_screen_id": step.from_screen_id,
             "to_screen_id": step.to_screen_id,
             "screenshot": self._relative_path(run, screenshot_path),
+            "timing": timing,
         }
+
+    def _timing_only_record(self, step_number: int, timing: dict[str, Any]) -> dict[str, Any]:
+        """A steps.jsonl line for a step that has phase timing but no step_logs row."""
+        empty = dict.fromkeys(self._STEP_RECORD_KEYS)
+        return {**empty, "step_number": step_number, "timing": timing}
 
     @staticmethod
     def _relative_path(run: Run, path: str | None) -> str | None:
@@ -125,6 +175,7 @@ class AnalysisBundleWriter:
             self.step_log_repository.get_step_logs_by_run(run_id),
             self.ai_interaction_repository.get_ai_interactions_by_run(run_id),
             read_config_snapshot(run.session_path),
+            self._step_timings(self.step_phase_repository.get_transitions_for_run(run_id)),
             telemetry,
         )
 
@@ -135,6 +186,7 @@ class AnalysisBundleWriter:
         step_logs,
         interactions,
         config: dict[str, Any] | None,
+        timings: dict[int, dict[str, Any]],
         telemetry: TelemetrySummary | None = None,
     ) -> list[ReportSection]:
         sections = [
@@ -145,6 +197,7 @@ class AnalysisBundleWriter:
             self._repeated_actions_section(step_logs),
             self._failed_steps_section(step_logs),
             self._ai_usage_section(interactions),
+            self._timing_section(timings),
             self._telemetry_section(run, telemetry),
         ]
         return [section for section in sections if section is not None]
@@ -260,6 +313,35 @@ class AnalysisBundleWriter:
         for i in errors[:limit]:
             items.append(f"AI error at step {i.step_number}: {i.error_message or 'unknown error'}")
         return ReportSection("AI usage", items=items)
+
+    @staticmethod
+    def _timing_section(timings: dict[int, dict[str, Any]], limit: int = 10) -> ReportSection | None:
+        if not timings:
+            return None
+        durations: dict[tuple[str, str], list[float]] = defaultdict(list)
+        retries: list[tuple[int, dict[str, Any]]] = []
+        for step_number, timing in sorted(timings.items()):
+            for row in timing["phases"]:
+                durations[(row["phase"], row["metric"])].append(row["duration_ms"])
+            retries += [(step_number, retry) for retry in timing["validation_retries"]]
+
+        items = [
+            f"{phase} {metric}: avg {sum(values) / len(values):.0f} ms, "
+            f"max {max(values):.0f} ms ({len(values)} steps)"
+            for (phase, metric), values in durations.items()
+        ]
+        items.append(f"Manager validation retries: {len(retries)}")
+        for step_number, retry in retries[:limit]:
+            attempt = retry.get("attempt")
+            prefix = f"step {step_number}" + (f" attempt {attempt}" if attempt is not None else "")
+            items.append(f"{prefix}: {retry.get('reason', 'Validation retry')}")
+        if len(retries) > limit:
+            items.append(f"... and {len(retries) - limit} more (see `steps.jsonl`)")
+        return ReportSection(
+            "Timing breakdown",
+            intro=f"Per-phase durations over {len(timings)} steps with phase data; per-step rows are in `steps.jsonl`.",
+            items=items,
+        )
 
     @staticmethod
     def _telemetry_section(run: Run, telemetry: TelemetrySummary | None) -> ReportSection | None:
