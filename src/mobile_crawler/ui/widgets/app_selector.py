@@ -1,8 +1,6 @@
 """App selection widget for mobile-crawler GUI."""
 
 import logging
-import re
-import subprocess
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import Qt, QThread, Signal
@@ -10,6 +8,11 @@ from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QMessageBox, QPushButton, QVBoxLayout, QWidget
 
 from mobile_crawler.infrastructure.app_metadata_resolver import AppMetadata, AppMetadataResolver
+from mobile_crawler.infrastructure.installed_apps import (
+    fetch_third_party_packages_output,
+    is_valid_package_name,
+    parse_package_list,
+)
 from mobile_crawler.ui.async_utils import AsyncOperation
 
 if TYPE_CHECKING:
@@ -164,18 +167,7 @@ class AppSelector(QWidget):
         if not self.device_id:
             raise RuntimeError("No device selected")
 
-        result = subprocess.run(
-            ["adb", "-s", self.device_id, "shell", "pm", "list", "packages", "-3"],
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
-
-        if result.returncode != 0:
-            error_output = result.stderr.strip() or result.stdout.strip()
-            raise RuntimeError(error_output or "ADB command failed")
-
-        return result.stdout
+        return fetch_third_party_packages_output(self.device_id)
 
     def _on_list_success(self, packages: str):
         """Handle successful package list retrieval.
@@ -183,23 +175,12 @@ class AppSelector(QWidget):
         Args:
             packages: Raw string output from package manager
         """
-        # Parse output
-        package_list = []
-        if packages:
-            for line in packages.split("\n"):
-                line = line.strip()
-                if line.startswith("package:"):
-                    package = line.replace("package:", "").strip()
-                    if self._validate_package(package):
-                        package_list.append(package)
+        package_list = parse_package_list(packages or "")
 
         if not package_list:
             self.status_label.setText("No apps found")
             self.status_label.setStyleSheet("color: red; font-style: italic;")
             return
-
-        # Sort packages
-        package_list.sort()
 
         # Populate combo box with raw package names; icons/labels arrive via enrichment
         self.apps_combo.blockSignals(True)
@@ -306,13 +287,7 @@ class AppSelector(QWidget):
         Returns:
             True if valid, False otherwise
         """
-        # Android package name regex:
-        # - Must start with a letter
-        # - Can contain letters, digits, and underscores
-        # - Must have at least one dot
-        # - Each segment must start with a lowercase letter
-        pattern = r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$"
-        return bool(re.match(pattern, package))
+        return is_valid_package_name(package)
 
     def current_package(self) -> str | None:
         """Get the currently selected package.
