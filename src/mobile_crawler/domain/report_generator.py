@@ -10,7 +10,7 @@ from typing import Any
 
 from mobile_crawler.domain.run_config_snapshot import read_config_snapshot
 from mobile_crawler.infrastructure.ai_interaction_repository import AIInteractionRepository
-from mobile_crawler.infrastructure.analysis_bundle import AnalysisBundleWriter
+from mobile_crawler.infrastructure.analysis_bundle import AnalysisBundleWriter, screenshots_by_step
 from mobile_crawler.infrastructure.database import DatabaseManager
 from mobile_crawler.infrastructure.run_repository import RunRepository
 from mobile_crawler.infrastructure.step_log_repository import StepLogRepository
@@ -90,8 +90,7 @@ class ReportGenerator:
 
         # 2.2. Fetch AI interactions to get screenshot paths (which are missing in step_logs)
         interactions = self.ai_interaction_repository.get_ai_interactions_by_run(run_id)
-        # Map step_number -> screenshot_path
-        step_screenshots = {i.step_number: i.screenshot_path for i in interactions}
+        step_screenshots = screenshots_by_step(step_logs, interactions)
 
         # 3. Assemble run_data for correlator
         # Map DB model to dictionary expected by correlator

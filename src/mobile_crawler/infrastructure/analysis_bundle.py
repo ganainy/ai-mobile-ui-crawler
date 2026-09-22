@@ -24,6 +24,32 @@ from mobile_crawler.reporting.contracts import ReportSection
 logger = logging.getLogger(__name__)
 
 
+def screenshots_by_step(step_logs, interactions) -> dict[int, str]:
+    """Map step number -> screenshot path of the AI call that decided that step.
+
+    AI calls are numbered per decision and steps per executed tool, so the numbers
+    drift apart once a decision runs several tools. A step gets the screenshot of the
+    latest AI call made after the previous step and no later than itself: the first
+    tool of a decision carries its screenshot, the rest of that batch none.
+    Steps without a step_logs row fall back to matching by number.
+    """
+    shots = sorted(
+        ((i.timestamp, i.screenshot_path) for i in interactions if i.screenshot_path),
+        key=lambda shot: shot[0],
+    )
+    by_number = {i.step_number: i.screenshot_path for i in interactions if i.screenshot_path}
+    result: dict[int, str] = {}
+    previous = None
+    for step in sorted(step_logs, key=lambda s: s.step_number):
+        in_window = [path for ts, path in shots if (previous is None or ts > previous) and ts <= step.timestamp]
+        if in_window:
+            result[step.step_number] = in_window[-1]
+        previous = step.timestamp
+    logged = {s.step_number for s in step_logs}
+    result.update({n: path for n, path in by_number.items() if n not in logged})
+    return result
+
+
 class AnalysisBundleWriter:
     """Writes analysis.md, steps.jsonl and run.json for a crawl run.
 
@@ -57,7 +83,7 @@ class AnalysisBundleWriter:
         phase_transitions = self.step_phase_repository.get_transitions_for_run(run_id)
         timings = self._step_timings(phase_transitions)
 
-        screenshots = {i.step_number: i.screenshot_path for i in interactions}
+        screenshots = screenshots_by_step(step_logs, interactions)
         logged_steps = {step.step_number: step for step in step_logs}
         steps = [
             self._step_record(run, logged_steps[n], screenshots.get(n), timings.get(n))

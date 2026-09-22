@@ -43,6 +43,7 @@ from mobile_crawler.domain.step_phase import StepPhase, StepPhaseStateMachine
 from mobile_crawler.domain.step_phase_models import StepPhaseTransition
 from mobile_crawler.domain.ui_wait_predicate import AdaptiveWaitConfig, UIWaitPredicate, is_omniparser_backed
 from mobile_crawler.infrastructure.ai_interaction_repository import AIInteraction, AIInteractionRepository
+from mobile_crawler.infrastructure.step_log_repository import StepLog, StepLogRepository
 from mobile_crawler.infrastructure.step_phase_repository import StepPhaseRepository
 
 logger = logging.getLogger(__name__)
@@ -188,6 +189,7 @@ class CrawlerAgentService:
         # Step phase machine and observers (set per-run via begin_step_tracking)
         self._step_phase_machine: StepPhaseStateMachine | None = None
         self._step_phase_repository: StepPhaseRepository | None = None
+        self._step_log_repository: StepLogRepository | None = None
         self._ui_wait_predicate: UIWaitPredicate | None = None
         self._action_verifier: ActionVerifier | None = None
         self._current_run_id: int | None = None
@@ -205,6 +207,9 @@ class CrawlerAgentService:
         self._sub_phase_starts: dict[str, float] = {}
         self._phase_metadata: dict[str, dict[str, Any]] = {}
         self._pending_step_timing: dict[str, Any] = {}
+        # Reasoning and LLM time of the latest Executor/FastAgent decision, written onto the
+        # step_logs rows of the tools it runs (an Action Batch runs several).
+        self._step_decision: dict[str, Any] = {}
         # Actions run since the last step-by-step pause, handed to listeners on the next pause.
         self._step_actions: list[ActionResult] = []
 
@@ -603,6 +608,7 @@ class CrawlerAgentService:
         self._sub_phase_starts = {}
         self._phase_metadata = {}
         self._pending_step_timing = {}
+        self._step_decision = {}
         self._screenshots_dir = screenshots_dir
         self._screenshot_written: set[tuple[int, int]] = set()  # (run_id, step_number)
 
@@ -615,6 +621,7 @@ class CrawlerAgentService:
 
         db_manager = DatabaseManager()
         self._step_phase_repository = StepPhaseRepository(db_manager)
+        self._step_log_repository = StepLogRepository(db_manager)
 
         # Initialize wait predicate and verifier (lazy -- will be fully wired
         # when crawler_agent provides state_provider/driver)
@@ -785,7 +792,7 @@ class CrawlerAgentService:
         return self._phase_metadata.pop(phase.value, {})
 
     def _buffer_workflow_timing(self, event) -> None:
-        """Buffer Manager/Executor timing until the following tool event creates a step."""
+        """Buffer Manager/Executor/FastAgent timing and the latest decision until the next tool event."""
         from mobile_crawler.domain.crawler_agent.agent.executor.events import ExecutorResponseEvent
         from mobile_crawler.domain.crawler_agent.agent.manager.events import (
             ManagerContextEvent,
@@ -807,6 +814,13 @@ class CrawlerAgentService:
             executor_llm_ms = getattr(event, "executor_llm_ms", None)
             if executor_llm_ms is not None:
                 self._pending_step_timing["executor_llm_ms"] = executor_llm_ms
+            parsed = getattr(event, "parsed_action", None) or {}
+            self._step_decision = {"reasoning": parsed.get("thought") or None, "llm_ms": executor_llm_ms}
+        elif isinstance(event, FastAgentResponseEvent):
+            self._step_decision = {
+                "reasoning": getattr(event, "thought", None) or None,
+                "llm_ms": getattr(event, "fast_agent_llm_ms", None),
+            }
 
     def _apply_pending_step_timing(self) -> None:
         """Attach buffered Manager/Executor timings to the current DECIDE phase."""
@@ -825,6 +839,43 @@ class CrawlerAgentService:
             )
 
         self._pending_step_timing = {}
+
+    def _write_step_log(self, event) -> None:
+        """Persist a step_logs row for a ToolExecutionEvent under the current step number.
+
+        One row per executed tool, numbered like ``step_phase_transitions``. The decision's
+        reasoning goes on every tool it ran; its LLM time only on the first, so sums stay right.
+        Screen ids stay empty: nothing in the agent loop assigns screen ids.
+        """
+        if not self._current_run_id or not self._step_log_repository:
+            return
+        success = bool(getattr(event, "success", False))
+        summary = getattr(event, "summary", None) or None
+        tool_args = getattr(event, "tool_args", None)
+        input_text = tool_args.get("text") if isinstance(tool_args, dict) else None
+        duration_ms = getattr(event, "duration_ms", None)
+        try:
+            self._step_log_repository.create_step_log(
+                StepLog(
+                    id=None,
+                    run_id=self._current_run_id,
+                    step_number=self._current_step_number,
+                    timestamp=datetime.now(),
+                    from_screen_id=None,
+                    to_screen_id=None,
+                    action_type=str(getattr(event, "tool_name", "unknown")),
+                    action_description=summary,
+                    target_bbox_json=None,
+                    input_text=str(input_text) if input_text is not None else None,
+                    execution_success=success,
+                    error_message=None if success else summary,
+                    action_duration_ms=float(duration_ms) if isinstance(duration_ms, int | float) else None,
+                    ai_response_time_ms=self._step_decision.pop("llm_ms", None),
+                    ai_reasoning=self._step_decision.get("reasoning"),
+                )
+            )
+        except Exception as e:
+            logger.warning(f"Failed to write step log for step {self._current_step_number}: {e}")
 
     def _on_phase_transition(self, old_phase: StepPhase, new_phase: StepPhase) -> None:
         """Listener callback for state machine transitions.
@@ -945,6 +996,8 @@ class CrawlerAgentService:
 
         # Increment step number on each tool execution
         self._current_step_number += 1
+        # Written before the phase transitions so update_step_current_phase finds the row.
+        self._write_step_log(event)
         self._apply_pending_step_timing()
         duration_ms = getattr(event, "duration_ms", None)
         self._add_sub_phase_timing(
@@ -1180,6 +1233,19 @@ class CrawlerAgentService:
             logger.warning(f"Invalid phase transition at step {self._current_step_number}: {e}")
         except Exception as e:
             logger.warning(f"Phase transition error at step {self._current_step_number}: {e}")
+
+    async def _dispatch_workflow_event(self, event) -> None:
+        """Route one event from the agent's workflow stream to its handler."""
+        if isinstance(event, StepPausedEvent):
+            self._surface_step_pause(event.step_number)
+        elif isinstance(event, ToolExecutionEvent):
+            self._record_step_action(event)
+            await self._handle_tool_execution_event(event)
+        elif isinstance(event, ScreenshotEvent):
+            await self._handle_screenshot_timing_event(event)
+        else:
+            self._buffer_workflow_timing(event)
+            await self._handle_ai_interaction_event(event)
 
     async def _handle_screenshot_timing_event(self, event) -> None:
         """Handle a ScreenshotEvent carrying capture duration for the Statistics dashboard."""
@@ -1652,16 +1718,7 @@ class CrawlerAgentService:
                             """Background task: consume agent events and drive step phase metadata."""
                             try:
                                 async for event in workflow_result.stream_events():
-                                    if isinstance(event, StepPausedEvent):
-                                        self._surface_step_pause(event.step_number)
-                                    elif isinstance(event, ToolExecutionEvent):
-                                        self._record_step_action(event)
-                                        await self._handle_tool_execution_event(event)
-                                    elif isinstance(event, ScreenshotEvent):
-                                        await self._handle_screenshot_timing_event(event)
-                                    else:
-                                        self._buffer_workflow_timing(event)
-                                        await self._handle_ai_interaction_event(event)
+                                    await self._dispatch_workflow_event(event)
                             except asyncio.CancelledError:
                                 pass
                             except Exception as e:

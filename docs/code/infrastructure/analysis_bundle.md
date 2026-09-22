@@ -11,6 +11,9 @@ Source: `src/mobile_crawler/infrastructure/analysis_bundle.py`
 ## Classes
 - `AnalysisBundleWriter`
 
+## Functions
+- `screenshots_by_step`
+
 ## Imports
 - [[code/domain/run_config_snapshot|domain.run_config_snapshot]]
 - [[code/domain/step_phase_models|domain.step_phase_models]]

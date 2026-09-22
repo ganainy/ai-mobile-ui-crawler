@@ -16,6 +16,7 @@ Source: `src/mobile_crawler/infrastructure/step_log_repository.py`
 - [[code/infrastructure/database|infrastructure.database]]
 
 ## Imported by
+- [[code/domain/crawler_agent_service|domain.crawler_agent_service]]
 - [[code/domain/prompt_builder|domain.prompt_builder]]
 - [[code/domain/report_generator|domain.report_generator]]
 - [[code/infrastructure/analysis_bundle|infrastructure.analysis_bundle]]

@@ -45,6 +45,7 @@ Source: `src/mobile_crawler/domain/crawler_agent_service.py`
 - [[code/infrastructure/app_account_store|infrastructure.app_account_store]]
 - [[code/infrastructure/database|infrastructure.database]]
 - [[code/infrastructure/sms_reader|infrastructure.sms_reader]]
+- [[code/infrastructure/step_log_repository|infrastructure.step_log_repository]]
 - [[code/infrastructure/step_phase_repository|infrastructure.step_phase_repository]]
 - [[code/infrastructure/verification_inbox|infrastructure.verification_inbox]]
 
