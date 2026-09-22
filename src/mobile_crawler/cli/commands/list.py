@@ -1,25 +1,44 @@
-"""CLI commands for listing runs and devices."""
+"""CLI commands for listing runs, devices and installed apps."""
+
+from __future__ import annotations
+
+import logging
 
 import click
 
+logger = logging.getLogger(__name__)
+
 
 @click.command()
-@click.argument('target', type=click.Choice(['runs', 'devices']))
-@click.option('--limit', '-n', type=int, default=10, help='Maximum number of items to list')
+@click.argument('target', type=click.Choice(['runs', 'devices', 'apps']))
+@click.option('--limit', '-n', type=int, default=None,
+              help='Maximum number of items to list (default: 10 for runs/devices, all for apps)')
 @click.option('--format', 'output_format', type=click.Choice(['table', 'json']), default='table', help='Output format')
-def list(target: str, limit: int, output_format: str):
-    """List runs or devices.
+@click.option('--device', '-d', 'device_id', default=None, help='Device ID to list apps from (required for apps)')
+@click.option('--no-names', is_flag=True, default=False,
+              help='apps only: skip resolving app names (faster; names need an APK pull on first lookup)')
+def list(target: str, limit: int | None, output_format: str, device_id: str | None, no_names: bool):
+    """List runs, devices or installed apps.
 
-    TARGET: What to list ('runs' or 'devices')
+    TARGET: What to list ('runs', 'devices' or 'apps')
+
+    'apps' lists the third-party packages installed on --device, i.e. valid
+    values for `crawl --package`.
     """
+    if target == 'apps' and not device_id:
+        raise click.UsageError("'list apps' requires --device ID (see 'list devices').")
+    if target != 'apps' and (device_id or no_names):
+        raise click.UsageError("--device and --no-names only apply to 'list apps'.")
+    if limit is None and target != 'apps':
+        limit = 10
+
     try:
         from mobile_crawler.infrastructure.database import DatabaseManager
         from mobile_crawler.infrastructure.device_detection import DeviceDetection
         from mobile_crawler.infrastructure.run_repository import RunRepository
 
-        db_manager = DatabaseManager()
-
         if target == 'runs':
+            db_manager = DatabaseManager()
             run_repository = RunRepository(db_manager)
             runs = run_repository.get_recent_runs(limit)
 
@@ -80,6 +99,57 @@ def list(target: str, limit: int, output_format: str):
                 for device in devices[:limit]:
                     click.echo(f"{device.device_id:<20} {device.model[:19]:<20} {'Android':<10} {device.android_version:<10} {device.status}")
 
+        elif target == 'apps':
+            _list_apps(device_id, limit, output_format, resolve_names=not no_names)
+
     except Exception as e:
         click.echo(f"Error listing {target}: {e}", err=True)
         raise click.Abort() from e
+
+
+def _list_apps(device_id: str, limit: int | None, output_format: str, resolve_names: bool) -> None:
+    """Print the third-party packages installed on `device_id`, with app names where resolvable."""
+    from mobile_crawler.infrastructure import installed_apps
+
+    packages = installed_apps.list_third_party_packages(device_id)
+    if limit is not None:
+        packages = packages[:limit]
+
+    names = _resolve_app_names(device_id, packages) if resolve_names else {}
+    apps = [{'package': package, 'name': names.get(package)} for package in packages]
+
+    if output_format == 'json':
+        import json
+        click.echo(json.dumps(apps, indent=2))
+        return
+
+    if not apps:
+        click.echo(f"No third-party apps found on {device_id}.")
+        return
+
+    click.echo(f"Installed Apps on {device_id}:")
+    click.echo("-" * 80)
+    click.echo(f"{'Package':<50} {'Name'}")
+    click.echo("-" * 80)
+    for app in apps:
+        click.echo(f"{app['package']:<50} {app['name'] or '-'}")
+
+
+def _resolve_app_names(device_id: str, packages: list[str]) -> dict[str, str]:
+    """Resolve display names via the GUI's AppMetadataResolver; unresolved packages are omitted."""
+    from mobile_crawler.infrastructure.app_metadata_resolver import AppMetadataResolver
+
+    if packages:
+        # stderr: stdout may be JSON. First lookups pull each APK, so this can take a while.
+        click.echo(f"Resolving names for {len(packages)} apps (use --no-names to skip)...", err=True)
+    resolver = AppMetadataResolver()
+    names = {}
+    for package in packages:
+        try:
+            metadata = resolver.resolve(device_id, package)
+        except Exception as e:
+            logger.debug(f"Failed to resolve app metadata for {package}: {e}")
+            continue
+        if metadata.source != 'unresolved':
+            names[package] = metadata.label
+    return names

@@ -19,3 +19,4 @@ Source: `src/mobile_crawler/infrastructure/docker_autostart.py`
 
 ## Imported by
 - [[code/cli/commands/crawl|cli.commands.crawl]]
+- [[code/cli/commands/mobsf_scan|cli.commands.mobsf_scan]]

@@ -20,6 +20,8 @@ Source: `src/mobile_crawler/infrastructure/run_repository.py`
 - [[code/cli/commands/crawl|cli.commands.crawl]]
 - [[code/cli/commands/delete|cli.commands.delete]]
 - [[code/cli/commands/list|cli.commands.list]]
+- [[code/cli/commands/mobsf_scan|cli.commands.mobsf_scan]]
+- [[code/cli/commands/stats|cli.commands.stats]]
 - [[code/core/crawler_loop|core.crawler_loop]]
 - [[code/core/stale_run_cleaner|core.stale_run_cleaner]]
 - [[code/domain/report_generator|domain.report_generator]]

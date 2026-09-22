@@ -384,3 +384,166 @@ class TestCrawlStepByStep:
         prompter = loop_cls.call_args.kwargs["human_prompter"]
         console = loop_cls.return_value.add_event_listener.call_args.args[0]
         assert console._reader is prompter._reader
+
+
+class TestCrawlRunOverrides:
+    """--parser-mode, --reasoning-mode and --exploration-objective override config for this run only."""
+
+    def _run(self, extra_args):
+        # Config calls made before OmniParser auto-start, for the ordering test.
+        self.calls_before_omniparser = []
+        with (
+            patch("mobile_crawler.cli.commands.crawl.DatabaseManager"),
+            patch("mobile_crawler.cli.commands.crawl.ConfigManager") as config_cls,
+            patch("mobile_crawler.cli.commands.crawl.CrawlerLoop"),
+            patch("mobile_crawler.cli.commands.crawl.RunRepository") as run_repo_cls,
+            patch("mobile_crawler.cli.commands.crawl.get_app_data_dir") as data_dir,
+            patch("mobile_crawler.cli.commands.crawl.ensure_mobsf_running_if_enabled", return_value=None),
+            patch("mobile_crawler.cli.commands.crawl.ensure_omniparser_running_if_enabled") as omniparser,
+        ):
+            data_dir.return_value = Mock()
+            run_repo_cls.return_value.create_run.return_value = 7
+            config = Mock()
+            config.get.return_value = None
+            config_cls.return_value = config
+            omniparser.side_effect = lambda cm: self.calls_before_omniparser.extend(cm.method_calls)
+            result = CliRunner().invoke(
+                cli,
+                [
+                    "crawl",
+                    "--device",
+                    "emulator-5554",
+                    "--package",
+                    "com.example.app",
+                    "--model",
+                    "gemini-pro",
+                    *extra_args,
+                ],
+            )
+        return result, config
+
+    @staticmethod
+    def _keys(calls):
+        return {c.args[0] for c in calls}
+
+    def test_no_overrides_by_default(self):
+        result, config = self._run([])
+
+        assert result.exit_code == 0
+        config.override.assert_not_called()
+
+    def test_parser_mode_overrides_without_persisting(self):
+        result, config = self._run(["--parser-mode", "accessibility"])
+
+        assert result.exit_code == 0
+        config.override.assert_called_once_with("ui_parser_mode", "accessibility")
+        assert "ui_parser_mode" not in self._keys(config.set.call_args_list)
+
+    def test_parser_mode_rejects_unknown_values(self):
+        result, config = self._run(["--parser-mode", "ocr"])
+
+        assert result.exit_code == 2
+        assert "--parser-mode" in result.output
+        config.override.assert_not_called()
+
+    def test_parser_mode_override_applies_before_docker_autostart(self):
+        # OmniParser auto-start reads ui_parser_mode, so the override must already be in place.
+        result, _ = self._run(["--parser-mode", "accessibility"])
+
+        assert result.exit_code == 0
+        assert "override" in [c[0] for c in self.calls_before_omniparser]
+
+    def test_reasoning_mode_flag_overrides_to_true(self):
+        result, config = self._run(["--reasoning-mode"])
+
+        assert result.exit_code == 0
+        config.override.assert_called_once_with("crawler_reasoning_mode", True)
+
+    def test_no_reasoning_mode_flag_overrides_to_false(self):
+        result, config = self._run(["--no-reasoning-mode"])
+
+        assert result.exit_code == 0
+        config.override.assert_called_once_with("crawler_reasoning_mode", False)
+        assert "crawler_reasoning_mode" not in self._keys(config.set.call_args_list)
+
+    def test_exploration_objective_overrides_without_persisting(self):
+        result, config = self._run(["--exploration-objective", "Find the settings screen"])
+
+        assert result.exit_code == 0
+        config.override.assert_called_once_with("exploration_objective", "Find the settings screen")
+        assert "exploration_objective" not in self._keys(config.set.call_args_list)
+
+
+class TestCrawlLastDeviceAndPackage:
+    """--device last / --package last resolve to the persisted last-used device and app."""
+
+    def _run(self, device, package, saved):
+        with (
+            patch("mobile_crawler.cli.commands.crawl.DatabaseManager"),
+            patch("mobile_crawler.cli.commands.crawl.ConfigManager") as config_cls,
+            patch("mobile_crawler.cli.commands.crawl.CrawlerLoop") as loop_cls,
+            patch("mobile_crawler.cli.commands.crawl.RunRepository") as run_repo_cls,
+            patch("mobile_crawler.cli.commands.crawl.get_app_data_dir") as data_dir,
+        ):
+            data_dir.return_value = Mock()
+            run_repo_cls.return_value.create_run.return_value = 7
+            config = Mock()
+            config.user_config_store.get_setting.side_effect = lambda key, default=None: saved.get(key, default)
+            config_cls.return_value = config
+            result = CliRunner().invoke(
+                cli, ["crawl", "--device", device, "--package", package, "--model", "gemini-pro"]
+            )
+        return result, config, run_repo_cls.return_value, loop_cls
+
+    def test_device_last_uses_the_saved_device(self):
+        result, _, run_repo, _ = self._run("last", "com.example.app", {"last_device_id": "R5CT1234"})
+
+        assert result.exit_code == 0
+        assert run_repo.create_run.call_args.args[0].device_id == "R5CT1234"
+
+    def test_package_last_uses_the_saved_package(self):
+        result, config, run_repo, _ = self._run("emulator-5554", "last", {"last_app_package": "com.saved.app"})
+
+        assert result.exit_code == 0
+        assert run_repo.create_run.call_args.args[0].app_package == "com.saved.app"
+        config.set.assert_any_call("app_package", "com.saved.app")
+
+    def test_both_last_resolve_together(self):
+        saved = {"last_device_id": "R5CT1234", "last_app_package": "com.saved.app"}
+        result, _, run_repo, _ = self._run("last", "last", saved)
+
+        assert result.exit_code == 0
+        run = run_repo.create_run.call_args.args[0]
+        assert (run.device_id, run.app_package) == ("R5CT1234", "com.saved.app")
+
+    def test_explicit_values_do_not_read_saved_settings(self):
+        saved = {"last_device_id": "R5CT1234", "last_app_package": "com.saved.app"}
+        result, config, run_repo, _ = self._run("emulator-5554", "com.example.app", saved)
+
+        assert result.exit_code == 0
+        run = run_repo.create_run.call_args.args[0]
+        assert (run.device_id, run.app_package) == ("emulator-5554", "com.example.app")
+        read_keys = [c.args[0] for c in config.user_config_store.get_setting.call_args_list]
+        assert "last_device_id" not in read_keys and "last_app_package" not in read_keys
+
+    def test_device_last_without_saved_device_fails_before_the_run(self):
+        result, _, run_repo, loop_cls = self._run("last", "com.example.app", {})
+
+        assert result.exit_code == 1
+        assert "last_device_id" in result.stderr
+        run_repo.create_run.assert_not_called()
+        loop_cls.assert_not_called()
+
+    def test_package_last_without_saved_package_fails_before_the_run(self):
+        result, _, run_repo, loop_cls = self._run("emulator-5554", "last", {})
+
+        assert result.exit_code == 1
+        assert "last_app_package" in result.stderr
+        run_repo.create_run.assert_not_called()
+        loop_cls.assert_not_called()
+
+    def test_help_mentions_last(self):
+        result = CliRunner().invoke(cli, ["crawl", "--help"])
+
+        assert result.exit_code == 0
+        assert "'last'" in result.output

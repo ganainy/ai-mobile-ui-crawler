@@ -5,6 +5,8 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from mobile_crawler.config.config_manager import ConfigManager
 from mobile_crawler.infrastructure.user_config_store import UserConfigStore
 
@@ -112,3 +114,38 @@ class TestConfigManager:
         # Should fall back to env
         with patch.dict(os.environ, {'CRAWLER_TEST_KEY': 'env_value'}):
             assert config.get('test_key') == 'env_value'
+
+
+class TestRunOverrides:
+    """override() sets a value for this ConfigManager instance only: it wins over the store and never persists."""
+
+    @pytest.fixture
+    def store(self, tmp_path):
+        store = UserConfigStore(tmp_path / "user_config.db")
+        store.create_schema()
+        yield store
+
+    def test_override_wins_over_persisted_value(self, store):
+        config = ConfigManager(store)
+        config.set("ui_parser_mode", "omniparser")
+
+        config.override("ui_parser_mode", "accessibility")
+
+        assert config.get("ui_parser_mode") == "accessibility"
+
+    def test_override_is_not_persisted(self, store):
+        config = ConfigManager(store)
+        config.set("ui_parser_mode", "omniparser")
+
+        config.override("ui_parser_mode", "accessibility")
+
+        assert store.get_setting("ui_parser_mode") == "omniparser"
+        assert ConfigManager(store).get("ui_parser_mode") == "omniparser"
+
+    def test_falsy_override_still_wins(self, store):
+        config = ConfigManager(store)
+        config.set("crawler_reasoning_mode", True)
+
+        config.override("crawler_reasoning_mode", False)
+
+        assert config.get("crawler_reasoning_mode") is False

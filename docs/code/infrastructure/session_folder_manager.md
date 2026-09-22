@@ -18,6 +18,7 @@ Source: `src/mobile_crawler/infrastructure/session_folder_manager.py`
 ## Imported by
 - [[code/cli/commands/crawl|cli.commands.crawl]]
 - [[code/cli/commands/delete|cli.commands.delete]]
+- [[code/cli/commands/mobsf_scan|cli.commands.mobsf_scan]]
 - [[code/core/crawler_loop|core.crawler_loop]]
 - [[code/domain/traffic_capture_manager|domain.traffic_capture_manager]]
 - [[code/infrastructure/mobsf_manager|infrastructure.mobsf_manager]]

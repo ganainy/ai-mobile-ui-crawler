@@ -14,6 +14,7 @@ Source: `src/mobile_crawler/ui/widgets/app_selector.py`
 
 ## Imports
 - [[code/infrastructure/app_metadata_resolver|infrastructure.app_metadata_resolver]]
+- [[code/infrastructure/installed_apps|infrastructure.installed_apps]]
 - [[code/infrastructure/user_config_store|infrastructure.user_config_store]]
 - [[code/ui/async_utils|ui.async_utils]]
 

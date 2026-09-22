@@ -611,10 +611,11 @@ class MobSFManager:
         session_path: str | None = None,
         device_id: str | None = None,
         log_callback: Callable[[str, str | None], None] | None = None,
+        apk_path: str | None = None,
     ) -> tuple[bool, dict[str, Any]]:
         """Perform a complete scan workflow.
 
-        1. Extract APK from device
+        1. Extract APK from device (skipped when ``apk_path`` is given)
         2. Upload to MobSF
         3. Scan the APK
         4. Get and save reports
@@ -625,6 +626,8 @@ class MobSFManager:
             session_path: Optional session directory path
             log_callback: Optional callback function to display logs.
                          Should accept (message: str, color: Optional[str] = None)
+            apk_path: Optional already-stored APK (or split .apks archive) to scan
+                instead of pulling one from the device
 
         Returns:
             Tuple of (success, scan_summary)
@@ -683,17 +686,20 @@ class MobSFManager:
         os.makedirs(reports_dir, exist_ok=True)
         os.makedirs(apks_dir, exist_ok=True)
 
-        # Extract APK from device
-        _log("Extracting APK from device...", "blue")
-        logger.debug(f"Extracting APK for package: {package_name}")
-        apk_path = self.extract_apk_from_device(package_name, output_dir=apks_dir, device_id=device_id)
-        if not apk_path:
-            error_msg = "Failed to extract APK from device"
-            logger.error(f"MobSF analysis failed: {error_msg}")
-            _log(f"ERROR: {error_msg}", "red")
-            return False, {"error": error_msg}
-        _log(f"APK extracted to: {apk_path}", "green")
-        logger.debug(f"APK extracted successfully: {apk_path}")
+        if apk_path:
+            _log(f"Using stored APK: {apk_path}", "blue")
+        else:
+            # Extract APK from device
+            _log("Extracting APK from device...", "blue")
+            logger.debug(f"Extracting APK for package: {package_name}")
+            apk_path = self.extract_apk_from_device(package_name, output_dir=apks_dir, device_id=device_id)
+            if not apk_path:
+                error_msg = "Failed to extract APK from device"
+                logger.error(f"MobSF analysis failed: {error_msg}")
+                _log(f"ERROR: {error_msg}", "red")
+                return False, {"error": error_msg}
+            _log(f"APK extracted to: {apk_path}", "green")
+            logger.debug(f"APK extracted successfully: {apk_path}")
 
         # Upload APK to MobSF
         _log("Uploading APK to MobSF...", "blue")
@@ -847,15 +853,54 @@ class MobSFManager:
             _log("MobSF analysis timed out - scan may still be in progress", "orange")
             return False, summary
 
-    def analyze_run(self, run: "Run", device_id: str) -> MobSFAnalysisResult:
-        """Analyze an APK for a past run (compatibility method for UI).
+    def _resolve_session_path(self, run: "Run") -> str | None:
+        """Return the run's session folder: the stored path if it exists, else the
+        folder manager's lookup, else the stored path as-is (may not exist yet)."""
+        stored = getattr(run, "session_path", None) or None
+        if stored and os.path.isdir(stored):
+            return stored
+        if self.session_folder_manager:
+            found = self.session_folder_manager.get_session_path(run)
+            if found:
+                return found
+        return stored
 
-        This method provides compatibility with the old interface used by RunHistoryView.
-        It wraps perform_complete_scan and returns a MobSFAnalysisResult.
+    def find_stored_apk(self, run: "Run") -> str | None:
+        """Return the APK saved in the run's session ``apks`` folder, or None.
+
+        An APK is only stored there if MobSF already pulled it from the device
+        for this run. A split-APK ``<package>.apks`` archive wins over the
+        individual split files pulled next to it. Never creates folders.
+        """
+        session_path = self._resolve_session_path(run)
+        if not session_path:
+            return None
+
+        apks_dir = Path(session_path) / "apks"
+        if not apks_dir.is_dir():
+            return None
+        for name in (f"{run.app_package}.apks", f"{run.app_package}.apk"):
+            candidate = apks_dir / name
+            if candidate.is_file():
+                return str(candidate)
+        return None
+
+    def analyze_run(
+        self,
+        run: "Run",
+        device_id: str,
+        apk_path: str | None = None,
+        log_callback: Callable[[str, str | None], None] | None = None,
+    ) -> MobSFAnalysisResult:
+        """Analyze the APK for a run (Run History, post-crawl auto-run, ``mobsf-scan``).
+
+        Wraps perform_complete_scan and returns a MobSFAnalysisResult.
 
         Args:
             run: Run object for organizing results
             device_id: Device ID for ADB operations
+            apk_path: Already-stored APK to scan instead of pulling from the device
+            log_callback: Optional progress callback, see perform_complete_scan
 
         Returns:
             MobSFAnalysisResult with report paths or error
@@ -863,12 +908,7 @@ class MobSFManager:
         if not self.config_manager.get("enable_mobsf_analysis", False):
             return MobSFAnalysisResult(success=False, error="MobSF analysis is disabled in configuration")
 
-        # Get session path from run
-        session_path = None
-        if hasattr(run, "session_path") and run.session_path:
-            session_path = run.session_path
-        elif self.session_folder_manager:
-            session_path = self.session_folder_manager.get_session_path(run)
+        session_path = self._resolve_session_path(run)
 
         # Perform complete scan
         success, summary = self.perform_complete_scan(
@@ -876,7 +916,8 @@ class MobSFManager:
             run_id=run.id,
             session_path=session_path,
             device_id=device_id,
-            log_callback=None,  # UI will handle logging separately
+            log_callback=log_callback,
+            apk_path=apk_path,
         )
 
         if success:

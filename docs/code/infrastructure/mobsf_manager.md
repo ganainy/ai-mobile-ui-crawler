@@ -26,6 +26,7 @@ Source: `src/mobile_crawler/infrastructure/mobsf_manager.py`
 - [[code/infrastructure/session_folder_manager|infrastructure.session_folder_manager]]
 
 ## Imported by
+- [[code/cli/commands/mobsf_scan|cli.commands.mobsf_scan]]
 - [[code/core/crawler_loop|core.crawler_loop]]
 - [[code/core/pre_crawl_validator|core.pre_crawl_validator]]
 - [[code/infrastructure/mobsf_docker|infrastructure.mobsf_docker]]

@@ -15,6 +15,7 @@ from mobile_crawler.core.crawler_loop import CrawlerLoop
 from mobile_crawler.domain.models import ActionResult
 from mobile_crawler.domain.report_generator import ReportGenerator
 from mobile_crawler.infrastructure.database import DatabaseManager
+from mobile_crawler.cli.docker_autostart_report import report_docker_autostart
 from mobile_crawler.infrastructure.docker_autostart import (
     ensure_mobsf_running_if_enabled,
     ensure_omniparser_running_if_enabled,
@@ -191,24 +192,22 @@ class JSONEventListener(CrawlerEventListener):
         print(json.dumps(event), flush=True)
 
 
-def _report_docker_autostart(label: str, result: tuple[bool, str] | None) -> None:
-    """Echo the outcome of a Docker container auto-start attempt (a no-op if `result` is None).
+_LAST = "last"
 
-    Always writes to stderr, never stdout: stdout is reserved for the
-    newline-delimited JSON events a consumer of this command parses.
-    """
-    if result is None:
-        return
-    ok, message = result
-    if ok:
-        click.echo(f"{label}: {message}", err=True)
-    else:
-        click.echo(f"Warning: {label} could not be started automatically: {message}", err=True)
+
+def _resolve_last(value: str, config_manager: ConfigManager, key: str, option: str) -> str:
+    """Return `value`, or the persisted `key` setting when `value` is 'last' (the GUI's last-used choice)."""
+    if value != _LAST:
+        return value
+    saved = config_manager.user_config_store.get_setting(key, default=None)
+    if not saved:
+        raise ValueError(f"{option} last: no saved '{key}' setting yet; pass an explicit {option} value")
+    return saved
 
 
 @click.command()
-@click.option("--device", required=True, help="Device ID to crawl")
-@click.option("--package", required=True, help="App package name to crawl")
+@click.option("--device", required=True, help="Device ID to crawl, or 'last' for the last-used device")
+@click.option("--package", required=True, help="App package name to crawl, or 'last' for the last-used app")
 @click.option("--model", required=True, help="AI model to use")
 @click.option("--steps", type=int, help="Maximum number of crawl steps")
 @click.option("--duration", type=int, help="Maximum crawl duration in seconds")
@@ -228,6 +227,20 @@ def _report_docker_autostart(label: str, result: tuple[bool, str] | None) -> Non
     help="Override the persisted Human Fallback setting for this run only (default: use the configured setting)",
 )
 @click.option(
+    "--parser-mode",
+    type=click.Choice(["accessibility", "boost", "omniparser"], case_sensitive=False),
+    help="UI parser mode for this run only (default: the configured UI Parser Mode)",
+)
+@click.option(
+    "--reasoning-mode/--no-reasoning-mode",
+    default=None,
+    help="Turn the crawler agent's Reasoning Mode on or off for this run only (default: the configured setting)",
+)
+@click.option(
+    "--exploration-objective",
+    help="Exploration Objective for this run only (default: the configured objective)",
+)
+@click.option(
     "--step-by-step",
     is_flag=True,
     help="Pause after each step, print what it did (on stderr) and wait for Enter before the next one",
@@ -245,6 +258,9 @@ def crawl(
     no_report: bool,
     log_level: str | None,
     human_fallback: bool | None,
+    parser_mode: str | None,
+    reasoning_mode: bool | None,
+    exploration_objective: str | None,
     step_by_step: bool,
 ) -> None:
     """Start a crawl on the specified device and app."""
@@ -256,6 +272,9 @@ def crawl(
         # Initialize configuration
         config_manager = ConfigManager()
         config_manager.user_config_store.create_schema()
+
+        device = _resolve_last(device, config_manager, "last_device_id", "--device")
+        package = _resolve_last(package, config_manager, "last_app_package", "--package")
 
         # Override config with command line options
         if steps:
@@ -276,11 +295,18 @@ def crawl(
             config_manager.set("auto_run_mobsf_after_crawl", True)
         if no_report:
             config_manager.set("auto_generate_report_after_run", False)
+        # Single-run overrides: never written to the config store.
+        if parser_mode is not None:
+            config_manager.override("ui_parser_mode", parser_mode)
+        if reasoning_mode is not None:
+            config_manager.override("crawler_reasoning_mode", reasoning_mode)
+        if exploration_objective is not None:
+            config_manager.override("exploration_objective", exploration_objective)
 
         effective_log_level = (log_level or config_manager.get("log_level", "INFO") or "INFO").upper()
 
-        _report_docker_autostart("MobSF", ensure_mobsf_running_if_enabled(config_manager))
-        _report_docker_autostart("OmniParser", ensure_omniparser_running_if_enabled(config_manager))
+        report_docker_autostart("MobSF", ensure_mobsf_running_if_enabled(config_manager))
+        report_docker_autostart("OmniParser", ensure_omniparser_running_if_enabled(config_manager))
 
         # Initialize database
         db_manager = DatabaseManager()

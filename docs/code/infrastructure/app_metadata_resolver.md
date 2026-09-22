@@ -16,4 +16,5 @@ Source: `src/mobile_crawler/infrastructure/app_metadata_resolver.py`
 - [[code/config/paths|config.paths]]
 
 ## Imported by
+- [[code/cli/commands/list|cli.commands.list]]
 - [[code/ui/widgets/app_selector|ui.widgets.app_selector]]

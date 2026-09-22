@@ -1,4 +1,4 @@
-"""Configuration manager with precedence: SQLite → environment variables → module defaults."""
+"""Configuration manager with precedence: run overrides → SQLite → environment variables → module defaults."""
 
 import os
 from typing import Any
@@ -11,9 +11,10 @@ class ConfigManager:
     """Configuration manager with precedence order.
 
     Precedence (highest to lowest):
-    1. SQLite database (user_config.db)
-    2. Environment variables (CRAWLER_ prefix)
-    3. Module defaults
+    1. Run overrides set with ``override()`` (in memory, this instance only)
+    2. SQLite database (user_config.db)
+    3. Environment variables (CRAWLER_ prefix)
+    4. Module defaults
     """
 
     def __init__(self, user_config_store: UserConfigStore | None = None):
@@ -25,6 +26,7 @@ class ConfigManager:
         if user_config_store is None:
             user_config_store = UserConfigStore()
         self.user_config_store = user_config_store
+        self._overrides: dict[str, Any] = {}
 
     def get(self, key: str, default: Any = None) -> Any:
         """Get configuration value with precedence.
@@ -36,6 +38,9 @@ class ConfigManager:
         Returns:
             Configuration value
         """
+        if key in self._overrides:
+            return self._overrides[key]
+
         # 1. Check SQLite database
         try:
             db_value = self.user_config_store.get_setting(key)
@@ -69,6 +74,13 @@ class ConfigManager:
             value: Value to set
         """
         self.user_config_store.set_setting(key, value)
+
+    def override(self, key: str, value: Any) -> None:
+        """Set a value for this instance only, above every other source; never written to the database.
+
+        Used for single-run settings such as ``crawl`` command-line flags.
+        """
+        self._overrides[key] = value
 
     def _convert_env_value(self, value: str) -> Any:
         """Convert environment variable string to appropriate type.
