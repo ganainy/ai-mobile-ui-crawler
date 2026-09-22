@@ -15,5 +15,9 @@ The GUI's step-by-step mode (`CrawlerLoop.set_step_by_step_enabled` + "Next Step
 - New `cli/step_by_step_console.py` `StepByStepConsole`: duck-typed listener; prints the summary to stderr (stdout is the JSON event stream) and waits for Enter on a background thread (the handler runs on the agent's event-loop thread), then calls `CrawlerLoop.advance_step`. EOF on stdin advances, so a non-interactive run can't hang.
 - `crawl`: `--step-by-step` flag enables the mode and adds the console before `run`.
 
+## Review fixes (before commit f91e9b6)
+- `_surface_step_pause` emitted `on_step_paused` before the `paused_step` state change; an immediate advance (buffered Enter, EOF) was dropped by `advance_step`'s state guard and the workflow hung. Now the state changes first (tested).
+- `_record_step_action` grew `_step_actions` all run long when step-by-step was off; it now records only while the mode is on.
+
 ## Status
-Full suite green. No typechecker in `.venv312`. Not tried on a real device or terminal.
+Committed as f91e9b6, with only this issue's hunks (another session was editing `crawl.py` / `test_crawl_command.py` at the same time; its work is left uncommitted). Full suite green. No typechecker in `.venv312`. Not tried on a real device or terminal.
