@@ -16,7 +16,7 @@ class TestListCommand:
         runner = CliRunner()
         result = runner.invoke(cli, ['list', '--help'])
         assert result.exit_code == 0
-        assert 'List runs or devices' in result.output
+        assert 'List runs, devices or installed apps' in result.output
         assert 'TARGET' in result.output
         assert '--limit' in result.output
         assert '--format' in result.output
