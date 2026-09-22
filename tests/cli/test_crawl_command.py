@@ -319,3 +319,68 @@ class TestCrawlHumanFallback:
 
         assert result.exit_code == 0
         assert loop_cls.call_args.kwargs["human_fallback_enabled_override"] is False
+
+
+class TestCrawlStepByStep:
+    """--step-by-step turns on the loop's step-by-step mode and adds the terminal pause console."""
+
+    def _run(self, extra_args):
+        with (
+            patch("mobile_crawler.cli.commands.crawl.DatabaseManager"),
+            patch("mobile_crawler.cli.commands.crawl.ConfigManager") as config_cls,
+            patch("mobile_crawler.cli.commands.crawl.CrawlerLoop") as loop_cls,
+            patch("mobile_crawler.cli.commands.crawl.RunRepository") as run_repo_cls,
+            patch("mobile_crawler.cli.commands.crawl.get_app_data_dir") as data_dir,
+        ):
+            data_dir.return_value = Mock()
+            run_repo_cls.return_value.create_run.return_value = 7
+            config_cls.return_value = Mock()
+            result = CliRunner().invoke(
+                cli,
+                [
+                    "crawl",
+                    "--device",
+                    "emulator-5554",
+                    "--package",
+                    "com.example.app",
+                    "--model",
+                    "gemini-pro",
+                    *extra_args,
+                ],
+            )
+        return result, loop_cls
+
+    def test_step_by_step_is_off_by_default(self):
+        result, loop_cls = self._run([])
+
+        assert result.exit_code == 0
+        loop = loop_cls.return_value
+        loop.set_step_by_step_enabled.assert_not_called()
+        loop.add_event_listener.assert_not_called()
+
+    def test_flag_enables_step_by_step_before_the_run(self):
+        result, loop_cls = self._run(["--step-by-step"])
+
+        assert result.exit_code == 0
+        loop = loop_cls.return_value
+        loop.set_step_by_step_enabled.assert_called_once_with(True)
+        call_names = [c[0] for c in loop.method_calls]
+        assert call_names.index("set_step_by_step_enabled") < call_names.index("run")
+
+    def test_flag_adds_a_console_that_advances_the_loop(self):
+        result, loop_cls = self._run(["--step-by-step"])
+
+        assert result.exit_code == 0
+        loop = loop_cls.return_value
+        consoles = [c.args[0] for c in loop.add_event_listener.call_args_list]
+        assert len(consoles) == 1 and type(consoles[0]).__name__ == "StepByStepConsole"
+        consoles[0]._advance()
+        loop.advance_step.assert_called_once_with()
+
+    def test_console_shares_the_human_prompters_stdin_reader(self):
+        result, loop_cls = self._run(["--step-by-step"])
+
+        assert result.exit_code == 0
+        prompter = loop_cls.call_args.kwargs["human_prompter"]
+        console = loop_cls.return_value.add_event_listener.call_args.args[0]
+        assert console._reader is prompter._reader

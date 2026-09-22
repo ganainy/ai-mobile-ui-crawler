@@ -7,6 +7,8 @@ import click
 
 from mobile_crawler.config import get_app_data_dir
 from mobile_crawler.config.config_manager import ConfigManager
+from mobile_crawler.cli.console_reader import ConsoleReader
+from mobile_crawler.cli.step_by_step_console import StepByStepConsole
 from mobile_crawler.cli.terminal_human_prompter import TerminalHumanPrompter
 from mobile_crawler.core.crawler_event_listener import CrawlerEventListener
 from mobile_crawler.core.crawler_loop import CrawlerLoop
@@ -225,6 +227,11 @@ def _report_docker_autostart(label: str, result: tuple[bool, str] | None) -> Non
     default=None,
     help="Override the persisted Human Fallback setting for this run only (default: use the configured setting)",
 )
+@click.option(
+    "--step-by-step",
+    is_flag=True,
+    help="Pause after each step, print what it did (on stderr) and wait for Enter before the next one",
+)
 def crawl(
     device: str,
     package: str,
@@ -238,6 +245,7 @@ def crawl(
     no_report: bool,
     log_level: str | None,
     human_fallback: bool | None,
+    step_by_step: bool,
 ) -> None:
     """Start a crawl on the specified device and app."""
     try:
@@ -298,6 +306,8 @@ def crawl(
         run_id = run_repo.create_run(run)
 
         session_folder_manager = SessionFolderManager()
+        # One stdin reader for every prompt in the run, so prompts never race each other for input.
+        console_reader = ConsoleReader()
         crawler_loop = CrawlerLoop(
             config_manager=config_manager,
             run_repository=run_repo,
@@ -307,9 +317,14 @@ def crawl(
                 db_manager,
                 telemetry_client_factory=build_telemetry_client_factory(config_manager),
             ),
-            human_prompter=TerminalHumanPrompter(),
+            human_prompter=TerminalHumanPrompter(reader=console_reader),
             human_fallback_enabled_override=human_fallback,
         )
+        if step_by_step:
+            crawler_loop.set_step_by_step_enabled(True)
+            crawler_loop.add_event_listener(
+                StepByStepConsole(advance=crawler_loop.advance_step, reader=console_reader)
+            )
 
         # Run the crawl
         crawler_loop.run(run_id)

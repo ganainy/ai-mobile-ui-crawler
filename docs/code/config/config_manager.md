@@ -22,6 +22,7 @@ Source: `src/mobile_crawler/config/config_manager.py`
 - [[code/cli/commands/config|cli.commands.config]]
 - [[code/cli/commands/crawl|cli.commands.crawl]]
 - [[code/cli/commands/report|cli.commands.report]]
+- [[code/cli/commands/scenarios|cli.commands.scenarios]]
 - [[code/config/_index|config]]
 - [[code/core/crawler_loop|core.crawler_loop]]
 - [[code/domain/crawler_agent_service|domain.crawler_agent_service]]

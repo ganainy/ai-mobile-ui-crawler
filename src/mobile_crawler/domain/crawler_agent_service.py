@@ -35,7 +35,7 @@ from mobile_crawler.domain.crawler_agent.agent.manager.events import ManagerResp
 from mobile_crawler.domain.errors import ErrorContext, FatalError
 from mobile_crawler.domain.guided_scenarios_generator import guided_scenarios_config_key
 from mobile_crawler.domain.human_fallback import HumanFallback, HumanFallbackConfig, HumanPrompter
-from mobile_crawler.domain.models import AIAction, BoundingBox
+from mobile_crawler.domain.models import ActionResult, AIAction, BoundingBox
 from mobile_crawler.domain.prompt_builder import format_login_and_form_data
 from mobile_crawler.domain.run_outcome import build_guided_progress
 from mobile_crawler.domain.stats_collector_span_processor import OTEL_AVAILABLE, StatsCollectorSpanProcessor
@@ -205,6 +205,8 @@ class CrawlerAgentService:
         self._sub_phase_starts: dict[str, float] = {}
         self._phase_metadata: dict[str, dict[str, Any]] = {}
         self._pending_step_timing: dict[str, Any] = {}
+        # Actions run since the last step-by-step pause, handed to listeners on the next pause.
+        self._step_actions: list[ActionResult] = []
 
         # Initialize OmniParser if available
         if OMNIPARSER_AVAILABLE:
@@ -597,6 +599,7 @@ class CrawlerAgentService:
         self._ai_call_step_number = 0
         self._emit_step_phase_event = emit_step_phase_event
         self._emit_state_change = emit_state_change
+        self._step_actions = []
         self._sub_phase_starts = {}
         self._phase_metadata = {}
         self._pending_step_timing = {}
@@ -887,6 +890,40 @@ class CrawlerAgentService:
                 )
             except Exception as e:
                 logger.warning(f"Failed to emit step phase event: {e}")
+
+    def _record_step_action(self, event) -> None:
+        """Remember a ToolExecutionEvent's outcome for the next step-by-step pause summary.
+
+        Only while step-by-step is on: nothing else clears the list, so recording in a normal
+        run would grow it for the whole run.
+        """
+        cfg = self._crawler_agent_config
+        if cfg is None or not cfg.agent.step_by_step:
+            return
+        duration_ms = getattr(event, "duration_ms", None)
+        self._step_actions.append(
+            ActionResult(
+                success=bool(event.success),
+                action_type=event.tool_name,
+                target=event.summary,
+                duration_ms=float(duration_ms) if isinstance(duration_ms, int | float) else 0.0,
+            )
+        )
+
+    def _surface_step_pause(self, step_number: int) -> None:
+        """Tell listeners a step-by-step pause began: the state change, then the paused step's actions.
+
+        The state must be ``paused_step`` before listeners hear about the pause:
+        ``CrawlerLoop.advance_step`` ignores an advance in any other state, and a listener may
+        advance at once (e.g. the CLI reading a buffered Enter), which would otherwise be lost
+        and leave the workflow waiting forever.
+        """
+        actions, self._step_actions = self._step_actions, []
+        # Use the CrawlState enum value string ("paused_step").
+        if self._emit_state_change:
+            self._emit_state_change("paused_step")
+        if self._emit_step_phase_event:
+            self._emit_step_phase_event("on_step_paused", self._current_run_id, step_number, actions)
 
     async def _handle_tool_execution_event(self, event) -> None:
         """Handle a ToolExecutionEvent from internal crawler_agent's event stream.
@@ -1616,11 +1653,9 @@ class CrawlerAgentService:
                             try:
                                 async for event in workflow_result.stream_events():
                                     if isinstance(event, StepPausedEvent):
-                                        # Surface the pause to the UI / CrawlerLoop.
-                                        # Use the CrawlState enum value string ("paused_step").
-                                        if self._emit_state_change:
-                                            self._emit_state_change("paused_step")
+                                        self._surface_step_pause(event.step_number)
                                     elif isinstance(event, ToolExecutionEvent):
+                                        self._record_step_action(event)
                                         await self._handle_tool_execution_event(event)
                                     elif isinstance(event, ScreenshotEvent):
                                         await self._handle_screenshot_timing_event(event)

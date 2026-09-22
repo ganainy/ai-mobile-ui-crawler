@@ -78,3 +78,28 @@ def test_second_call_after_a_timeout_reuses_the_pending_reader_instead_of_racing
     released.set()
     second_call.join(3)
     assert result["reply"] == HumanReply(code="999999")
+
+
+def test_a_shared_reader_serves_a_later_prompt_from_a_timed_out_one():
+    """The Human Fallback prompter and the --step-by-step pause share one ConsoleReader so a
+    timed-out Human Fallback read can't race a step-by-step read for the user's Enter."""
+    from mobile_crawler.cli.console_reader import ConsoleReader
+
+    release = threading.Event()
+    calls = []
+
+    def input_func(prompt):
+        calls.append(prompt)
+        release.wait(5)
+        return ""
+
+    reader = ConsoleReader(input_func=input_func)
+    prompter = TerminalHumanPrompter(output_func=lambda msg: None, reader=reader)
+    assert prompter(HumanRequest(RequestKind.CODE, "code?"), timeout_seconds=0.05) is None
+
+    answers, reused = reader.read_async("")
+    release.set()
+
+    assert reused is True
+    assert answers.get(timeout=2) == ""
+    assert len(calls) == 1

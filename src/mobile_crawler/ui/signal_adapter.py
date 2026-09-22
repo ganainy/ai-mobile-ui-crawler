@@ -92,7 +92,7 @@ class QtSignalAdapter(QObject):
         """Called when a step completes."""
         self.step_completed.emit(run_id, step_number, actions_count, duration_ms)
 
-    def on_step_paused(self, run_id: int, step_number: int) -> None:
+    def on_step_paused(self, run_id: int, step_number: int, actions: list[ActionResult] | None = None) -> None:
         """Called when a step is paused (step-by-step mode)."""
         self.step_paused.emit(run_id, step_number)
 

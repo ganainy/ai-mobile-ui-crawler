@@ -49,6 +49,10 @@ class CrawlerEventListener(ABC):
         """Called when a step completes."""
         pass
 
+    def on_step_paused(self, run_id: int, step_number: int, actions: list[ActionResult]) -> None:
+        """Called when step-by-step mode pauses after a step, with the actions that step executed."""
+        return None
+
     @abstractmethod
     def on_crawl_completed(self, run_id: int, total_steps: int, total_duration_ms: float, reason: str) -> None:
         """Called when a crawl completes."""

@@ -1138,3 +1138,86 @@ class TestRunReportDetails:
     def test_guided_progress_is_none_without_guided_scenarios(self, crawler_agent_service):
         details = crawler_agent_service._run_outcome_details("com.x", is_timeout=False, reason="")
         assert details["guided_progress"] is None
+
+
+class TestCrawlerAgentServiceStepPause:
+    """A step-by-step pause is surfaced to listeners with the actions the paused step ran."""
+
+    @staticmethod
+    def _tool_event(name, success, summary, duration_ms=12.0):
+        return types.SimpleNamespace(
+            tool_name=name, tool_args={}, success=success, summary=summary, duration_ms=duration_ms
+        )
+
+    def _begin(self, service, step_by_step=True):
+        service._crawler_agent_config = types.SimpleNamespace(agent=types.SimpleNamespace(step_by_step=step_by_step))
+        emitted = []
+        states = []
+        with patch("mobile_crawler.infrastructure.database.DatabaseManager"):
+            service.begin_step_tracking(
+                run_id=42,
+                emit_step_phase_event=lambda name, *args: emitted.append((name, *args)),
+                emit_state_change=states.append,
+            )
+        return emitted, states
+
+    def test_pause_emits_the_actions_run_since_the_last_pause(self, crawler_agent_service):
+        emitted, states = self._begin(crawler_agent_service)
+
+        crawler_agent_service._record_step_action(self._tool_event("click", True, "Tapped 'Login'"))
+        crawler_agent_service._record_step_action(self._tool_event("type", False, "No focused field"))
+        crawler_agent_service._surface_step_pause(3)
+
+        paused = [e for e in emitted if e[0] == "on_step_paused"]
+        assert len(paused) == 1
+        _, run_id, step_number, actions = paused[0]
+        assert (run_id, step_number) == (42, 3)
+        assert actions == [
+            ActionResult(success=True, action_type="click", target="Tapped 'Login'", duration_ms=12.0),
+            ActionResult(success=False, action_type="type", target="No focused field", duration_ms=12.0),
+        ]
+        assert states == ["paused_step"]
+
+    def test_actions_are_reset_after_each_pause(self, crawler_agent_service):
+        emitted, _ = self._begin(crawler_agent_service)
+
+        crawler_agent_service._record_step_action(self._tool_event("click", True, "first"))
+        crawler_agent_service._surface_step_pause(1)
+        crawler_agent_service._record_step_action(self._tool_event("swipe", True, "second"))
+        crawler_agent_service._surface_step_pause(2)
+
+        paused = [e for e in emitted if e[0] == "on_step_paused"]
+        assert [a.target for a in paused[1][3]] == ["second"]
+
+    def test_missing_duration_is_recorded_as_zero(self, crawler_agent_service):
+        emitted, _ = self._begin(crawler_agent_service)
+
+        crawler_agent_service._record_step_action(self._tool_event("back", True, "Done", duration_ms=None))
+        crawler_agent_service._surface_step_pause(1)
+
+        actions = [e for e in emitted if e[0] == "on_step_paused"][0][3]
+        assert actions[0].duration_ms == 0.0
+
+    def test_state_is_paused_before_listeners_hear_of_the_pause(self, crawler_agent_service):
+        """A listener may advance immediately; CrawlerLoop.advance_step drops advances unless paused."""
+        order = []
+        crawler_agent_service._crawler_agent_config = types.SimpleNamespace(
+            agent=types.SimpleNamespace(step_by_step=True)
+        )
+        with patch("mobile_crawler.infrastructure.database.DatabaseManager"):
+            crawler_agent_service.begin_step_tracking(
+                run_id=42,
+                emit_step_phase_event=lambda name, *args: order.append(name),
+                emit_state_change=lambda state: order.append(state),
+            )
+
+        crawler_agent_service._surface_step_pause(1)
+
+        assert order.index("paused_step") < order.index("on_step_paused")
+
+    def test_nothing_is_recorded_when_step_by_step_is_off(self, crawler_agent_service):
+        self._begin(crawler_agent_service, step_by_step=False)
+
+        crawler_agent_service._record_step_action(self._tool_event("click", True, "Tapped"))
+
+        assert crawler_agent_service._step_actions == []

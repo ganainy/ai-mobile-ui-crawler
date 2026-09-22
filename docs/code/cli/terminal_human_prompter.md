@@ -12,6 +12,7 @@ Source: `src/mobile_crawler/cli/terminal_human_prompter.py`
 - `TerminalHumanPrompter`
 
 ## Imports
+- [[code/cli/console_reader|cli.console_reader]]
 - [[code/domain/human_fallback|domain.human_fallback]]
 
 ## Imported by
