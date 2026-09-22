@@ -144,6 +144,9 @@ mobile-crawler-cli crawl --device emulator-5554 --package com.example.app --prov
 mobile-crawler-cli crawl --device emulator-5554 --package com.example.app --provider gemini --model gemini-1.5-flash --enable-traffic-capture
 mobile-crawler-cli crawl --device emulator-5554 --package com.example.app --provider gemini --model gemini-1.5-flash --enable-video-recording
 mobile-crawler-cli crawl --device emulator-5554 --package com.example.app --provider gemini --model gemini-1.5-flash --enable-mobsf-analysis
+
+# Reuse the device and app last selected in the GUI
+mobile-crawler-cli crawl --device last --package last --provider gemini --model gemini-1.5-flash
 ```
 
 ## MobSF Static Analysis
@@ -274,7 +277,7 @@ The current crawl flow is:
 
 ## How the Agent Runtime is Used
 
-The agent runtime is fully internalized within the `mobile_crawler` package at `src/mobile_crawler/domain/crawler_agent/`. 
+The agent runtime is fully internalized within the `mobile_crawler` package at `src/mobile_crawler/domain/crawler_agent/`.
 Imports from the agent runtime resolve directly under the `mobile_crawler.domain.crawler_agent` namespace (e.g., `from mobile_crawler.domain.crawler_agent import CrawlerConfig, CrawlerAgent, ToolExecutionEvent`). The dynamic runtime injection that inserted the external path into `sys.path` has been completely removed.
 
 Mobile Crawler does not own the agent runtime's core exploration loop. The internalized `crawler_agent` package owns screenshot and UI-state capture, LLM planning and execution, agent workflows, and ADB-backed device actions.

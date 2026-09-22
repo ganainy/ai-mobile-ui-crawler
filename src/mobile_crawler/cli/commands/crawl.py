@@ -206,9 +206,22 @@ def _report_docker_autostart(label: str, result: tuple[bool, str] | None) -> Non
         click.echo(f"Warning: {label} could not be started automatically: {message}", err=True)
 
 
+_LAST = "last"
+
+
+def _resolve_last(value: str, config_manager: ConfigManager, key: str, option: str) -> str:
+    """Return `value`, or the persisted `key` setting when `value` is 'last' (the GUI's last-used choice)."""
+    if value != _LAST:
+        return value
+    saved = config_manager.user_config_store.get_setting(key, default=None)
+    if not saved:
+        raise ValueError(f"{option} last: no saved '{key}' setting yet; pass an explicit {option} value")
+    return saved
+
+
 @click.command()
-@click.option("--device", required=True, help="Device ID to crawl")
-@click.option("--package", required=True, help="App package name to crawl")
+@click.option("--device", required=True, help="Device ID to crawl, or 'last' for the last-used device")
+@click.option("--package", required=True, help="App package name to crawl, or 'last' for the last-used app")
 @click.option("--model", required=True, help="AI model to use")
 @click.option("--steps", type=int, help="Maximum number of crawl steps")
 @click.option("--duration", type=int, help="Maximum crawl duration in seconds")
@@ -256,6 +269,9 @@ def crawl(
         # Initialize configuration
         config_manager = ConfigManager()
         config_manager.user_config_store.create_schema()
+
+        device = _resolve_last(device, config_manager, "last_device_id", "--device")
+        package = _resolve_last(package, config_manager, "last_app_package", "--package")
 
         # Override config with command line options
         if steps:
