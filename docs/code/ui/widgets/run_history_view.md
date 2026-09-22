@@ -13,10 +13,8 @@ Source: `src/mobile_crawler/ui/widgets/run_history_view.py`
 - `RunStatsDialog`
 - `RunHistoryView`
 
-## Functions
-- `format_stat_value`
-
 ## Imports
+- [[code/core/run_stats_sections|core.run_stats_sections]]
 - [[code/domain/report_generator|domain.report_generator]]
 - [[code/infrastructure/mobsf_manager|infrastructure.mobsf_manager]]
 - [[code/infrastructure/run_repository|infrastructure.run_repository]]

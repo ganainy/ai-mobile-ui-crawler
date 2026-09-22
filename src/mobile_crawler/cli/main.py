@@ -10,6 +10,7 @@ from mobile_crawler.cli.commands.list import list
 from mobile_crawler.cli.commands.mobsf_scan import mobsf_scan
 from mobile_crawler.cli.commands.report import report
 from mobile_crawler.cli.commands.scenarios import scenarios
+from mobile_crawler.cli.commands.stats import stats
 
 try:
     from importlib.metadata import version
@@ -37,6 +38,7 @@ cli.add_command(list)
 cli.add_command(delete)
 cli.add_command(mobsf_scan)
 cli.add_command(scenarios)
+cli.add_command(stats)
 
 
 def run():

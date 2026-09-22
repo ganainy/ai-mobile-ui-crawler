@@ -20,6 +20,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from mobile_crawler.core.run_stats_sections import RUN_STATS_SECTIONS, format_stat_value
+
 if TYPE_CHECKING:
     from mobile_crawler.domain.report_generator import ReportGenerator
     from mobile_crawler.infrastructure.mobsf_manager import MobSFManager
@@ -56,113 +58,12 @@ class RunStatsDialog(QDialog):
 
         layout = QVBoxLayout(self)
 
-        # Group definitions: (section title, list of (display label, attr name))
-        groups = [
-            (
-                "Crawl Progress",
-                [
-                    ("Total Steps", "total_steps"),
-                    ("Successful Steps", "successful_steps"),
-                    ("Failed Steps", "failed_steps"),
-                    ("Duration (s)", "crawl_duration_seconds"),
-                    ("Avg Step (ms)", "avg_step_duration_ms"),
-                ],
-            ),
-            (
-                "Screen Discovery",
-                [
-                    ("Unique Screens", "unique_screens_visited"),
-                    ("Total Visits", "total_screen_visits"),
-                    ("Deepest Depth", "deepest_navigation_depth"),
-                    ("Unique Activities", "unique_activities_visited"),
-                ],
-            ),
-            (
-                "Action Statistics",
-                [
-                    ("Actions By Type", "actions_by_type"),
-                    ("Successful By Type", "successful_actions_by_type"),
-                    ("Failed By Type", "failed_actions_by_type"),
-                    ("Avg Duration (ms)", "avg_action_duration_ms"),
-                    ("Min Duration (ms)", "min_action_duration_ms"),
-                    ("Max Duration (ms)", "max_action_duration_ms"),
-                ],
-            ),
-            (
-                "AI Performance",
-                [
-                    ("Total AI Calls", "total_ai_calls"),
-                    ("Avg Response (ms)", "avg_ai_response_time_ms"),
-                    ("Min Response (ms)", "min_ai_response_time_ms"),
-                    ("Max Response (ms)", "max_ai_response_time_ms"),
-                    ("Timeouts", "ai_timeout_count"),
-                    ("Errors", "ai_error_count"),
-                    ("Retries", "ai_retry_count"),
-                    ("Invalid Responses", "invalid_response_count"),
-                    ("Total Tokens", "total_ai_tokens_used"),
-                    ("Vision Calls", "vision_call_count"),
-                    ("Non-Vision Calls", "non_vision_call_count"),
-                    ("AI Success By Type", "ai_success_by_type"),
-                    ("AI Total By Type", "ai_total_by_type"),
-                ],
-            ),
-            (
-                "Batching",
-                [
-                    ("Multi-Action Batches", "multi_action_batch_count"),
-                    ("Single Actions", "single_action_count"),
-                    ("Total Batch Actions", "total_batch_actions"),
-                    ("Avg Batch Size", "avg_batch_size"),
-                    ("Max Batch Size", "max_batch_size"),
-                ],
-            ),
-            (
-                "Error & Recovery",
-                [
-                    ("Stuck Detections", "stuck_detection_count"),
-                    ("Stuck Recoveries", "stuck_recovery_success"),
-                    ("App Crashes", "app_crash_count"),
-                    ("App Relaunches", "app_relaunch_count"),
-                    ("Context Losses", "context_loss_count"),
-                    ("Context Recoveries", "context_recovery_count"),
-                    ("Avg Recovery (ms)", "avg_recovery_time_ms"),
-                ],
-            ),
-            (
-                "Device & App",
-                [
-                    ("Device", "device_model"),
-                    ("Android Version", "android_version"),
-                    ("App Package", "app_package"),
-                    ("App Version", "app_version"),
-                ],
-            ),
-            (
-                "Network & Security",
-                [
-                    ("PCAP Size (bytes)", "pcap_file_size_bytes"),
-                    ("PCAP Packets", "pcap_packet_count"),
-                    ("MobSF Score", "mobsf_security_score"),
-                    ("MobSF High", "mobsf_high_issues"),
-                    ("MobSF Medium", "mobsf_medium_issues"),
-                    ("MobSF Low", "mobsf_low_issues"),
-                ],
-            ),
-            (
-                "Coverage",
-                [
-                    ("Transitions", "transition_count"),
-                    ("Unique Transitions", "unique_transitions"),
-                ],
-            ),
-        ]
-
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         content = QWidget()
         content_layout = QVBoxLayout(content)
 
-        for title, rows in groups:
+        for title, rows in RUN_STATS_SECTIONS:
             group = QGroupBox(title)
             grid = QGridLayout(group)
             for r, (label, attr) in enumerate(rows):
@@ -180,19 +81,6 @@ class RunStatsDialog(QDialog):
         btn_row.addStretch()
         btn_row.addWidget(close_btn)
         layout.addLayout(btn_row)
-
-
-def format_stat_value(value) -> str:
-    """Format a stat value for display."""
-    if value is None:
-        return "—"
-    if isinstance(value, dict):
-        if not value:
-            return "—"
-        return ", ".join(f"{k}: {v}" for k, v in value.items())
-    if isinstance(value, float):
-        return f"{value:.1f}"
-    return str(value)
 
 
 class RunHistoryView(QWidget):

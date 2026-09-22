@@ -245,6 +245,7 @@ class RuntimeStats:
             invalid_bbox_count=data.get("invalid_bbox_count", 0),
             avg_recovery_time_ms=data.get("avg_recovery_time_ms", 0.0),
             device_model=data.get("device_model"),
+            app_package=data.get("app_package"),
             android_version=data.get("android_version"),
             screen_width=data.get("screen_width"),
             screen_height=data.get("screen_height"),

@@ -17,5 +17,6 @@ Source: `src/mobile_crawler/infrastructure/step_phase_repository.py`
 - [[code/infrastructure/database|infrastructure.database]]
 
 ## Imported by
+- [[code/cli/commands/stats|cli.commands.stats]]
 - [[code/domain/crawler_agent_service|domain.crawler_agent_service]]
 - [[code/ui/main_window|ui.main_window]]

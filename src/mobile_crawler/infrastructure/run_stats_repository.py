@@ -64,11 +64,16 @@ class RunStatsRepository:
             run_id: The run ID to fetch stats for
 
         Returns:
-            RuntimeStats object if a row exists, None otherwise
+            RuntimeStats object if a row exists, None otherwise. app_package
+            comes from the runs table, since run_stats doesn't store it.
         """
         conn = self.db_manager.get_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM run_stats WHERE run_id = ?", (run_id,))
+        cursor.execute(
+            "SELECT rs.*, r.app_package FROM run_stats rs "
+            "LEFT JOIN runs r ON r.id = rs.run_id WHERE rs.run_id = ?",
+            (run_id,),
+        )
         row = cursor.fetchone()
         if row is None:
             return None
