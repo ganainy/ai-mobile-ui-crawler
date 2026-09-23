@@ -24,8 +24,8 @@ Implemented [#27](https://github.com/ganainy/ai-mobile-ui-crawler/issues/27) in 
 
 ## Verified
 - Real Docker run on port 16006 with a temp bind-mount dir: image pulled + started in 137 s, 20 OTLP spans written and read back over REST, `phoenix.db` + WAL files on the Windows bind mount, reuse and stop worked. Tag `version-20.3.0` exists.
-- Suite green (1799 passed).
+- Suite green (1804 passed after the review fixes and the uninstall).
 
 ## Not done / open
-- `arize-phoenix` is still installed in `.venv312`: uninstalling needs the user's OK.
+- `arize-phoenix` uninstalled from `.venv312` with the user's OK (after they stopped their `phoenix serve`); `phoenix.client`/`evals`/`otel` (other packages) remain, `phoenix.server` is gone. Suite still green.
 - Not tried against the real `~/.phoenix/phoenix.db` or in a real crawl / the real GUI.
