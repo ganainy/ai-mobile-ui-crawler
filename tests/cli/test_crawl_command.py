@@ -169,9 +169,9 @@ class TestCrawlCommand:
 
 
 class TestCrawlDockerAutostart:
-    """The crawl command auto-starts MobSF/OmniParser Docker containers before crawling."""
+    """The crawl command auto-starts the MobSF/OmniParser/Phoenix Docker containers before crawling."""
 
-    def _run(self, extra_args, mobsf_result=None, omniparser_result=None):
+    def _run(self, extra_args, mobsf_result=None, omniparser_result=None, phoenix_result=None):
         with (
             patch("mobile_crawler.cli.commands.crawl.DatabaseManager"),
             patch("mobile_crawler.cli.commands.crawl.ConfigManager") as config_cls,
@@ -186,7 +186,12 @@ class TestCrawlDockerAutostart:
                 "mobile_crawler.cli.commands.crawl.ensure_omniparser_running_if_enabled",
                 return_value=omniparser_result,
             ) as ensure_omniparser,
+            patch(
+                "mobile_crawler.cli.commands.crawl.ensure_phoenix_running_if_enabled",
+                return_value=phoenix_result,
+            ) as ensure_phoenix,
         ):
+            self.ensure_phoenix = ensure_phoenix
             data_dir.return_value = Mock()
             run_repo_cls.return_value.create_run.return_value = 7
             config_cls.return_value = Mock()
@@ -211,6 +216,21 @@ class TestCrawlDockerAutostart:
         assert result.exit_code == 0
         ensure_mobsf.assert_called_once()
         ensure_omniparser.assert_called_once()
+        self.ensure_phoenix.assert_called_once()
+
+    def test_phoenix_start_is_reported_on_stderr(self):
+        result, _, _ = self._run([], phoenix_result=(True, "Phoenix is ready"))
+
+        assert result.exit_code == 0
+        assert "Phoenix: Phoenix is ready" in result.stderr
+        assert "Phoenix" not in result.stdout
+
+    def test_phoenix_start_failure_is_left_to_the_pre_run_warning(self):
+        # The Pre-run Warning already names the failure; don't print it twice.
+        result, _, _ = self._run([], phoenix_result=(False, "Docker is not available"))
+
+        assert result.exit_code == 0
+        assert "Phoenix could not be started automatically" not in result.stderr
 
     def test_successful_start_is_reported_on_stderr_not_stdout(self):
         result, _, _ = self._run([], mobsf_result=(True, "MobSF is ready"))
@@ -232,6 +252,7 @@ class TestCrawlDockerAutostart:
         assert result.exit_code == 0
         assert "MobSF" not in result.output
         assert "OmniParser" not in result.output
+        assert "Phoenix" not in result.output
 
 
 class TestCrawlRunReport:

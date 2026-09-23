@@ -57,6 +57,7 @@ class _FakeSelector(QWidget):
         self.reset_layout_requested = _Connectable()
         self.generate_guided_scenarios_requested = _Connectable()
         self.delete_app_account_requested = _Connectable()
+        self.tracing_turned_on = _Connectable()
 
     def set_api_key_callback(self, _callback):
         pass
@@ -397,3 +398,77 @@ class TestPreRunPortalFix:
         assert started is False
         assert "Enable Portal and start" not in labels
         assert "Start anyway" in labels
+
+
+class TestPhoenixManagedService:
+    """Phoenix is started like MobSF/OmniParser, only for a local phoenix_url with Phoenix tracing on."""
+
+    @staticmethod
+    def _window(enabled=True, provider="phoenix", url="http://localhost:6006"):
+        window = MainWindow.__new__(MainWindow)
+        window.settings_panel = Mock()
+        window.settings_panel.get_enable_tracing.return_value = enabled
+        window.settings_panel.get_tracing_provider.return_value = provider
+        window.settings_panel.get_phoenix_url.return_value = url
+        window._phoenix_docker_service = None
+        window._phoenix_startup_worker = None
+        return window
+
+    def test_starts_a_worker_for_a_local_phoenix(self):
+        window = self._window(url="http://127.0.0.1:7007")
+        with (
+            patch("mobile_crawler.ui.main_window.PhoenixDockerService") as service_cls,
+            patch("mobile_crawler.ui.main_window.PhoenixStartupWorker") as worker_cls,
+        ):
+            window.start_phoenix_if_enabled()
+
+        service_cls.assert_called_once_with("http://127.0.0.1:7007")
+        worker_cls.assert_called_once_with(service_cls.return_value)
+        worker_cls.return_value.start.assert_called_once()
+        assert window._phoenix_docker_service is service_cls.return_value
+
+    def test_empty_url_means_the_default_local_phoenix(self):
+        window = self._window(url="")
+        with (
+            patch("mobile_crawler.ui.main_window.PhoenixDockerService") as service_cls,
+            patch("mobile_crawler.ui.main_window.PhoenixStartupWorker"),
+        ):
+            window.start_phoenix_if_enabled()
+
+        service_cls.assert_called_once_with("http://localhost:6006")
+
+    def test_does_nothing_when_phoenix_is_not_in_use_or_remote(self):
+        for window in (
+            self._window(enabled=False),
+            self._window(provider="langfuse"),
+            self._window(url="http://tracer.lan:6006"),
+        ):
+            with patch("mobile_crawler.ui.main_window.PhoenixStartupWorker") as worker_cls:
+                window.start_phoenix_if_enabled()
+            worker_cls.assert_not_called()
+
+    def test_does_not_start_a_second_worker_while_one_runs(self):
+        window = self._window()
+        window._phoenix_startup_worker = Mock()
+        window._phoenix_startup_worker.isRunning.return_value = True
+        with patch("mobile_crawler.ui.main_window.PhoenixStartupWorker") as worker_cls:
+            window.start_phoenix_if_enabled()
+        worker_cls.assert_not_called()
+
+    def test_exit_dialog_offers_a_running_phoenix_container(self):
+        window = self._window()
+        window._mobsf_docker_service = None
+        window._omniparser_docker_service = Mock(is_running=Mock(return_value=False))
+        window.settings_panel.get_omniparser_local_url.return_value = "http://localhost:8001"
+        with (
+            patch("mobile_crawler.ui.main_window.PhoenixDockerService") as service_cls,
+            patch("mobile_crawler.ui.main_window.QMessageBox") as box_cls,
+            patch("mobile_crawler.ui.main_window.QCheckBox") as checkbox_cls,
+            patch("mobile_crawler.ui.main_window.QVBoxLayout"),
+            patch("mobile_crawler.ui.main_window.QWidget"),
+        ):
+            service_cls.return_value.is_running.return_value = True
+            window._maybe_prompt_docker_stop()
+
+        box_cls.assert_called_once()
+        checkbox_cls.assert_called_once_with("Stop Phoenix")

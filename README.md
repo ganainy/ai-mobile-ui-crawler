@@ -31,6 +31,8 @@ mobile-crawler-gui
 
 When "Enable MobSF Analysis" is turned on in Settings, the GUI automatically starts the managed MobSF Docker container on launch (and warns if Docker or MobSF is unavailable). Otherwise it runs without MobSF.
 
+When tracing is on with the `phoenix` provider and a localhost Phoenix URL, the GUI and CLI start the managed Phoenix container (`arizephoenix/phoenix:version-20.3.0`, traces kept in `~/.phoenix`) the same way; there is no need to run `phoenix serve`. See "Tracing (Phoenix)" in [docs/cli.md](docs/cli.md).
+
 Run a crawl from the CLI:
 
 ```powershell

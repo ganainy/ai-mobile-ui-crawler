@@ -18,11 +18,12 @@ Persistence and device integration: SQLite database and repositories (runs, scre
 - [[code/infrastructure/credential_store|infrastructure.credential_store]] - Credential store for encrypting sensitive data.
 - [[code/infrastructure/database|infrastructure.database]] - Database management for crawler.db - crawl data storage.
 - [[code/infrastructure/device_detection|infrastructure.device_detection]] - Device detection utilities for Android devices using ADB.
-- [[code/infrastructure/docker_autostart|infrastructure.docker_autostart]] - Auto-start the MobSF/OmniParser Docker containers a crawl will need.
+- [[code/infrastructure/docker_autostart|infrastructure.docker_autostart]] - Auto-start the Managed Services (MobSF, OmniParser, Phoenix) a crawl will need.
 - [[code/infrastructure/installed_apps|infrastructure.installed_apps]] - Enumerates third-party packages installed on an Android device via ADB.
 - [[code/infrastructure/mobsf_docker|infrastructure.mobsf_docker]] - Docker lifecycle management for the MobSF static-analysis server.
 - [[code/infrastructure/mobsf_manager|infrastructure.mobsf_manager]] - MobSF Manager for APK analysis.
 - [[code/infrastructure/omniparser_docker|infrastructure.omniparser_docker]] - Docker lifecycle management for the local OmniParser server.
+- [[code/infrastructure/phoenix_docker|infrastructure.phoenix_docker]] - Docker lifecycle management for the local Phoenix tracing server.
 - [[code/infrastructure/run_repository|infrastructure.run_repository]] - Repository for managing crawl runs in crawler.db.
 - [[code/infrastructure/run_stats_repository|infrastructure.run_stats_repository]] - Repository for managing runtime statistics in crawler.db.
 - [[code/infrastructure/screen_repository|infrastructure.screen_repository]] - Repository for managing discovered screens in crawler.db.

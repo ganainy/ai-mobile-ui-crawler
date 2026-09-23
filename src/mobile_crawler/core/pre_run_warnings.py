@@ -74,18 +74,47 @@ def _portal_warning(config_manager, device_id: str | None) -> PreRunWarning | No
 
 
 def _phoenix_warning(config_manager, device_id: str | None) -> PreRunWarning | None:
-    """Phoenix tracing is enabled but its server does not answer."""
-    if config_manager.get("enable_tracing", False) is not True:
-        return None
-    if config_manager.get("tracing_provider", "phoenix") != "phoenix":
-        return None
+    """Phoenix tracing is enabled but no Phoenix answers: remote and down, port taken, or start failed."""
+    from mobile_crawler.infrastructure.phoenix_docker import (
+        PhoenixDockerService,
+        is_local_phoenix_url,
+        last_start_error,
+        phoenix_tracing_url,
+    )
 
-    from mobile_crawler.domain.crawler_agent.agent.utils.tracing_setup import check_phoenix_reachable
-
-    endpoint = config_manager.get("phoenix_url", "http://localhost:6006") or "http://localhost:6006"
-    if check_phoenix_reachable(endpoint, timeout=1.0):
+    endpoint = phoenix_tracing_url(config_manager)
+    if endpoint is None:
         return None
+    no_trace = "so this run will have no trace"
+    if not is_local_phoenix_url(endpoint):
+        from mobile_crawler.domain.crawler_agent.agent.utils.tracing_setup import check_phoenix_reachable
+
+        if check_phoenix_reachable(endpoint, timeout=1.0):
+            return None
+        return PreRunWarning(
+            f"Phoenix tracing is enabled but no Phoenix server answers at {endpoint}, {no_trace}. "
+            "It is not on this machine, so the crawler does not start it. "
+            "Fix: start that Phoenix server or turn tracing off in Settings."
+        )
+
+    service = PhoenixDockerService(endpoint)
+    if service.is_phoenix_reachable():
+        return None
+    if service.port_in_use():
+        if service.is_running():
+            return PreRunWarning(
+                f"Phoenix tracing is enabled but the {service.container_name} container on port {service.port} "
+                f"does not answer yet (still starting, or stuck), {no_trace}. "
+                f"Fix: wait a moment, check `docker logs {service.container_name}`, or turn tracing off in Settings."
+            )
+        return PreRunWarning(
+            f"Phoenix tracing is enabled but port {service.port} is in use by something that is not Phoenix, "
+            f"{no_trace}. Fix: free the port, change the Phoenix URL, or turn tracing off in Settings."
+        )
+    reason = last_start_error(endpoint)
+    fix = "fix the error above" if reason else "check that Docker Desktop is running"
     return PreRunWarning(
-        f"Phoenix tracing is enabled but no Phoenix server answers at {endpoint}, so this run will have no trace. "
-        "Fix: start the Phoenix server or turn tracing off in Settings."
+        f"Phoenix tracing is enabled but Phoenix could not be started in Docker at {endpoint}"
+        f"{f' ({reason})' if reason else ''}, {no_trace}. "
+        f"Fix: {fix}, or turn tracing off in Settings."
     )

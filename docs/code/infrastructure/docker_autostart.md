@@ -4,19 +4,21 @@ file: src/mobile_crawler/infrastructure/docker_autostart.py
 ---
 # mobile_crawler.infrastructure.docker_autostart
 
-Auto-start the MobSF/OmniParser Docker containers a crawl will need.
+Auto-start the Managed Services (MobSF, OmniParser, Phoenix) a crawl will need.
 
 Source: `src/mobile_crawler/infrastructure/docker_autostart.py`
 
 ## Functions
 - `ensure_mobsf_running_if_enabled`
 - `ensure_omniparser_running_if_enabled`
+- `ensure_phoenix_running_if_enabled`
 
 ## Imports
 - [[code/config/config_manager|config.config_manager]]
 - [[code/config/defaults|config.defaults]]
 - [[code/infrastructure/mobsf_docker|infrastructure.mobsf_docker]]
 - [[code/infrastructure/omniparser_docker|infrastructure.omniparser_docker]]
+- [[code/infrastructure/phoenix_docker|infrastructure.phoenix_docker]]
 
 ## Imported by
 - [[code/cli/commands/crawl|cli.commands.crawl]]
