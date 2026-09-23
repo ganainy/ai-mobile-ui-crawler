@@ -95,3 +95,21 @@ async def test_status_reports_ready():
     )
     status = await portal.get_portal_status(device)
     assert status.ready and status.version == "0.7.25"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("current", "written"),
+    [
+        ("null", portal.A11Y_SERVICE_NAME),
+        ("com.other/.Svc", f"com.other/.Svc:{portal.A11Y_SERVICE_NAME}"),
+        (portal.A11Y_SERVICE_NAME, portal.A11Y_SERVICE_NAME),
+    ],
+)
+async def test_enable_keeps_other_accessibility_services(current, written):
+    device = AsyncMock()
+    device.shell = AsyncMock(side_effect=[current, "", ""])
+
+    await portal.enable_portal_accessibility(device)
+
+    assert device.shell.await_args_list[1].args[0] == f"settings put secure enabled_accessibility_services {written}"

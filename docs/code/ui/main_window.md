@@ -25,6 +25,7 @@ Source: `src/mobile_crawler/ui/main_window.py`
 - [[code/core/crawl_state_machine|core.crawl_state_machine]]
 - [[code/core/crawler_loop|core.crawler_loop]]
 - [[code/core/log_sinks|core.log_sinks]]
+- [[code/core/portal_actions|core.portal_actions]]
 - [[code/core/pre_run_warnings|core.pre_run_warnings]]
 - [[code/core/stale_run_cleaner|core.stale_run_cleaner]]
 - [[code/domain/guided_scenarios_generator|domain.guided_scenarios_generator]]

@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from mobile_crawler.core.portal_actions import PORTAL_MANUAL_STEPS
 from mobile_crawler.infrastructure.app_account_store import AppAccount
 from mobile_crawler.ui.widgets.status_bar_exclusion_preview import StatusBarExclusionPreview
 
@@ -613,12 +614,22 @@ class SettingsPanel(QWidget):
         portal_layout.addWidget(self.portal_check_button)
         self.portal_install_button = QPushButton("Install / enable Portal")
         self.portal_install_button.setToolTip(
-            "Download the pinned Portal release, install it on the selected device and turn on its "
-            "accessibility service. Without Portal, boost mode uses OmniParser only."
+            "Turn on Portal's accessibility service over adb (a few seconds). If Portal is not installed, "
+            "download the pinned release and install it first (a few minutes). "
+            "Without Portal, boost mode uses OmniParser only."
         )
         self.portal_install_button.clicked.connect(self._install_portal)
         portal_layout.addWidget(self.portal_install_button)
-        self.portal_container.setLayout(portal_layout)
+        portal_outer = QVBoxLayout()
+        portal_outer.setContentsMargins(0, 0, 0, 0)
+        portal_outer.addLayout(portal_layout)
+        # Shown only while Portal is not ready: the by-hand route for when adb can't turn it on.
+        self.portal_help_label = QLabel(PORTAL_MANUAL_STEPS)
+        self.portal_help_label.setWordWrap(True)
+        self.portal_help_label.setStyleSheet("color: #666; font-size: 11px;")
+        self.portal_help_label.setVisible(False)
+        portal_outer.addWidget(self.portal_help_label)
+        self.portal_container.setLayout(portal_outer)
         parser_layout.addWidget(self.portal_container)
         self._set_portal_buttons_enabled(False)
         self.ui_parser_mode_combo.currentTextChanged.connect(
@@ -1422,7 +1433,7 @@ class SettingsPanel(QWidget):
         self._run_portal_action("Checking Portal...", "check")
 
     def _install_portal(self) -> None:
-        self._run_portal_action("Installing Portal (this can take a few minutes)...", "install")
+        self._run_portal_action("Enabling Portal (installing it can take a few minutes)...", "install")
 
     def _run_portal_action(self, busy_text: str, action: str) -> None:
         if self._device_id is None or self._portal_in_flight:
@@ -1433,17 +1444,22 @@ class SettingsPanel(QWidget):
         threading.Thread(target=self._portal_worker, args=(action, self._device_id), daemon=True).start()
 
     def _portal_worker(self, action: str, device_id: str) -> None:
-        from mobile_crawler.ui import portal_actions
+        from mobile_crawler.core import portal_actions
 
-        run = portal_actions.install_portal if action == "install" else portal_actions.check_portal
+        run = portal_actions.fix_portal if action == "install" else portal_actions.check_portal
         text, ready = run(device_id)
         self._portal_status_ready.emit(text, ready)
 
     def _on_portal_status_ready(self, text: str, ready: bool) -> None:
         self._portal_in_flight = False
         self._set_portal_buttons_enabled(self._device_id is not None)
+        self.show_portal_status(text, ready)
+
+    def show_portal_status(self, text: str, ready: bool) -> None:
+        """Show a Portal status (also used by main_window after enabling Portal from the pre-run dialog)."""
         self.portal_status_label.setText(text)
         self.portal_status_label.setStyleSheet(f"color: {'#2e7d32' if ready else '#b26a00'}; font-size: 11px;")
+        self.portal_help_label.setVisible(not ready)
 
     def _fetch_status_bar_preview(self) -> None:
         """Capture a fresh screenshot from the selected device for the preview."""

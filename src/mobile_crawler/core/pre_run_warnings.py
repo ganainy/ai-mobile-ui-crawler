@@ -7,13 +7,26 @@ Each check is best-effort: if it cannot be carried out, it stays silent rather t
 import asyncio
 import logging
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
 _A11Y_PARSER_MODES = ("accessibility", "boost")
 
 
-def collect_pre_run_warnings(config_manager, device_id: str | None) -> list[str]:
+@dataclass(frozen=True)
+class PreRunWarning:
+    """One problem found before the run.
+
+    ``portal_fix`` says how ``core.portal_actions`` can fix a Portal problem: ``"enable"``
+    (a few seconds over adb) or ``"install"`` (a download; minutes). None for other problems.
+    """
+
+    message: str
+    portal_fix: str | None = None
+
+
+def collect_pre_run_warnings(config_manager, device_id: str | None) -> list[PreRunWarning]:
     """Return one human-readable message per problem found, in the order they matter.
 
     The checks run in parallel (each waits on the network or adb for up to ~2 s).
@@ -33,7 +46,7 @@ def collect_pre_run_warnings(config_manager, device_id: str | None) -> list[str]
     return warnings
 
 
-def _portal_warning(config_manager, device_id: str | None) -> str | None:
+def _portal_warning(config_manager, device_id: str | None) -> PreRunWarning | None:
     """Portal must be installed with its accessibility service on for the a11y tree parser modes."""
     mode = str(config_manager.get("ui_parser_mode", "boost") or "boost").lower()
     if mode not in _A11Y_PARSER_MODES or not device_id:
@@ -53,14 +66,14 @@ def _portal_warning(config_manager, device_id: str | None) -> str | None:
         effect = "the crawler will see no UI elements"
     else:
         effect = "every step will fall back to OmniParser (slower, and it costs money on Replicate)"
-    return (
+    return PreRunWarning(
         f"{portal.describe()}, so the phone cannot supply an accessibility tree and {effect} "
-        f"(UI parser mode '{mode}'). Fix: turn on Mobilerun Portal under Settings > Accessibility on the phone, "
-        "or use 'Install / enable Portal' in the app's Settings."
+        f"(UI parser mode '{mode}').",
+        portal_fix="enable" if portal.installed else "install",
     )
 
 
-def _phoenix_warning(config_manager, device_id: str | None) -> str | None:
+def _phoenix_warning(config_manager, device_id: str | None) -> PreRunWarning | None:
     """Phoenix tracing is enabled but its server does not answer."""
     if config_manager.get("enable_tracing", False) is not True:
         return None
@@ -72,7 +85,7 @@ def _phoenix_warning(config_manager, device_id: str | None) -> str | None:
     endpoint = config_manager.get("phoenix_url", "http://localhost:6006") or "http://localhost:6006"
     if check_phoenix_reachable(endpoint, timeout=1.0):
         return None
-    return (
+    return PreRunWarning(
         f"Phoenix tracing is enabled but no Phoenix server answers at {endpoint}, so this run will have no trace. "
         "Fix: start the Phoenix server or turn tracing off in Settings."
     )

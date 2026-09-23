@@ -321,7 +321,13 @@ def crawl(
 
         # stderr: stdout is the JSON event stream.
         for warning in collect_pre_run_warnings(config_manager, device):
-            click.echo(f"Warning: {warning}", err=True)
+            click.echo(f"Warning: {warning.message}", err=True)
+            if warning.portal_fix:
+                click.echo(
+                    f"  Fix: mobile-crawler-cli portal enable --device {device} "
+                    "(turns it on over adb; prints the manual steps if that fails)",
+                    err=True,
+                )
 
         # Initialize database
         db_manager = DatabaseManager()

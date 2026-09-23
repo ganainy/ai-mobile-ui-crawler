@@ -23,6 +23,7 @@ Source: `src/mobile_crawler/domain/crawler_agent/portal.py`
 - `setup_keyboard`
 - `disable_keyboard`
 - `setup_portal`
+- `wait_for_portal_service`
 - `get_portal_status`
 - `ensure_portal_ready`
 - `test`
@@ -32,6 +33,6 @@ Source: `src/mobile_crawler/domain/crawler_agent/portal.py`
 - [[code/domain/crawler_agent/tools/driver/android|domain.crawler_agent.tools.driver.android]]
 
 ## Imported by
+- [[code/core/portal_actions|core.portal_actions]]
 - [[code/core/pre_run_warnings|core.pre_run_warnings]]
 - [[code/domain/crawler_agent/agent/droid/crawler_agent|domain.crawler_agent.agent.droid.crawler_agent]]
-- [[code/ui/portal_actions|ui.portal_actions]]

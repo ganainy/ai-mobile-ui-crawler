@@ -8,6 +8,9 @@ Pre-run warnings: problems that do not stop a crawl but make it worse than the s
 
 Source: `src/mobile_crawler/core/pre_run_warnings.py`
 
+## Classes
+- `PreRunWarning`
+
 ## Functions
 - `collect_pre_run_warnings`
 

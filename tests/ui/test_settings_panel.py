@@ -852,7 +852,7 @@ class TestPortalControls:
         assert not panel.portal_container.isHidden()
 
     def test_selecting_a_device_checks_portal_and_shows_the_status(self, qt_app, mock_config_store, monkeypatch):
-        from mobile_crawler.ui import portal_actions
+        from mobile_crawler.core import portal_actions
 
         monkeypatch.setattr(portal_actions, "check_portal", lambda device_id: (f"ready on {device_id}", True))
         panel = _create_settings_panel(mock_config_store)
@@ -866,12 +866,12 @@ class TestPortalControls:
         assert panel.portal_status_label.text() == "ready on device-1"
         assert panel.portal_install_button.isEnabled()
 
-    def test_install_button_runs_the_install_action(self, qt_app, mock_config_store, monkeypatch):
-        from mobile_crawler.ui import portal_actions
+    def test_install_button_runs_the_fix_action(self, qt_app, mock_config_store, monkeypatch):
+        from mobile_crawler.core import portal_actions
 
         calls = []
         monkeypatch.setattr(
-            portal_actions, "install_portal", lambda d: calls.append(d) or ("Portal 0.7.25 is ready", True)
+            portal_actions, "fix_portal", lambda d: calls.append(d) or ("Portal 0.7.25 is ready", True)
         )
         panel = _create_settings_panel(mock_config_store)
         panel._device_id = "device-1"
@@ -884,6 +884,17 @@ class TestPortalControls:
 
         assert calls == ["device-1"]
         assert panel.portal_status_label.text() == "Portal 0.7.25 is ready"
+        assert panel.portal_help_label.isHidden()
+
+    def test_manual_steps_are_shown_only_while_portal_is_not_ready(self, qt_app, mock_config_store):
+        panel = _create_settings_panel(mock_config_store)
+
+        panel.show_portal_status("Portal is installed but its accessibility service is off", False)
+        assert not panel.portal_help_label.isHidden()
+        assert "Settings > Accessibility" in panel.portal_help_label.text()
+
+        panel.show_portal_status("Portal 0.7.25 is ready", True)
+        assert panel.portal_help_label.isHidden()
 
     def test_a_second_request_is_ignored_while_one_is_running(self, qt_app, mock_config_store, monkeypatch):
         panel = _create_settings_panel(mock_config_store)

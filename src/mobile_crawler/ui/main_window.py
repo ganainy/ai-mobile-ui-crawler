@@ -1090,15 +1090,50 @@ class MainWindow(QMainWindow):
         if not warnings:
             return True
         for warning in warnings:
-            self._append_clean_log(LogLevel.WARNING, warning, "ui")
-        answer = QMessageBox.warning(
-            self,
-            "Before the crawl starts",
-            "\n\n".join(warnings) + "\n\nStart the crawl anyway?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
+            self._append_clean_log(LogLevel.WARNING, warning.message, "ui")
+
+        from mobile_crawler.core.portal_actions import PORTAL_MANUAL_STEPS
+
+        fixes = {w.portal_fix for w in warnings} - {None}
+        text = "\n\n".join(w.message for w in warnings)
+        if "install" in fixes:
+            text += "\n\nInstall it with 'Install / enable Portal' in Settings (it takes a few minutes)."
+        box = QMessageBox(
+            QMessageBox.Icon.Warning, "Before the crawl starts", text + "\n\nStart the crawl anyway?", parent=self
         )
-        return answer == QMessageBox.StandardButton.Yes
+        enable_button = None
+        if "enable" in fixes and device_id:
+            enable_button = box.addButton("Enable Portal and start", QMessageBox.ButtonRole.AcceptRole)
+        if fixes:
+            box.setDetailedText(PORTAL_MANUAL_STEPS)
+        start_button = box.addButton("Start anyway", QMessageBox.ButtonRole.YesRole)
+        cancel_button = box.addButton(QMessageBox.StandardButton.Cancel)
+        box.setDefaultButton(enable_button or cancel_button)
+        box.exec()
+        clicked = box.clickedButton()
+        if clicked is start_button:
+            return True
+        if enable_button is None or clicked is not enable_button:
+            return False
+        return self._enable_portal_before_crawl(device_id)
+
+    def _enable_portal_before_crawl(self, device_id: str) -> bool:
+        """Turn Portal's accessibility service on over adb; start the crawl only if that worked."""
+        from PySide6.QtWidgets import QApplication, QMessageBox
+
+        from mobile_crawler.core.portal_actions import PORTAL_MANUAL_STEPS, enable_portal
+
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            text, ready = enable_portal(device_id)
+        finally:
+            QApplication.restoreOverrideCursor()
+        self._append_clean_log(LogLevel.INFO if ready else LogLevel.WARNING, text, "ui")
+        if self.settings_panel:
+            self.settings_panel.show_portal_status(text, ready)
+        if not ready:
+            QMessageBox.warning(self, "Portal is still off", f"{text}\n\n{PORTAL_MANUAL_STEPS}")
+        return ready
 
     def _show_error(self, title: str, message: str) -> None:
         """Show error dialog.

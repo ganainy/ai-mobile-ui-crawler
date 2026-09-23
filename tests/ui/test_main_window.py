@@ -312,3 +312,88 @@ class TestAutoReportSettingWiring:
         window._create_config_manager()
 
         config_manager.set.assert_any_call("auto_generate_report_after_run", False)
+
+
+class TestPreRunPortalFix:
+    """The pre-run dialog's 'Enable Portal and start' button."""
+
+    @staticmethod
+    def _window():
+        # A real QWidget (the dialog needs a constructed parent) carrying just
+        # the MainWindow methods and attributes these tests exercise.
+        class _Window(QWidget):
+            _confirm_pre_run_warnings = MainWindow._confirm_pre_run_warnings
+            _enable_portal_before_crawl = MainWindow._enable_portal_before_crawl
+
+        window = _Window()
+        window._selected_device = Mock(device_id="dev-1")
+        window._append_clean_log = Mock()
+        window.settings_panel = Mock()
+        return window
+
+    @staticmethod
+    def _click(monkeypatch, label):
+        from PySide6.QtWidgets import QMessageBox
+
+        monkeypatch.setattr(QMessageBox, "exec", lambda self: 0)
+        monkeypatch.setattr(
+            QMessageBox, "clickedButton", lambda self: next(b for b in self.buttons() if b.text() == label)
+        )
+
+    def _confirm(self, window, warnings):
+        with patch("mobile_crawler.ui.main_window.collect_pre_run_warnings", return_value=warnings):
+            return window._confirm_pre_run_warnings(Mock())
+
+    def test_enable_button_enables_portal_and_starts(self, qt_app, monkeypatch):
+        from mobile_crawler.core.pre_run_warnings import PreRunWarning
+
+        window = self._window()
+        self._click(monkeypatch, "Enable Portal and start")
+        with patch("mobile_crawler.core.portal_actions.enable_portal", return_value=("Portal 0.7.25 is ready", True)) as enable:
+            started = self._confirm(window, [PreRunWarning("Portal is off", portal_fix="enable")])
+
+        assert started is True
+        enable.assert_called_once_with("dev-1")
+        window.settings_panel.show_portal_status.assert_called_once_with("Portal 0.7.25 is ready", True)
+
+    def test_enable_that_fails_does_not_start(self, qt_app, monkeypatch):
+        from PySide6.QtWidgets import QMessageBox
+
+        from mobile_crawler.core.pre_run_warnings import PreRunWarning
+
+        window = self._window()
+        self._click(monkeypatch, "Enable Portal and start")
+        shown = []
+        monkeypatch.setattr(QMessageBox, "warning", lambda *args: shown.append(args))
+        with patch("mobile_crawler.core.portal_actions.enable_portal", return_value=("still off", False)):
+            started = self._confirm(window, [PreRunWarning("Portal is off", portal_fix="enable")])
+
+        assert started is False
+        assert shown and "Settings > Accessibility" in shown[0][2]
+
+    def test_start_anyway_skips_the_fix(self, qt_app, monkeypatch):
+        from mobile_crawler.core.pre_run_warnings import PreRunWarning
+
+        window = self._window()
+        self._click(monkeypatch, "Start anyway")
+        with patch("mobile_crawler.core.portal_actions.enable_portal") as enable:
+            started = self._confirm(window, [PreRunWarning("Portal is off", portal_fix="enable")])
+
+        assert started is True
+        enable.assert_not_called()
+
+    def test_no_enable_button_when_portal_must_be_installed(self, qt_app, monkeypatch):
+        from PySide6.QtWidgets import QMessageBox
+
+        from mobile_crawler.core.pre_run_warnings import PreRunWarning
+
+        window = self._window()
+        labels = []
+        monkeypatch.setattr(QMessageBox, "exec", lambda self: labels.extend(b.text() for b in self.buttons()) or 0)
+        monkeypatch.setattr(QMessageBox, "clickedButton", lambda self: None)
+
+        started = self._confirm(window, [PreRunWarning("Portal is not installed", portal_fix="install")])
+
+        assert started is False
+        assert "Enable Portal and start" not in labels
+        assert "Start anyway" in labels

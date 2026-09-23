@@ -8,6 +8,7 @@ from mobile_crawler.cli.commands.crawl import crawl
 from mobile_crawler.cli.commands.delete import delete
 from mobile_crawler.cli.commands.list import list
 from mobile_crawler.cli.commands.mobsf_scan import mobsf_scan
+from mobile_crawler.cli.commands.portal import portal
 from mobile_crawler.cli.commands.report import report
 from mobile_crawler.cli.commands.scenarios import scenarios
 from mobile_crawler.cli.commands.stats import stats
@@ -39,6 +40,7 @@ cli.add_command(delete)
 cli.add_command(mobsf_scan)
 cli.add_command(scenarios)
 cli.add_command(stats)
+cli.add_command(portal)
 
 
 def run():

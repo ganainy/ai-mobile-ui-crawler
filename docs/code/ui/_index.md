@@ -15,6 +15,5 @@ PySide6 desktop interface: main window and widgets for device/app selection, liv
 - [[code/ui/main_window|ui.main_window]] - Main window for the mobile-crawler GUI application.
 - [[code/ui/mobsf_startup_worker|ui.mobsf_startup_worker]] - Background worker that ensures MobSF is running at GUI startup.
 - [[code/ui/omniparser_startup_worker|ui.omniparser_startup_worker]] - Background worker that ensures the local OmniParser server is running at GUI startup.
-- [[code/ui/portal_actions|ui.portal_actions]] - Blocking Portal check / install helpers for the Settings panel (run them off the UI thread).
 - [[code/ui/resources/_index|ui.resources]] - UI resources package.
 - [[code/ui/signal_adapter|ui.signal_adapter]] - Qt signal adapter for bridging core events to GUI.

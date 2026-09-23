@@ -609,3 +609,34 @@ class TestCrawlPreRunWarnings:
 
         assert result.exit_code == 0
         assert loop_cls.call_args.kwargs["run_stats_repository"] is not None
+
+
+class TestCrawlPreRunWarnings:
+    """Pre-run warnings go to stderr, with the portal command as the fix for Portal problems."""
+
+    def test_portal_warning_prints_the_enable_command(self, no_pre_run_warnings):
+        from mobile_crawler.core.pre_run_warnings import PreRunWarning
+
+        no_pre_run_warnings.return_value = [
+            PreRunWarning("Portal is installed but its accessibility service is off", portal_fix="enable"),
+            PreRunWarning("Phoenix is down"),
+        ]
+        with (
+            patch("mobile_crawler.cli.commands.crawl.DatabaseManager"),
+            patch("mobile_crawler.cli.commands.crawl.ConfigManager") as config_cls,
+            patch("mobile_crawler.cli.commands.crawl.CrawlerLoop"),
+            patch("mobile_crawler.cli.commands.crawl.RunRepository") as run_repo_cls,
+            patch("mobile_crawler.cli.commands.crawl.get_app_data_dir"),
+            patch("mobile_crawler.cli.commands.crawl.ensure_mobsf_running_if_enabled", return_value=None),
+            patch("mobile_crawler.cli.commands.crawl.ensure_omniparser_running_if_enabled", return_value=None),
+        ):
+            run_repo_cls.return_value.create_run.return_value = 7
+            config_cls.return_value.get.return_value = None
+            result = CliRunner().invoke(
+                cli, ["crawl", "--device", "dev-1", "--package", "com.example.app", "--model", "m"]
+            )
+
+        assert "Warning: Portal is installed but its accessibility service is off" in result.stderr
+        assert "Fix: mobile-crawler-cli portal enable --device dev-1" in result.stderr
+        assert result.stderr.count("Fix:") == 1
+        assert "Warning: Phoenix is down" in result.stderr

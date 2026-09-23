@@ -95,11 +95,18 @@ async def enable_portal_accessibility(device: AdbDevice, service_name: str = A11
         device: ADB device connection
         service_name: Full accessibility service name (default: Portal service)
 
+    Other enabled accessibility services are kept (the setting is a
+    colon-separated list; writing only Portal's name would turn them off).
+
     Note:
         This may fail on some devices due to security restrictions.
         Manual enablement may be required.
     """
-    await device.shell(f"settings put secure enabled_accessibility_services {service_name}")
+    current = await device.shell("settings get secure enabled_accessibility_services")
+    services = [s for s in str(current or "").strip().split(":") if s and s != "null"]
+    if service_name not in services:
+        services.append(service_name)
+    await device.shell(f"settings put secure enabled_accessibility_services {':'.join(services)}")
     await device.shell("settings put secure accessibility_enabled 1")
 
 
@@ -288,7 +295,7 @@ async def setup_portal(
             try:
                 await enable_portal_accessibility(device)
                 # Wait for the service to become responsive
-                await _wait_for_portal_service(device)
+                await wait_for_portal_service(device)
                 # The overlay would be screenshotted and parsed as UI elements.
                 await toggle_overlay(device, False)
                 logger.info("Accessibility service enabled")
@@ -311,7 +318,7 @@ async def setup_portal(
         return False
 
 
-async def _wait_for_portal_service(device: AdbDevice, timeout: float = 10.0, interval: float = 1.0) -> None:
+async def wait_for_portal_service(device: AdbDevice, timeout: float = 10.0, interval: float = 1.0) -> None:
     """Poll the content provider until the accessibility service is responsive.
 
     Uses the simple ``/state`` endpoint which responds as soon as the
@@ -453,7 +460,7 @@ async def ensure_portal_ready(
                     "or reinstall/re-enable the portal app on the device."
                 )
             # Wait for the service process to start and become responsive
-            await _wait_for_portal_service(device)
+            await wait_for_portal_service(device)
             logger.info("Accessibility service enabled")
         except RuntimeError:
             raise

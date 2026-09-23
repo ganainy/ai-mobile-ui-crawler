@@ -34,14 +34,15 @@ def test_warns_when_portal_accessibility_service_is_off(mode):
     warnings, _ = _collect(Config(ui_parser_mode=mode), portal=PortalStatus(True, "1.0", False))
 
     assert len(warnings) == 1
-    assert "accessibility service is off" in warnings[0]
-    assert "Settings > Accessibility" in warnings[0]
+    assert "accessibility service is off" in warnings[0].message
+    assert warnings[0].portal_fix == "enable"
 
 
 def test_warns_when_portal_is_not_installed():
     warnings, _ = _collect(Config(ui_parser_mode="boost"), portal=PortalStatus(False, None, False))
 
-    assert "Portal is not installed" in warnings[0]
+    assert "Portal is not installed" in warnings[0].message
+    assert warnings[0].portal_fix == "install"
 
 
 def test_no_portal_warning_in_omniparser_mode_or_without_a_device():
@@ -57,7 +58,8 @@ def test_warns_when_phoenix_tracing_is_on_but_unreachable():
     warnings, reachable = _collect(config, phoenix_up=False)
 
     assert len(warnings) == 1
-    assert "http://p:1" in warnings[0]
+    assert "http://p:1" in warnings[0].message
+    assert warnings[0].portal_fix is None
     assert reachable.call_args.args[0] == "http://p:1"
 
 
@@ -84,4 +86,4 @@ def test_a_failing_check_is_skipped():
         warnings = collect_pre_run_warnings(config, "dev-1")
 
     assert len(warnings) == 1
-    assert "Phoenix" in warnings[0]
+    assert "Phoenix" in warnings[0].message
