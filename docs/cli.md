@@ -106,6 +106,16 @@ mobile-crawler-cli crawl --package <package> --provider gemini --model gemini-3.
 
 If MobSF fails, the crawl still counts as completed and the error is in the log. Running MobSF by hand and other options: see the README's "MobSF Static Analysis" section.
 
+**Tracing (Phoenix).** Records every LLM call of the run in [Arize Phoenix](https://docs.arize.com/phoenix), and `report` pulls it back into the run report.
+1. Install and start [Docker Desktop](https://www.docker.com/products/docker-desktop/), as for MobSF.
+2. Turn tracing on (Phoenix is the default provider):
+   ```powershell
+   mobile-crawler-cli config set enable_tracing true
+   ```
+3. Crawl as usual. Before the run the CLI starts the `mobile-crawler-phoenix` container (image `arizephoenix/phoenix:version-20.3.0`, first start downloads it) on the port of `phoenix_url` (default `http://localhost:6006`) and leaves it running; open that URL for the Phoenix UI. Traces are stored in `%USERPROFILE%\.phoenix\phoenix.db`, the same place a `phoenix serve` uses.
+
+A Phoenix already answering on that port (e.g. a `phoenix serve` left open) is used as is. If the port is taken by something else, Docker is missing or the start fails, the crawl still runs, without a trace, and a warning says why. A `phoenix_url` on another machine is never started, only checked.
+
 ## Commands
 
 Every command has `--help`:

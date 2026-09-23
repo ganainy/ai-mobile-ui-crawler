@@ -1,7 +1,7 @@
-"""Auto-start the MobSF/OmniParser Docker containers a crawl will need.
+"""Auto-start the Managed Services (MobSF, OmniParser, Phoenix) a crawl will need.
 
-Ports ``MainWindow.start_mobsf_if_enabled`` / ``start_omniparser_if_enabled``
-to a blocking call, for callers with no UI thread to keep responsive (the
+Ports ``MainWindow.start_mobsf_if_enabled`` / ``start_omniparser_if_enabled`` /
+``start_phoenix_if_enabled`` to a blocking call, for callers with no UI thread to keep responsive (the
 CLI's ``crawl`` command and, later, ``mobsf-scan``). Containers are left
 running afterwards, matching GUI behavior.
 """
@@ -9,6 +9,7 @@ running afterwards, matching GUI behavior.
 from mobile_crawler.config.config_manager import ConfigManager
 from mobile_crawler.infrastructure.mobsf_docker import MobSFDockerService
 from mobile_crawler.infrastructure.omniparser_docker import OmniParserDockerService
+from mobile_crawler.infrastructure.phoenix_docker import PhoenixDockerService, managed_phoenix_url
 
 
 def ensure_mobsf_running_if_enabled(config_manager: ConfigManager) -> tuple[bool, str] | None:
@@ -35,3 +36,15 @@ def ensure_omniparser_running_if_enabled(config_manager: ConfigManager) -> tuple
 
     url = config_manager.get("omniparser_local_url", "http://localhost:8001")
     return OmniParserDockerService(url).ensure_running()
+
+
+def ensure_phoenix_running_if_enabled(config_manager: ConfigManager) -> tuple[bool, str] | None:
+    """Start the local Phoenix container if Phoenix tracing is on and nothing answers yet.
+
+    Returns None if Phoenix tracing isn't in use or ``phoenix_url`` is not on this
+    machine (nothing to manage), otherwise the (success, message) result.
+    """
+    url = managed_phoenix_url(config_manager)
+    if url is None:
+        return None
+    return PhoenixDockerService(url).ensure_running()

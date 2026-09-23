@@ -49,6 +49,7 @@ from mobile_crawler.infrastructure.device_detection import DeviceDetection
 from mobile_crawler.infrastructure.mobsf_docker import MobSFDockerService
 from mobile_crawler.infrastructure.mobsf_manager import MobSFManager
 from mobile_crawler.infrastructure.omniparser_docker import OmniParserDockerService
+from mobile_crawler.infrastructure.phoenix_docker import PHOENIX_DEFAULT_URL, PhoenixDockerService, managed_phoenix_url
 from mobile_crawler.infrastructure.run_repository import RunRepository
 from mobile_crawler.infrastructure.run_stats_repository import RunStatsRepository
 from mobile_crawler.infrastructure.screen_repository import ScreenRepository
@@ -62,6 +63,7 @@ from mobile_crawler.ui.live_feed_worker import LiveFeedWorker
 from mobile_crawler.ui.log_cleaner import LogCleaner
 from mobile_crawler.ui.mobsf_startup_worker import MobSFStartupWorker
 from mobile_crawler.ui.omniparser_startup_worker import OmniParserStartupWorker
+from mobile_crawler.ui.phoenix_startup_worker import PhoenixStartupWorker
 
 # Signal adapter
 from mobile_crawler.ui.signal_adapter import QtSignalAdapter
@@ -370,6 +372,8 @@ class MainWindow(QMainWindow):
         self._mobsf_startup_worker = None
         self._omniparser_docker_service = None
         self._omniparser_startup_worker = None
+        self._phoenix_docker_service = None
+        self._phoenix_startup_worker = None
 
         # Load step-by-step preference from config store
         config_store = self._services["user_config_store"]
@@ -554,6 +558,7 @@ class MainWindow(QMainWindow):
         try:
             # Create config manager with current settings
             config_manager = self._create_config_manager()
+            self._wait_for_phoenix_before_crawl()
             if not self._confirm_pre_run_warnings(config_manager):
                 return
 
@@ -1349,6 +1354,7 @@ class MainWindow(QMainWindow):
         self.ai_selector.model_selected.connect(self._on_model_selected)
         self.settings_panel.settings_saved.connect(self._on_settings_saved)
         self.settings_panel.omniparser_keepalive_pinged.connect(self._on_omniparser_keepalive_pinged)
+        self.settings_panel.tracing_turned_on.connect(self.start_phoenix_if_enabled)
         self.settings_panel.reset_layout_requested.connect(self._on_reset_layout_requested)
         self.settings_panel.delete_app_account_requested.connect(self._on_delete_app_account_requested)
         self.settings_panel.generate_guided_scenarios_requested.connect(self._on_generate_guided_scenarios_requested)
@@ -1484,6 +1490,8 @@ class MainWindow(QMainWindow):
             self._save_guided_scenarios_for_selected_package()
             self._save_app_account_for_selected_package()
 
+        # Tracing may just have been switched to a local Phoenix (or its URL changed).
+        self.start_phoenix_if_enabled()
         self._update_start_button_state()
 
     def _app_account_store(self) -> AppAccountStore:
@@ -2099,20 +2107,94 @@ class MainWindow(QMainWindow):
                 f"Local OmniParser could not be started:\n\n{message}",
             )
 
+    def start_phoenix_if_enabled(self) -> None:
+        """Start the local Phoenix container in the background if Phoenix tracing will use it.
+
+        Called at launch, when tracing is ticked or settings are saved, and before a crawl.
+        A failure is only logged: the Phoenix Pre-run Warning shows it before the next crawl.
+        """
+        url = managed_phoenix_url(
+            {
+                "enable_tracing": self.settings_panel.get_enable_tracing(),
+                "tracing_provider": self.settings_panel.get_tracing_provider(),
+                "phoenix_url": self.settings_panel.get_phoenix_url(),
+            }
+        )
+        if url is None:
+            return
+        worker = self._phoenix_startup_worker
+        if worker is not None and worker.isRunning():
+            return
+
+        docker_service = PhoenixDockerService(url)
+        self._phoenix_docker_service = docker_service
+
+        worker = PhoenixStartupWorker(docker_service)
+        worker.result.connect(self._on_phoenix_startup_result)
+        self._phoenix_startup_worker = worker
+        worker.start()
+
+    def _on_phoenix_startup_result(self, ok: bool, message: str, started_by_gui: bool) -> None:
+        """Log the Phoenix startup worker result."""
+        if self._phoenix_docker_service is not None:
+            self._phoenix_docker_service.started_by_gui = started_by_gui
+        self._append_clean_log(LogLevel.INFO if ok else LogLevel.WARNING, f"Phoenix: {message}", "phoenix")
+
+    def _wait_for_phoenix_before_crawl(self) -> None:
+        """Blocking check before a crawl: (re)start Phoenix and wait for it, behind a skippable busy dialog.
+
+        Returns quickly when Phoenix already answers. Whatever the outcome, the crawl goes on;
+        the Phoenix Pre-run Warning reports a Phoenix that is still down.
+        """
+        from PySide6.QtCore import QEventLoop
+        from PySide6.QtWidgets import QProgressDialog
+
+        self.start_phoenix_if_enabled()
+        worker = self._phoenix_startup_worker
+        if worker is None:
+            return
+
+        loop = QEventLoop()
+        worker.finished.connect(loop.quit)
+        try:
+            if not worker.isRunning():
+                return
+            progress = QProgressDialog("Starting Phoenix for tracing...", "Skip", 0, 0, self)
+            progress.setWindowTitle("Phoenix")
+            progress.setWindowModality(Qt.WindowModality.ApplicationModal)
+            progress.setAutoClose(False)
+            progress.setAutoReset(False)
+            progress.canceled.connect(loop.quit)
+            # Only show the dialog if Phoenix is not up almost at once.
+            QTimer.singleShot(500, lambda: worker.isRunning() and progress.show())
+            loop.exec()
+            progress.close()
+        finally:
+            worker.finished.disconnect(loop.quit)
+
     def _maybe_prompt_docker_stop(self) -> None:
-        """Offer to stop the managed Docker containers (MobSF, OmniParser) that are still running.
+        """Offer to stop the managed Docker containers (MobSF, OmniParser, Phoenix) that are still running.
 
         Shows one dialog with a checkbox per running container. "Keep Running" leaves
         everything up; "Stop Selected" stops only the checked ones.
         """
         candidates = []
-        for label, attr in (("MobSF", "_mobsf_docker_service"), ("OmniParser", "_omniparser_docker_service")):
+        for label, attr in (
+            ("MobSF", "_mobsf_docker_service"),
+            ("OmniParser", "_omniparser_docker_service"),
+            ("Phoenix", "_phoenix_docker_service"),
+        ):
             service = getattr(self, attr, None)
+            # Not started this session (e.g. settings differed at launch), but the
+            # container may still be up from an earlier run.
             if service is None and attr == "_omniparser_docker_service":
-                # Not started this session (e.g. parser mode/backend differed at
-                # launch), but the stack may still be up from an earlier run.
                 try:
                     service = OmniParserDockerService(self.settings_panel.get_omniparser_local_url())
+                except Exception:
+                    continue
+            if service is None and attr == "_phoenix_docker_service":
+                try:
+                    service = PhoenixDockerService(self.settings_panel.get_phoenix_url() or PHOENIX_DEFAULT_URL)
                 except Exception:
                     continue
             if service is None:
@@ -2237,11 +2319,12 @@ class MainWindow(QMainWindow):
                     startup_worker.terminate()
                     startup_worker.wait()
 
-            omniparser_worker = getattr(self, "_omniparser_startup_worker", None)
-            if omniparser_worker and omniparser_worker.isRunning():
-                if not omniparser_worker.wait(10000):
-                    omniparser_worker.terminate()
-                    omniparser_worker.wait()
+            for worker_attr in ("_omniparser_startup_worker", "_phoenix_startup_worker"):
+                startup_worker = getattr(self, worker_attr, None)
+                if startup_worker and startup_worker.isRunning():
+                    if not startup_worker.wait(10000):
+                        startup_worker.terminate()
+                        startup_worker.wait()
 
             # Wait briefly for the Guided Scenarios worker to avoid a running-thread warning
             guided_scenarios_worker = getattr(self, "_guided_scenarios_worker", None)
@@ -2311,6 +2394,7 @@ def run():
 
     window.start_mobsf_if_enabled()
     window.start_omniparser_if_enabled()
+    window.start_phoenix_if_enabled()
 
     sys.exit(app.exec())
 

@@ -25,6 +25,7 @@ from mobile_crawler.cli.docker_autostart_report import report_docker_autostart
 from mobile_crawler.infrastructure.docker_autostart import (
     ensure_mobsf_running_if_enabled,
     ensure_omniparser_running_if_enabled,
+    ensure_phoenix_running_if_enabled,
 )
 from mobile_crawler.infrastructure.installed_apps import is_package_installed
 from mobile_crawler.infrastructure.run_repository import Run, RunRepository
@@ -335,6 +336,9 @@ def crawl(
 
         report_docker_autostart("MobSF", ensure_mobsf_running_if_enabled(config_manager))
         report_docker_autostart("OmniParser", ensure_omniparser_running_if_enabled(config_manager))
+        phoenix_result = ensure_phoenix_running_if_enabled(config_manager)
+        # A failed Phoenix start is reported once, by the Phoenix Pre-run Warning below.
+        report_docker_autostart("Phoenix", phoenix_result if phoenix_result and phoenix_result[0] else None)
 
         # stderr: stdout is the JSON event stream.
         for warning in collect_pre_run_warnings(config_manager, device):

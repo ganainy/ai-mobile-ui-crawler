@@ -64,6 +64,7 @@ class SettingsPanel(QWidget):
     # Signal emitted when settings are saved
     settings_saved = Signal()  # type: ignore
     omniparser_keepalive_pinged = Signal(bool, str, float)  # type: ignore
+    tracing_turned_on = Signal()  # type: ignore  # the tracing checkbox was just ticked
     reset_layout_requested = Signal()  # type: ignore
     generate_guided_scenarios_requested = Signal()  # type: ignore
     delete_app_account_requested = Signal()  # type: ignore
@@ -845,8 +846,8 @@ class SettingsPanel(QWidget):
         tracing_layout.addWidget(self.phoenix_widget)
 
         self.phoenix_hint = QLabel(
-            "Phoenix does not start automatically. Run `phoenix serve` in a separate "
-            "terminal first, then view traces at this URL in your browser."
+            "For a localhost URL, Phoenix is started in Docker automatically (needs Docker Desktop); "
+            "view traces at this URL in your browser."
         )
         self.phoenix_hint.setWordWrap(True)
         self.phoenix_hint.setStyleSheet("color: #666; font-size: 11px;")
@@ -893,6 +894,7 @@ class SettingsPanel(QWidget):
 
         # Connect signals
         self.enable_tracing_checkbox.toggled.connect(self._on_tracing_toggled)
+        self.enable_tracing_checkbox.toggled.connect(lambda checked: checked and self.tracing_turned_on.emit())
         self.tracing_provider_combo.currentTextChanged.connect(self._on_tracing_provider_changed)
 
         tracing_group.setLayout(tracing_layout)
