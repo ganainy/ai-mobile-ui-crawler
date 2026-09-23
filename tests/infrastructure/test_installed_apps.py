@@ -6,6 +6,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from mobile_crawler.infrastructure.installed_apps import (
+    is_package_installed,
     is_valid_package_name,
     list_third_party_packages,
     parse_package_list,
@@ -53,3 +54,32 @@ class TestListThirdPartyPackages:
 
         with pytest.raises(RuntimeError):
             list_third_party_packages("x")
+
+
+class TestIsPackageInstalled:
+    @patch("mobile_crawler.infrastructure.installed_apps.subprocess.run")
+    def test_installed_package_has_a_pm_path(self, mock_run):
+        mock_run.return_value = Mock(returncode=0, stdout="package:/data/app/com.a.app/base.apk\n", stderr="")
+
+        assert is_package_installed("emulator-5554", "com.a.app") is True
+        assert mock_run.call_args.args[0] == ["adb", "-s", "emulator-5554", "shell", "pm", "path", "com.a.app"]
+
+    @patch("mobile_crawler.infrastructure.installed_apps.subprocess.run")
+    def test_missing_package_is_not_installed(self, mock_run):
+        mock_run.return_value = Mock(returncode=1, stdout="", stderr="")
+
+        assert is_package_installed("emulator-5554", "com.missing.app") is False
+
+    @patch("mobile_crawler.infrastructure.installed_apps.subprocess.run")
+    def test_adb_error_raises_instead_of_reporting_not_installed(self, mock_run):
+        mock_run.return_value = Mock(returncode=1, stdout="", stderr="error: device 'x' not found")
+
+        with pytest.raises(RuntimeError, match="device 'x' not found"):
+            is_package_installed("x", "com.a.app")
+
+    @patch("mobile_crawler.infrastructure.installed_apps.subprocess.run")
+    def test_timeout_raises_runtime_error(self, mock_run):
+        mock_run.side_effect = subprocess.TimeoutExpired(cmd="adb", timeout=30)
+
+        with pytest.raises(RuntimeError):
+            is_package_installed("x", "com.a.app")

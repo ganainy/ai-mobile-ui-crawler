@@ -10,12 +10,14 @@ Source: `src/mobile_crawler/cli/commands/crawl.py`
 
 ## Classes
 - `JSONEventListener`
+- `_CliCrawler`
 
 ## Functions
 - `crawl`
 
 ## Imports
 - [[code/cli/console_reader|cli.console_reader]]
+- [[code/cli/crawl_batch|cli.crawl_batch]]
 - [[code/cli/docker_autostart_report|cli.docker_autostart_report]]
 - [[code/cli/step_by_step_console|cli.step_by_step_console]]
 - [[code/cli/terminal_human_prompter|cli.terminal_human_prompter]]
@@ -24,10 +26,14 @@ Source: `src/mobile_crawler/cli/commands/crawl.py`
 - [[code/core/crawler_event_listener|core.crawler_event_listener]]
 - [[code/core/crawler_loop|core.crawler_loop]]
 - [[code/core/pre_run_warnings|core.pre_run_warnings]]
+- [[code/domain/adb_action_executor|domain.adb_action_executor]]
+- [[code/domain/human_fallback|domain.human_fallback]]
 - [[code/domain/models|domain.models]]
 - [[code/domain/report_generator|domain.report_generator]]
 - [[code/infrastructure/database|infrastructure.database]]
+- [[code/infrastructure/device_detection|infrastructure.device_detection]]
 - [[code/infrastructure/docker_autostart|infrastructure.docker_autostart]]
+- [[code/infrastructure/installed_apps|infrastructure.installed_apps]]
 - [[code/infrastructure/run_repository|infrastructure.run_repository]]
 - [[code/infrastructure/run_stats_repository|infrastructure.run_stats_repository]]
 - [[code/infrastructure/session_folder_manager|infrastructure.session_folder_manager]]

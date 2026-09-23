@@ -1,5 +1,6 @@
 """Tests for the crawl CLI command."""
 
+import json
 from unittest.mock import Mock, patch
 
 import pytest
@@ -100,8 +101,6 @@ class TestCrawlCommand:
                     "com.example.app",
                     "--model",
                     "gpt-4",
-                    "--steps",
-                    "50",
                     "--duration",
                     "300",
                     "--provider",
@@ -110,11 +109,12 @@ class TestCrawlCommand:
             )
 
             assert result.exit_code == 0
-            # Verify config overrides were set
-            mock_config_manager.set.assert_any_call("max_crawl_steps", 50)
-            mock_config_manager.set.assert_any_call("max_crawl_duration_seconds", 300)
-            mock_config_manager.set.assert_any_call("ai_provider", "openrouter")
-            mock_config_manager.set.assert_any_call("ai_model", "gpt-4")
+            # Single-run overrides, never written to the settings store
+            mock_config_manager.override.assert_any_call("limit_type", "duration")
+            mock_config_manager.override.assert_any_call("max_duration_seconds", 300)
+            mock_config_manager.override.assert_any_call("ai_provider", "openrouter")
+            mock_config_manager.override.assert_any_call("ai_model", "gpt-4")
+            mock_config_manager.set.assert_not_called()
 
     @patch("mobile_crawler.cli.commands.crawl.DatabaseManager")
     @patch("mobile_crawler.cli.commands.crawl.ConfigManager")
@@ -154,8 +154,8 @@ class TestCrawlCommand:
             )
 
             assert result.exit_code == 0
-            mock_config_manager.set.assert_any_call("enable_traffic_capture", True)
-            mock_config_manager.set.assert_any_call("pcapdroid_tls_decryption", True)
+            mock_config_manager.override.assert_any_call("enable_traffic_capture", True)
+            mock_config_manager.override.assert_any_call("pcapdroid_tls_decryption", True)
 
 
 class TestCrawlDockerAutostart:
@@ -266,12 +266,13 @@ class TestCrawlRunReport:
         result, config, _, _ = self._run(["--no-report"])
 
         assert result.exit_code == 0
-        config.set.assert_any_call("auto_generate_report_after_run", False)
+        config.override.assert_any_call("auto_generate_report_after_run", False)
+        config.set.assert_not_called()
 
     def test_auto_report_is_not_overridden_by_default(self):
         _, config, _, _ = self._run([])
 
-        assert ("auto_generate_report_after_run", False) not in [c.args for c in config.set.call_args_list]
+        assert ("auto_generate_report_after_run", False) not in [c.args for c in config.override.call_args_list]
 
 
 class TestCrawlHumanFallback:
@@ -434,30 +435,35 @@ class TestCrawlRunOverrides:
     def _keys(calls):
         return {c.args[0] for c in calls}
 
+    def _run_override_keys(self, config):
+        # --model is required, and every run sets its app package; neither is a per-flag override.
+        return self._keys(c for c in config.override.call_args_list if c.args[0] not in ("ai_model", "app_package"))
+
     def test_no_overrides_by_default(self):
         result, config = self._run([])
 
         assert result.exit_code == 0
-        config.override.assert_not_called()
+        assert self._run_override_keys(config) == set()
 
     def test_parser_mode_overrides_without_persisting(self):
         result, config = self._run(["--parser-mode", "accessibility"])
 
         assert result.exit_code == 0
-        config.override.assert_called_once_with("ui_parser_mode", "accessibility")
+        config.override.assert_any_call("ui_parser_mode", "accessibility")
+        assert self._run_override_keys(config) == {"ui_parser_mode"}
         assert "ui_parser_mode" not in self._keys(config.set.call_args_list)
 
     def test_restart_app_flag_overrides_to_true(self):
         result, config = self._run(["--restart-app"])
 
         assert result.exit_code == 0
-        config.override.assert_called_once_with("restart_app_before_run", True)
+        config.override.assert_any_call("restart_app_before_run", True)
 
     def test_no_restart_app_flag_overrides_without_persisting(self):
         result, config = self._run(["--no-restart-app"])
 
         assert result.exit_code == 0
-        config.override.assert_called_once_with("restart_app_before_run", False)
+        config.override.assert_any_call("restart_app_before_run", False)
         assert "restart_app_before_run" not in self._keys(config.set.call_args_list)
 
     def test_parser_mode_rejects_unknown_values(self):
@@ -478,20 +484,20 @@ class TestCrawlRunOverrides:
         result, config = self._run(["--reasoning-mode"])
 
         assert result.exit_code == 0
-        config.override.assert_called_once_with("crawler_reasoning_mode", True)
+        config.override.assert_any_call("crawler_reasoning_mode", True)
 
     def test_no_reasoning_mode_flag_overrides_to_false(self):
         result, config = self._run(["--no-reasoning-mode"])
 
         assert result.exit_code == 0
-        config.override.assert_called_once_with("crawler_reasoning_mode", False)
+        config.override.assert_any_call("crawler_reasoning_mode", False)
         assert "crawler_reasoning_mode" not in self._keys(config.set.call_args_list)
 
     def test_exploration_objective_overrides_without_persisting(self):
         result, config = self._run(["--exploration-objective", "Find the settings screen"])
 
         assert result.exit_code == 0
-        config.override.assert_called_once_with("exploration_objective", "Find the settings screen")
+        config.override.assert_any_call("exploration_objective", "Find the settings screen")
         assert "exploration_objective" not in self._keys(config.set.call_args_list)
 
 
@@ -527,7 +533,7 @@ class TestCrawlLastDeviceAndPackage:
 
         assert result.exit_code == 0
         assert run_repo.create_run.call_args.args[0].app_package == "com.saved.app"
-        config.set.assert_any_call("app_package", "com.saved.app")
+        config.override.assert_any_call("app_package", "com.saved.app")
 
     def test_both_last_resolve_together(self):
         saved = {"last_device_id": "R5CT1234", "last_app_package": "com.saved.app"}
@@ -640,3 +646,189 @@ class TestCrawlPreRunWarnings:
         assert "Fix: mobile-crawler-cli portal enable --device dev-1" in result.stderr
         assert result.stderr.count("Fix:") == 1
         assert "Warning: Phoenix is down" in result.stderr
+
+
+
+class TestCrawlLimits:
+    """--steps / --duration pick the limit type for this run and are never saved to settings."""
+
+    def _run(self, extra_args):
+        with (
+            patch("mobile_crawler.cli.commands.crawl.DatabaseManager"),
+            patch("mobile_crawler.cli.commands.crawl.ConfigManager") as config_cls,
+            patch("mobile_crawler.cli.commands.crawl.CrawlerLoop"),
+            patch("mobile_crawler.cli.commands.crawl.RunRepository") as run_repo_cls,
+            patch("mobile_crawler.cli.commands.crawl.get_app_data_dir") as data_dir,
+        ):
+            data_dir.return_value = Mock()
+            run_repo_cls.return_value.create_run.return_value = 7
+            config = Mock()
+            config_cls.return_value = config
+            result = CliRunner().invoke(
+                cli,
+                ["crawl", "--device", "emulator-5554", "--package", "com.example.app", "--model", "m", *extra_args],
+            )
+        return result, config
+
+    def test_duration_switches_the_limit_to_duration(self):
+        result, config = self._run(["--duration", "600"])
+
+        assert result.exit_code == 0
+        config.override.assert_any_call("limit_type", "duration")
+        config.override.assert_any_call("max_duration_seconds", 600)
+        config.set.assert_not_called()
+
+    def test_steps_switches_the_limit_to_steps(self):
+        result, config = self._run(["--steps", "40"])
+
+        assert result.exit_code == 0
+        config.override.assert_any_call("limit_type", "steps")
+        config.override.assert_any_call("max_steps", 40)
+        config.set.assert_not_called()
+
+    def test_steps_and_duration_together_are_rejected(self):
+        result, config = self._run(["--steps", "40", "--duration", "600"])
+
+        assert result.exit_code == 2
+        assert "mutually exclusive" in result.output
+        config.override.assert_not_called()
+
+    def test_feature_flags_are_not_saved_to_settings(self):
+        result, config = self._run(
+            ["--provider", "gemini", "--enable-video-recording", "--enable-mobsf-analysis", "--no-report"]
+        )
+
+        assert result.exit_code == 0
+        for key in ("ai_provider", "enable_video_recording", "enable_mobsf_analysis", "auto_run_mobsf_after_crawl"):
+            assert key in {c.args[0] for c in config.override.call_args_list}
+        config.set.assert_not_called()
+
+
+class TestCrawlBatch:
+    """Several --package values crawl one app after another, each as its own run."""
+
+    def _run(self, packages, extra_args=(), installed=None, statuses=None, fallback_setting=False):
+        installed = installed if installed is not None else set(packages)
+        statuses = statuses or {}
+        created = []
+
+        def create_run(run):
+            created.append(run)
+            return 100 + len(created)
+
+        def get_run_by_id(run_id):
+            package = created[run_id - 101].app_package
+            status, reason = statuses.get(package, ("COMPLETED", "duration_limit"))
+            return Mock(status=status, stop_reason=reason, total_steps=3, unique_screens=2)
+
+        with (
+            patch("mobile_crawler.cli.commands.crawl.DatabaseManager"),
+            patch("mobile_crawler.cli.commands.crawl.ConfigManager") as config_cls,
+            patch("mobile_crawler.cli.commands.crawl.CrawlerLoop") as loop_cls,
+            patch("mobile_crawler.cli.commands.crawl.RunRepository") as run_repo_cls,
+            patch("mobile_crawler.cli.commands.crawl.get_app_data_dir") as data_dir,
+            patch("mobile_crawler.cli.commands.crawl.ensure_mobsf_running_if_enabled", return_value=None) as mobsf,
+            patch("mobile_crawler.cli.commands.crawl.ensure_omniparser_running_if_enabled", return_value=None),
+            patch("mobile_crawler.cli.commands.crawl.DeviceDetection") as detection_cls,
+            patch(
+                "mobile_crawler.cli.commands.crawl.is_package_installed",
+                side_effect=lambda device, package: package in installed,
+            ),
+            patch("mobile_crawler.cli.commands.crawl.ADBActionExecutor") as executor_cls,
+        ):
+            data_dir.return_value = Mock()
+            run_repo = run_repo_cls.return_value
+            run_repo.create_run.side_effect = create_run
+            run_repo.get_run_by_id.side_effect = get_run_by_id
+            config = Mock()
+            config.get.side_effect = lambda key, default=None: (
+                fallback_setting if key == "human_fallback_enabled" else default
+            )
+            config_cls.return_value = config
+            detection_cls.return_value.get_connected_devices.return_value = [
+                Mock(device_id="emulator-5554", is_available=True)
+            ]
+            args = ["crawl", "--device", "emulator-5554", "--model", "m"]
+            for package in packages:
+                args += ["--package", package]
+            result = CliRunner().invoke(cli, [*args, *extra_args])
+        self.created = created
+        self.loop_cls = loop_cls
+        self.executor_cls = executor_cls
+        self.mobsf = mobsf
+        self.config = config
+        return result
+
+    def _batch_event(self, result):
+        events = [json.loads(line) for line in result.stdout.splitlines() if line.startswith("{")]
+        return [e for e in events if e["event"] == "batch_completed"]
+
+    def test_each_package_gets_its_own_run(self):
+        result = self._run(["com.a.app", "com.b.app"])
+
+        assert result.exit_code == 0
+        assert [r.app_package for r in self.created] == ["com.a.app", "com.b.app"]
+        assert [c.args[0] for c in self.loop_cls.return_value.run.call_args_list] == [101, 102]
+        assert self.loop_cls.call_count == 2
+
+    def test_each_run_points_features_at_its_own_package(self):
+        self._run(["com.a.app", "com.b.app"])
+
+        packages = [c.args[1] for c in self.config.override.call_args_list if c.args[0] == "app_package"]
+        assert packages == ["com.a.app", "com.b.app"]
+
+    def test_previous_app_is_force_stopped_between_runs(self):
+        self._run(["com.a.app", "com.b.app"])
+
+        self.executor_cls.return_value.force_stop_package.assert_called_once_with("com.a.app")
+
+    def test_docker_autostart_runs_once_per_batch(self):
+        self._run(["com.a.app", "com.b.app"])
+
+        self.mobsf.assert_called_once()
+
+    def test_pre_run_warnings_are_checked_once_per_batch(self, no_pre_run_warnings):
+        self._run(["com.a.app", "com.b.app"])
+
+        no_pre_run_warnings.assert_called_once()
+
+    def test_summary_is_a_json_event_on_stdout_and_a_table_on_stderr(self):
+        result = self._run(["com.a.app", "com.b.app"], installed={"com.a.app"})
+
+        [event] = self._batch_event(result)
+        assert event["aborted_reason"] is None
+        assert event["runs"] == [
+            {"package": "com.a.app", "run_id": 101, "status": "COMPLETED", "stop_reason": "duration_limit"},
+            {"package": "com.b.app", "run_id": None, "status": "SKIPPED", "stop_reason": "not installed"},
+        ]
+        assert "Batch summary" in result.stderr
+        assert "com.b.app" in result.stderr and "SKIPPED" in result.stderr
+
+    def test_any_failed_app_makes_the_exit_code_non_zero(self):
+        result = self._run(["com.a.app", "com.b.app"], statuses={"com.a.app": ("ERROR", "error: boom")})
+
+        assert result.exit_code == 1
+        assert len(self.created) == 2
+
+    def test_single_package_prints_no_batch_summary(self):
+        result = self._run(["com.a.app"])
+
+        assert result.exit_code == 0
+        assert self._batch_event(result) == []
+        assert "Batch summary" not in result.stderr
+        self.executor_cls.assert_not_called()
+
+    def test_human_fallback_on_warns_at_batch_start(self):
+        result = self._run(["com.a.app", "com.b.app"], fallback_setting=True)
+
+        assert "Human Fallback is on" in result.stderr
+
+    def test_no_human_fallback_flag_silences_the_warning(self):
+        result = self._run(["com.a.app", "com.b.app"], ["--no-human-fallback"], fallback_setting=True)
+
+        assert "Human Fallback" not in result.stderr
+
+    def test_human_fallback_off_does_not_warn(self):
+        result = self._run(["com.a.app", "com.b.app"], fallback_setting=False)
+
+        assert "Human Fallback" not in result.stderr
