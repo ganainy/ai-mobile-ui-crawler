@@ -7,6 +7,7 @@ running afterwards, matching GUI behavior.
 """
 
 from mobile_crawler.config.config_manager import ConfigManager
+from mobile_crawler.config.defaults import MOBSF_DEFAULT_URL
 from mobile_crawler.infrastructure.mobsf_docker import MobSFDockerService
 from mobile_crawler.infrastructure.omniparser_docker import OmniParserDockerService
 
@@ -19,7 +20,7 @@ def ensure_mobsf_running_if_enabled(config_manager: ConfigManager) -> tuple[bool
     """
     if not config_manager.get("enable_mobsf_analysis", False):
         return None
-    return MobSFDockerService().prepare()
+    return MobSFDockerService(config_manager.get("mobsf_api_url") or MOBSF_DEFAULT_URL).prepare()
 
 
 def ensure_omniparser_running_if_enabled(config_manager: ConfigManager) -> tuple[bool, str] | None:

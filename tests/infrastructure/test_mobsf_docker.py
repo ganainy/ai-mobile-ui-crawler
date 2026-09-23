@@ -183,3 +183,22 @@ class TestExtractApiKeyFromLogs:
 
     def test_extracts_plain_key(self):
         assert extract_api_key_from_logs("REST API Key: deadbeefcafe") == "deadbeefcafe"
+
+
+class TestPortFromUrl:
+    def test_default_port_is_mobsf_default_url_port(self):
+        assert MobSFDockerService().port == 8000
+
+    def test_port_derived_from_url(self):
+        assert MobSFDockerService("http://localhost:9123/").port == 9123
+
+    def test_published_port_maps_to_container_8000(self):
+        service = MobSFDockerService("http://localhost:9123")
+        with (
+            patch.object(service, "is_mobsf_reachable", return_value=False),
+            patch.object(service, "docker_available", return_value=True),
+            patch.object(service, "container_state", return_value="absent"),
+            patch("mobile_crawler.infrastructure.mobsf_docker.subprocess.run") as run,
+        ):
+            service.ensure_running(timeout=0)
+        assert "9123:8000" in run.call_args[0][0]

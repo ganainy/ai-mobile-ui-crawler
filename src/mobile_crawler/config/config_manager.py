@@ -4,7 +4,7 @@ import os
 from typing import Any
 
 from ..infrastructure.user_config_store import UserConfigStore
-from .defaults import DEFAULTS
+from .defaults import DEFAULTS, correct_mobsf_api_url
 
 
 class ConfigManager:
@@ -45,6 +45,8 @@ class ConfigManager:
         try:
             db_value = self.user_config_store.get_setting(key)
             if db_value is not None:
+                if key == "mobsf_api_url":
+                    return correct_mobsf_api_url(db_value)
                 return db_value
         except Exception as e:
             # If DB access fails, log it and continue to next source

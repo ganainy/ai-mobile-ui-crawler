@@ -3,7 +3,7 @@
 import os
 import tempfile
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -149,3 +149,21 @@ class TestRunOverrides:
         config.override("crawler_reasoning_mode", False)
 
         assert config.get("crawler_reasoning_mode") is False
+
+
+class TestStaleMobsfApiUrl:
+    """A saved MobSF URL on OmniParser's local port is the old wrong default."""
+
+    @pytest.mark.parametrize(
+        "saved", ["http://localhost:8001", "http://127.0.0.1:8001/", "https://localhost:8001/api"]
+    )
+    def test_saved_omniparser_port_reads_as_mobsf_default(self, saved):
+        store = Mock()
+        store.get_setting.return_value = saved
+        assert ConfigManager(store).get("mobsf_api_url") == "http://localhost:8000"
+
+    @pytest.mark.parametrize("saved", ["http://localhost:9000", "http://192.168.1.5:8001"])
+    def test_other_saved_urls_are_kept(self, saved):
+        store = Mock()
+        store.get_setting.return_value = saved
+        assert ConfigManager(store).get("mobsf_api_url") == saved

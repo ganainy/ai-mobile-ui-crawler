@@ -1,6 +1,11 @@
 """Default configuration values."""
 
 from typing import Any
+from urllib.parse import urlparse
+
+# MobSF's API URL. The Docker-published port is derived from it (see
+# MobSFDockerService); it must not be OmniParser's port (8001).
+MOBSF_DEFAULT_URL = "http://localhost:8000"
 
 # Default configuration values
 # These are used when no other source provides a value
@@ -71,7 +76,7 @@ DEFAULTS: dict[str, Any] = {
     # False, MobSF can still be run manually from Run History.
     "auto_run_mobsf_after_crawl": False,
     # MobSF server API URL (must be running and accessible)
-    "mobsf_api_url": "http://localhost:8001",
+    "mobsf_api_url": MOBSF_DEFAULT_URL,
     # MobSF API key (required for API access)
     "mobsf_api_key": None,
     # Maximum time to wait for scan completion (in seconds)
@@ -128,3 +133,16 @@ DEFAULTS: dict[str, Any] = {
     "wait_start_app_timeout_ms": 5000,
     "wait_start_app_poll_interval_ms": 300,
 }
+
+
+def correct_mobsf_api_url(url: str) -> str:
+    """Return the MobSF default in place of a saved URL on OmniParser's local port.
+
+    Older versions defaulted ``mobsf_api_url`` to OmniParser's port (8001), so a
+    saved local URL on that port is that stale default, not a real MobSF server.
+    """
+    parsed = urlparse(url)
+    omniparser_port = urlparse(DEFAULTS["omniparser_local_url"]).port
+    if parsed.hostname in ("localhost", "127.0.0.1") and parsed.port == omniparser_port:
+        return MOBSF_DEFAULT_URL
+    return url

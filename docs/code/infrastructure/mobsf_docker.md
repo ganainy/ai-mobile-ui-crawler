@@ -12,6 +12,7 @@ Source: `src/mobile_crawler/infrastructure/mobsf_docker.py`
 - `MobSFDockerService`
 
 ## Imports
+- [[code/config/defaults|config.defaults]]
 - [[code/infrastructure/mobsf_manager|infrastructure.mobsf_manager]]
 
 ## Imported by

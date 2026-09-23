@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any, Optional
 
 import requests
 
+from mobile_crawler.config.defaults import MOBSF_DEFAULT_URL
 from mobile_crawler.domain.run_folder_layout import RunFolderLayout
 
 if TYPE_CHECKING:
@@ -133,7 +134,7 @@ class MobSFManager:
         self.session_folder_manager = session_folder_manager
 
         self.api_key = ""
-        self.api_url = config_manager.get("mobsf_api_url", "http://localhost:8000")
+        self.api_url = config_manager.get("mobsf_api_url", MOBSF_DEFAULT_URL)
         if not self.api_url:
             raise ValueError("MOBSF_API_URL must be set in configuration")
 
@@ -214,7 +215,7 @@ class MobSFManager:
 
     def _refresh_runtime_config(self) -> tuple[str, str]:
         """Read MobSF URL and resolve the API key from automatic sources."""
-        api_url = self.config_manager.get("mobsf_api_url", "http://localhost:8000")
+        api_url = self.config_manager.get("mobsf_api_url", MOBSF_DEFAULT_URL)
         if not api_url:
             raise ValueError("MOBSF_API_URL must be set in configuration")
 

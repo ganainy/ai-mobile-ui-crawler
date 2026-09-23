@@ -10,7 +10,9 @@ import shutil
 import socket
 import subprocess
 import time
+from urllib.parse import urlparse
 
+from mobile_crawler.config.defaults import MOBSF_DEFAULT_URL
 from mobile_crawler.infrastructure.mobsf_manager import (
     MOBSF_CONTAINER_NAME,
     extract_api_key_from_logs,
@@ -20,7 +22,8 @@ from mobile_crawler.infrastructure.mobsf_manager import (
 logger = logging.getLogger(__name__)
 
 MOBSF_IMAGE = "opensecurity/mobile-security-framework-mobsf"
-MOBSF_PORT = 8000
+# Port MobSF listens on inside the container.
+MOBSF_CONTAINER_PORT = 8000
 MOBSF_HOST = "127.0.0.1"
 
 
@@ -30,17 +33,19 @@ class MobSFDockerService:
     The container is launched detached so it survives GUI restarts. The
     ``started_by_gui`` flag records whether this process launched the
     container, which the UI uses to decide whether to offer to stop it.
+    The host port is taken from the MobSF API URL, so the container is
+    published where the API calls will go.
     """
 
     def __init__(
         self,
+        url: str = MOBSF_DEFAULT_URL,
         image: str = MOBSF_IMAGE,
         container_name: str = MOBSF_CONTAINER_NAME,
-        port: int = MOBSF_PORT,
     ):
         self.image = image
         self.container_name = container_name
-        self.port = port
+        self.port = urlparse(url.rstrip("/")).port or urlparse(MOBSF_DEFAULT_URL).port
         self.started_by_gui = False
 
     def docker_available(self) -> bool:
@@ -123,7 +128,7 @@ class MobSFDockerService:
                         self.container_name,
                         "--rm",
                         "-p",
-                        f"{self.port}:8000",
+                        f"{self.port}:{MOBSF_CONTAINER_PORT}",
                         self.image,
                     ],
                     check=True,
@@ -155,7 +160,7 @@ class MobSFDockerService:
                         self.container_name,
                         "--rm",
                         "-p",
-                        f"{self.port}:8000",
+                        f"{self.port}:{MOBSF_CONTAINER_PORT}",
                         self.image,
                     ],
                     check=True,
