@@ -14,7 +14,7 @@ $IconPathIco = Join-Path $ScriptDir "crawler_logo.ico"
 
 # Find a Python interpreter to launch the GUI. Prefer a project virtualenv's
 # windowed interpreter (pythonw.exe) so no console window is shown.
-$venvDirs = @("venv312", ".venv", "venv")
+$venvDirs = @(".venv312", "venv312", ".venv", "venv")
 $pythonExe = $null
 foreach ($venvDir in $venvDirs) {
     $pythonw = Join-Path $ScriptDir (Join-Path $venvDir "Scripts\pythonw.exe")
@@ -57,7 +57,7 @@ if (Test-Path $IconPathIco) {
         if ($icoFile.Length -lt 100) {
             Write-Host "Warning: ICO file appears to be too small ($($icoFile.Length) bytes). It may be corrupted." -ForegroundColor Yellow
         }
-        
+
         # Use absolute path for icon (required by Windows shortcuts)
         $IconPathIcoAbsolute = (Resolve-Path $IconPathIco).Path
         $Shortcut.IconLocation = "$IconPathIcoAbsolute,0"
@@ -95,6 +95,3 @@ Write-Host "`nYou can now double-click 'Mobile Crawler' on your desktop to launc
 
 # Clean up COM object
 [System.Runtime.Interopservices.Marshal]::ReleaseComObject($WshShell) | Out-Null
-
-
-

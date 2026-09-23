@@ -2256,9 +2256,36 @@ class MainWindow(QMainWindow):
         event.accept()
 
 
+def _hide_child_console_windows() -> None:
+    """Stop child processes (adb, docker, ...) from flashing console windows.
+
+    Under pythonw.exe (the desktop shortcut) the GUI has no console, so Windows
+    gives every console child its own visible window. Default all Popen calls,
+    including asyncio's, to CREATE_NO_WINDOW when no console is attached.
+    """
+    if sys.platform != "win32":
+        return
+
+    import ctypes
+    import subprocess
+
+    if ctypes.windll.kernel32.GetConsoleWindow():
+        return
+
+    original_init = subprocess.Popen.__init__
+
+    def _init(self, *args, **kwargs):
+        if not kwargs.get("creationflags"):
+            kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+        original_init(self, *args, **kwargs)
+
+    subprocess.Popen.__init__ = _init
+
+
 def run():
     """Entry point for the GUI application."""
     _set_windows_app_user_model_id()
+    _hide_child_console_windows()
 
     app = QApplication(sys.argv)
     app.setApplicationName("Mobile Crawler")
