@@ -147,7 +147,15 @@ mobile-crawler-cli crawl --device emulator-5554 --package com.example.app --prov
 
 # Reuse the device and app last selected in the GUI
 mobile-crawler-cli crawl --device last --package last --provider gemini --model gemini-1.5-flash
+
+# Crawl several apps one after another, 10 minutes each; every app gets its own run
+mobile-crawler-cli crawl --device emulator-5554 --package com.a.app --package com.b.app --package com.c.app `
+  --provider gemini --model gemini-1.5-flash --duration 600 --no-human-fallback
 ```
+
+Command-line settings apply to that invocation only; they are never saved to the settings store. `--steps` and `--duration` are mutually exclusive.
+
+With more than one `--package`, the apps run in the given order with the same settings. Before each app, the batch checks that the device is still connected and the package is installed. It skips a missing app, force-stops the previous one, and ends with a `batch_completed` JSON event on stdout and a summary table on stderr. An app that errors doesn't stop the batch; a disconnected device or Ctrl+C does. The exit code is 0 only if every app's run completed (130 on Ctrl+C).
 
 ## MobSF Static Analysis
 

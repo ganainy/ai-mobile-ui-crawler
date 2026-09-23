@@ -8,18 +8,23 @@ import click
 from mobile_crawler.config import get_app_data_dir
 from mobile_crawler.config.config_manager import ConfigManager
 from mobile_crawler.cli.console_reader import ConsoleReader
+from mobile_crawler.cli.crawl_batch import BatchResult, run_crawl_batch
 from mobile_crawler.cli.step_by_step_console import StepByStepConsole
 from mobile_crawler.cli.terminal_human_prompter import TerminalHumanPrompter
 from mobile_crawler.core.crawler_event_listener import CrawlerEventListener
 from mobile_crawler.core.crawler_loop import CrawlerLoop
+from mobile_crawler.domain.adb_action_executor import ADBActionExecutor
+from mobile_crawler.domain.human_fallback import FALLBACK_ENABLED_KEY
 from mobile_crawler.domain.models import ActionResult
 from mobile_crawler.domain.report_generator import ReportGenerator
 from mobile_crawler.infrastructure.database import DatabaseManager
+from mobile_crawler.infrastructure.device_detection import DeviceDetection
 from mobile_crawler.cli.docker_autostart_report import report_docker_autostart
 from mobile_crawler.infrastructure.docker_autostart import (
     ensure_mobsf_running_if_enabled,
     ensure_omniparser_running_if_enabled,
 )
+from mobile_crawler.infrastructure.installed_apps import is_package_installed
 from mobile_crawler.infrastructure.run_repository import Run, RunRepository
 from mobile_crawler.infrastructure.session_folder_manager import SessionFolderManager
 from mobile_crawler.infrastructure.telemetry_client import build_telemetry_client_factory
@@ -207,10 +212,17 @@ def _resolve_last(value: str, config_manager: ConfigManager, key: str, option: s
 
 @click.command()
 @click.option("--device", required=True, help="Device ID to crawl, or 'last' for the last-used device")
-@click.option("--package", required=True, help="App package name to crawl, or 'last' for the last-used app")
+@click.option(
+    "--package",
+    "packages",
+    required=True,
+    multiple=True,
+    help="App package name to crawl, or 'last' for the last-used app. "
+    "Repeat to crawl several apps one after another, each as its own run",
+)
 @click.option("--model", required=True, help="AI model to use")
-@click.option("--steps", type=int, help="Maximum number of crawl steps")
-@click.option("--duration", type=int, help="Maximum crawl duration in seconds")
+@click.option("--steps", type=int, help="Maximum number of crawl steps (per app)")
+@click.option("--duration", type=int, help="Maximum crawl duration in seconds (per app)")
 @click.option("--provider", help="AI provider (gemini, openrouter, ollama)")
 @click.option("--enable-traffic-capture", is_flag=True, help="Enable PCAPdroid traffic capture during crawl")
 @click.option("--enable-video-recording", is_flag=True, help="Enable video recording during crawl")
@@ -247,7 +259,7 @@ def _resolve_last(value: str, config_manager: ConfigManager, key: str, option: s
 )
 def crawl(
     device: str,
-    package: str,
+    packages: tuple[str, ...],
     model: str,
     steps: int | None,
     duration: int | None,
@@ -263,7 +275,9 @@ def crawl(
     exploration_objective: str | None,
     step_by_step: bool,
 ) -> None:
-    """Start a crawl on the specified device and app."""
+    """Start a crawl on the specified device and app, or on several apps one after another."""
+    if steps and duration:
+        raise click.UsageError("--steps and --duration are mutually exclusive; pass one limit")
     try:
         # Ensure app data directory exists
         app_data_dir = get_app_data_dir()
@@ -274,28 +288,28 @@ def crawl(
         config_manager.user_config_store.create_schema()
 
         device = _resolve_last(device, config_manager, "last_device_id", "--device")
-        package = _resolve_last(package, config_manager, "last_app_package", "--package")
+        packages = [_resolve_last(p, config_manager, "last_app_package", "--package") for p in packages]
 
-        # Override config with command line options
-        if steps:
-            config_manager.set("max_crawl_steps", steps)
-        if duration:
-            config_manager.set("max_crawl_duration_seconds", duration)
-        if provider:
-            config_manager.set("ai_provider", provider)
-        config_manager.set("ai_model", model)
-        config_manager.set("app_package", package)  # Set app package for features
-        if enable_traffic_capture:
-            config_manager.set("enable_traffic_capture", True)
-            config_manager.set("pcapdroid_tls_decryption", True)
-        if enable_video_recording:
-            config_manager.set("enable_video_recording", True)
-        if enable_mobsf_analysis:
-            config_manager.set("enable_mobsf_analysis", True)
-            config_manager.set("auto_run_mobsf_after_crawl", True)
-        if no_report:
-            config_manager.set("auto_generate_report_after_run", False)
         # Single-run overrides: never written to the config store.
+        if steps:
+            config_manager.override("limit_type", "steps")
+            config_manager.override("max_steps", steps)
+        if duration:
+            config_manager.override("limit_type", "duration")
+            config_manager.override("max_duration_seconds", duration)
+        if provider:
+            config_manager.override("ai_provider", provider)
+        config_manager.override("ai_model", model)
+        if enable_traffic_capture:
+            config_manager.override("enable_traffic_capture", True)
+            config_manager.override("pcapdroid_tls_decryption", True)
+        if enable_video_recording:
+            config_manager.override("enable_video_recording", True)
+        if enable_mobsf_analysis:
+            config_manager.override("enable_mobsf_analysis", True)
+            config_manager.override("auto_run_mobsf_after_crawl", True)
+        if no_report:
+            config_manager.override("auto_generate_report_after_run", False)
         if parser_mode is not None:
             config_manager.override("ui_parser_mode", parser_mode)
         if reasoning_mode is not None:
@@ -315,46 +329,125 @@ def crawl(
         # Create run repository
         run_repo = RunRepository(db_manager)
 
-        # Create run record
+        session_folder_manager = SessionFolderManager()
+        # One stdin reader for every prompt in the run, so prompts never race each other for input.
+        console_reader = ConsoleReader()
+
+        def make_loop() -> CrawlerLoop:
+            crawler_loop = CrawlerLoop(
+                config_manager=config_manager,
+                run_repository=run_repo,
+                session_folder_manager=session_folder_manager,
+                event_listeners=[JSONEventListener(effective_log_level)],
+                report_generator=ReportGenerator(
+                    db_manager,
+                    telemetry_client_factory=build_telemetry_client_factory(config_manager),
+                ),
+                human_prompter=TerminalHumanPrompter(reader=console_reader),
+                human_fallback_enabled_override=human_fallback,
+            )
+            if step_by_step:
+                crawler_loop.set_step_by_step_enabled(True)
+                crawler_loop.add_event_listener(
+                    StepByStepConsole(advance=crawler_loop.advance_step, reader=console_reader)
+                )
+            return crawler_loop
+
+        crawler = _CliCrawler(device, provider, model, config_manager, run_repo, make_loop)
+
+        if len(packages) == 1:
+            run_id = crawler.start_run(packages[0])
+            crawler.run(run_id, packages[0])
+            return
+
+        fallback_on = human_fallback if human_fallback is not None else bool(config_manager.get(FALLBACK_ENABLED_KEY))
+        if fallback_on:
+            click.echo(
+                "Warning: Human Fallback is on; an unanswered prompt waits out its timeout inside that app's "
+                "crawl. Pass --no-human-fallback for unattended batches.",
+                err=True,
+            )
+        result = run_crawl_batch(packages, crawler)
+        _report_batch(result)
+        sys.exit(result.exit_code)
+
+    except Exception as e:
+        click.echo(f"Error starting crawl: {e}", err=True)
+        sys.exit(1)
+
+
+class _CliCrawler:
+    """`BatchCrawler` over the real device, the runs table and a fresh CrawlerLoop per run."""
+
+    def __init__(self, device, provider, model, config_manager, run_repo, make_loop) -> None:
+        self._device = device
+        self._provider = provider
+        self._model = model
+        self._config_manager = config_manager
+        self._run_repo = run_repo
+        self._make_loop = make_loop
+
+    def device_ready(self) -> bool:
+        return any(d.device_id == self._device and d.is_available for d in DeviceDetection().get_connected_devices())
+
+    def is_installed(self, package: str) -> bool:
+        return is_package_installed(self._device, package)
+
+    def force_stop(self, package: str) -> None:
+        ADBActionExecutor(self._device).force_stop_package(package)
+
+    def start_run(self, package: str) -> int:
+        self._config_manager.override("app_package", package)  # Set app package for features
         run = Run(
             id=None,
-            device_id=device,
+            device_id=self._device,
             app_package=package,
             start_activity=None,  # Will be determined during crawl
             start_time=datetime.now(),
             end_time=None,
             status="RUNNING",
-            ai_provider=provider,
-            ai_model=model,
+            ai_provider=self._provider,
+            ai_model=self._model,
             total_steps=0,
             unique_screens=0,
         )
-        run_id = run_repo.create_run(run)
+        return self._run_repo.create_run(run)
 
-        session_folder_manager = SessionFolderManager()
-        # One stdin reader for every prompt in the run, so prompts never race each other for input.
-        console_reader = ConsoleReader()
-        crawler_loop = CrawlerLoop(
-            config_manager=config_manager,
-            run_repository=run_repo,
-            session_folder_manager=session_folder_manager,
-            event_listeners=[JSONEventListener(effective_log_level)],
-            report_generator=ReportGenerator(
-                db_manager,
-                telemetry_client_factory=build_telemetry_client_factory(config_manager),
-            ),
-            human_prompter=TerminalHumanPrompter(reader=console_reader),
-            human_fallback_enabled_override=human_fallback,
+    def run(self, run_id: int, package: str) -> None:
+        self._make_loop().run(run_id)
+
+    def outcome(self, run_id: int) -> tuple[str, str | None]:
+        run = self._run_repo.get_run_by_id(run_id)
+        if run is None:
+            return "ERROR", "error: run not found"
+        return run.status, run.stop_reason
+
+    def mark_user_stopped(self, run_id: int) -> None:
+        run = self._run_repo.get_run_by_id(run_id)
+        if run is None or run.status != "RUNNING":
+            return
+        self._run_repo.update_run_stats(
+            run_id,
+            total_steps=run.total_steps,
+            unique_screens=run.unique_screens,
+            status="STOPPED",
+            end_time=datetime.now(),
+            stop_reason="user_stop",
         )
-        if step_by_step:
-            crawler_loop.set_step_by_step_enabled(True)
-            crawler_loop.add_event_listener(
-                StepByStepConsole(advance=crawler_loop.advance_step, reader=console_reader)
-            )
 
-        # Run the crawl
-        crawler_loop.run(run_id)
 
-    except Exception as e:
-        click.echo(f"Error starting crawl: {e}", err=True)
-        sys.exit(1)
+def _report_batch(result: BatchResult) -> None:
+    """Print the batch summary: one JSON event on stdout, a readable table on stderr."""
+    event = {"event": "batch_completed", **result.to_dict(), "timestamp": datetime.now().isoformat()}
+    print(json.dumps(event), flush=True)
+
+    width = max(len(e.package) for e in result.entries)
+    click.echo("\nBatch summary:", err=True)
+    for e in result.entries:
+        run = f"run {e.run_id}" if e.run_id is not None else "no run"
+        reason = f"  ({e.stop_reason})" if e.stop_reason else ""
+        click.echo(f"  {e.package:<{width}}  {run:<10}  {e.status}{reason}", err=True)
+    if result.aborted_reason == "device_unreachable":
+        click.echo("Batch stopped: the device became unreachable.", err=True)
+    elif result.aborted_reason == "user_stop":
+        click.echo("Batch stopped by user.", err=True)

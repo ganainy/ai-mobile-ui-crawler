@@ -56,3 +56,28 @@ def fetch_third_party_packages_output(device_id: str) -> str:
 def list_third_party_packages(device_id: str) -> list[str]:
     """Return the sorted third-party packages installed on `device_id`."""
     return parse_package_list(fetch_third_party_packages_output(device_id))
+
+
+def is_package_installed(device_id: str, package: str) -> bool:
+    """Return True if `package` (third-party or system) is installed on `device_id`.
+
+    Raises:
+        RuntimeError: if adb can't be run, times out or reports an error, so an unreachable
+            device is never mistaken for a missing app.
+    """
+    try:
+        result = subprocess.run(
+            ["adb", "-s", device_id, "shell", "pm", "path", package],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except (subprocess.SubprocessError, OSError) as e:
+        raise RuntimeError(f"ADB command failed: {e}") from e
+
+    if any(line.strip().startswith("package:") for line in result.stdout.splitlines()):
+        return True
+    # `pm path` exits non-zero with no output for a missing package; anything on stderr is adb failing.
+    if result.stderr.strip():
+        raise RuntimeError(result.stderr.strip())
+    return False
