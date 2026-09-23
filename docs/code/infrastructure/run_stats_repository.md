@@ -16,6 +16,7 @@ Source: `src/mobile_crawler/infrastructure/run_stats_repository.py`
 - [[code/infrastructure/database|infrastructure.database]]
 
 ## Imported by
+- [[code/cli/commands/crawl|cli.commands.crawl]]
 - [[code/cli/commands/stats|cli.commands.stats]]
 - [[code/ui/main_window|ui.main_window]]
 - [[code/ui/widgets/run_history_view|ui.widgets.run_history_view]]

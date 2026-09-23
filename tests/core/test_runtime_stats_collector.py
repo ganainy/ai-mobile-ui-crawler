@@ -45,14 +45,19 @@ class TestRuntimeStats:
         assert db_dict["device_model"] == "Pixel 5"
         assert db_dict["android_version"] == "13.0"
 
-    def test_to_db_dict_nulls_most_visited_screen_id(self):
-        """most_visited_screen_id is never persisted (no real screens.id here)."""
-        stats = RuntimeStats(most_visited_screen_id=12345, most_visited_screen_count=3)
+    def test_to_db_dict_nulls_a_non_screen_most_visited_screen_id(self):
+        """An in-memory key (not a screens.id) is never persisted to the FK column."""
+        stats = RuntimeStats(most_visited_screen_id="step_3", most_visited_screen_count=3)
 
         db_dict = stats.to_db_dict()
 
         assert db_dict["most_visited_screen_id"] is None
         assert db_dict["most_visited_screen_count"] == 3
+
+    def test_to_db_dict_keeps_a_screen_id(self):
+        stats = RuntimeStats(most_visited_screen_id=12, most_visited_screen_count=3)
+
+        assert stats.to_db_dict()["most_visited_screen_id"] == 12
 
     def test_from_db_dict_ignores_most_visited_screen_id(self):
         """from_db_dict leaves most_visited_screen_id as None."""

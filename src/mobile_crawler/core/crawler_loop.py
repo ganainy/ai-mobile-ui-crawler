@@ -12,6 +12,7 @@ from mobile_crawler.config.config_manager import ConfigManager
 from mobile_crawler.core.crawl_state_machine import CrawlState, CrawlStateMachine
 from mobile_crawler.core.crawler_event_listener import CrawlerEventListener
 from mobile_crawler.core.log_sinks import LogLevel, capture_stdout_to_ui
+from mobile_crawler.core.run_stats_recorder import RunStatsRecorder
 from mobile_crawler.domain.crawler_agent_service import CrawlerAgentService
 from mobile_crawler.domain.errors import (
     CheckpointError,
@@ -48,6 +49,7 @@ class CrawlerLoop:
         report_generator=None,
         human_prompter=None,
         human_fallback_enabled_override=None,
+        run_stats_repository=None,
     ):
         """Initialize the crawler-agent-backed crawl wrapper.
 
@@ -61,6 +63,8 @@ class CrawlerLoop:
             human_prompter: Optional HumanPrompter used by Human Fallback during authentication
             human_fallback_enabled_override: Optional bool overriding the persisted Human Fallback
                 enabled setting for this run only (None means use the persisted setting)
+            run_stats_repository: Optional RunStatsRepository; when given, the run's statistics are
+                collected from its events and saved to run_stats before the Run Report is written
         """
         self.config_manager = config_manager
         self.run_repository = run_repository
@@ -70,6 +74,9 @@ class CrawlerLoop:
         self._report_generator = report_generator
         self._human_prompter = human_prompter
         self._human_fallback_enabled_override = human_fallback_enabled_override
+        self._run_stats_recorder = RunStatsRecorder(run_stats_repository) if run_stats_repository else None
+        if self._run_stats_recorder:
+            self.event_listeners.append(self._run_stats_recorder)
 
         self._crawl_thread: threading.Thread | None = None
         self._current_run_id: int | None = None
@@ -212,6 +219,7 @@ class CrawlerLoop:
         """
         start_time = time.time()
         self._cancel_requested = False
+        run = None
 
         try:
             run = self.run_repository.get_run_by_id(run_id)
@@ -460,7 +468,7 @@ class CrawlerLoop:
             self.run_repository.update_run_stats(
                 run_id=run_id,
                 total_steps=result.steps_completed,
-                unique_screens=0,
+                unique_screens=self._crawler_agent_service.unique_screen_count,
                 status=status,
                 end_time=datetime.now(),
                 stop_reason=stop_reason,
@@ -481,6 +489,7 @@ class CrawlerLoop:
 
             self._emit_event("on_crawl_completed", run_id, result.steps_completed, duration_ms, reason_with_stats)
 
+            self._save_run_stats(run_id, run)
             self._generate_report(run_id)
 
         except CrawlerError as e:
@@ -497,12 +506,23 @@ class CrawlerLoop:
             self._transition_state(CrawlState.ERROR.value, run_id)
             self._emit_event("on_error", run_id, None, wrapped)
         finally:
+            # No-op after a completed run (already saved before the report); saves what an errored run collected.
+            self._save_run_stats(run_id, run)
             self._video_recording_manager = None
             self._traffic_capture_manager = None
             if self._crawler_agent_service:
                 self._crawler_agent_service.clear_run_logging()
                 self._crawler_agent_service = None
             self._transition_state(CrawlState.STOPPED.value, run_id)
+
+    def _save_run_stats(self, run_id: int, run) -> None:
+        """Write the run's statistics to run_stats (once); never affects the crawl outcome."""
+        if self._run_stats_recorder is None:
+            return
+        try:
+            self._run_stats_recorder.save(run_id, session_path=getattr(run, "session_path", None))
+        except Exception as e:
+            logger.warning("Saving run_stats failed for run %s: %s", run_id, e)
 
     def _generate_report(self, run_id: int) -> None:
         """Write the Run Report after a run when enabled; never affects the crawl outcome."""

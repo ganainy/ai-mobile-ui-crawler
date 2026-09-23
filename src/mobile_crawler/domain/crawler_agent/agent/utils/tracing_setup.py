@@ -62,7 +62,7 @@ def setup_tracing(tracing_config: TracingConfig, agent: object | None = None) ->
         logger.warning(f"⚠️  Unknown tracing provider: {provider}. " f"Supported providers: phoenix, langfuse")
 
 
-def _check_phoenix_reachable(endpoint: str, timeout: float = 3.0) -> bool:
+def check_phoenix_reachable(endpoint: str, timeout: float = 3.0) -> bool:
     """Ping the Phoenix server to check if it's reachable."""
     import urllib.error
     import urllib.request
@@ -87,7 +87,7 @@ def _setup_phoenix_tracing() -> bool:
         return False
 
     endpoint = os.getenv("PHOENIX_URL") or os.getenv("phoenix_url") or "http://localhost:6006"
-    if not _check_phoenix_reachable(endpoint):
+    if not check_phoenix_reachable(endpoint):
         logger.warning(
             f"⚠️  Phoenix server is not reachable at {endpoint}. " "Tracing will be disabled for this session."
         )

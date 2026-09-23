@@ -19,6 +19,7 @@ Source: `src/mobile_crawler/domain/models.py`
 - [[code/cli/commands/crawl|cli.commands.crawl]]
 - [[code/cli/step_by_step_console|cli.step_by_step_console]]
 - [[code/core/crawler_event_listener|core.crawler_event_listener]]
+- [[code/core/run_stats_recorder|core.run_stats_recorder]]
 - [[code/domain/adb_action_executor|domain.adb_action_executor]]
 - [[code/domain/crawler_agent_service|domain.crawler_agent_service]]
 - [[code/ui/main_window|ui.main_window]]

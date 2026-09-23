@@ -119,7 +119,10 @@ class RuntimeStats:
             "unique_screens_visited": self.unique_screens_visited,
             "total_screen_visits": self.total_screen_visits,
             "deepest_navigation_depth": self.deepest_navigation_depth,
-            "most_visited_screen_id": None,
+            # FK to screens(id): only a real screen id is persisted, never an in-memory key.
+            "most_visited_screen_id": (
+                self.most_visited_screen_id if isinstance(self.most_visited_screen_id, int) else None
+            ),
             "most_visited_screen_count": self.most_visited_screen_count,
             "unique_activities_visited": self.unique_activities_visited,
             # Action Statistics (JSON fields)
@@ -325,8 +328,9 @@ class RuntimeStatsCollector:
         """Record a screen visit.
 
         Args:
-            screen_id: Identifier of the screen visited. Used only as an
-                in-memory dedup key for counting; it is never persisted.
+            screen_id: Identifier of the screen visited, used as the dedup key for
+                counting. Persisted (as most_visited_screen_id) only when it is a
+                screens-table id (int).
             navigation_depth: Current navigation depth from launch
         """
         # Update visit count

@@ -533,10 +533,13 @@ class AnalysisBundleWriter:
         conn = self.db_manager.get_connection()
         try:
             unique_screens_visited = (
+                # Both columns: the start screen only appears as a from_screen_id.
                 conn.execute(
-                    "SELECT COUNT(DISTINCT to_screen_id) FROM step_logs "
-                    "WHERE run_id = ? AND to_screen_id IS NOT NULL",
-                    (run_id,),
+                    "SELECT COUNT(DISTINCT screen_id) FROM ("
+                    "SELECT from_screen_id AS screen_id FROM step_logs WHERE run_id = ? "
+                    "UNION ALL SELECT to_screen_id FROM step_logs WHERE run_id = ?"
+                    ") WHERE screen_id IS NOT NULL",
+                    (run_id, run_id),
                 ).fetchone()[0]
                 or 0
             )

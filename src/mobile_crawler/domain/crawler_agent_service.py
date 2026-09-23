@@ -38,6 +38,7 @@ from mobile_crawler.domain.human_fallback import HumanFallback, HumanFallbackCon
 from mobile_crawler.domain.models import ActionResult, AIAction, BoundingBox
 from mobile_crawler.domain.prompt_builder import format_login_and_form_data
 from mobile_crawler.domain.run_outcome import build_guided_progress
+from mobile_crawler.domain.screen_tracker import ScreenState, ScreenTracker
 from mobile_crawler.domain.stats_collector_span_processor import OTEL_AVAILABLE, StatsCollectorSpanProcessor
 from mobile_crawler.domain.step_phase import StepPhase, StepPhaseStateMachine
 from mobile_crawler.domain.step_phase_models import StepPhaseTransition
@@ -190,6 +191,9 @@ class CrawlerAgentService:
         self._step_phase_machine: StepPhaseStateMachine | None = None
         self._step_phase_repository: StepPhaseRepository | None = None
         self._step_log_repository: StepLogRepository | None = None
+        # Screen identity for step_logs from/to_screen_id (set per-run via begin_step_tracking).
+        self._screen_tracker: ScreenTracker | None = None
+        self._current_screen_id: int | None = None
         self._ui_wait_predicate: UIWaitPredicate | None = None
         self._action_verifier: ActionVerifier | None = None
         self._current_run_id: int | None = None
@@ -622,6 +626,9 @@ class CrawlerAgentService:
         db_manager = DatabaseManager()
         self._step_phase_repository = StepPhaseRepository(db_manager)
         self._step_log_repository = StepLogRepository(db_manager)
+        self._screen_tracker = ScreenTracker(db_manager)
+        self._screen_tracker.start_run(run_id)
+        self._current_screen_id = None
 
         # Initialize wait predicate and verifier (lazy -- will be fully wired
         # when crawler_agent provides state_provider/driver)
@@ -845,7 +852,8 @@ class CrawlerAgentService:
 
         One row per executed tool, numbered like ``step_phase_transitions``. The decision's
         reasoning goes on every tool it ran; its LLM time only on the first, so sums stay right.
-        Screen ids stay empty: nothing in the agent loop assigns screen ids.
+        ``from_screen_id`` is the screen of the decision's screenshot; ``to_screen_id`` is filled
+        in by ``_track_screen`` once the next screenshot shows where the tool led.
         """
         if not self._current_run_id or not self._step_log_repository:
             return
@@ -861,7 +869,7 @@ class CrawlerAgentService:
                     run_id=self._current_run_id,
                     step_number=self._current_step_number,
                     timestamp=datetime.now(),
-                    from_screen_id=None,
+                    from_screen_id=self._current_screen_id,
                     to_screen_id=None,
                     action_type=str(getattr(event, "tool_name", "unknown")),
                     action_description=summary,
@@ -1383,6 +1391,7 @@ class CrawlerAgentService:
                 except Exception as e:
                     logger.warning(f"Failed to write screenshot for step {step_number}: {e}")
                     screenshot_path = None
+        screen_state = self._track_screen(step_number, screenshot_bytes, screenshot_path) if screenshot_path else None
 
         # Build request_data matching ai_monitor_panel.py's expected shape
         screenshot_b64 = base64.b64encode(screenshot_bytes).decode("utf-8") if screenshot_bytes else ""
@@ -1435,6 +1444,16 @@ class CrawlerAgentService:
                     self._emit_step_phase_event(
                         "on_screenshot_captured", self._current_run_id, step_number, screenshot_path
                     )
+                if screen_state:
+                    self._emit_step_phase_event(
+                        "on_screen_processed",
+                        self._current_run_id,
+                        step_number,
+                        screen_state.screen_id,
+                        screen_state.is_new,
+                        screen_state.visit_count,
+                        screen_state.total_screens_discovered,
+                    )
                 if omniparser_ms is not None:
                     self._emit_step_phase_event(
                         "on_omniparser_timing",
@@ -1476,6 +1495,39 @@ class CrawlerAgentService:
                 self.ai_interaction_repository.create_ai_interaction(interaction)
             except Exception as e:
                 logger.warning(f"Failed to persist AI interaction for step {step_number}: {e}")
+
+    def _track_screen(self, step_number: int, screenshot_bytes: bytes, screenshot_path: str) -> ScreenState | None:
+        """Identify the screen in a decision's screenshot (dHash, see ScreenTracker).
+
+        step_logs rows written since the previous screenshot get this screen as their
+        ``to_screen_id``; the tools this decision runs get it as ``from_screen_id``.
+        """
+        if not self._screen_tracker or not self._current_run_id:
+            return None
+        try:
+            from io import BytesIO
+
+            from PIL import Image
+
+            with Image.open(BytesIO(screenshot_bytes)) as image:
+                state = self._screen_tracker.process_screen(image, step_number, screenshot_path=screenshot_path)
+        except Exception as e:
+            logger.warning(f"Screen tracking failed for step {step_number}: {e}")
+            return None
+        if self._step_log_repository:
+            try:
+                self._step_log_repository.set_pending_to_screen(self._current_run_id, state.screen_id)
+            except Exception as e:
+                logger.warning(f"Failed to set to_screen_id for step {step_number}: {e}")
+        self._current_screen_id = state.screen_id
+        return state
+
+    @property
+    def unique_screen_count(self) -> int:
+        """Distinct screens seen in the current run."""
+        if not self._screen_tracker:
+            return 0
+        return int(self._screen_tracker.get_run_stats()["unique_screens"])
 
     def _batch_size_for_log(self) -> Any:
         """Configured Action Batch size for the run banner, or "?" if the agent config is unavailable."""

@@ -2,9 +2,17 @@
 
 from unittest.mock import Mock, patch
 
+import pytest
 from click.testing import CliRunner
 
 from mobile_crawler.cli.main import cli
+
+
+@pytest.fixture(autouse=True)
+def no_pre_run_warnings():
+    """The real checks talk to adb and the network."""
+    with patch("mobile_crawler.cli.commands.crawl.collect_pre_run_warnings", return_value=[]) as collect:
+        yield collect
 
 
 class TestCrawlCommand:
@@ -547,3 +555,44 @@ class TestCrawlLastDeviceAndPackage:
 
         assert result.exit_code == 0
         assert "'last'" in result.output
+
+
+class TestCrawlPreRunWarnings:
+    """Pre-run warnings (Portal off, Phoenix down) are printed to stderr before the run starts."""
+
+    def _run(self):
+        with (
+            patch("mobile_crawler.cli.commands.crawl.DatabaseManager"),
+            patch("mobile_crawler.cli.commands.crawl.ConfigManager") as config_cls,
+            patch("mobile_crawler.cli.commands.crawl.CrawlerLoop") as loop_cls,
+            patch("mobile_crawler.cli.commands.crawl.RunRepository") as run_repo_cls,
+            patch("mobile_crawler.cli.commands.crawl.get_app_data_dir") as data_dir,
+            patch("mobile_crawler.cli.commands.crawl.ensure_mobsf_running_if_enabled", return_value=None),
+            patch("mobile_crawler.cli.commands.crawl.ensure_omniparser_running_if_enabled", return_value=None),
+        ):
+            data_dir.return_value = Mock()
+            run_repo_cls.return_value.create_run.return_value = 7
+            config_cls.return_value.get.return_value = None
+            result = CliRunner().invoke(
+                cli,
+                ["crawl", "--device", "emulator-5554", "--package", "com.example.app", "--model", "gemini-pro"],
+            )
+        return result, loop_cls
+
+    def test_warnings_go_to_stderr_and_the_run_still_starts(self, no_pre_run_warnings):
+        no_pre_run_warnings.return_value = ["Portal is off", "Phoenix is down"]
+
+        result, loop_cls = self._run()
+
+        assert result.exit_code == 0
+        assert "Warning: Portal is off" in result.stderr
+        assert "Warning: Phoenix is down" in result.stderr
+        assert "Warning" not in result.stdout
+        loop_cls.return_value.run.assert_called_once_with(7)
+        assert no_pre_run_warnings.call_args.args[1] == "emulator-5554"
+
+    def test_crawler_loop_gets_a_run_stats_repository(self):
+        result, loop_cls = self._run()
+
+        assert result.exit_code == 0
+        assert loop_cls.call_args.kwargs["run_stats_repository"] is not None

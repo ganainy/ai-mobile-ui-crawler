@@ -13,6 +13,6 @@ Source: `src/mobile_crawler/core/runtime_stats_collector.py`
 - `RuntimeStatsCollector`
 
 ## Imported by
+- [[code/core/run_stats_recorder|core.run_stats_recorder]]
 - [[code/core/run_stats_sections|core.run_stats_sections]]
 - [[code/infrastructure/run_stats_repository|infrastructure.run_stats_repository]]
-- [[code/ui/main_window|ui.main_window]]

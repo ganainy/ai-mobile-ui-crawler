@@ -196,6 +196,25 @@ class StepLogRepository:
 
         return cursor.fetchone()[0]
 
+    def set_pending_to_screen(self, run_id: int, to_screen_id: int) -> int:
+        """Set ``to_screen_id`` on every step log of the run that has none yet.
+
+        The screen a tool leads to is only known at the next screenshot, so rows are
+        written without it and closed here once that screen has been identified.
+
+        Returns:
+            Number of rows updated
+        """
+        conn = self.db_manager.get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute(
+            "UPDATE step_logs SET to_screen_id = ? WHERE run_id = ? AND to_screen_id IS NULL",
+            (to_screen_id, run_id),
+        )
+        conn.commit()
+        return cursor.rowcount
+
     def delete_step_logs_by_run(self, run_id: int):
         """Delete all step logs for a specific run.
 

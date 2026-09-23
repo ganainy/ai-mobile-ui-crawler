@@ -16,6 +16,7 @@ Source: `src/mobile_crawler/core/crawler_loop.py`
 - [[code/core/crawl_state_machine|core.crawl_state_machine]]
 - [[code/core/crawler_event_listener|core.crawler_event_listener]]
 - [[code/core/log_sinks|core.log_sinks]]
+- [[code/core/run_stats_recorder|core.run_stats_recorder]]
 - [[code/domain/adb_action_executor|domain.adb_action_executor]]
 - [[code/domain/crawler_agent_service|domain.crawler_agent_service]]
 - [[code/domain/errors|domain.errors]]

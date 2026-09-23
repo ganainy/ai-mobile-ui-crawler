@@ -1229,3 +1229,80 @@ class TestCrawlerLoopAutoReport:
         loop.run(1)
 
         mock_listener.on_crawl_completed.assert_called_once()
+
+
+class TestCrawlerLoopRunStats:
+    """With a run_stats repository, CrawlerLoop saves the run's statistics before writing the Run Report."""
+
+    def _loop(self, mock_config_manager, mock_run_repository, mock_session_folder_manager, **kwargs):
+        mock_config_manager.get.side_effect = lambda key, default=None: default
+        run = Mock(app_package="com.example.app", device_id="device123", session_path=None)
+        mock_run_repository.get_run_by_id.return_value = run
+        mock_session_folder_manager.create_session_folder.return_value = "/tmp/session"
+        return CrawlerLoop(
+            config_manager=mock_config_manager,
+            run_repository=mock_run_repository,
+            session_folder_manager=mock_session_folder_manager,
+            **kwargs,
+        )
+
+    @staticmethod
+    def _service(mock_crawler_service_class, success=True):
+        service = Mock()
+        service.unique_screen_count = 4
+
+        async def explore(*args, **kwargs):
+            if not success:
+                raise RuntimeError("device went away")
+            return Mock(success=True, steps_completed=2, error_message=None, final_state={})
+
+        service.execute_exploration_task = explore
+        service.cleanup = Mock()
+        mock_crawler_service_class.return_value = service
+        return service
+
+    @patch("mobile_crawler.core.crawler_loop.CrawlerAgentService")
+    def test_stats_are_saved_before_the_report(
+        self, mock_crawler_service_class, mock_config_manager, mock_run_repository, mock_session_folder_manager
+    ):
+        self._service(mock_crawler_service_class)
+        order = Mock()
+        loop = self._loop(
+            mock_config_manager,
+            mock_run_repository,
+            mock_session_folder_manager,
+            run_stats_repository=order.stats_repo,
+            report_generator=order.report,
+        )
+
+        loop.run(1)
+
+        names = [c[0] for c in order.mock_calls]
+        assert names.index("stats_repo.save_run_stats") < names.index("report.generate")
+        assert order.stats_repo.save_run_stats.call_count == 1
+        assert order.stats_repo.save_run_stats.call_args.args[0]["run_id"] == 1
+
+    @patch("mobile_crawler.core.crawler_loop.CrawlerAgentService")
+    def test_stats_are_saved_when_the_run_errors(
+        self, mock_crawler_service_class, mock_config_manager, mock_run_repository, mock_session_folder_manager
+    ):
+        self._service(mock_crawler_service_class, success=False)
+        stats_repo = Mock()
+        loop = self._loop(
+            mock_config_manager, mock_run_repository, mock_session_folder_manager, run_stats_repository=stats_repo
+        )
+
+        loop.run(1)
+
+        stats_repo.save_run_stats.assert_called_once()
+
+    @patch("mobile_crawler.core.crawler_loop.CrawlerAgentService")
+    def test_run_record_gets_the_unique_screen_count(
+        self, mock_crawler_service_class, mock_config_manager, mock_run_repository, mock_session_folder_manager
+    ):
+        self._service(mock_crawler_service_class)
+        loop = self._loop(mock_config_manager, mock_run_repository, mock_session_folder_manager)
+
+        loop.run(1)
+
+        assert mock_run_repository.update_run_stats.call_args.kwargs["unique_screens"] == 4

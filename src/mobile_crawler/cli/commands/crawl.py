@@ -12,6 +12,7 @@ from mobile_crawler.cli.step_by_step_console import StepByStepConsole
 from mobile_crawler.cli.terminal_human_prompter import TerminalHumanPrompter
 from mobile_crawler.core.crawler_event_listener import CrawlerEventListener
 from mobile_crawler.core.crawler_loop import CrawlerLoop
+from mobile_crawler.core.pre_run_warnings import collect_pre_run_warnings
 from mobile_crawler.domain.models import ActionResult
 from mobile_crawler.domain.report_generator import ReportGenerator
 from mobile_crawler.infrastructure.database import DatabaseManager
@@ -21,6 +22,7 @@ from mobile_crawler.infrastructure.docker_autostart import (
     ensure_omniparser_running_if_enabled,
 )
 from mobile_crawler.infrastructure.run_repository import Run, RunRepository
+from mobile_crawler.infrastructure.run_stats_repository import RunStatsRepository
 from mobile_crawler.infrastructure.session_folder_manager import SessionFolderManager
 from mobile_crawler.infrastructure.telemetry_client import build_telemetry_client_factory
 
@@ -308,6 +310,10 @@ def crawl(
         report_docker_autostart("MobSF", ensure_mobsf_running_if_enabled(config_manager))
         report_docker_autostart("OmniParser", ensure_omniparser_running_if_enabled(config_manager))
 
+        # stderr: stdout is the JSON event stream.
+        for warning in collect_pre_run_warnings(config_manager, device):
+            click.echo(f"Warning: {warning}", err=True)
+
         # Initialize database
         db_manager = DatabaseManager()
         db_manager.migrate_schema()
@@ -345,6 +351,7 @@ def crawl(
             ),
             human_prompter=TerminalHumanPrompter(reader=console_reader),
             human_fallback_enabled_override=human_fallback,
+            run_stats_repository=RunStatsRepository(db_manager),
         )
         if step_by_step:
             crawler_loop.set_step_by_step_enabled(True)

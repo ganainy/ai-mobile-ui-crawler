@@ -16,3 +16,6 @@ Source: `src/mobile_crawler/domain/screen_tracker.py`
 - [[code/domain/screen_hash|domain.screen_hash]]
 - [[code/infrastructure/database|infrastructure.database]]
 - [[code/infrastructure/screen_repository|infrastructure.screen_repository]]
+
+## Imported by
+- [[code/domain/crawler_agent_service|domain.crawler_agent_service]]
