@@ -13,6 +13,7 @@ Source: `src/mobile_crawler/domain/traffic_capture_manager.py`
 
 ## Imports
 - [[code/config/config_manager|config.config_manager]]
+- [[code/domain/run_folder_layout|domain.run_folder_layout]]
 - [[code/infrastructure/adb_client|infrastructure.adb_client]]
 - [[code/infrastructure/database|infrastructure.database]]
 - [[code/infrastructure/run_repository|infrastructure.run_repository]]

@@ -257,7 +257,7 @@ class CrawlerLoop:
                 run_id=run_id,
                 emit_step_phase_event=self._emit_event,
                 emit_state_change=lambda state: self._transition_state(state, run_id),
-                screenshots_dir=self.session_folder_manager.get_subfolder(run, "screenshots"),
+                screenshots_dir=str(RunFolderLayout(session_path).screenshots_dir),
             )
 
             trace_session_id = getattr(self._crawler_agent_service, "trace_session_id", None)

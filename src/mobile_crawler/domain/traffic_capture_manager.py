@@ -8,6 +8,8 @@ import time
 import xml.etree.ElementTree as ET
 from typing import TYPE_CHECKING, Any, Optional
 
+from mobile_crawler.domain.run_folder_layout import RunFolderLayout
+
 if TYPE_CHECKING:
     from mobile_crawler.config.config_manager import ConfigManager
     from mobile_crawler.infrastructure.adb_client import ADBClient
@@ -169,7 +171,8 @@ class TrafficCaptureManager:
 
         Args:
             run_id: Optional run ID for filename generation
-            session_path: Optional session directory path for output
+            session_path: Run folder; the capture goes to its pcap/. Looked up from run_id when
+                omitted; the capture fails without one.
 
         Returns:
             Tuple of (success, message)
@@ -191,6 +194,16 @@ class TrafficCaptureManager:
         target_app_package = str(self.config_manager.get("app_package", ""))
         if not target_app_package:
             return False, "APP_PACKAGE not configured"
+
+        # The capture goes into the run folder's pcap/, never the working directory
+        if not session_path and self.session_folder_manager and run_id:
+            from mobile_crawler.infrastructure.database import DatabaseManager
+            from mobile_crawler.infrastructure.run_repository import RunRepository
+
+            run = RunRepository(DatabaseManager()).get_run_by_id(run_id)
+            session_path = self.session_folder_manager.get_session_path(run) if run else None
+        if not session_path:
+            return False, "No run folder to save the traffic capture in"
 
         # Verify PCAPdroid is installed
         logger.debug("Checking if PCAPdroid is installed...")
@@ -240,24 +253,7 @@ class TrafficCaptureManager:
         timestamp = time.strftime("%Y%m%d_%H%M%S")
         self.pcap_filename_on_device = f"{sanitized_package}_run{run_id or 'X'}_{timestamp}.pcap"
 
-        # Resolve output directory - PCAP files go to "pcap" folder
-        if session_path:
-            traffic_capture_dir = os.path.join(session_path, "pcap")
-        elif self.session_folder_manager and run_id:
-            # Try to get session path from manager
-            from mobile_crawler.infrastructure.database import DatabaseManager
-            from mobile_crawler.infrastructure.run_repository import RunRepository
-
-            db_manager = DatabaseManager()
-            run_repo = RunRepository(db_manager)
-            run = run_repo.get_run_by_id(run_id)
-            if run and self.session_folder_manager:
-                traffic_capture_dir = self.session_folder_manager.get_subfolder(run, "pcap")
-            else:
-                traffic_capture_dir = os.path.join("output_data", "traffic_captures")
-        else:
-            traffic_capture_dir = os.path.join("output_data", "traffic_captures")
-
+        traffic_capture_dir = str(RunFolderLayout(session_path).pcap_dir)
         os.makedirs(traffic_capture_dir, exist_ok=True)
         self.local_pcap_file_path = os.path.join(traffic_capture_dir, self.pcap_filename_on_device)
 

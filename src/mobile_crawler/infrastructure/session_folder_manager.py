@@ -149,23 +149,3 @@ class SessionFolderManager:
                 continue
 
         return os.path.abspath(best_match) if best_match else None
-
-    def get_subfolder(self, run: "Run", subdir: str) -> str:
-        """Get the absolute path to a subfolder within the session directory.
-
-        Args:
-            run: The Run object
-            subdir: The subdirectory name (e.g., 'screenshots', 'reports', 'data')
-
-        Returns:
-            Absolute path to the subfolder
-        """
-        session_path = self.get_session_path(run)
-        if not session_path:
-            # Fallback for runs without session folders - create in current structure if missing?
-            # For now, just return a path relative to current or base_path
-            session_path = os.path.join(self.base_path, f"run_{run.id}")
-
-        target_path = os.path.join(session_path, subdir)
-        os.makedirs(target_path, exist_ok=True)
-        return os.path.abspath(target_path)

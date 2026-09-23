@@ -42,7 +42,6 @@ def test_crawler_agent_wrapper_happy_path():
 
     session_manager = Mock()
     session_manager.create_session_folder.return_value = "C:/tmp/session"
-    session_manager.get_subfolder.return_value = "C:/tmp/session/screenshots"
 
     listener = TestListener()
 

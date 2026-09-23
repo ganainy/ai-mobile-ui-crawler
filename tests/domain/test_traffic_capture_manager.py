@@ -316,15 +316,53 @@ class TestTrafficCaptureManager:
             config_manager=mock_config_manager,
             adb_client=Mock(),
         )
-        # First start capture to set state
-        asyncio.run(manager.start_capture_async(run_id=1))
-        assert manager._is_currently_capturing is True
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # First start capture to set state
+            asyncio.run(manager.start_capture_async(run_id=1, session_path=temp_dir))
+            assert manager._is_currently_capturing is True
 
-        # Now start again - should succeed after stopping first
-        success, message = asyncio.run(manager.start_capture_async(run_id=1))
+            # Now start again - should succeed after stopping first
+            success, message = asyncio.run(manager.start_capture_async(run_id=1, session_path=temp_dir))
 
         assert success is True
         assert "started successfully" in message
+
+    @patch.object(TrafficCaptureManager, "_run_adb_command_async")
+    def test_start_capture_without_run_folder_fails_instead_of_writing_to_cwd(
+        self, mock_run_adb, mock_config_manager, tmp_path, monkeypatch
+    ):
+        monkeypatch.chdir(tmp_path)
+        mock_run_adb.return_value = ("", 0)
+        manager = TrafficCaptureManager(config_manager=mock_config_manager, adb_client=Mock())
+
+        success, message = asyncio.run(manager.start_capture_async(run_id=1))
+
+        assert success is False
+        assert "run folder" in message
+        assert manager._is_currently_capturing is False
+        assert list(tmp_path.iterdir()) == []
+
+    @patch.object(TrafficCaptureManager, "_run_adb_command_async")
+    def test_start_capture_looks_up_the_run_folder_when_not_given(
+        self, mock_run_adb, mock_config_manager, tmp_path
+    ):
+        """Without session_path the run folder comes from the folder manager, never a made-up path."""
+        mock_run_adb.return_value = ("", 0)
+        folder_manager = Mock()
+        folder_manager.get_session_path.return_value = None
+        manager = TrafficCaptureManager(
+            config_manager=mock_config_manager, adb_client=Mock(), session_folder_manager=folder_manager
+        )
+
+        with patch("mobile_crawler.infrastructure.run_repository.RunRepository") as repo_cls, patch(
+            "mobile_crawler.infrastructure.database.DatabaseManager"
+        ):
+            repo_cls.return_value.get_run_by_id.return_value = Mock(id=1)
+            success, message = asyncio.run(manager.start_capture_async(run_id=1))
+
+        assert success is False
+        assert "run folder" in message
+        folder_manager.get_session_path.assert_called_once()
 
     def test_start_capture_async_no_app_package(self, mock_adb_client):
         """Test starting capture fails without app_package configured."""
