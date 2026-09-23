@@ -16,3 +16,4 @@ Source: `src/mobile_crawler/domain/screen_hash.py`
 ## Imported by
 - [[code/domain/screen_tracker|domain.screen_tracker]]
 - [[code/domain/ui_wait_predicate|domain.ui_wait_predicate]]
+- [[code/infrastructure/screen_repository|infrastructure.screen_repository]]

@@ -13,6 +13,7 @@ Source: `src/mobile_crawler/infrastructure/screen_repository.py`
 - `ScreenRepository`
 
 ## Imports
+- [[code/domain/screen_hash|domain.screen_hash]]
 - [[code/infrastructure/database|infrastructure.database]]
 
 ## Imported by

@@ -69,7 +69,7 @@ class TestIsScreenStable:
         assert is_screen_stable("0000", "0000") is True
 
     def test_one_bit_difference_is_stable(self):
-        """1 bit difference is within default threshold of 12."""
+        """1 bit difference is within default threshold of 8."""
         assert is_screen_stable("0000", "0001") is True
 
     def test_large_difference_is_unstable(self):
@@ -79,6 +79,6 @@ class TestIsScreenStable:
         assert is_screen_stable("0000", "0001", threshold=0) is False
         assert is_screen_stable("0000", "0001", threshold=1) is True
 
-    def test_default_threshold_is_12(self):
+    def test_default_threshold_is_8(self):
         """Verify the default threshold constant."""
-        assert HAMMING_THRESHOLD == 12
+        assert HAMMING_THRESHOLD == 8

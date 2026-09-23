@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 from PIL import Image
 
-from mobile_crawler.domain.screen_hash import compute_screen_hash
+from mobile_crawler.domain.screen_hash import HAMMING_THRESHOLD, compute_screen_hash
 from mobile_crawler.infrastructure.database import DatabaseManager
 from mobile_crawler.infrastructure.screen_repository import Screen, ScreenRepository
 
@@ -28,9 +28,11 @@ class ScreenTracker:
     Uses imagehash library to generate perceptual hashes that are robust
     to minor visual differences (animations, time changes, etc.).
 
-    The Hamming distance threshold is configurable and allows for
-    ~12% visual difference (default threshold of 12 for 64-bit dHash)
-    before screens are considered different.
+    The Hamming distance threshold is configurable (default HAMMING_THRESHOLD,
+    8 of 64 dHash bits) before screens are considered different.
+
+    Screens match only within the run's app (runs.app_package), across runs,
+    so a blank or loading screen never takes another app's screen id.
 
     Note on Hash Algorithm Migration:
     - Previous implementation used pHash (256-bit, size=16)
@@ -44,14 +46,14 @@ class ScreenTracker:
     def __init__(
         self,
         db_manager: DatabaseManager,
-        screen_similarity_threshold: int = 12,
+        screen_similarity_threshold: int = HAMMING_THRESHOLD,
         use_perceptual_hashing: bool = True
     ):
         """Initialize screen tracker.
 
         Args:
             db_manager: Database manager for persistence
-            screen_similarity_threshold: Maximum Hamming distance for screens to be considered the same (default: 12)
+            screen_similarity_threshold: Maximum Hamming distance for screens to be considered the same (default: HAMMING_THRESHOLD)
             use_perceptual_hashing: Enable perceptual hashing for screen deduplication (default: True)
         """
         self.db_manager = db_manager
@@ -67,8 +69,11 @@ class ScreenTracker:
         # Track screens discovered in the current run
         self._run_screens: set[int] = set()
 
-        # Current run ID
+        # Current run ID and the app its screens belong to (looked up from
+        # runs.app_package on the first processed screen)
         self._current_run_id: int | None = None
+        self._app_package: str | None = None
+        self._app_package_loaded = False
 
         # Previous screen ID for transition tracking
         self._previous_screen_id: int | None = None
@@ -80,6 +85,8 @@ class ScreenTracker:
             run_id: The run ID to track
         """
         self._current_run_id = run_id
+        self._app_package = None
+        self._app_package_loaded = False
         self._visit_counts.clear()
         self._run_screens.clear()
         self._previous_screen_id = None
@@ -92,9 +99,24 @@ class ScreenTracker:
             f"Discovered {len(self._run_screens)} unique screens."
         )
         self._current_run_id = None
+        self._app_package = None
+        self._app_package_loaded = False
         self._visit_counts.clear()
         self._run_screens.clear()
         self._previous_screen_id = None
+
+    def _load_app_package(self) -> None:
+        if self._app_package_loaded:
+            return
+        conn = self.db_manager.get_connection()
+        try:
+            row = conn.execute(
+                "SELECT app_package FROM runs WHERE id = ?", (self._current_run_id,)
+            ).fetchone()
+        finally:
+            conn.close()
+        self._app_package = row["app_package"] if row else None
+        self._app_package_loaded = True
 
     def process_screen(
         self,
@@ -116,6 +138,7 @@ class ScreenTracker:
         """
         if self._current_run_id is None:
             raise RuntimeError("Screen tracker not started. Call start_run() first.")
+        self._load_app_package()
 
         # Generate perceptual hash
         composite_hash = self._generate_hash(image)
@@ -148,7 +171,8 @@ class ScreenTracker:
                 screenshot_path=screenshot_path,
                 activity_name=activity_name,
                 first_seen_run_id=self._current_run_id,
-                first_seen_step=step_number
+                first_seen_step=step_number,
+                app_package=self._app_package,
             )
             screen_id = self.screen_repository.create_screen(screen)
             is_new = True
@@ -193,7 +217,7 @@ class ScreenTracker:
             Matching Screen if found, None otherwise
         """
         # First try exact match (most common case)
-        exact_match = self.screen_repository.get_screen_by_hash(composite_hash)
+        exact_match = self.screen_repository.get_screen_by_hash(composite_hash, self._app_package)
         if exact_match:
             logger.debug(f"Found exact match for hash {composite_hash}")
             return exact_match
@@ -201,7 +225,8 @@ class ScreenTracker:
         # Then try fuzzy match with Hamming distance
         similar_screens = self.screen_repository.find_similar_screens(
             composite_hash,
-            max_distance=self.screen_similarity_threshold
+            max_distance=self.screen_similarity_threshold,
+            app_package=self._app_package,
         )
 
         if similar_screens:

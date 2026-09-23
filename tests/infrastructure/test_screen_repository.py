@@ -400,26 +400,79 @@ class TestScreenRepository:
         assert retrieved_screen.screenshot_path is None
         assert retrieved_screen.activity_name is None
 
-    def test_composite_hash_uniqueness(self, screen_repository_with_run, sample_screen):
-        """Test that composite_hash is unique in the database."""
-        # Create first screen
+    def test_composite_hash_unique_within_app(self, screen_repository_with_run, sample_screen):
+        """composite_hash is unique per app_package."""
+        sample_screen.app_package = "com.test.app"
         screen_repository_with_run.create_screen(sample_screen)
 
-        # Try to create another screen with same hash - should work (database allows it)
-        # Actually, the schema has UNIQUE constraint on composite_hash, so this should fail
         duplicate_screen = Screen(
             id=None,
             composite_hash=sample_screen.composite_hash,  # Same hash
             visual_hash="different_vhash",
             screenshot_path="/different/path.png",
             activity_name="different.activity",
-            first_seen_run_id=2,
+            first_seen_run_id=1,
             first_seen_step=1,
+            app_package="com.test.app",
         )
 
-        # This should raise an exception due to UNIQUE constraint
         with pytest.raises(sqlite3.IntegrityError):
             screen_repository_with_run.create_screen(duplicate_screen)
+
+    def test_same_hash_allowed_in_different_apps(self, screen_repository_with_run, sample_screen):
+        sample_screen.app_package = "com.a"
+        first_id = screen_repository_with_run.create_screen(sample_screen)
+        sample_screen.app_package = "com.b"
+        second_id = screen_repository_with_run.create_screen(sample_screen)
+
+        assert first_id != second_id
+        assert screen_repository_with_run.get_screen(second_id).app_package == "com.b"
+
+    def test_lookups_filter_by_app_package(self, screen_repository_with_run, sample_screen, similar_screen):
+        repo = screen_repository_with_run
+        sample_screen.app_package = "com.a"
+        similar_screen.app_package = "com.b"
+        a_id = repo.create_screen(sample_screen)
+        b_id = repo.create_screen(similar_screen)
+
+        assert repo.get_screen_by_hash(sample_screen.composite_hash, "com.b") is None
+        assert repo.get_screen_by_hash(sample_screen.composite_hash, "com.a").id == a_id
+        similar = repo.find_similar_screens(sample_screen.composite_hash, max_distance=5, app_package="com.b")
+        assert [screen.id for screen, _ in similar] == [b_id]
+        # No app given: every app's screens are compared
+        assert len(repo.find_similar_screens(sample_screen.composite_hash, max_distance=5)) == 2
+
+
+class TestScreensAppPackageMigration:
+    """migrate_schema rebuilds a pre-app_package screens table."""
+
+    def test_old_table_gets_app_package_backfilled_from_runs(self, temp_db_path):
+        conn = sqlite3.connect(temp_db_path)
+        conn.executescript(
+            "CREATE TABLE runs (id INTEGER PRIMARY KEY, device_id TEXT NOT NULL, app_package TEXT NOT NULL,"
+            " start_activity TEXT, start_time TEXT NOT NULL, status TEXT NOT NULL);"
+            "CREATE TABLE screens (id INTEGER PRIMARY KEY, composite_hash TEXT UNIQUE NOT NULL,"
+            " visual_hash TEXT NOT NULL, screenshot_path TEXT, activity_name TEXT,"
+            " first_seen_run_id INTEGER NOT NULL, first_seen_step INTEGER NOT NULL,"
+            " FOREIGN KEY (first_seen_run_id) REFERENCES runs(id));"
+            "INSERT INTO runs (id, device_id, app_package, start_time, status)"
+            " VALUES (7, 'd', 'com.old.app', '2026-01-01', 'COMPLETED');"
+            "INSERT INTO screens VALUES (3, 'abcd', 'abcd', NULL, NULL, 7, 1);"
+        )
+        conn.close()
+
+        manager = DatabaseManager(temp_db_path)
+        manager.migrate_schema()
+        repo = ScreenRepository(manager)
+
+        migrated = repo.get_screen(3)
+        assert migrated.app_package == "com.old.app"
+        assert migrated.composite_hash == "abcd"
+        # The old UNIQUE(composite_hash) is gone: another app may own the same hash.
+        repo.create_screen(Screen(None, "abcd", "abcd", None, None, 7, 2, app_package="com.other"))
+        # Running the migration again is a no-op.
+        manager.migrate_schema()
+        assert repo.get_screen_count() == 2
 
 
 class TestScreenRepositoryThresholdConfiguration:
@@ -437,17 +490,17 @@ class TestScreenRepositoryThresholdConfiguration:
         # Verify thresholds are set correctly
         assert tracker_strict.screen_similarity_threshold == 5
         assert tracker_loose.screen_similarity_threshold == 20
-        assert tracker_default.screen_similarity_threshold == 12
+        assert tracker_default.screen_similarity_threshold == 8
 
         # Verify that different trackers maintain their own threshold settings
         assert tracker_strict.screen_similarity_threshold != tracker_loose.screen_similarity_threshold
 
-    def test_default_threshold_is_12(self, db_manager_with_run):
-        """Test that default threshold is 12."""
+    def test_default_threshold_is_8(self, db_manager_with_run):
+        """Test that default threshold is 8."""
         from mobile_crawler.domain.screen_tracker import ScreenTracker
 
         tracker = ScreenTracker(db_manager_with_run)
-        assert tracker.screen_similarity_threshold == 12
+        assert tracker.screen_similarity_threshold == 8
 
     def test_use_perceptual_hashing_flag(self, db_manager_with_run):
         """Test that use_perceptual_hashing flag can be configured."""

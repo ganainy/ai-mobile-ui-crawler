@@ -30,7 +30,7 @@ DEFAULTS: dict[str, Any] = {
     # Security
     "encrypt_api_keys": True,
     # Screen deduplication settings
-    "screen_similarity_threshold": 12,  # Hamming distance threshold for dHash (64-bit)
+    "screen_similarity_threshold": 8,  # Hamming distance threshold for dHash (64-bit); matches HAMMING_THRESHOLD
     "use_perceptual_hashing": True,  # Enable perceptual hashing for screen deduplication
     # Traffic capture settings (PCAPdroid)
     # Enable network traffic capture using PCAPdroid Android app

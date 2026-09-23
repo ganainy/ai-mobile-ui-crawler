@@ -14,10 +14,12 @@ from PIL import Image
 # dHash size (64-bit hash).
 DHASH_SIZE = 8
 
-# Hamming distance threshold for "same screen" (12/64 bits ≈ 19%). Tuned for
-# ScreenTracker dedup, where two visits of the same screen must tolerate
-# incidental noise like clock/battery/notification changes.
-HAMMING_THRESHOLD = 12
+# Hamming distance threshold for "same screen" (8/64 bits ≈ 12%), used by
+# ScreenTracker dedup. The status bar is already cropped off, so the noise to
+# tolerate is state on one screen: a ticked box or typed text moved the hash
+# 1-6 bits in run 179, while different onboarding questions sharing one layout
+# were 10-12 bits apart (12 merged four of them into one screen).
+HAMMING_THRESHOLD = 8
 
 # Hamming distance threshold for "settled between two consecutive fast polls"
 # (2/64 bits ≈ 3%). Much stricter than HAMMING_THRESHOLD: settle-detection

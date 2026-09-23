@@ -74,13 +74,15 @@ class DatabaseManager:
             """
             CREATE TABLE IF NOT EXISTS screens (
                 id INTEGER PRIMARY KEY,
-                composite_hash TEXT UNIQUE NOT NULL,
+                composite_hash TEXT NOT NULL,
                 visual_hash TEXT NOT NULL,
                 screenshot_path TEXT,
                 activity_name TEXT,
                 first_seen_run_id INTEGER NOT NULL,
                 first_seen_step INTEGER NOT NULL,
-                FOREIGN KEY (first_seen_run_id) REFERENCES runs(id)
+                app_package TEXT,
+                FOREIGN KEY (first_seen_run_id) REFERENCES runs(id),
+                UNIQUE (app_package, composite_hash)
             )
         """
         )
@@ -430,7 +432,64 @@ class DatabaseManager:
                 conn.execute("ALTER TABLE step_phase_transitions ADD COLUMN current_activity TEXT DEFAULT NULL")
 
             conn.commit()
+
+            self._migrate_screens_app_package(conn)
         except sqlite3.OperationalError as e:
             logger.debug(f"Schema migration step skipped (may already exist): {e}")
         finally:
             conn.close()
+
+    def _migrate_screens_app_package(self, conn: sqlite3.Connection) -> None:
+        """Scope screens to an app: add screens.app_package, backfilled from runs.
+
+        The old table had UNIQUE(composite_hash), which would stop two apps from
+        each owning a screen with the same hash. SQLite cannot drop a constraint,
+        so the table is rebuilt with UNIQUE(app_package, composite_hash).
+        """
+        columns = [row["name"] for row in conn.execute("PRAGMA table_info(screens)")]
+        if "app_package" in columns:
+            return
+
+        # step_logs/transitions/run_stats reference screens(id); ids are kept,
+        # but DROP TABLE would trip the foreign-key check, so turn it off for the
+        # rebuild (the pragma is a no-op inside a transaction, hence before BEGIN).
+        conn.execute("PRAGMA foreign_keys=OFF")
+        try:
+            conn.execute("BEGIN")
+            conn.execute(
+                """
+                CREATE TABLE screens_new (
+                    id INTEGER PRIMARY KEY,
+                    composite_hash TEXT NOT NULL,
+                    visual_hash TEXT NOT NULL,
+                    screenshot_path TEXT,
+                    activity_name TEXT,
+                    first_seen_run_id INTEGER NOT NULL,
+                    first_seen_step INTEGER NOT NULL,
+                    app_package TEXT,
+                    FOREIGN KEY (first_seen_run_id) REFERENCES runs(id),
+                    UNIQUE (app_package, composite_hash)
+                )
+            """
+            )
+            conn.execute(
+                """
+                INSERT INTO screens_new (
+                    id, composite_hash, visual_hash, screenshot_path, activity_name,
+                    first_seen_run_id, first_seen_step, app_package
+                )
+                SELECT s.id, s.composite_hash, s.visual_hash, s.screenshot_path,
+                       s.activity_name, s.first_seen_run_id, s.first_seen_step,
+                       r.app_package
+                FROM screens s LEFT JOIN runs r ON r.id = s.first_seen_run_id
+            """
+            )
+            conn.execute("DROP TABLE screens")
+            conn.execute("ALTER TABLE screens_new RENAME TO screens")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_screens_hash ON screens(composite_hash)")
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
+        finally:
+            conn.execute("PRAGMA foreign_keys=ON")

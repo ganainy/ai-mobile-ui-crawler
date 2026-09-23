@@ -277,6 +277,33 @@ class TestScreenTrackerPersistence:
         assert result2.is_new is True  # New to run 2
 
 
+    def test_screen_does_not_match_across_apps(self, db_manager, sample_image):
+        """The same image in a run of another app gets a new screen id."""
+        from datetime import datetime
+
+        from mobile_crawler.infrastructure.run_repository import Run, RunRepository
+
+        tracker1 = ScreenTracker(db_manager)
+        tracker1.start_run(run_id=1)
+        first = tracker1.process_screen(image=sample_image, step_number=1)
+        tracker1.end_run()
+
+        RunRepository(db_manager).create_run(Run(
+            id=None, device_id="test-device", app_package="com.other.app",
+            start_activity=None, start_time=datetime.now(), end_time=None,
+            status='RUNNING', ai_provider='test', ai_model='test-model',
+            total_steps=0, unique_screens=0
+        ))  # run id=2
+        tracker2 = ScreenTracker(db_manager)
+        tracker2.start_run(run_id=2)
+        second = tracker2.process_screen(image=sample_image, step_number=1)
+
+        assert second.screen_id != first.screen_id
+        repo = tracker2.screen_repository
+        assert repo.get_screen(first.screen_id).app_package == "com.test.app"
+        assert repo.get_screen(second.screen_id).app_package == "com.other.app"
+
+
 class TestScreenTrackerEdgeCases:
     """Tests for edge cases and error handling."""
 
@@ -511,9 +538,9 @@ class TestScreenTrackerConfigurableThreshold:
             assert result1_strict.screen_id != result2_strict.screen_id
             assert result1_loose.screen_id == result2_loose.screen_id
 
-    def test_default_threshold_is_12(self, screen_tracker):
-        """Test that default threshold is 12."""
-        assert screen_tracker.screen_similarity_threshold == 12
+    def test_default_threshold_is_8(self, screen_tracker):
+        """Test that default threshold is 8."""
+        assert screen_tracker.screen_similarity_threshold == 8
 
     def test_use_perceptual_hashing_flag(self, db_manager):
         """Test that use_perceptual_hashing flag can be set."""
@@ -528,4 +555,3 @@ class TestScreenTrackerConfigurableThreshold:
 
         assert tracker_with_hashing.use_perceptual_hashing is True
         assert tracker_without_hashing.use_perceptual_hashing is False
-

@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 
+from mobile_crawler.domain.screen_hash import HAMMING_THRESHOLD
 from mobile_crawler.infrastructure.database import DatabaseManager
 
 
@@ -15,6 +16,7 @@ class Screen:
     activity_name: str | None
     first_seen_run_id: int
     first_seen_step: int
+    app_package: str | None = None  # Screens only match within the same app
 
 
 class ScreenRepository:
@@ -43,15 +45,16 @@ class ScreenRepository:
         cursor.execute("""
             INSERT INTO screens (
                 composite_hash, visual_hash, screenshot_path, activity_name,
-                first_seen_run_id, first_seen_step
-            ) VALUES (?, ?, ?, ?, ?, ?)
+                first_seen_run_id, first_seen_step, app_package
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
         """, (
             screen.composite_hash,
             screen.visual_hash,
             screen.screenshot_path,
             screen.activity_name,
             screen.first_seen_run_id,
-            screen.first_seen_step
+            screen.first_seen_step,
+            screen.app_package,
         ))
 
         screen_id = cursor.lastrowid
@@ -78,11 +81,12 @@ class ScreenRepository:
 
         return self._row_to_screen(row)
 
-    def get_screen_by_hash(self, composite_hash: str) -> Screen | None:
+    def get_screen_by_hash(self, composite_hash: str, app_package: str | None = None) -> Screen | None:
         """Get a screen by its composite hash.
 
         Args:
             composite_hash: The composite hash to search for
+            app_package: If given, only match screens of this app
 
         Returns:
             Screen object if found, None otherwise
@@ -90,7 +94,13 @@ class ScreenRepository:
         conn = self.db_manager.get_connection()
         cursor = conn.cursor()
 
-        cursor.execute("SELECT * FROM screens WHERE composite_hash = ?", (composite_hash,))
+        if app_package is None:
+            cursor.execute("SELECT * FROM screens WHERE composite_hash = ?", (composite_hash,))
+        else:
+            cursor.execute(
+                "SELECT * FROM screens WHERE composite_hash = ? AND app_package = ?",
+                (composite_hash, app_package),
+            )
         row = cursor.fetchone()
 
         if row is None:
@@ -179,12 +189,15 @@ class ScreenRepository:
         conn.commit()
         return deleted
 
-    def find_similar_screens(self, composite_hash: str, max_distance: int = 12) -> list[tuple[Screen, int]]:
+    def find_similar_screens(
+        self, composite_hash: str, max_distance: int = HAMMING_THRESHOLD, app_package: str | None = None
+    ) -> list[tuple[Screen, int]]:
         """Find screens similar to the given hash using Hamming distance.
 
         Args:
             composite_hash: The hash to compare against
-            max_distance: Maximum Hamming distance (default 12 for dHash 64-bit)
+            max_distance: Maximum Hamming distance (default HAMMING_THRESHOLD)
+            app_package: If given, only compare against screens of this app
 
         Returns:
             List of (Screen, distance) tuples for screens within max_distance
@@ -192,10 +205,12 @@ class ScreenRepository:
         conn = self.db_manager.get_connection()
         cursor = conn.cursor()
 
-        # Get all screens - for a real implementation, you might want to optimize this
-        # with database functions or pre-computed indexes, but for simplicity we'll
-        # calculate distances in Python
-        cursor.execute("SELECT * FROM screens")
+        # Distances are computed in Python over the app's screens (all screens
+        # when no app is given).
+        if app_package is None:
+            cursor.execute("SELECT * FROM screens")
+        else:
+            cursor.execute("SELECT * FROM screens WHERE app_package = ?", (app_package,))
         rows = cursor.fetchall()
 
         similar_screens = []
@@ -304,7 +319,8 @@ class ScreenRepository:
             screenshot_path=row["screenshot_path"],
             activity_name=row["activity_name"],
             first_seen_run_id=row["first_seen_run_id"],
-            first_seen_step=row["first_seen_step"]
+            first_seen_step=row["first_seen_step"],
+            app_package=row["app_package"],
         )
 
     def count_unique_screens_for_run(self, run_id: int) -> int:

@@ -87,3 +87,15 @@ _Avoid_: Mirror, screen mirroring, stream
 **Human Fallback**:
 An opt-in (checkbox) behaviour where, when the crawler cannot solve a Verification Challenge or complete sign-in by itself, it pauses and asks the user to supply the code or finish the step. Times out after a configurable wait, after which authentication is skipped and the crawl continues with whatever is reachable. When off, authentication is skipped immediately on failure.
 _Avoid_: Manual mode, human in the loop
+
+**Screen**:
+One distinct visual state of the app, identified by a perceptual hash (dHash) of a decision's screenshot; two screenshots within a small hash distance are the same Screen, so a form with different text typed in stays one Screen. Each step records the Screen it started on and the Screen it led to. Screens belong to one app and are shared across that app's runs (a screenshot never matches another app's Screen); "unique screens" counts the distinct Screens one run visited.
+_Avoid_: Page, view, state
+
+**Run Stats**:
+The statistics saved for one run when it ends (steps, actions, screens, AI calls, recovery, capture sizes), collected from the crawl's events the same way whichever front end (GUI or CLI) started it, and shown by "View Stats" and `stats RUN_ID`.
+_Avoid_: Metrics, run summary
+
+**Pre-run Warning**:
+A problem found just before a crawl starts that does not stop it but makes it worse than the settings promise (Portal's accessibility service off in boost/accessibility mode, Phoenix tracing on but its server down). The GUI shows it in a dialog asking whether to start anyway; the CLI prints it to stderr and starts.
+_Avoid_: Preflight error, validation error
