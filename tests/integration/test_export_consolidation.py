@@ -31,12 +31,12 @@ class TestExportConsolidation:
     def session_manager(self, temp_dir):
         return SessionFolderManager(base_path=os.path.join(temp_dir, "output_data"))
 
-    def test_report_saves_bundle_to_session_analysis_folder(self, db_manager, session_manager, temp_dir):
+    def test_report_saves_bundle_to_session_reports_analysis_folder(self, db_manager, session_manager, temp_dir):
         run_repo = RunRepository(db_manager)
 
         # 1. Create run with session path
         session_root = os.path.join(temp_dir, "output_data", "run_1")
-        os.makedirs(os.path.join(session_root, "data"), exist_ok=True)
+        os.makedirs(session_root, exist_ok=True)
 
         run_id = run_repo.create_run(
             Run(
@@ -57,5 +57,5 @@ class TestExportConsolidation:
         ReportGenerator(db_manager).generate(run_id)
 
         # 3. Verify the bundle is written inside the session folder
-        analysis_dir = Path(os.path.abspath(session_root)) / "analysis"
+        analysis_dir = Path(os.path.abspath(session_root)) / "reports" / "analysis"
         assert (analysis_dir / "run.json").exists()

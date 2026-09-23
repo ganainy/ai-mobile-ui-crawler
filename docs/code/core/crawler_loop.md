@@ -21,6 +21,7 @@ Source: `src/mobile_crawler/core/crawler_loop.py`
 - [[code/domain/crawler_agent_service|domain.crawler_agent_service]]
 - [[code/domain/errors|domain.errors]]
 - [[code/domain/run_config_snapshot|domain.run_config_snapshot]]
+- [[code/domain/run_folder_layout|domain.run_folder_layout]]
 - [[code/domain/run_outcome|domain.run_outcome]]
 - [[code/domain/traffic_capture_manager|domain.traffic_capture_manager]]
 - [[code/domain/video_recording_manager|domain.video_recording_manager]]

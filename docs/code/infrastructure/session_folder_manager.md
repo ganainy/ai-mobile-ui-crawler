@@ -13,6 +13,7 @@ Source: `src/mobile_crawler/infrastructure/session_folder_manager.py`
 
 ## Imports
 - [[code/config/_index|config]]
+- [[code/domain/run_folder_layout|domain.run_folder_layout]]
 - [[code/infrastructure/run_repository|infrastructure.run_repository]]
 
 ## Imported by

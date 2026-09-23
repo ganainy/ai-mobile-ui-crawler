@@ -59,7 +59,7 @@ class TestArtifactGrouping:
         assert os.path.exists(session_path)
         assert os.path.exists(os.path.join(session_path, "screenshots"))
         assert os.path.exists(os.path.join(session_path, "reports"))
-        assert os.path.exists(os.path.join(session_path, "data"))
+        assert not os.path.exists(os.path.join(session_path, "data"))
 
         # 3. Test ReportGenerator integration
         rg = ReportGenerator(db_manager)
@@ -68,8 +68,8 @@ class TestArtifactGrouping:
         assert os.path.exists(report_path)
         assert Path(report_path).parent.name == "reports"
 
-        # 4. The Analysis Bundle lands in the session's analysis folder
-        analysis_dir = Path(session_path) / "analysis"
+        # 4. The Analysis Bundle lands next to the HTML in reports/analysis
+        analysis_dir = Path(session_path) / "reports" / "analysis"
         assert (analysis_dir / "analysis.md").exists()
         assert (analysis_dir / "steps.jsonl").exists()
         assert (analysis_dir / "run.json").exists()

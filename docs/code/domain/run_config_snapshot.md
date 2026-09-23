@@ -16,6 +16,7 @@ Source: `src/mobile_crawler/domain/run_config_snapshot.py`
 
 ## Imports
 - [[code/domain/guided_scenarios_generator|domain.guided_scenarios_generator]]
+- [[code/domain/run_folder_layout|domain.run_folder_layout]]
 
 ## Imported by
 - [[code/core/crawler_loop|core.crawler_loop]]

@@ -5,7 +5,7 @@ from mobile_crawler.reporting.contracts import RunReportData, RunSummary
 from mobile_crawler.reporting.generator import JinjaReportGenerator
 
 
-def test_generator_creates_files(tmp_path):
+def test_generator_writes_only_the_html(tmp_path):
     output_html = tmp_path / "report.html"
     output_json = tmp_path / "report.json"
 
@@ -29,9 +29,5 @@ def test_generator_creates_files(tmp_path):
     generator.generate(data, str(output_html))
 
     assert os.path.exists(output_html)
-    assert os.path.exists(output_json)
-
-    # Verify content
-    with open(output_json) as f:
-        json_data = f.read()
-        assert '"run_id": "test_run"' in json_data
+    assert not os.path.exists(output_json)  # the Analysis Bundle replaced the JSON export
+    assert "test_run" in output_html.read_text(encoding="utf-8")

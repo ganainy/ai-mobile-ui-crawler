@@ -1,4 +1,3 @@
-import json
 import os
 from datetime import datetime
 
@@ -16,8 +15,7 @@ class JinjaReportGenerator(ReportGenerator):
         self.env = Environment(loader=FileSystemLoader(template_dir))
 
     def generate(self, data: RunReportData, output_path_html: str) -> None:
-        """Render and save both HTML and JSON reports."""
-        # 1. Generate HTML
+        """Render and save the HTML report."""
         template = self.env.get_template("report.html.j2")
         html_content = template.render(
             run_id=data.run_id,
@@ -31,15 +29,3 @@ class JinjaReportGenerator(ReportGenerator):
 
         with open(output_path_html, "w", encoding="utf-8") as f:
             f.write(html_content)
-
-        # 2. Generate JSON (Requirement FR-009)
-        output_path_json = os.path.splitext(output_path_html)[0] + ".json"
-
-        # We need a custom encoder for datetime/timedelta if asdict doesn't handle them
-        def datetime_serializer(obj):
-            if isinstance(obj, datetime):
-                return obj.isoformat()
-            raise TypeError(f"Type {type(obj)} not serializable")
-
-        with open(output_path_json, "w", encoding="utf-8") as f:
-            json.dump(data.to_dict(), f, indent=2, default=datetime_serializer)

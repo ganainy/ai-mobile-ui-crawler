@@ -7,10 +7,9 @@ from pathlib import Path
 from typing import Any
 
 from mobile_crawler.domain.guided_scenarios_generator import guided_scenarios_config_key
+from mobile_crawler.domain.run_folder_layout import RunFolderLayout
 
 logger = logging.getLogger(__name__)
-
-SNAPSHOT_RELATIVE_PATH = Path("data") / "config_snapshot.json"
 
 # Explicit allowlist: keys are copied one by one so API keys and other secrets can never leak in.
 _PLAIN_KEYS = (
@@ -59,8 +58,8 @@ def build_config_snapshot(config_manager: Any, app_package: str, git_commit: str
 
 
 def write_config_snapshot(session_path: str, snapshot: dict[str, Any]) -> Path:
-    """Write the snapshot to <session>/data/config_snapshot.json and return its path."""
-    path = Path(session_path) / SNAPSHOT_RELATIVE_PATH
+    """Write the snapshot to <session>/reports/config_snapshot.json and return its path."""
+    path = RunFolderLayout(session_path).config_snapshot
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(snapshot, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
     return path
@@ -70,7 +69,7 @@ def read_config_snapshot(session_path: str | None) -> dict[str, Any] | None:
     """Read a run's snapshot, or None when absent (older runs) or unreadable."""
     if not session_path:
         return None
-    path = Path(session_path) / SNAPSHOT_RELATIVE_PATH
+    path = RunFolderLayout(session_path).config_snapshot
     try:
         return json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):

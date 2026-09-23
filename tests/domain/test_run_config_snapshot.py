@@ -66,5 +66,5 @@ def test_snapshot_falls_back_to_legacy_step_limit_key():
 def test_write_config_snapshot_puts_json_in_session_data_folder(tmp_path):
     path = write_config_snapshot(str(tmp_path), {"ai_model": "m"})
 
-    assert path == tmp_path / "data" / "config_snapshot.json"
+    assert path == tmp_path / "reports" / "config_snapshot.json"
     assert json.loads(path.read_text(encoding="utf-8")) == {"ai_model": "m"}

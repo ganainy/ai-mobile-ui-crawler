@@ -59,18 +59,21 @@ A first short crawl, from a terminal with the venv active:
    ```powershell
    mobile-crawler-cli list runs -n 1
    mobile-crawler-cli stats <run-id>
-   Invoke-Item "$env:APPDATA\mobile-crawler\output_data\run_<run-id>_*\reports\report_run_<run-id>.html"
+   Invoke-Item "$env:APPDATA\mobile-crawler\output_data\run_<run-id>_*\reports\run_report.html"
    ```
-   Everything the run produced is in its folder, `%APPDATA%\mobile-crawler\output_data\run_<run-id>_<date>_<time>\`:
+   Everything the run produced is in its folder, `%APPDATA%\mobile-crawler\output_data\run_<run-id>_<date>_<time>\`. Every report is under `reports\`; raw artifacts have their own folders:
 
    | Path | Contents |
    |---|---|
-   | `reports\report_run_<id>.html` / `.json` | The run report, step by step |
+   | `reports\run_report.html` | The run report, step by step |
+   | `reports\analysis\analysis.md`, `steps.jsonl`, `run.json` | AI-readable summary; `steps.jsonl` has one line per step with the action, the AI's reasoning, timings and success/error |
+   | `reports\mobsf\` | MobSF JSON/PDF reports, when MobSF is on |
+   | `reports\config_snapshot.json` | Settings the run used |
+   | `reports\crawler_trace.jsonl` | Full agent trace |
    | `screenshots\step_0001.png`, ... | One screenshot per step |
-   | `analysis\analysis.md`, `steps.jsonl`, `run.json` | AI-readable summary; `steps.jsonl` has one line per step with the action, the AI's reasoning, timings and success/error |
-   | `logs\crawler_trace.jsonl` | Full agent trace |
-   | `data\config_snapshot.json` | Settings the run used |
-   | `videos\`, `pcap\`, `apks\` + `reports\` | Screen video, traffic capture and MobSF results, when those are on (see below) |
+   | `videos\`, `pcap\`, `apks\` | Screen video, traffic capture and the APK MobSF scanned, when those are on (see below) |
+
+   Run folders from before this layout (report in `reports\report_run_<id>.html`, `analysis\`, `data\`, `logs\`) move over with `.venv312\Scripts\python.exe scripts\migrate_run_folders.py` (`--dry-run` lists the changes first).
 
    If the report is missing (e.g. after `--no-report`), rebuild it with `mobile-crawler-cli report <run-id>`.
 
@@ -98,7 +101,7 @@ mobile-crawler-cli crawl --device <device-id> --package <package> --provider gem
    mobile-crawler-cli crawl --device <device-id> --package <package> --provider gemini --model gemini-3.8-flash --steps 5 --enable-traffic-capture
    ```
 
-**Static analysis (MobSF).** After the crawl, pulls the app's APK from the device, scans it in MobSF and saves the JSON/PDF reports into the run's `reports\` (and the APK into `apks\`).
+**Static analysis (MobSF).** After the crawl, pulls the app's APK from the device, scans it in MobSF and saves the JSON/PDF reports into the run's `reports\mobsf\` (and the APK into `apks\`).
 1. Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) (WSL 2 backend) and start it. `docker info` must work.
 2. Crawl with the flag. The CLI starts the `mobile-crawler-mobsf` container itself (the first start downloads the MobSF image) and reads its API key from the container logs.
    ```powershell
@@ -226,7 +229,7 @@ Same record as the GUI's Run History "View Stats". Saved when a crawl completes.
 mobile-crawler-cli report <run_id> [-o report.html]
 ```
 
-Writes the HTML report and the analysis folder (`analysis.md`, `steps.jsonl`, `run.json`) into the run's session folder, pulling Phoenix/Langfuse telemetry back in. `crawl` already does this unless `--no-report`.
+Writes the HTML report (`reports/run_report.html`; `-o` moves only this file) and the analysis folder (`reports/analysis/`: `analysis.md`, `steps.jsonl`, `run.json`) into the run folder, pulling Phoenix/Langfuse telemetry back in. `crawl` already does this unless `--no-report`.
 
 ## mobsf-scan
 

@@ -7,6 +7,8 @@ import shutil
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
+from mobile_crawler.domain.run_folder_layout import RunFolderLayout
+
 if TYPE_CHECKING:
     from mobile_crawler.infrastructure.run_repository import Run
 
@@ -44,10 +46,8 @@ class SessionFolderManager:
         # Create main directory
         os.makedirs(session_path, exist_ok=True)
 
-        # Create standard subdirectories
-        # Separate folders for different artifact types: pcap, videos, logs, apks
-        subdirs = ["screenshots", "reports", "pcap", "videos", "logs", "data", "apks"]
-        for subdir in subdirs:
+        # Create standard subdirectories (reports/ holds every report; see RunFolderLayout)
+        for subdir in RunFolderLayout.CREATED_SUBFOLDERS:
             os.makedirs(os.path.join(session_path, subdir), exist_ok=True)
 
         return os.path.abspath(session_path)

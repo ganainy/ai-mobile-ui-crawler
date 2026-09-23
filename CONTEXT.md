@@ -41,7 +41,7 @@ An ordered group of consecutive actions the Executor performs from one Manager s
 _Avoid_: Macro, compound action, multi-action
 
 **Run Report**:
-The single output of reporting on one finished crawl run: a human-readable HTML page plus an Analysis Bundle, produced together by one action (auto at run end if enabled, or manually). Replaces the separate HTML report and JSON export.
+The single output of reporting on one finished crawl run: a human-readable HTML page plus an Analysis Bundle, produced together by one action (auto at run end if enabled, or manually). Replaces the separate HTML report and JSON export. Lives in the run folder's `reports/`, with the run's other reports (MobSF, config snapshot, crawler trace).
 _Avoid_: Export, HTML report, run export
 
 **Analysis Bundle**:

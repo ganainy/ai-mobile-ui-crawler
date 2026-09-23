@@ -1004,10 +1004,13 @@ class TestCrawlerAgentServiceLogging:
             with patch("mobile_crawler.domain.crawler_agent_service.CrawlerLogHandler") as mock_handler_class:
                 mock_handler = Mock()
                 mock_handler_class.return_value = mock_handler
-                crawler_agent_service.configure_run_logging(1, log_dir, emit_debug, True)
+                log_path = str(tmp_path / "reports" / "crawler_trace.jsonl")
+                crawler_agent_service.configure_run_logging(1, log_path, emit_debug, True)
                 assert crawler_agent_service._log_handler is not None
                 assert droid_logger.propagate is False
                 mock_handler_class.assert_called_once()
+                assert mock_handler_class.call_args.args[1] == log_path
+                assert (tmp_path / "reports").is_dir()
         finally:
             crawler_agent_service.clear_run_logging()
             droid_logger.propagate = original_propagate

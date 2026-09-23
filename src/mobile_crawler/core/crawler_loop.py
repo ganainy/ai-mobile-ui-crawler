@@ -26,6 +26,7 @@ from mobile_crawler.domain.run_config_snapshot import (
     current_git_commit,
     write_config_snapshot,
 )
+from mobile_crawler.domain.run_folder_layout import RunFolderLayout
 from mobile_crawler.domain.run_outcome import derive_stop_reason
 from mobile_crawler.domain.traffic_capture_manager import TrafficCaptureManager
 from mobile_crawler.domain.video_recording_manager import VideoRecordingManager
@@ -263,8 +264,8 @@ class CrawlerLoop:
             if isinstance(trace_session_id, str):
                 self.run_repository.update_trace_id(run_id, trace_session_id)
 
-            logs_dir = self.session_folder_manager.get_subfolder(run, "logs")
-            self._crawler_agent_service.configure_run_logging(run_id, logs_dir, self._emit_event, True)
+            trace_path = str(RunFolderLayout(session_path).crawler_trace)
+            self._crawler_agent_service.configure_run_logging(run_id, trace_path, self._emit_event, True)
 
             exploration_objective = self.config_manager.get("exploration_objective", None)
 

@@ -397,13 +397,13 @@ class CrawlerAgentService:
 
         return config
 
-    def configure_run_logging(self, run_id: int, log_dir: str, emit_debug, enable_ui: bool) -> None:
-        """Attach a Crawler log handler for UI/debug and JSONL output.
+    def configure_run_logging(self, run_id: int, log_path: str, emit_debug, enable_ui: bool) -> None:
+        """Attach a Crawler log handler for UI/debug and JSONL output (written to ``log_path``).
 
         Always enables UI forwarding so logs reach both the JSONL file
         and the root QLogHandler bridge in MainWindow.
         """
-        log_path = os.path.join(log_dir, "crawler_trace.jsonl")
+        os.makedirs(os.path.dirname(log_path) or ".", exist_ok=True)
         handler = CrawlerLogHandler(run_id, log_path, emit_debug, True)
         handler.setLevel(logging.DEBUG)
 

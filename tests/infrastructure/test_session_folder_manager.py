@@ -13,7 +13,7 @@ def test_create_session_folder(tmp_path):
     assert os.path.isdir(path)
 
     # Check subdirectories
-    expected_subdirs = ["screenshots", "reports", "pcap", "videos", "logs", "data", "apks"]
+    expected_subdirs = ["screenshots", "reports", "pcap", "videos", "apks"]
     for subdir in expected_subdirs:
         assert os.path.exists(os.path.join(path, subdir))
         assert os.path.isdir(os.path.join(path, subdir))

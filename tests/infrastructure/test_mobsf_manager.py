@@ -208,6 +208,8 @@ class TestMobSFManager:
         manager._make_api_request = Mock(side_effect=mock_api_request)
 
         with tempfile.TemporaryDirectory() as tmpdir:
+            # os.path.exists is patched to True, which stops os.makedirs creating parents
+            (Path(tmpdir) / "reports").mkdir()
             success, summary = manager.perform_complete_scan(
                 package_name="com.example.app",
                 session_path=tmpdir,
@@ -297,7 +299,7 @@ class TestMobSFManager:
         config = _make_config_manager()
         manager = MobSFManager(config_manager=config)
 
-        result = manager.extract_apk_from_device("com.example.app")
+        result = manager.extract_apk_from_device("com.example.app", output_dir="unused")
 
         assert result is None
 
@@ -643,6 +645,25 @@ class TestStoredApk:
         assert summary["apk_path"] == str(apk)
         assert uploaded == ["stored.apk"]
         mock_extract.assert_not_called()
+        mobsf_dir = tmp_path / "reports" / "mobsf"
+        assert summary["json_report"] == str(mobsf_dir / "h1_report.json")
+        assert summary["pdf_report"] == str(mobsf_dir / "h1_report.pdf")
+        assert (mobsf_dir / "h1_report.json").is_file()
+
+    @patch.object(MobSFManager, "extract_apk_from_device")
+    @patch.object(MobSFManager, "preflight", return_value=(True, ""))
+    def test_perform_complete_scan_without_run_folder_fails_instead_of_writing_to_cwd(
+        self, mock_preflight, mock_extract, tmp_path, monkeypatch
+    ):
+        monkeypatch.chdir(tmp_path)
+        manager = MobSFManager(config_manager=_make_config_manager())
+
+        success, summary = manager.perform_complete_scan("com.example.app")
+
+        assert success is False
+        assert "run folder" in summary["error"]
+        mock_extract.assert_not_called()
+        assert list(tmp_path.iterdir()) == []
 
     @patch.object(MobSFManager, "perform_complete_scan")
     def test_analyze_run_passes_apk_path_and_log_callback(self, mock_perform, tmp_path):

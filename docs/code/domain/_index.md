@@ -27,8 +27,9 @@ Exploration logic: action execution/verification, screen and state tracking, OCR
 - [[code/domain/overlay_renderer|domain.overlay_renderer]] - Coordinate overlay rendering for mobile-crawler screenshots.
 - [[code/domain/prompt_builder|domain.prompt_builder]] - Prompt builder for AI interactions.
 - [[code/domain/prompts|domain.prompts]] - Default prompts for AI interactions.
-- [[code/domain/report_generator|domain.report_generator]] - Enhanced HTML/JSON report generator for crawl runs.
+- [[code/domain/report_generator|domain.report_generator]] - Run Report generator (HTML plus Analysis Bundle) for crawl runs.
 - [[code/domain/run_config_snapshot|domain.run_config_snapshot]] - Config snapshot captured at run start, so runs can be compared across crawler changes.
+- [[code/domain/run_folder_layout|domain.run_folder_layout]] - Where each file of a run folder lives.
 - [[code/domain/run_outcome|domain.run_outcome]] - Derives the Stop Reason and guided-scenario progress recorded on a finished run.
 - [[code/domain/scrcpy_stream|domain.scrcpy_stream]] - Live Feed video source: talks to a vendored scrcpy server over adb.
 - [[code/domain/screen_hash|domain.screen_hash]] - Shared screen hashing utilities.

@@ -150,8 +150,9 @@ output_data/
     │   ├── com.example.app.apk
     │   └── com.example.app.apks
     └── reports/
-        ├── {mobsf_hash}_report.json
-        └── {mobsf_hash}_report.pdf
+        └── mobsf/
+            ├── {mobsf_hash}_report.json
+            └── {mobsf_hash}_report.pdf
 ```
 
 ## CrawlerAgent Traffic Capture and TLS Decryption
@@ -344,17 +345,24 @@ Telemetry key configuration:
 
 `SessionFolderManager` creates per-run folders under the app data directory's `output_data` folder by default:
 
+Every report of a run is in its `reports/` folder; raw artifacts stay in their own folders:
+
 ```text
 output_data/
 └── run_{ID}_{YYYYMMDD_HHMMSS}/
-    ├── screenshots/
     ├── reports/
+    │   ├── run_report.html          # Run Report, human-readable half
+    │   ├── analysis/                # Analysis Bundle: analysis.md, steps.jsonl, run.json
+    │   ├── mobsf/                   # MobSF JSON/PDF
+    │   ├── config_snapshot.json
+    │   └── crawler_trace.jsonl
+    ├── screenshots/
     ├── pcap/
     ├── videos/
-    ├── logs/
-    ├── data/
     └── apks/
 ```
+
+The paths are defined in one place, `domain/run_folder_layout.py`. Older run folders (with `analysis/`, `data/`, `logs/` and `reports/report_run_<id>.html`) are moved to this layout by `scripts/migrate_run_folders.py` (`--dry-run` to preview).
 
 The session path is stored on the run record so the UI can resolve artifacts later.
 

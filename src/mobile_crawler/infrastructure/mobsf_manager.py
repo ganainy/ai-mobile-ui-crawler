@@ -17,6 +17,8 @@ from typing import TYPE_CHECKING, Any, Optional
 
 import requests
 
+from mobile_crawler.domain.run_folder_layout import RunFolderLayout
+
 if TYPE_CHECKING:
     from mobile_crawler.config.config_manager import ConfigManager
     from mobile_crawler.infrastructure.adb_client import ADBClient
@@ -136,17 +138,6 @@ class MobSFManager:
             raise ValueError("MOBSF_API_URL must be set in configuration")
 
         self.headers = {"Authorization": ""}
-
-    @property
-    def scan_results_dir(self) -> str:
-        """Lazily resolve the scan results directory path.
-
-        Returns:
-            Path to scan results directory
-        """
-        # Default to reports subdirectory in session folder
-        # This will be resolved when perform_complete_scan is called with a run
-        return os.path.join("output_data", "mobsf_reports")
 
     def _make_api_request(
         self,
@@ -373,12 +364,13 @@ class MobSFManager:
         return await temp_client.execute_async(command_list, suppress_stderr)
 
     def extract_apk_from_device(
-        self, package_name: str, output_dir: str | None = None, device_id: str | None = None
+        self, package_name: str, output_dir: str, device_id: str | None = None
     ) -> str | None:
         """Extract the APK file from a connected Android device using ADB.
 
         Args:
             package_name: The package name of the app to extract
+            output_dir: Folder to pull the APK into (the run folder's ``apks/``)
 
         Returns:
             Path to the extracted APK file, or None if extraction failed
@@ -413,22 +405,16 @@ class MobSFManager:
 
             apk_paths = [path.strip() for path in apk_paths if path.strip()]
 
-            # Resolve output directory - use provided directory or session directory if available
-            if output_dir:
-                selected_output_dir = output_dir
-            else:
-                selected_output_dir = os.path.join("output_data", "apks")
-
-            os.makedirs(selected_output_dir, exist_ok=True)
+            os.makedirs(output_dir, exist_ok=True)
 
             pulled_files = []
             for index, remote_apk in enumerate(apk_paths):
                 remote_name = os.path.basename(remote_apk) or f"split_{index}.apk"
                 safe_name = re.sub(r"[^A-Za-z0-9._-]+", "_", remote_name)
                 if len(apk_paths) == 1:
-                    local_apk = os.path.join(selected_output_dir, f"{package_name}.apk")
+                    local_apk = os.path.join(output_dir, f"{package_name}.apk")
                 else:
-                    local_apk = os.path.join(selected_output_dir, f"{index:02d}_{safe_name}")
+                    local_apk = os.path.join(output_dir, f"{index:02d}_{safe_name}")
 
                 pull_cmd = ["pull", remote_apk, local_apk]
                 pull_result = subprocess.run(
@@ -448,7 +434,7 @@ class MobSFManager:
                 logger.info(f"APK extracted to: {pulled_files[0]}")
                 return pulled_files[0]
 
-            archive_path = os.path.join(selected_output_dir, f"{package_name}.apks")
+            archive_path = os.path.join(output_dir, f"{package_name}.apks")
             with zipfile.ZipFile(archive_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
                 for pulled_file in pulled_files:
                     archive.write(pulled_file, arcname=os.path.basename(pulled_file))
@@ -532,7 +518,7 @@ class MobSFManager:
         data = {"hash": file_hash}
         return self._make_api_request("download_pdf", "POST", data=data, timeout=timeout)
 
-    def save_pdf_report(self, file_hash: str, output_path: str | None = None, timeout: int | None = None) -> str | None:
+    def save_pdf_report(self, file_hash: str, output_path: str, timeout: int | None = None) -> str | None:
         """Save the PDF report to a file.
 
         Args:
@@ -548,9 +534,6 @@ class MobSFManager:
             logger.error(f"Failed to get PDF report: {pdf_content}")
             return None
 
-        if output_path is None:
-            output_path = os.path.join(self.scan_results_dir, f"{file_hash}_report.pdf")
-
         try:
             os.makedirs(os.path.dirname(output_path), exist_ok=True)
             with open(output_path, "wb") as pdf_file:
@@ -561,9 +544,7 @@ class MobSFManager:
             logger.error(f"Error saving PDF report: {str(e)}")
             return None
 
-    def save_json_report(
-        self, file_hash: str, output_path: str | None = None, timeout: int | None = None
-    ) -> str | None:
+    def save_json_report(self, file_hash: str, output_path: str, timeout: int | None = None) -> str | None:
         """Save the JSON report to a file.
 
         Args:
@@ -578,9 +559,6 @@ class MobSFManager:
         if not success:
             logger.error(f"Failed to get JSON report: {report}")
             return None
-
-        if output_path is None:
-            output_path = os.path.join(self.scan_results_dir, f"{file_hash}_report.json")
 
         try:
             os.makedirs(os.path.dirname(output_path), exist_ok=True)
@@ -623,7 +601,8 @@ class MobSFManager:
         Args:
             package_name: The package name to scan
             run_id: Optional run ID for organizing results
-            session_path: Optional session directory path
+            session_path: Run folder; reports go to its reports/mobsf/, pulled APKs to apks/.
+                Looked up from run_id when omitted; the scan fails without one.
             log_callback: Optional callback function to display logs.
                          Should accept (message: str, color: Optional[str] = None)
             apk_path: Optional already-stored APK (or split .apks archive) to scan
@@ -662,26 +641,20 @@ class MobSFManager:
         logger.debug(f"MobSF API URL: {self.api_url}")
         logger.debug(f"MobSF API key configured: {bool(self.api_key)}")
 
-        # Resolve output directory
-        if session_path:
-            reports_dir = os.path.join(session_path, "reports")
-            apks_dir = os.path.join(session_path, "apks")
-        elif self.session_folder_manager and run_id:
+        # Reports and APKs go inside the run folder, never the working directory
+        if not session_path and self.session_folder_manager and run_id:
             from mobile_crawler.infrastructure.database import DatabaseManager
             from mobile_crawler.infrastructure.run_repository import RunRepository
 
-            db_manager = DatabaseManager()
-            run_repo = RunRepository(db_manager)
-            run = run_repo.get_run_by_id(run_id)
-            if run and self.session_folder_manager:
-                reports_dir = self.session_folder_manager.get_subfolder(run, "reports")
-                apks_dir = self.session_folder_manager.get_subfolder(run, "apks")
-            else:
-                reports_dir = os.path.join("output_data", "mobsf_reports")
-                apks_dir = os.path.join("output_data", "apks")
-        else:
-            reports_dir = os.path.join("output_data", "mobsf_reports")
-            apks_dir = os.path.join("output_data", "apks")
+            run = RunRepository(DatabaseManager()).get_run_by_id(run_id)
+            session_path = self.session_folder_manager.get_session_path(run) if run else None
+        if not session_path:
+            error_msg = "No run folder to save the MobSF reports and APK in"
+            _log(f"ERROR: {error_msg}", "red")
+            return False, {"error": error_msg}
+        layout = RunFolderLayout(session_path)
+        reports_dir = str(layout.mobsf_dir)
+        apks_dir = str(layout.apks_dir)
 
         os.makedirs(reports_dir, exist_ok=True)
         os.makedirs(apks_dir, exist_ok=True)
@@ -876,7 +849,7 @@ class MobSFManager:
         if not session_path:
             return None
 
-        apks_dir = Path(session_path) / "apks"
+        apks_dir = RunFolderLayout(session_path).apks_dir
         if not apks_dir.is_dir():
             return None
         for name in (f"{run.app_package}.apks", f"{run.app_package}.apk"):

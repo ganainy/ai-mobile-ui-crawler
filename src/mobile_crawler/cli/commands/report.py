@@ -9,8 +9,9 @@ import click
 def report(run_id: str, output_path: str):
     """Generate a report for a crawl run.
 
-    Writes the HTML report and the AI-readable analysis folder (analysis.md, steps.jsonl,
-    run.json) into the run's session folder, and reads Phoenix/Langfuse telemetry back in.
+    Writes the HTML report (run_report.html) and the AI-readable analysis folder (analysis.md,
+    steps.jsonl, run.json) into the run folder's reports/, and reads Phoenix/Langfuse telemetry
+    back in. --output moves only the HTML file.
 
     RUN_ID: ID of the crawl run to generate report for
     """

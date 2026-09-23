@@ -1,5 +1,6 @@
 """Tests for CrawlerLoop lifecycle, event emission, and error handling."""
 
+from pathlib import Path
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -1039,9 +1040,13 @@ class TestCrawlerLoopRunReportFields:
 
         import json
 
-        snapshot = json.loads((tmp_path / "data" / "config_snapshot.json").read_text(encoding="utf-8"))
+        snapshot = json.loads((tmp_path / "reports" / "config_snapshot.json").read_text(encoding="utf-8"))
         assert snapshot["ai_model"] == "gemini-x"
         assert snapshot["max_steps"] == 12
+
+        # The crawler trace is a report too: it goes next to the snapshot.
+        trace_path = mock_service.configure_run_logging.call_args.args[1]
+        assert Path(trace_path) == tmp_path / "reports" / "crawler_trace.jsonl"
 
     @patch("mobile_crawler.core.crawler_loop.write_config_snapshot", side_effect=OSError("disk full"))
     @patch("mobile_crawler.core.crawler_loop.CrawlerAgentService")

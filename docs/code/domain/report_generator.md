@@ -4,15 +4,17 @@ file: src/mobile_crawler/domain/report_generator.py
 ---
 # mobile_crawler.domain.report_generator
 
-Enhanced HTML/JSON report generator for crawl runs.
+Run Report generator (HTML plus Analysis Bundle) for crawl runs.
 
 Source: `src/mobile_crawler/domain/report_generator.py`
 
 ## Classes
+- `RunFolderMissingError`
 - `ReportGenerator`
 
 ## Imports
 - [[code/domain/run_config_snapshot|domain.run_config_snapshot]]
+- [[code/domain/run_folder_layout|domain.run_folder_layout]]
 - [[code/infrastructure/ai_interaction_repository|infrastructure.ai_interaction_repository]]
 - [[code/infrastructure/analysis_bundle|infrastructure.analysis_bundle]]
 - [[code/infrastructure/database|infrastructure.database]]

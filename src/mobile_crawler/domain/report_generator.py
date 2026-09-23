@@ -1,4 +1,4 @@
-"""Enhanced HTML/JSON report generator for crawl runs."""
+"""Run Report generator (HTML plus Analysis Bundle) for crawl runs."""
 
 import json
 import logging
@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from mobile_crawler.domain.run_config_snapshot import read_config_snapshot
+from mobile_crawler.domain.run_folder_layout import RunFolderLayout
 from mobile_crawler.infrastructure.ai_interaction_repository import AIInteractionRepository
 from mobile_crawler.infrastructure.analysis_bundle import AnalysisBundleWriter, screenshots_by_step
 from mobile_crawler.infrastructure.database import DatabaseManager
@@ -27,8 +28,12 @@ from mobile_crawler.reporting.parsers.pcap_parser import DpktPcapParser
 logger = logging.getLogger(__name__)
 
 
+class RunFolderMissingError(RuntimeError):
+    """The run has no run folder on disk, so there is nowhere to write its Run Report."""
+
+
 class ReportGenerator:
-    """Generates enhanced HTML and JSON reports for crawl runs."""
+    """Generates the Run Report (HTML plus Analysis Bundle) for crawl runs."""
 
     def __init__(
         self,
@@ -60,12 +65,17 @@ class ReportGenerator:
 
         Args:
             run_id: ID of the run to generate report for
-            output_path: Optional custom output path (HTML)
+            output_path: Optional custom output path (HTML). The Analysis Bundle still goes to
+                the run folder's ``reports/analysis/``, or next to the HTML if the run folder is gone.
             fetch_telemetry: Read the run's Phoenix/Langfuse data back into the report. Off for
                 the automatic post-run report, since tracing servers ingest asynchronously.
 
         Returns:
             Path to the generated HTML file
+
+        Raises:
+            ValueError: the run does not exist
+            RunFolderMissingError: no output_path given and the run folder is missing
         """
         # 1. Fetch data from DB
         run = self.run_repository.get_run_by_id(run_id)
@@ -74,19 +84,28 @@ class ReportGenerator:
 
         step_logs = self.step_log_repository.get_step_logs_by_run(run_id)
 
-        # 2. Prepare paths for optional artifacts
+        # 2. Output paths and optional artifacts, all inside the run folder
+        layout = RunFolderLayout(run.session_path) if run.session_path else None
+        has_run_folder = layout is not None and layout.root.is_dir()
+        if has_run_folder:
+            html_path = Path(output_path) if output_path else layout.run_report_html
+            bundle_dir = layout.analysis_dir
+        elif output_path:
+            html_path = Path(output_path)
+            bundle_dir = html_path.parent / "analysis"
+        else:
+            raise RunFolderMissingError(
+                f"Run {run_id} has no run folder on disk ({run.session_path or 'no path stored'}); "
+                "pass an output path to write the report elsewhere"
+            )
+
         pcap_path = None
         mobsf_path = None
-        if run.session_path and os.path.exists(run.session_path):
-            # Check for PCAP
-            pcap_candidate = os.path.join(run.session_path, "traffic", "capture.pcap")
-            if os.path.exists(pcap_candidate):
-                pcap_path = pcap_candidate
-
-            # Check for MobSF JSON
-            mobsf_candidate = os.path.join(run.session_path, "mobsf", "report.json")
-            if os.path.exists(mobsf_candidate):
-                mobsf_path = mobsf_candidate
+        if has_run_folder:
+            pcap = layout.find_pcap()
+            pcap_path = str(pcap) if pcap else None
+            mobsf = layout.find_mobsf_json_report()
+            mobsf_path = str(mobsf) if mobsf else None
 
         # 2.2. Fetch AI interactions to get screenshot paths (which are missing in step_logs)
         interactions = self.ai_interaction_repository.get_ai_interactions_by_run(run_id)
@@ -107,9 +126,12 @@ class ReportGenerator:
             # Resolve screenshot from AI interactions map
             ss_path = step_screenshots.get(log.step_number)
 
-            # Resolve screenshot relative to session folder if possible, or use absolute
+            # Link screenshots relative to the HTML's folder when they are in the run folder
             if ss_path and run.session_path and ss_path.startswith(run.session_path):
-                ss_path = os.path.relpath(ss_path, os.path.join(run.session_path, "reports"))
+                try:
+                    ss_path = os.path.relpath(ss_path, html_path.parent)
+                except ValueError:  # custom output path on another drive: keep it absolute
+                    pass
 
             run_dict["steps"].append(
                 {
@@ -128,26 +150,14 @@ class ReportGenerator:
         telemetry = self._telemetry_for(run, fetch_telemetry)
         report_data.analysis_sections = self.bundle_writer.build_sections(run_id, telemetry)
 
-        # 5. Determine output path
-        if not output_path:
-            filename = f"report_run_{run_id}.html"
-            if run.session_path and Path(run.session_path).exists():
-                reports_dir = Path(run.session_path) / "reports"
-                reports_dir.mkdir(parents=True, exist_ok=True)
-                output_path = str(reports_dir / filename)
-            else:
-                output_path = filename
-
-        # 6. Generate
+        # 5. Generate
+        html_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path = str(html_path)
         self.jinja_generator.generate(report_data, output_path)
 
         logger.info(f"Generated enhanced report: {output_path}")
 
-        # 7. Analysis Bundle (AI-readable half of the Run Report)
-        if run.session_path and Path(run.session_path).exists():
-            bundle_dir = Path(run.session_path) / "analysis"
-        else:
-            bundle_dir = Path(output_path).parent / "analysis"
+        # 6. Analysis Bundle (AI-readable half of the Run Report)
         self.bundle_writer.write(run_id, bundle_dir, telemetry)
 
         return output_path

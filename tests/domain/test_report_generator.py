@@ -146,7 +146,7 @@ class TestReportGenerator:
             generator = ReportGenerator(db_manager)
             result_path = generator.generate(1)
 
-            assert result_path.endswith("report_run_1.html")
+            assert result_path.endswith("run_report.html")
             mock_jinja_cls.return_value.generate.assert_called_once()
 
     def test_safe_json_load(self):
