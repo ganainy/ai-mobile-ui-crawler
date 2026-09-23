@@ -32,4 +32,4 @@ Goal: give `crawl` a list of apps, run each for a fixed time (e.g. 10 minutes), 
 
 ## Not done / open
 - Not tried on a real device.
-- Merged into main: conflicts with main's pre-run warnings, `RunStatsRepository` wiring and `--restart-app` resolved by keeping all of them; pre-run warnings run once per batch, and `restart_app_before_run` (default on) also force-stops each target app at run start. Fixes issue #25 (not closed yet).
+- Merged into main: conflicts with main's pre-run warnings, `RunStatsRepository` wiring and `--restart-app` resolved by keeping all of them; pre-run warnings run once per batch, and `restart_app_before_run` (default on) also force-stops each target app at run start. Fixes issue #25 (closed). Pushed to origin as caac2a3; worktree and branch removed.
