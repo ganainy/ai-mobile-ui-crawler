@@ -447,6 +447,19 @@ class TestCrawlRunOverrides:
         config.override.assert_called_once_with("ui_parser_mode", "accessibility")
         assert "ui_parser_mode" not in self._keys(config.set.call_args_list)
 
+    def test_restart_app_flag_overrides_to_true(self):
+        result, config = self._run(["--restart-app"])
+
+        assert result.exit_code == 0
+        config.override.assert_called_once_with("restart_app_before_run", True)
+
+    def test_no_restart_app_flag_overrides_without_persisting(self):
+        result, config = self._run(["--no-restart-app"])
+
+        assert result.exit_code == 0
+        config.override.assert_called_once_with("restart_app_before_run", False)
+        assert "restart_app_before_run" not in self._keys(config.set.call_args_list)
+
     def test_parser_mode_rejects_unknown_values(self):
         result, config = self._run(["--parser-mode", "ocr"])
 

@@ -23,6 +23,7 @@ _PLAIN_KEYS = (
     "tracing_provider",
     "enable_traffic_capture",
     "enable_video_recording",
+    "restart_app_before_run",
 )
 
 

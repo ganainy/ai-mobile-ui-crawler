@@ -461,12 +461,26 @@ class CrawlerAgentService:
     async def _ensure_target_app_active_before_crawler(
         self,
         app_package: str,
+        force_restart: bool = False,
     ) -> None:
-        """Launch and verify the target package before any crawler work starts."""
+        """Launch and verify the target package before any crawler work starts.
+
+        With ``force_restart`` the app is force-stopped first, so the crawl starts
+        on its launch screen instead of wherever the last run left it (app data
+        is kept).
+        """
         from mobile_crawler.domain.adb_action_executor import ADBActionExecutor
 
         attempts = int(self.config_manager.get("target_app_launch_attempts", 3) or 3)
         adb_executor = ADBActionExecutor(device_id=self.device_id)
+
+        if force_restart:
+            stop_result = adb_executor.force_stop_package(app_package)
+            if stop_result.success:
+                logger.info("Force-stopped %s so the run starts from its launch screen", app_package)
+            else:
+                logger.warning("Force-stop of %s failed: %s", app_package, stop_result.error_message)
+
         current_package = adb_executor.get_current_package()
 
         if current_package == app_package:
@@ -1703,11 +1717,14 @@ class CrawlerAgentService:
 
         crash_attempt = 0
         transient_attempt = 0
+        # Only the first launch restarts the app; crash/transient retries resume.
+        restart_pending = bool(self.config_manager.get("restart_app_before_run", True))
 
         while True:
             try:
                 await self._ensure_device_awake_before_crawler()
-                await self._ensure_target_app_active_before_crawler(app_package)
+                await self._ensure_target_app_active_before_crawler(app_package, force_restart=restart_pending)
+                restart_pending = False
 
                 # Initialize agent if needed
                 await self._initialize_agent(max_steps, target_package=app_package, step_by_step=step_by_step)

@@ -922,6 +922,25 @@ class TestAutoGenerateReport:
         assert reloaded.get_auto_generate_report_after_run() is False
 
 
+class TestRestartAppBeforeRun:
+    """Tests for the 'Restart the app before each run' checkbox."""
+
+    def test_on_by_default(self, qt_app, mock_config_store):
+        panel = _create_settings_panel(mock_config_store)
+        assert panel.restart_app_checkbox.isChecked()
+
+    def test_unchecked_choice_is_saved_and_reloaded(self, qt_app, mock_config_store, monkeypatch):
+        monkeypatch.setattr(QMessageBox, "information", lambda parent, title, message: None)
+        panel = _create_settings_panel(mock_config_store)
+        panel.restart_app_checkbox.setChecked(False)
+
+        panel._on_save_clicked()
+
+        assert mock_config_store.get_setting("restart_app_before_run", default=True) is False
+        reloaded = _create_settings_panel(mock_config_store)
+        assert not reloaded.restart_app_checkbox.isChecked()
+
+
 class TestVerificationInboxGroup:
     """Tests for the Verification Inbox (Gmail IMAP) settings group."""
 

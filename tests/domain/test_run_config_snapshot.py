@@ -24,6 +24,7 @@ def test_snapshot_records_run_settings_and_guided_scenarios():
             "top_bar_height": 80,
             "bottom_bar_height": 0,
             "guided_scenarios::com.x": ["Open settings"],
+            "restart_app_before_run": False,
         }
     )
 
@@ -37,6 +38,7 @@ def test_snapshot_records_run_settings_and_guided_scenarios():
     assert snapshot["bottom_bar_exclusion_px"] == 0
     assert snapshot["guided_scenarios"] == ["Open settings"]
     assert snapshot["git_commit"] == "abc1234"
+    assert snapshot["restart_app_before_run"] is False
 
 
 def test_snapshot_never_includes_secrets():

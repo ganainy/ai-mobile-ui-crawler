@@ -179,6 +179,15 @@ class SettingsPanel(QWidget):
         max_duration_layout.addStretch()
         limits_layout.addLayout(max_duration_layout)
 
+        self.restart_app_checkbox = QCheckBox("Restart the app before each run")
+        self.restart_app_checkbox.setToolTip(
+            "Force-stop the app first so every run starts from its launch screen.\n"
+            "App data (login, half-finished sign-up) is kept.\n"
+            "Off: the run resumes wherever the app currently is."
+        )
+        self.restart_app_checkbox.setChecked(True)
+        limits_layout.addWidget(self.restart_app_checkbox)
+
         self.steps_radio.toggled.connect(self._on_limit_type_changed)
         limits_group.setLayout(limits_layout)
         layout.addWidget(limits_group)
@@ -974,6 +983,10 @@ class SettingsPanel(QWidget):
         max_duration = self._config_store.get_setting("max_duration_seconds", default=300)
         self.max_duration_input.setValue(max_duration)
 
+        self.restart_app_checkbox.setChecked(
+            bool(self._config_store.get_setting("restart_app_before_run", default=True))
+        )
+
         # Load screen configuration
         top_bar_height = self._config_store.get_setting("top_bar_height", default=80)
         self.top_bar_height_input.setValue(top_bar_height)
@@ -1163,6 +1176,9 @@ class SettingsPanel(QWidget):
                 # Save limit type preference
                 limit_type = "steps" if self.steps_radio.isChecked() else "duration"
                 self._config_store.set_setting("limit_type", limit_type, "string")
+                self._config_store.set_setting(
+                    "restart_app_before_run", self.restart_app_checkbox.isChecked(), "bool"
+                )
 
                 # Save screen configuration
                 self._config_store.set_setting("top_bar_height", self.top_bar_height_input.value(), "int")
@@ -1773,6 +1789,7 @@ class SettingsPanel(QWidget):
         self.replicate_api_key_input.clear()
         self.max_steps_input.setValue(100)
         self.max_duration_input.setValue(300)
+        self.restart_app_checkbox.setChecked(True)
         self.test_address_input.setText("Kaiserstraße 12, 60311 Frankfurt am Main, Germany")
         self.test_phone_input.clear()
         self.verification_inbox_address_input.clear()

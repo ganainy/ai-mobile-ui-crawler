@@ -86,6 +86,9 @@ DEFAULTS: dict[str, Any] = {
     "pre_crawl_wake_device": True,
     "pre_crawl_unlock_swipe": True,
     "pre_crawl_wake_timeout_seconds": 5.0,
+    # Force-stop the target app before the run so it starts from its launch
+    # screen (app data is kept). Off = resume wherever the app currently is.
+    "restart_app_before_run": True,
     # Use reasoning mode for complex planning (vs direct execution)
     "crawler_reasoning_mode": True,
     # Agent streaming output (for real-time updates)

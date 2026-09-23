@@ -741,7 +741,7 @@ class TestCrawlerAgentServiceTargetPreflight:
         async def wake_preflight():
             order.append("wake")
 
-        async def target_preflight(app_package):
+        async def target_preflight(app_package, force_restart=False):
             order.append(f"target:{app_package}")
 
         with (
@@ -793,8 +793,73 @@ class TestCrawlerAgentServiceTargetPreflight:
         target_preflight.assert_not_awaited()
         fake_agent.assert_not_called()
 
+    @staticmethod
+    def _set_restart_app(service, enabled):
+        base_get = service.config_manager.get.side_effect
+        service.config_manager.get.side_effect = lambda key, default=None: (
+            enabled if key == "restart_app_before_run" else base_get(key, default)
+        )
+
+    @pytest.mark.asyncio
+    async def test_execute_restart_on_force_stops_before_launch(self, crawler_agent_service):
+        self._set_restart_app(crawler_agent_service, True)
+        mock_adb = Mock()
+        mock_adb.force_stop_package.return_value = ActionResult(
+            success=True, action_type="force_stop", target="com.example.app"
+        )
+        # The app was in front before the stop; after it the launcher is.
+        mock_adb.get_current_package.side_effect = ["com.android.launcher", "com.example.app"]
+        mock_adb.am_start_recovery.return_value = ActionResult(
+            success=True, action_type="am_start_recovery", target="com.example.app"
+        )
+
+        with (
+            patch("mobile_crawler.domain.adb_action_executor.ADBActionExecutor", return_value=mock_adb),
+            patch.object(crawler_agent_service, "_ensure_device_awake_before_crawler", new=AsyncMock()),
+            patch.object(crawler_agent_service, "_initialize_agent", new=AsyncMock()),
+            patch.object(crawler_agent_service, "_log_agent_interaction"),
+            patch.dict(sys.modules, self._fake_crawler_agent_modules(success=True)),
+        ):
+            crawler_agent_service._crawler_agent_config = Mock()
+            result = await crawler_agent_service.execute_exploration_task(
+                run_id=1,
+                app_package="com.example.app",
+                max_steps=3,
+            )
+
+        assert result.success is True
+        mock_adb.force_stop_package.assert_called_once_with("com.example.app")
+        mock_adb.am_start_recovery.assert_called_once_with("com.example.app")
+        names = [c[0] for c in mock_adb.method_calls]
+        assert names.index("force_stop_package") < names.index("am_start_recovery")
+
+    @pytest.mark.asyncio
+    async def test_execute_restart_off_does_not_force_stop(self, crawler_agent_service):
+        self._set_restart_app(crawler_agent_service, False)
+        mock_adb = Mock()
+        mock_adb.get_current_package.return_value = "com.example.app"
+
+        with (
+            patch("mobile_crawler.domain.adb_action_executor.ADBActionExecutor", return_value=mock_adb),
+            patch.object(crawler_agent_service, "_ensure_device_awake_before_crawler", new=AsyncMock()),
+            patch.object(crawler_agent_service, "_initialize_agent", new=AsyncMock()),
+            patch.object(crawler_agent_service, "_log_agent_interaction"),
+            patch.dict(sys.modules, self._fake_crawler_agent_modules(success=True)),
+        ):
+            crawler_agent_service._crawler_agent_config = Mock()
+            result = await crawler_agent_service.execute_exploration_task(
+                run_id=1,
+                app_package="com.example.app",
+                max_steps=3,
+            )
+
+        assert result.success is True
+        mock_adb.force_stop_package.assert_not_called()
+        mock_adb.am_start_recovery.assert_not_called()
+
     @pytest.mark.asyncio
     async def test_execute_preflight_already_in_target_does_not_launch(self, crawler_agent_service):
+        self._set_restart_app(crawler_agent_service, False)
         mock_adb = Mock()
         mock_adb.get_current_package.return_value = "com.example.app"
 

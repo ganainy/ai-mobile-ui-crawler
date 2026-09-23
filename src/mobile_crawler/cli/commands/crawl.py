@@ -243,6 +243,12 @@ def _resolve_last(value: str, config_manager: ConfigManager, key: str, option: s
     help="Exploration Objective for this run only (default: the configured objective)",
 )
 @click.option(
+    "--restart-app/--no-restart-app",
+    default=None,
+    help="Force-stop the app first so the run starts from its launch screen (app data is kept), "
+    "or resume where it is, for this run only (default: the configured setting, on)",
+)
+@click.option(
     "--step-by-step",
     is_flag=True,
     help="Pause after each step, print what it did (on stderr) and wait for Enter before the next one",
@@ -263,6 +269,7 @@ def crawl(
     parser_mode: str | None,
     reasoning_mode: bool | None,
     exploration_objective: str | None,
+    restart_app: bool | None,
     step_by_step: bool,
 ) -> None:
     """Start a crawl on the specified device and app."""
@@ -304,6 +311,8 @@ def crawl(
             config_manager.override("crawler_reasoning_mode", reasoning_mode)
         if exploration_objective is not None:
             config_manager.override("exploration_objective", exploration_objective)
+        if restart_app is not None:
+            config_manager.override("restart_app_before_run", restart_app)
 
         effective_log_level = (log_level or config_manager.get("log_level", "INFO") or "INFO").upper()
 

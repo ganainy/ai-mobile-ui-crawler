@@ -49,6 +49,7 @@ class TestDefaultConfigValues:
             "pre_crawl_wake_device",
             "pre_crawl_unlock_swipe",
             "pre_crawl_wake_timeout_seconds",
+            "restart_app_before_run",
             "crawler_reasoning_mode",
             "crawler_streaming",
             "crawler_retry_count",
@@ -131,6 +132,7 @@ class TestDefaultConfigValues:
             "auto_run_mobsf_after_crawl",
             "pre_crawl_wake_device",
             "pre_crawl_unlock_swipe",
+            "restart_app_before_run",
             "crawler_reasoning_mode",
             "crawler_streaming",
         ]
