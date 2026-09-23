@@ -29,7 +29,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from mobile_crawler.config.defaults import MOBSF_DEFAULT_URL, correct_mobsf_api_url
+from mobile_crawler.config.defaults import MOBSF_DEFAULT_URL, OMNIPARSER_DEFAULT_URL, correct_mobsf_api_url
 from mobile_crawler.core.portal_actions import PORTAL_MANUAL_STEPS
 from mobile_crawler.infrastructure.app_account_store import AppAccount
 from mobile_crawler.ui.widgets.status_bar_exclusion_preview import StatusBarExclusionPreview
@@ -657,8 +657,8 @@ class SettingsPanel(QWidget):
         local_url_layout.setContentsMargins(0, 0, 0, 0)
         local_url_layout.addWidget(QLabel("Local OmniParser URL:"))
         self.omniparser_local_url_input = QLineEdit()
-        self.omniparser_local_url_input.setText("http://localhost:8001")
-        self.omniparser_local_url_input.setPlaceholderText("e.g. http://localhost:8001")
+        self.omniparser_local_url_input.setText(OMNIPARSER_DEFAULT_URL)
+        self.omniparser_local_url_input.setPlaceholderText(f"e.g. {OMNIPARSER_DEFAULT_URL}")
         self.omniparser_local_url_input.setToolTip("Local server URL for OmniParser (must include port)")
         local_url_layout.addWidget(self.omniparser_local_url_input)
         self.local_url_container.setLayout(local_url_layout)
@@ -1090,10 +1090,10 @@ class SettingsPanel(QWidget):
         omniparser_backend = self._config_store.get_setting("omniparser_backend", default="replicate")
         self.omniparser_backend_combo.setCurrentText(omniparser_backend)
 
-        omniparser_local_url = self._config_store.get_setting("omniparser_local_url", default="http://localhost:8001")
+        omniparser_local_url = self._config_store.get_setting("omniparser_local_url", default=OMNIPARSER_DEFAULT_URL)
         # Port 8000 is MobSF's; the old OmniParser default collided with it.
         if omniparser_local_url.rstrip("/") in ("http://localhost:8000", "http://127.0.0.1:8000"):
-            omniparser_local_url = "http://localhost:8001"
+            omniparser_local_url = OMNIPARSER_DEFAULT_URL
         self.omniparser_local_url_input.setText(omniparser_local_url)
 
         omniparser_local_parse_timeout = self._config_store.get_setting(

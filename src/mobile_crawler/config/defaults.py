@@ -3,9 +3,10 @@
 from typing import Any
 from urllib.parse import urlparse
 
-# MobSF's API URL. The Docker-published port is derived from it (see
-# MobSFDockerService); it must not be OmniParser's port (8001).
+# Default URLs of the two local Docker services. Each service's published
+# port is derived from its URL, so they must not share a port.
 MOBSF_DEFAULT_URL = "http://localhost:8000"
+OMNIPARSER_DEFAULT_URL = "http://localhost:8001"
 
 # Default configuration values
 # These are used when no other source provides a value
@@ -105,7 +106,7 @@ DEFAULTS: dict[str, Any] = {
     # UI parser strategy: OmniParser (vision) as primary mode
     "ui_parser_mode": "boost",
     "omniparser_backend": "replicate",
-    "omniparser_local_url": "http://localhost:8001",
+    "omniparser_local_url": OMNIPARSER_DEFAULT_URL,
     "omniparser_local_parse_timeout_seconds": 120,
     "omniparser_box_threshold": 0.05,
     "omniparser_cache_ttl_days": 30,
@@ -142,7 +143,7 @@ def correct_mobsf_api_url(url: str) -> str:
     saved local URL on that port is that stale default, not a real MobSF server.
     """
     parsed = urlparse(url)
-    omniparser_port = urlparse(DEFAULTS["omniparser_local_url"]).port
+    omniparser_port = urlparse(OMNIPARSER_DEFAULT_URL).port
     if parsed.hostname in ("localhost", "127.0.0.1") and parsed.port == omniparser_port:
         return MOBSF_DEFAULT_URL
     return url

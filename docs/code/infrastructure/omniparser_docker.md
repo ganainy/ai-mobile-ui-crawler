@@ -12,6 +12,7 @@ Source: `src/mobile_crawler/infrastructure/omniparser_docker.py`
 - `OmniParserDockerService`
 
 ## Imports
+- [[code/config/defaults|config.defaults]]
 - [[code/infrastructure/mobsf_docker|infrastructure.mobsf_docker]]
 
 ## Imported by

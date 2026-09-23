@@ -202,3 +202,13 @@ class TestPortFromUrl:
         ):
             service.ensure_running(timeout=0)
         assert "9123:8000" in run.call_args[0][0]
+
+    def test_empty_url_uses_default(self):
+        assert MobSFDockerService("").url == "http://localhost:8000"
+        assert MobSFDockerService(None).port == 8000
+
+    def test_reachability_probes_url_host_and_port(self):
+        service = MobSFDockerService("http://192.168.1.5:9123")
+        with patch("mobile_crawler.infrastructure.mobsf_docker.socket.create_connection") as connect:
+            assert service.is_mobsf_reachable() is True
+        assert connect.call_args[0][0] == ("192.168.1.5", 9123)

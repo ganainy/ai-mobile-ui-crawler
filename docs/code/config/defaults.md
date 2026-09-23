@@ -16,5 +16,6 @@ Source: `src/mobile_crawler/config/defaults.py`
 - [[code/infrastructure/docker_autostart|infrastructure.docker_autostart]]
 - [[code/infrastructure/mobsf_docker|infrastructure.mobsf_docker]]
 - [[code/infrastructure/mobsf_manager|infrastructure.mobsf_manager]]
+- [[code/infrastructure/omniparser_docker|infrastructure.omniparser_docker]]
 - [[code/ui/main_window|ui.main_window]]
 - [[code/ui/widgets/settings_panel|ui.widgets.settings_panel]]

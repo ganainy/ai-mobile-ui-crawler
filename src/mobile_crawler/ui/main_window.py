@@ -2044,7 +2044,7 @@ class MainWindow(QMainWindow):
         if not self.settings_panel.get_enable_mobsf_analysis():
             return
 
-        docker_service = MobSFDockerService(self.settings_panel.get_mobsf_api_url() or MOBSF_DEFAULT_URL)
+        docker_service = MobSFDockerService(self.settings_panel.get_mobsf_api_url())
         self._mobsf_docker_service = docker_service
 
         worker = MobSFStartupWorker(docker_service)

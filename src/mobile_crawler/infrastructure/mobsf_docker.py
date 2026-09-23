@@ -24,7 +24,6 @@ logger = logging.getLogger(__name__)
 MOBSF_IMAGE = "opensecurity/mobile-security-framework-mobsf"
 # Port MobSF listens on inside the container.
 MOBSF_CONTAINER_PORT = 8000
-MOBSF_HOST = "127.0.0.1"
 
 
 class MobSFDockerService:
@@ -33,19 +32,22 @@ class MobSFDockerService:
     The container is launched detached so it survives GUI restarts. The
     ``started_by_gui`` flag records whether this process launched the
     container, which the UI uses to decide whether to offer to stop it.
-    The host port is taken from the MobSF API URL, so the container is
-    published where the API calls will go.
+    The host and port come from the MobSF API URL (the default when it is
+    empty), so the container is published and probed where the API calls go.
     """
 
     def __init__(
         self,
-        url: str = MOBSF_DEFAULT_URL,
+        url: str | None = None,
         image: str = MOBSF_IMAGE,
         container_name: str = MOBSF_CONTAINER_NAME,
     ):
+        self.url = (url or MOBSF_DEFAULT_URL).rstrip("/")
         self.image = image
         self.container_name = container_name
-        self.port = urlparse(url.rstrip("/")).port or urlparse(MOBSF_DEFAULT_URL).port
+        parsed = urlparse(self.url)
+        self.host = parsed.hostname or urlparse(MOBSF_DEFAULT_URL).hostname
+        self.port = parsed.port or urlparse(MOBSF_DEFAULT_URL).port
         self.started_by_gui = False
 
     def docker_available(self) -> bool:
@@ -60,9 +62,9 @@ class MobSFDockerService:
             return False
 
     def is_mobsf_reachable(self) -> bool:
-        """Return True if the MobSF server responds on the configured port."""
+        """Return True if the MobSF server accepts connections at the URL's host and port."""
         try:
-            with socket.create_connection((MOBSF_HOST, self.port), timeout=2):
+            with socket.create_connection((self.host, self.port), timeout=2):
                 return True
         except OSError:
             return False
