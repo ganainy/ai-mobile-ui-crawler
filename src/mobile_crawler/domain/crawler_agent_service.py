@@ -238,7 +238,7 @@ class CrawlerAgentService:
         """
         # Get LLM configuration from crawler config
         ai_provider = self.config_manager.get("ai_provider", "gemini")
-        ai_model = self.config_manager.get("ai_model", "gemini-1.5-flash")
+        ai_model = self.config_manager.get("ai_model", "gemini-3.8-flash")
 
         # Map crawler providers to internal format
         provider_mapping = {

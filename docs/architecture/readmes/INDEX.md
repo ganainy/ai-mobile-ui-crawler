@@ -8,5 +8,6 @@ This folder collects project README-style documents other than the root `README.
 - `crawler-agent-decision-loop.md` - Detailed explanation of the crawler-agent decision loop, timing costs, and speed/quality tuning options.
 - `crawler-agent-app-cards.md` - App-card configuration notes for the internalized crawler agent runtime.
 - `crawl-duration-5-step-analysis.md` - Analysis of crawl duration across a 5-step crawl.
+- `logging-audit.md` - Audit of log levels and logging plumbing (partly applied 2026-09-20; leftovers listed at the end).
 
 Keep the root `README.md` as the main project entry point.

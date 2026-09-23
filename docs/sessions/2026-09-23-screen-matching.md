@@ -4,7 +4,7 @@ date: 2026-09-23
 ---
 # Screen matching: per-app scope, threshold 8
 
-Item 1 of [handoff-2026-09-23](../handoff-2026-09-23.md). Follows [run stats / screen ids](2026-09-23-run-stats-screens-warnings.md).
+Item 1 of [handoff-2026-09-23](2026-09-23-handoff.md). Follows [run stats / screen ids](2026-09-23-run-stats-screens-warnings.md).
 
 ## Measurement (run 179, 36 screenshots, closest-match like `ScreenTracker`)
 | Threshold | Screens | Notes |

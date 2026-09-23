@@ -34,9 +34,9 @@ When "Enable MobSF Analysis" is turned on in Settings, the GUI automatically sta
 Run a crawl from the CLI:
 
 ```powershell
-python run_cli.py crawl --device emulator-5554 --package com.example.app --provider gemini --model gemini-1.5-flash --steps 15
+python run_cli.py crawl --device emulator-5554 --package com.example.app --provider gemini --model gemini-3.8-flash --steps 15
 # or, after editable install:
-mobile-crawler-cli crawl --device emulator-5554 --package com.example.app --provider gemini --model gemini-1.5-flash --steps 15
+mobile-crawler-cli crawl --device emulator-5554 --package com.example.app --provider gemini --model gemini-3.8-flash --steps 15
 ```
 
 ## Current Project State
@@ -98,7 +98,7 @@ adb devices
 Use the connected device ID in crawl commands. For example:
 
 ```powershell
-mobile-crawler-cli crawl --device 172.20.10.4:5555 --package com.example.app --provider gemini --model gemini-1.5-flash --steps 15
+mobile-crawler-cli crawl --device 172.20.10.4:5555 --package com.example.app --provider gemini --model gemini-3.8-flash --steps 15
 ```
 
 For older Android versions or USB-first wireless setup, connect over USB once, then run:
@@ -122,40 +122,20 @@ The UI exposes device selection, app selection, AI model/provider selection, cra
 
 ### CLI
 
-The CLI entry point is `run_cli.py`, which calls `mobile_crawler.cli.main.run()`. The `crawl` command:
+The CLI entry point is `mobile-crawler-cli` (or `python run_cli.py`), which calls `mobile_crawler.cli.main.run()`. Commands: `crawl`, `list`, `stats`, `report`, `mobsf-scan`, `delete`, `scenarios`, `portal`, `config`.
 
-1. Creates the app data directory and configuration store.
-2. Applies command-line settings such as device, package, model, provider, step or duration limits, and optional feature flags.
-3. Migrates the SQLite schema and creates a run record.
-4. Creates a `CrawlerLoop` with a JSON event listener.
-5. Runs the crawler and emits lifecycle/debug events as JSON on stdout.
-
-Useful flags:
+**Full reference with every command and flag: [docs/cli.md](docs/cli.md).**
 
 ```powershell
-mobile-crawler-cli crawl `
-  --device emulator-5554 `
-  --package com.example.app `
-  --provider gemini `
-  --model gemini-1.5-flash `
-  --steps 15
-
-mobile-crawler-cli crawl --device emulator-5554 --package com.example.app --provider openrouter --model <model> --duration 300
-mobile-crawler-cli crawl --device emulator-5554 --package com.example.app --provider gemini --model gemini-1.5-flash --enable-traffic-capture
-mobile-crawler-cli crawl --device emulator-5554 --package com.example.app --provider gemini --model gemini-1.5-flash --enable-video-recording
-mobile-crawler-cli crawl --device emulator-5554 --package com.example.app --provider gemini --model gemini-1.5-flash --enable-mobsf-analysis
-
-# Reuse the device and app last selected in the GUI
-mobile-crawler-cli crawl --device last --package last --provider gemini --model gemini-1.5-flash
+mobile-crawler-cli crawl --device emulator-5554 --package com.example.app `
+  --provider gemini --model gemini-3.8-flash --steps 15
 
 # Crawl several apps one after another, 10 minutes each; every app gets its own run
-mobile-crawler-cli crawl --device emulator-5554 --package com.a.app --package com.b.app --package com.c.app `
-  --provider gemini --model gemini-1.5-flash --duration 600 --no-human-fallback
+mobile-crawler-cli crawl --device emulator-5554 --package com.a.app --package com.b.app `
+  --provider gemini --model gemini-3.8-flash --duration 600 --no-human-fallback
 ```
 
-Command-line settings apply to that invocation only; they are never saved to the settings store. `--steps` and `--duration` are mutually exclusive.
-
-With more than one `--package`, the apps run in the given order with the same settings. Before each app, the batch checks that the device is still connected and the package is installed. It skips a missing app, force-stops the previous one, and ends with a `batch_completed` JSON event on stdout and a summary table on stderr. An app that errors doesn't stop the batch; a disconnected device or Ctrl+C does. The exit code is 0 only if every app's run completed (130 on Ctrl+C).
+Command-line settings apply to that invocation only; they are never saved to the settings store.
 
 ## MobSF Static Analysis
 
@@ -255,7 +235,7 @@ The default MobSF URL is `http://localhost:8000`. Change the MobSF API URL in th
 Automatic after crawl:
 
 ```powershell
-mobile-crawler-cli crawl --device emulator-5554 --package com.example.app --provider gemini --model gemini-1.5-flash --enable-mobsf-analysis
+mobile-crawler-cli crawl --device emulator-5554 --package com.example.app --provider gemini --model gemini-3.8-flash --enable-mobsf-analysis
 ```
 
 In the GUI, enable MobSF analysis in Settings before starting a crawl. To run MobSF automatically after each successful, non-cancelled crawl, also enable the "Automatically run after each successful crawl" checkbox; otherwise MobSF stays available for manual runs only. If MobSF fails, the crawl remains completed and the failure is written to logs.

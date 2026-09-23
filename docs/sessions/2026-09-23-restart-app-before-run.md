@@ -4,7 +4,7 @@ date: 2026-09-23
 ---
 # Restart the app before each run
 
-Item 2 of [handoff-2026-09-23](../handoff-2026-09-23.md). Run 180 started on the sign-up form that run 179 left open.
+Item 2 of [handoff-2026-09-23](2026-09-23-handoff.md). Run 180 started on the sign-up form that run 179 left open.
 
 ## Changes
 - New config key `restart_app_before_run` (default True, `config/defaults.py`).

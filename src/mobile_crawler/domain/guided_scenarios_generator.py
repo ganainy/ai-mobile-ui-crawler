@@ -108,7 +108,7 @@ def _resolve_api_key(config_manager: ConfigManager, primary_key: str, env_keys: 
 
 def _build_extraction_llm(config_manager: ConfigManager):
     ai_provider = config_manager.get("ai_provider", "gemini")
-    ai_model = config_manager.get("ai_model", "gemini-1.5-flash")
+    ai_model = config_manager.get("ai_model", "gemini-3.8-flash")
 
     if ai_provider not in _PROVIDER_MAPPING:
         raise ValueError(f"Unsupported AI provider: {ai_provider}")

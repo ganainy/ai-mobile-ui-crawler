@@ -4,7 +4,7 @@ date: 2026-09-23
 ---
 # Portal instructions and auto-fix (GUI + CLI)
 
-Item 3 of [handoff-2026-09-23](../handoff-2026-09-23.md).
+Item 3 of [handoff-2026-09-23](2026-09-23-handoff.md).
 
 ## Checked on the phone (SM-G991B, Android 15, Portal 0.7.25)
 - The Portal app's top half is "Connect to Mobilerun": Sign in with Browser / Use API Key / Custom Connection. That is the Mobilerun cloud service. The crawler never uses it, nor the IP/token/ADB forward command under Connection Details: `portal_client.py` uses the content provider over adb and, for TCP, sets up the port forward and fetches the token through the content provider itself. "All Files Access" is also unused.
