@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 @click.option('--limit', '-n', type=int, default=None,
               help='Maximum number of items to list (default: 10 for runs/devices, all for apps)')
 @click.option('--format', 'output_format', type=click.Choice(['table', 'json']), default='table', help='Output format')
-@click.option('--device', '-d', 'device_id', default=None, help='Device ID to list apps from (required for apps)')
+@click.option('--device', '-d', 'device_id', default=None, help='apps only: device ID to list apps from; only needed when more than one device is connected')
 @click.option('--no-names', is_flag=True, default=False,
               help='apps only: skip resolving app names (faster; names need an APK pull on first lookup)')
 def list(target: str, limit: int | None, output_format: str, device_id: str | None, no_names: bool):
@@ -22,13 +22,15 @@ def list(target: str, limit: int | None, output_format: str, device_id: str | No
 
     TARGET: What to list ('runs', 'devices' or 'apps')
 
-    'apps' lists the third-party packages installed on --device, i.e. valid
+    'apps' lists the third-party packages installed on the device, i.e. valid
     values for `crawl --package`.
     """
-    if target == 'apps' and not device_id:
-        raise click.UsageError("'list apps' requires --device ID (see 'list devices').")
     if target != 'apps' and (device_id or no_names):
         raise click.UsageError("--device and --no-names only apply to 'list apps'.")
+    if target == 'apps':
+        from mobile_crawler.cli.device_choice import resolve_device
+
+        device_id = resolve_device(device_id)
     if limit is None and target != 'apps':
         limit = 10
 

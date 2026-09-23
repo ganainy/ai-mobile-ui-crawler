@@ -28,8 +28,10 @@ class TestListApps:
         assert 'apps' in result.output
         assert '--device' in result.output
 
-    def test_requires_device(self):
-        result = CliRunner().invoke(cli, ['list', 'apps'])
+    def test_several_devices_require_device(self):
+        with patch('mobile_crawler.cli.device_choice.DeviceDetection.get_available_devices',
+                   return_value=[Mock(device_id='a'), Mock(device_id='b')]):
+            result = CliRunner().invoke(cli, ['list', 'apps'])
         assert result.exit_code != 0
         assert '--device' in result.output
 

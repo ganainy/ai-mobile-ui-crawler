@@ -12,6 +12,7 @@ Source: `src/mobile_crawler/cli/commands/list.py`
 - `list`
 
 ## Imports
+- [[code/cli/device_choice|cli.device_choice]]
 - [[code/infrastructure/_index|infrastructure]]
 - [[code/infrastructure/app_metadata_resolver|infrastructure.app_metadata_resolver]]
 - [[code/infrastructure/database|infrastructure.database]]

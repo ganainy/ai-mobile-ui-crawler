@@ -17,5 +17,6 @@ Source: `src/mobile_crawler/infrastructure/device_detection.py`
 ## Imported by
 - [[code/cli/commands/crawl|cli.commands.crawl]]
 - [[code/cli/commands/list|cli.commands.list]]
+- [[code/cli/device_choice|cli.device_choice]]
 - [[code/ui/main_window|ui.main_window]]
 - [[code/ui/widgets/device_selector|ui.widgets.device_selector]]

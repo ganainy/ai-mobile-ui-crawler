@@ -2,7 +2,9 @@
 
 import click
 
-_device_option = click.option("--device", required=True, help="Device ID (see 'adb devices')")
+from mobile_crawler.cli.device_choice import DEVICE_HELP, resolve_device
+
+_device_option = click.option("--device", help=DEVICE_HELP)
 
 
 def _report(text: str, ready: bool) -> None:
@@ -27,27 +29,28 @@ def portal():
 
 @portal.command()
 @_device_option
-def status(device: str):
+def status(device: str | None):
     """Show whether Portal is installed and its accessibility service is on (changes nothing)."""
     from mobile_crawler.core.portal_actions import check_portal
 
-    _report(*check_portal(device))
+    _report(*check_portal(resolve_device(device)))
 
 
 @portal.command()
 @_device_option
-def enable(device: str):
+def enable(device: str | None):
     """Turn on Portal's accessibility service over adb (installs Portal first if it is missing)."""
     from mobile_crawler.core.portal_actions import fix_portal
 
-    _report(*fix_portal(device))
+    _report(*fix_portal(resolve_device(device)))
 
 
 @portal.command()
 @_device_option
-def install(device: str):
+def install(device: str | None):
     """Download the pinned Portal release, (re)install it and turn on its accessibility service."""
     from mobile_crawler.core.portal_actions import install_portal
 
+    device = resolve_device(device)
     click.echo("Installing Portal (this can take a few minutes)...", err=True)
     _report(*install_portal(device))

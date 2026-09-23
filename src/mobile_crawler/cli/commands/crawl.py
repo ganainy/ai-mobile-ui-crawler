@@ -9,6 +9,7 @@ from mobile_crawler.config import get_app_data_dir
 from mobile_crawler.config.config_manager import ConfigManager
 from mobile_crawler.cli.console_reader import ConsoleReader
 from mobile_crawler.cli.crawl_batch import BatchResult, run_crawl_batch
+from mobile_crawler.cli.device_choice import DEVICE_HELP, resolve_device
 from mobile_crawler.cli.step_by_step_console import StepByStepConsole
 from mobile_crawler.cli.terminal_human_prompter import TerminalHumanPrompter
 from mobile_crawler.core.crawler_event_listener import CrawlerEventListener
@@ -213,7 +214,7 @@ def _resolve_last(value: str, config_manager: ConfigManager, key: str, option: s
 
 
 @click.command()
-@click.option("--device", required=True, help="Device ID to crawl, or 'last' for the last-used device")
+@click.option("--device", help=f"{DEVICE_HELP}, or 'last' for the last-used device")
 @click.option(
     "--package",
     "packages",
@@ -266,7 +267,7 @@ def _resolve_last(value: str, config_manager: ConfigManager, key: str, option: s
     help="Pause after each step, print what it did (on stderr) and wait for Enter before the next one",
 )
 def crawl(
-    device: str,
+    device: str | None,
     packages: tuple[str, ...],
     model: str,
     steps: int | None,
@@ -287,6 +288,8 @@ def crawl(
     """Start a crawl on the specified device and app, or on several apps one after another."""
     if steps and duration:
         raise click.UsageError("--steps and --duration are mutually exclusive; pass one limit")
+    if device is None:
+        device = resolve_device(None)
     try:
         # Ensure app data directory exists
         app_data_dir = get_app_data_dir()

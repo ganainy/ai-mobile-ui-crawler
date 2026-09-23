@@ -15,6 +15,7 @@ Source: `src/mobile_crawler/cli/commands/portal.py`
 - `install`
 
 ## Imports
+- [[code/cli/device_choice|cli.device_choice]]
 - [[code/core/portal_actions|core.portal_actions]]
 
 ## Imported by
