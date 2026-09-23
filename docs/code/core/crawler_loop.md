@@ -11,6 +11,9 @@ Source: `src/mobile_crawler/core/crawler_loop.py`
 ## Classes
 - `CrawlerLoop`
 
+## Functions
+- `mobsf_scorecard_summary`
+
 ## Imports
 - [[code/config/config_manager|config.config_manager]]
 - [[code/core/crawl_state_machine|core.crawl_state_machine]]

@@ -37,6 +37,24 @@ from mobile_crawler.infrastructure.session_folder_manager import SessionFolderMa
 logger = logging.getLogger(__name__)
 
 
+def mobsf_scorecard_summary(scorecard: dict) -> tuple[float, int, int, int]:
+    """Return (score, high, medium, low) from a MobSF scorecard.
+
+    MobSF reports each severity as a list of findings (counted here) and names
+    medium/low "warning"/"info"; plain counts and "medium"/"low" are accepted too.
+    """
+
+    def count(*keys: str) -> int:
+        for key in keys:
+            value = scorecard.get(key)
+            if value:
+                return len(value) if isinstance(value, list | tuple) else int(value)
+        return 0
+
+    score = scorecard.get("security_score") or scorecard.get("score") or 0.0
+    return float(score), count("high"), count("warning", "medium"), count("info", "low")
+
+
 class CrawlerLoop:
     """Thin wrapper that delegates traversal to the internal crawler agent."""
 
@@ -558,13 +576,7 @@ class CrawlerLoop:
                 # Feed security scorecard into the runtime stats collector
                 scorecard = result.security_score
                 if isinstance(scorecard, dict):
-                    score = scorecard.get("score") or scorecard.get("security_score") or 0.0
-                    high = int(scorecard.get("high") or 0)
-                    # MobSF's scorecard API uses "warning"/"info" for medium/low severity
-                    # (see mobsf_parser.py's JsonMobSFParser, which hits the same quirk).
-                    medium = int(scorecard.get("warning") or scorecard.get("medium") or 0)
-                    low = int(scorecard.get("info") or scorecard.get("low") or 0)
-                    self._emit_event("on_mobsf_finished", run_id, float(score), high, medium, low)
+                    self._emit_event("on_mobsf_finished", run_id, *mobsf_scorecard_summary(scorecard))
             else:
                 self._emit_event(
                     "on_debug_log",
