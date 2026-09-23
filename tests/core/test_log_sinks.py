@@ -257,6 +257,29 @@ class TestLineCapturingStream:
         stream.write("\n\n\n")
         callback.assert_not_called()
 
+    def test_callback_that_prints_does_not_deadlock_or_recapture(self):
+        """A callback printing to a capturing stream (the CLI event printer) must not hang or loop."""
+        import threading
+
+        original = MagicMock()
+        captured = []
+        out = err = None
+
+        def callback(line):
+            captured.append(line)
+            out.write(f"event: {line}\n")
+
+        out = _LineCapturingStream(original, callback, LogLevel.DEBUG)
+        err = _LineCapturingStream(original, callback, LogLevel.DEBUG)
+
+        worker = threading.Thread(target=lambda: (out.write("from stdout\n"), err.write("from stderr\n")), daemon=True)
+        worker.start()
+        worker.join(timeout=5)
+
+        assert not worker.is_alive(), "write() deadlocked"
+        assert captured == ["from stdout", "from stderr"]
+        original.write.assert_any_call("event: from stderr\n")
+
 
 class TestCaptureStdoutToUI:
     """Tests for capture_stdout_to_ui context manager."""

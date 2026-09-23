@@ -184,6 +184,9 @@ class QLogHandler(logging.Handler):
             pass
 
 
+_capture_state = threading.local()
+
+
 class _LineCapturingStream:
     """Wraps a stream and forwards complete lines to a callback.
 
@@ -208,16 +211,29 @@ class _LineCapturingStream:
         except Exception:
             pass
 
+        # A callback that prints (the CLI event printer) writes back into a
+        # capturing stream; re-capturing that output would loop, and used to deadlock.
+        if getattr(_capture_state, "in_callback", False):
+            return len(text)
+
         with self._lock:
             self._buf += text
+            lines = []
             while "\n" in self._buf:
                 line, self._buf = self._buf.split("\n", 1)
                 line = line.rstrip("\r")
                 if line.strip():  # skip blank lines
-                    try:
-                        self._callback(line)
-                    except Exception:
-                        pass
+                    lines.append(line)
+
+        _capture_state.in_callback = True
+        try:
+            for line in lines:
+                try:
+                    self._callback(line)
+                except Exception:
+                    pass
+        finally:
+            _capture_state.in_callback = False
         return len(text)
 
     def flush(self):
