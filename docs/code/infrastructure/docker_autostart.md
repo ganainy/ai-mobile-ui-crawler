@@ -14,6 +14,7 @@ Source: `src/mobile_crawler/infrastructure/docker_autostart.py`
 
 ## Imports
 - [[code/config/config_manager|config.config_manager]]
+- [[code/config/defaults|config.defaults]]
 - [[code/infrastructure/mobsf_docker|infrastructure.mobsf_docker]]
 - [[code/infrastructure/omniparser_docker|infrastructure.omniparser_docker]]
 

@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
 
 # Import resources
 from mobile_crawler.config.config_manager import ConfigManager
+from mobile_crawler.config.defaults import MOBSF_DEFAULT_URL
 from mobile_crawler.core.crawl_controller import CrawlController
 from mobile_crawler.core.crawl_state_machine import CrawlState
 from mobile_crawler.core.crawler_loop import CrawlerLoop
@@ -772,7 +773,7 @@ class MainWindow(QMainWindow):
             config_manager.set("mobsf_api_url", mobsf_api_url)
         else:
             # Use default if not set in UI
-            config_manager.set("mobsf_api_url", "http://localhost:8000")
+            config_manager.set("mobsf_api_url", MOBSF_DEFAULT_URL)
 
         # Set DroidRun UI parser settings from settings panel
         ui_parser_mode = self.settings_panel.get_ui_parser_mode()
@@ -2043,7 +2044,7 @@ class MainWindow(QMainWindow):
         if not self.settings_panel.get_enable_mobsf_analysis():
             return
 
-        docker_service = MobSFDockerService()
+        docker_service = MobSFDockerService(self.settings_panel.get_mobsf_api_url())
         self._mobsf_docker_service = docker_service
 
         worker = MobSFStartupWorker(docker_service)

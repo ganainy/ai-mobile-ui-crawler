@@ -21,6 +21,7 @@ Source: `src/mobile_crawler/ui/main_window.py`
 
 ## Imports
 - [[code/config/config_manager|config.config_manager]]
+- [[code/config/defaults|config.defaults]]
 - [[code/core/crawl_controller|core.crawl_controller]]
 - [[code/core/crawl_state_machine|core.crawl_state_machine]]
 - [[code/core/crawler_loop|core.crawler_loop]]

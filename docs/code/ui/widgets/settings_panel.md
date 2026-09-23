@@ -12,6 +12,7 @@ Source: `src/mobile_crawler/ui/widgets/settings_panel.py`
 - `SettingsPanel`
 
 ## Imports
+- [[code/config/defaults|config.defaults]]
 - [[code/core/_index|core]]
 - [[code/core/portal_actions|core.portal_actions]]
 - [[code/domain/adb_action_executor|domain.adb_action_executor]]

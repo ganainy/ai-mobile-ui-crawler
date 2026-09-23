@@ -16,6 +16,16 @@ def no_pre_run_warnings():
         yield collect
 
 
+@pytest.fixture(autouse=True)
+def no_docker_autostart():
+    """The real auto-start talks to Docker; tests that check it patch it again themselves."""
+    with (
+        patch("mobile_crawler.cli.commands.crawl.ensure_mobsf_running_if_enabled", return_value=None),
+        patch("mobile_crawler.cli.commands.crawl.ensure_omniparser_running_if_enabled", return_value=None),
+    ):
+        yield
+
+
 class TestCrawlCommand:
     """Test the crawl command."""
 

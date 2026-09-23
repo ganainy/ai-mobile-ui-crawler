@@ -1,6 +1,8 @@
 """Tests for default config values."""
 
-from mobile_crawler.config.defaults import DEFAULTS
+from urllib.parse import urlparse
+
+from mobile_crawler.config.defaults import DEFAULTS, MOBSF_DEFAULT_URL, OMNIPARSER_DEFAULT_URL
 
 
 class TestDefaultConfigValues:
@@ -203,3 +205,14 @@ class TestDefaultConfigValues:
 
 def test_auto_generate_report_after_run_defaults_on():
     assert DEFAULTS["auto_generate_report_after_run"] is True
+
+
+def test_mobsf_default_url_is_mobsf_port():
+    assert MOBSF_DEFAULT_URL == "http://localhost:8000"
+    assert DEFAULTS["mobsf_api_url"] == MOBSF_DEFAULT_URL
+
+
+def test_mobsf_and_omniparser_default_urls_use_different_ports():
+    # Both containers run side by side; a shared port sends MobSF calls to OmniParser.
+    assert DEFAULTS["omniparser_local_url"] == OMNIPARSER_DEFAULT_URL
+    assert urlparse(DEFAULTS["mobsf_api_url"]).port != urlparse(DEFAULTS["omniparser_local_url"]).port

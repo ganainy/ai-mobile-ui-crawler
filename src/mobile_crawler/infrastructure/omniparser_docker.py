@@ -16,11 +16,11 @@ from urllib.parse import urlparse
 
 import requests
 
+from mobile_crawler.config.defaults import OMNIPARSER_DEFAULT_URL
 from mobile_crawler.infrastructure.mobsf_docker import MobSFDockerService
 
 logger = logging.getLogger(__name__)
 
-OMNIPARSER_DEFAULT_URL = "http://localhost:8001"
 OMNIPARSER_COMPOSE_FILE = Path(__file__).resolve().parents[3] / "docker" / "omniparser" / "docker-compose.yml"
 
 
@@ -30,7 +30,7 @@ class OmniParserDockerService:
     def __init__(self, url: str = OMNIPARSER_DEFAULT_URL, compose_file: Path = OMNIPARSER_COMPOSE_FILE):
         self.url = url.rstrip("/")
         self.compose_file = compose_file
-        self.port = urlparse(self.url).port or 8001
+        self.port = urlparse(self.url).port or urlparse(OMNIPARSER_DEFAULT_URL).port
         self.started_by_gui = False
         # Human-readable progress line, polled by the UI while startup runs.
         self.status = "Not started"

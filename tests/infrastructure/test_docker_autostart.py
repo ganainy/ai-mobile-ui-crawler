@@ -30,6 +30,19 @@ class TestEnsureMobsfRunningIfEnabled:
         assert result == (True, "MobSF is ready")
         service_cls.return_value.prepare.assert_called_once()
 
+    def test_publishes_container_on_configured_url(self):
+        config = Mock()
+        config.get.side_effect = lambda key, default=None: {
+            "enable_mobsf_analysis": True,
+            "mobsf_api_url": "http://localhost:9123",
+        }.get(key, default)
+
+        with patch("mobile_crawler.infrastructure.docker_autostart.MobSFDockerService") as service_cls:
+            service_cls.return_value.prepare.return_value = (True, "MobSF is ready")
+            ensure_mobsf_running_if_enabled(config)
+
+        service_cls.assert_called_once_with("http://localhost:9123")
+
 
 class TestEnsureOmniparserRunningIfEnabled:
     def test_skips_when_accessibility_mode(self):

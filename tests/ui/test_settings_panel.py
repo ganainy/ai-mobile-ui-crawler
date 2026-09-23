@@ -798,6 +798,25 @@ class TestMobSFAutoRun:
         assert panel.get_auto_run_mobsf_after_crawl() is True
 
 
+class TestMobSFApiUrl:
+    """The MobSF URL defaults to MobSF's port, not OmniParser's 8001."""
+
+    def test_defaults_to_port_8000(self, qt_app, mock_config_store):
+        panel = _create_settings_panel(mock_config_store)
+        assert panel.get_mobsf_api_url() == "http://localhost:8000"
+        assert panel.mobsf_api_url_input.placeholderText() == "http://localhost:8000"
+
+    def test_saved_omniparser_port_is_corrected_on_load(self, qt_app, mock_config_store):
+        mock_config_store.set_setting("mobsf_api_url", "http://localhost:8001", "string")
+        panel = _create_settings_panel(mock_config_store)
+        assert panel.get_mobsf_api_url() == "http://localhost:8000"
+
+    def test_saved_custom_url_is_kept(self, qt_app, mock_config_store):
+        mock_config_store.set_setting("mobsf_api_url", "http://192.168.1.5:8001", "string")
+        panel = _create_settings_panel(mock_config_store)
+        assert panel.get_mobsf_api_url() == "http://192.168.1.5:8001"
+
+
 class TestStatusBarExclusionPreview:
     """Tests for the bottom-bar input and screenshot-calibration preview."""
 
