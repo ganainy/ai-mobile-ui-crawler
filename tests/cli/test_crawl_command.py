@@ -643,7 +643,7 @@ class TestCrawlPreRunWarnings:
             )
 
         assert "Warning: Portal is installed but its accessibility service is off" in result.stderr
-        assert "Fix: mobile-crawler-cli portal enable --device dev-1" in result.stderr
+        assert "Fix: mobile-crawler-cli a11y-portal enable --device dev-1" in result.stderr
         assert result.stderr.count("Fix:") == 1
         assert "Warning: Phoenix is down" in result.stderr
 

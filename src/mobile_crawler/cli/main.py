@@ -21,7 +21,7 @@ except ImportError:
     __version__ = "0.1.0"
 
 
-@click.group()
+@click.group(epilog="Run 'mobile-crawler-cli COMMAND --help' for a command's options. Full reference: docs/cli.md")
 @click.version_option(__version__, prog_name="mobile-crawler")
 def cli():
     """Mobile Crawler - AI-powered Android exploration tool.

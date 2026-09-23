@@ -338,7 +338,7 @@ def crawl(
             click.echo(f"Warning: {warning.message}", err=True)
             if warning.portal_fix:
                 click.echo(
-                    f"  Fix: mobile-crawler-cli portal enable --device {device} "
+                    f"  Fix: mobile-crawler-cli a11y-portal enable --device {device} "
                     "(turns it on over adb; prints the manual steps if that fails)",
                     err=True,
                 )

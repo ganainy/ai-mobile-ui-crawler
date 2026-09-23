@@ -2,7 +2,7 @@
 
 Containerizes Microsoft's [OmniParser](https://github.com/microsoft/OmniParser) server so it
 can run locally without a manual Python/CUDA environment setup. See
-[`docs/readmes/local-omniparser-setup.md`](../../docs/readmes/local-omniparser-setup.md) for the
+[`docs/architecture/readmes/local-omniparser-setup.md`](../../docs/architecture/readmes/local-omniparser-setup.md) for the
 non-Docker setup this replaces, and for background on the two upstream patches.
 
 ## Prerequisites

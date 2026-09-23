@@ -20,7 +20,7 @@ WORKDIR /app
 RUN git clone https://github.com/microsoft/OmniParser.git . \
     && git checkout ${OMNIPARSER_COMMIT}
 
-# Fix 1 (unconditional, from docs/readmes/local-omniparser-setup.md): PaddleOCR's
+# Fix 1 (unconditional, from docs/architecture/readmes/local-omniparser-setup.md): PaddleOCR's
 # constructor here passes deprecated kwargs that crash on modern paddleocr releases.
 RUN sed -i \
     "/^paddle_ocr = PaddleOCR(/,/)/c\\paddle_ocr = PaddleOCR(lang='en', use_angle_cls=False)" \

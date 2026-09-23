@@ -73,7 +73,7 @@ A step in sign-up or login that requires proof of control of an email address or
 _Avoid_: OTP step, verification step, 2FA
 
 **Portal**:
-The app installed on the target device whose accessibility service supplies the accessibility tree (element bounds, text, clickable flags) that the crawler reads instead of, or before, running OmniParser. Installed and enabled from Settings, the pre-run dialog's "Enable Portal and start" or the CLI's `portal enable`, never without being asked; the crawler reads it over adb, so the Portal app's Mobilerun sign-in, API key, IP and token are not needed. Without it, boost mode uses OmniParser only and accessibility mode reports an error.
+The app installed on the target device whose accessibility service supplies the accessibility tree (element bounds, text, clickable flags) that the crawler reads instead of, or before, running OmniParser. Installed and enabled from Settings, the pre-run dialog's "Enable Portal and start" or the CLI's `a11y-portal enable`, never without being asked; the crawler reads it over adb, so the Portal app's Mobilerun sign-in, API key, IP and token are not needed. Without it, boost mode uses OmniParser only and accessibility mode reports an error.
 _Avoid_: Accessibility app, helper app
 
 **Incomplete Accessibility Tree**:
@@ -97,5 +97,5 @@ The statistics saved for one run when it ends (steps, actions, screens, AI calls
 _Avoid_: Metrics, run summary
 
 **Pre-run Warning**:
-A problem found just before a crawl starts that does not stop it but makes it worse than the settings promise (Portal's accessibility service off in boost/accessibility mode, Phoenix tracing on but its server down). The GUI shows it in a dialog asking whether to start anyway (with "Enable Portal and start" when Portal is installed but off); the CLI prints it to stderr, with the `portal enable` command for Portal problems, and starts.
+A problem found just before a crawl starts that does not stop it but makes it worse than the settings promise (Portal's accessibility service off in boost/accessibility mode, Phoenix tracing on but its server down). The GUI shows it in a dialog asking whether to start anyway (with "Enable Portal and start" when Portal is installed but off); the CLI prints it to stderr, with the `a11y-portal enable` command for Portal problems, and starts.
 _Avoid_: Preflight error, validation error

@@ -13,7 +13,7 @@ if [[ ! -f "$ICON_DETECT_WEIGHTS" || ! -f "$ICON_CAPTION_WEIGHTS" ]]; then
     hf download microsoft/OmniParser-v2.0 --local-dir "$WEIGHTS_DIR"
 
     # Defensive: some environments nest the download under weights/weights (a known
-    # pitfall on Windows hosts per docs/readmes/local-omniparser-setup.md). Flatten
+    # pitfall on Windows hosts per docs/architecture/readmes/local-omniparser-setup.md). Flatten
     # it if it happens here too.
     if [[ -d "${WEIGHTS_DIR}/weights" ]]; then
         echo "[entrypoint] Flattening nested ${WEIGHTS_DIR}/weights directory..."

@@ -11,7 +11,7 @@ git clone <repository-url>
 cd mobile-crawler
 
 python -m venv .venv312
-.\venv312\Scripts\Activate.ps1
+.\.venv312\Scripts\Activate.ps1
 
 # Install Mobile Crawler and all its internalized crawler_agent dependencies
 pip install -e .
@@ -34,8 +34,6 @@ When "Enable MobSF Analysis" is turned on in Settings, the GUI automatically sta
 Run a crawl from the CLI:
 
 ```powershell
-python run_cli.py crawl --device emulator-5554 --package com.example.app --provider gemini --model gemini-3.8-flash --steps 15
-# or, after editable install:
 mobile-crawler-cli crawl --device emulator-5554 --package com.example.app --provider gemini --model gemini-3.8-flash --steps 15
 ```
 
@@ -58,7 +56,7 @@ Optional integrations:
 - PCAPdroid for traffic capture.
 - MobSF server for static APK analysis.
 - Android screen recording support for session video capture.
-- Replicate or local OmniParser configuration when using fallback-capable parser modes such as `boost`. See `docs/readmes/local-omniparser-setup.md` for local setup notes.
+- Replicate or local OmniParser configuration when using fallback-capable parser modes such as `boost`. See `docs/architecture/readmes/local-omniparser-setup.md` for local setup notes.
 
 ## Prepare an Android Device for ADB
 
@@ -122,7 +120,7 @@ The UI exposes device selection, app selection, AI model/provider selection, cra
 
 ### CLI
 
-The CLI entry point is `mobile-crawler-cli` (or `python run_cli.py`), which calls `mobile_crawler.cli.main.run()`. Commands: `crawl`, `list`, `stats`, `report`, `mobsf-scan`, `delete`, `scenarios`, `portal`, `config`.
+The CLI entry point is `mobile-crawler-cli` (a console script installed into the venv by `pip install -e .`), which calls `mobile_crawler.cli.main.run()`. Commands: `crawl`, `list`, `stats`, `report`, `mobsf-scan`, `delete`, `scenarios`, `a11y-portal`, `config`.
 
 **Full reference with every command and flag: [docs/cli.md](docs/cli.md).**
 
@@ -253,7 +251,7 @@ The manual button uses the run's stored device ID and package name, so the same 
 
 The current crawl flow is:
 
-1. `run_cli.py`/`mobile-crawler-cli` starts the CLI, or `mobile-crawler-gui` starts the GUI.
+1. `mobile-crawler-cli` starts the CLI, or `mobile-crawler-gui` starts the GUI.
 2. The CLI `crawl` command or GUI `MainWindow` creates a run record, prepares `ConfigManager`, repositories, and `SessionFolderManager`, then runs `CrawlerLoop`.
 3. `CrawlerLoop` creates a timestamped session folder, stores the session path on the run, emits lifecycle events, attaches crawler-agent logging, and calls `CrawlerAgentService.execute_exploration_task()`.
 4. `CrawlerAgentService` translates Mobile Crawler settings into the internal runtime's `CrawlerConfig`, ensures the target package is active through ADB preflight checks, creates a `CrawlerAgent`, and runs the crawler-agent workflow.
@@ -282,7 +280,7 @@ Mobile Crawler wraps the internalized `crawler_agent` with:
 - Duration limits, cancellation requests, crash recovery, and LLM client cleanup.
 - Optional MobSF, PCAPdroid, video, and report/artifact infrastructure.
 
-For a detailed explanation of the Manager/Executor decision loop, FastAgent mode, timing costs, and speed/quality tuning options, see `docs/readmes/crawler-agent-decision-loop.md`.
+For a detailed explanation of the Manager/Executor decision loop, FastAgent mode, timing costs, and speed/quality tuning options, see `docs/architecture/readmes/crawler-agent-decision-loop.md`.
 
 ## How UI Parsing Works With crawler_agent
 
@@ -380,7 +378,7 @@ Documentation-only README edits do not require code tests. For runtime changes, 
 
 Use `.codex/project-memory/CHANGELOG.md` as the compact project-state memory for future Codex sessions. Completed planning docs should not be recreated just for history; preserve implemented decisions in `docs/ARCHITECTURE.md`, active specs, this README, and the changelog.
 
-Other README-style documents are grouped under `docs/readmes/` so the root stays focused as the main project entry point.
+Other README-style documents are grouped under `docs/architecture/readmes/` so the root stays focused as the main project entry point.
 
 ## License
 

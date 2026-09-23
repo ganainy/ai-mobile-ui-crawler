@@ -15,9 +15,9 @@ def _report(text: str, ready: bool) -> None:
         click.get_current_context().exit(1)
 
 
-@click.group()
+@click.group(name="a11y-portal")
 def portal():
-    """Check, enable or install Mobilerun Portal on a device.
+    """Check, enable or install the accessibility Portal (Mobilerun Portal) on a device.
 
     The 'boost' and 'accessibility' UI parser modes need Portal installed with
     its accessibility service on. The crawler reads Portal over adb; the Portal

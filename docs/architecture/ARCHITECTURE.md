@@ -10,7 +10,7 @@
 │                 Interface / Entry Layer                      │
 ├──────────────────────────┬───────────────────────────────────┤
 │   CLI                    │   GUI                             │
-│  `run_cli.py`            │  `mobile-crawler-gui`             │
+│  `mobile-crawler-cli`    │  `mobile-crawler-gui`             │
 │  `src/mobile_crawler/`   │  `src/mobile_crawler/ui/`         │
 │  `cli/*`                 │  (via `main_window.py`)           │
 └────────┬─────────────────┴──────────┬────────────────────────┘
@@ -54,7 +54,7 @@
 
 **Interface Layer:**
 - Purpose: Accept user intent and map it to crawl/report/config operations.
-- Location: `run_cli.py`, `src/mobile_crawler/cli/`, `src/mobile_crawler/ui/`
+- Location: `src/mobile_crawler/cli/`, `src/mobile_crawler/ui/`
 - Contains: Click commands, Qt widgets, startup helpers.
 - Depends on: `config`, `core`, `domain`, `infrastructure`.
 - Used by: End users and scripts.
@@ -126,8 +126,8 @@
 ## Entry Points
 
 **CLI Entrypoint:**
-- Location: `run_cli.py`, `src/mobile_crawler/cli/main.py`
-- Triggers: `mobile-crawler-cli` script or direct Python execution.
+- Location: `src/mobile_crawler/cli/main.py`
+- Triggers: `mobile-crawler-cli` console script.
 - Responsibilities: Register Click command group and dispatch subcommands.
 
 **GUI Entrypoint:**

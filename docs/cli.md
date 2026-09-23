@@ -1,10 +1,116 @@
 ---
-author: claude
 updated: 2026-09-23
 ---
 # CLI Reference
 
-The CLI is a Click app: `mobile-crawler-cli` (after `pip install -e .`) or `python run_cli.py` from the repo root. Every command has `--help`.
+Run the CLI from the project's virtual environment, the same one the GUI uses (`.venv312`). Activate it first in each new terminal, from the repo root:
+
+```powershell
+.\.venv312\Scripts\Activate.ps1
+```
+
+Then run `mobile-crawler-cli` (installed into the venv by `pip install -e .`). Without activating, call it by path: `.\.venv312\Scripts\mobile-crawler-cli.exe`. A global Python is missing the dependencies.
+
+## Quick start
+
+A first short crawl, from a terminal with the venv active:
+
+1. **Check the device is connected.** Its status must be `device`. If it's missing, see "Prepare an Android Device for ADB" in the [README](../README.md).
+   ```powershell
+   mobile-crawler-cli list devices
+   ```
+2. **Pick the app to crawl** from the device's installed apps, using its package name.
+   ```powershell
+   mobile-crawler-cli list apps -d <device-id>
+   ```
+3. **Save the AI API key** (only once; it's stored encrypted and the GUI uses it too).
+   ```powershell
+   mobile-crawler-cli config set gemini_api_key <your-key>
+   ```
+4. **Set up how the crawler reads the screen.** Use option A if you can; B only if Portal can't run on the device.
+
+   **A. Accessibility Portal (recommended, free).** Portal (the "Mobilerun Portal" app) must be **installed on the device with its accessibility service turned on**. The default parser mode (`boost`) reads the screen through it.
+   ```powershell
+   mobile-crawler-cli a11y-portal enable --device <device-id>   # installs Portal if missing, then turns its service on
+   mobile-crawler-cli a11y-portal status --device <device-id>   # must report Portal as ready
+   ```
+   Keep the phone unlocked and watch it while this runs:
+   - **Install warning:** if Play Protect or the phone warns about an app from an unknown source, choose to install anyway (e.g. *More details > Install anyway*). Some phones first ask you to allow installing over USB.
+   - **Accessibility warning:** if `status` still says the service is off, turn it on by hand: *Settings > Accessibility > Installed apps* (stock Android: *Downloaded apps*) *> Mobilerun Portal*, switch it on and tap **Allow** on the "full control of your device" warning. If the switch is greyed out: *Settings > Apps > Mobilerun Portal > ⋮ > Allow restricted settings*, then try again. The command prints these steps when Portal isn't ready.
+   - The service turns off when Portal is force-stopped or updated; run `a11y-portal enable` again. The Portal app's sign-in, API key, IP and token are not needed.
+
+   **B. Without Portal: OmniParser.** A vision model reads each screenshot instead. Run the crawl with `--parser-mode omniparser`, and set up one of these backends:
+   - **Replicate (cloud, the default backend):** create an account at [replicate.com](https://replicate.com), set up billing, create a token under [Account > API tokens](https://replicate.com/account/api-tokens), then save it:
+     ```powershell
+     mobile-crawler-cli config set replicate_api_key <r8_...>
+     ```
+   - **Local (needs an NVIDIA GPU and Docker Desktop with WSL2):** build and start the server once (the first run downloads several GB of model weights), then switch the backend. Later crawls start the container themselves.
+     ```powershell
+     cd docker/omniparser; docker compose up --build
+     mobile-crawler-cli config set omniparser_backend local
+     ```
+     Details and the non-Docker setup: [local-omniparser-setup.md](architecture/readmes/local-omniparser-setup.md).
+5. **Run a 5-step crawl.**
+   ```powershell
+   mobile-crawler-cli crawl --device <device-id> --package <package> --provider gemini --model gemini-3.8-flash --steps 5
+   ```
+   To watch it step by step, add `--step-by-step`: it pauses after each step, prints what the step did and waits for Enter.
+6. **Look at the result.** Find the run id, check its stats, and open the HTML report, which lists every step with its action and screenshot:
+   ```powershell
+   mobile-crawler-cli list runs -n 1
+   mobile-crawler-cli stats <run-id>
+   Invoke-Item "$env:APPDATA\mobile-crawler\output_data\run_<run-id>_*\reports\report_run_<run-id>.html"
+   ```
+   Everything the run produced is in its folder, `%APPDATA%\mobile-crawler\output_data\run_<run-id>_<date>_<time>\`:
+
+   | Path | Contents |
+   |---|---|
+   | `reports\report_run_<id>.html` / `.json` | The run report, step by step |
+   | `screenshots\step_0001.png`, ... | One screenshot per step |
+   | `analysis\analysis.md`, `steps.jsonl`, `run.json` | AI-readable summary; `steps.jsonl` has one line per step with the action, the AI's reasoning, timings and success/error |
+   | `logs\crawler_trace.jsonl` | Full agent trace |
+   | `data\config_snapshot.json` | Settings the run used |
+   | `videos\`, `pcap\`, `apks\` + `reports\` | Screen video, traffic capture and MobSF results, when those are on (see below) |
+
+   If the report is missing (e.g. after `--no-report`), rebuild it with `mobile-crawler-cli report <run-id>`.
+
+Settings you save with `config set` or in the GUI become the defaults; flags on `crawl` override them for one run.
+
+### Optional: screen video, traffic capture, MobSF
+
+Each is off by default; add its flag to `crawl` (or turn it on in the GUI's Settings to make it the default). They can be combined.
+
+**Screen video.** Nothing to install; it records with adb `screenrecord` into the run's `videos\` folder.
+```powershell
+mobile-crawler-cli crawl --device <device-id> --package <package> --provider gemini --model gemini-3.8-flash --steps 5 --enable-video-recording
+```
+
+**Network traffic (PCAPdroid).** Saves a `.pcap` of the app's traffic into `pcap\`.
+1. Install [PCAPdroid](https://play.google.com/store/apps/details?id=com.emanuelef.remote_capture) from Google Play on the device.
+2. In PCAPdroid: settings (gear icon) > scroll to the bottom > *Control Permissions* > generate an API key, and save it:
+   ```powershell
+   mobile-crawler-cli config set pcapdroid_api_key <key>
+   ```
+   Without the key PCAPdroid asks for consent on the phone at every start; the crawler tries to accept it for you.
+3. Optional, to decrypt HTTPS: in PCAPdroid enable TLS decryption, install the PCAPdroid-mitm add-on and its CA certificate when it prompts you, then `mobile-crawler-cli config set pcapdroid_tls_decryption true`. Apps that pin certificates or use QUIC may still not decrypt.
+4. Crawl with the flag. The first time, Android asks to allow PCAPdroid's VPN connection; tap OK.
+   ```powershell
+   mobile-crawler-cli crawl --device <device-id> --package <package> --provider gemini --model gemini-3.8-flash --steps 5 --enable-traffic-capture
+   ```
+
+**Static analysis (MobSF).** After the crawl, pulls the app's APK from the device, scans it in MobSF and saves the JSON/PDF reports into the run's `reports\` (and the APK into `apks\`).
+1. Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) (WSL 2 backend) and start it. `docker info` must work.
+2. Crawl with the flag. The CLI starts the `mobile-crawler-mobsf` container itself (the first start downloads the MobSF image) and reads its API key from the container logs.
+   ```powershell
+   mobile-crawler-cli crawl --device <device-id> --package <package> --provider gemini --model gemini-3.8-flash --steps 5 --enable-mobsf-analysis
+   ```
+3. To scan a finished run again: `mobile-crawler-cli mobsf-scan <run-id>`.
+
+If MobSF fails, the crawl still counts as completed and the error is in the log. Running MobSF by hand and other options: see the README's "MobSF Static Analysis" section.
+
+## Commands
+
+Every command has `--help`:
 
 ```powershell
 mobile-crawler-cli --help
@@ -20,10 +126,10 @@ mobile-crawler-cli --version
 | [`mobsf-scan`](#mobsf-scan) | Run MobSF on a finished run's stored APK |
 | [`delete`](#delete) | Delete a run and all its data |
 | [`scenarios`](#scenarios) | Manage an app's Guided Scenarios |
-| [`portal`](#portal) | Check, enable or install Mobilerun Portal on a device |
+| [`a11y-portal`](#a11y-portal) | Check, enable or install Mobilerun Portal on a device |
 | [`config`](#config) | Read and write persisted settings and API keys |
 
-Settings and the database live in `%APPDATA%\mobile-crawler` (Windows), `~/Library/Application Support/mobile-crawler` (macOS) or `~/.local/share/mobile-crawler` (Linux). The CLI and GUI share them.
+Settings and the database live in `%APPDATA%\mobile-crawler`; the CLI and GUI share them. Only Windows is tested.
 
 ## crawl
 
@@ -46,7 +152,7 @@ mobile-crawler-cli crawl --device <id|last> --package <pkg|last> --model <model>
 | `--log-level debug\|info\|warning\|error` | Minimum level of log events printed to stdout (default: `log_level` setting) |
 | `--human-fallback / --no-human-fallback` | Ask a human in the terminal when the agent is stuck, or not |
 | `--parser-mode accessibility\|boost\|omniparser` | UI parser mode |
-| `--reasoning-mode / --no-reasoning-mode` | Crawler agent Reasoning Mode on/off |
+| `--reasoning-mode / --no-reasoning-mode` | On (default): a Manager LLM call plans the next subgoal, then an Executor LLM call picks the actions (2 calls per step). Off: one FastAgent call decides and acts (faster and cheaper, less reliable on complex flows) |
 | `--exploration-objective TEXT` | Exploration Objective |
 | `--restart-app / --no-restart-app` | Force-stop the app first so the run starts at its launch screen (data kept), or resume where it is (default: on) |
 | `--step-by-step` | Pause after each step, print what it did on stderr, wait for Enter |
@@ -155,17 +261,17 @@ mobile-crawler-cli scenarios generate -p com.example.app [--website-url URL] [--
 
 `generate` builds the list with the LLM from the app's Play Store listing / website and replaces the current list on success; on failure it keeps the list and exits non-zero.
 
-## portal
+## a11y-portal
 
 The `boost` and `accessibility` parser modes need Mobilerun Portal installed with its accessibility service on. The Portal app's sign-in, API key, IP and token are not needed.
 
 ```powershell
-mobile-crawler-cli portal status  --device <id>   # read-only check
-mobile-crawler-cli portal enable  --device <id>   # turn the accessibility service on over adb (installs if missing)
-mobile-crawler-cli portal install --device <id>   # download the pinned release, (re)install, enable
+mobile-crawler-cli a11y-portal status  --device <id>   # read-only check
+mobile-crawler-cli a11y-portal enable  --device <id>   # turn the accessibility service on over adb (installs if missing)
+mobile-crawler-cli a11y-portal install --device <id>   # download the pinned release, (re)install, enable
 ```
 
-Force-stopping Portal turns its service off; run `portal enable` again.
+Force-stopping Portal turns its service off; run `a11y-portal enable` again.
 
 ## config
 

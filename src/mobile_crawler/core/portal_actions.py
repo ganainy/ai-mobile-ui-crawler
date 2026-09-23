@@ -19,7 +19,7 @@ PORTAL_MANUAL_STEPS = (
     "3. If it keeps turning itself off: Settings > Apps > Mobilerun Portal > Battery > Unrestricted. "
     "Force-stopping the Portal app also turns the service off.\n"
     "4. Check: the Portal app no longer shows 'Accessibility Service Not Enabled', or use Check / "
-    "'mobile-crawler-cli portal status'.\n"
+    "'mobile-crawler-cli a11y-portal status'.\n"
     "Not needed for this crawler: 'Connect to Mobilerun' (Sign in with Browser / Use API Key / Custom "
     "Connection, which are for the Mobilerun cloud service), the IP, token and ADB forward command under "
     "Connection Details, and All Files Access. The crawler reads Portal over adb and sets that up itself."
