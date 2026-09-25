@@ -45,7 +45,7 @@ _NOISE_PATTERNS: list[re.Pattern] = [
     re.compile(r"IndexedFormatter\.format:"),
     re.compile(r"_convert_omni_to_indexed:"),
     re.compile(r"Converting omni_tree"),
-    re.compile(r"(Attempting to import|Attempting to get class|Successfully imported|Found class):"),
+    re.compile(r"(Attempting to import module|Attempting to get class|Successfully imported module|Found class)\b"),
     re.compile(r"Initializing (OpenRouter|GoogleGenAI|Anthropic) with kwargs"),
     re.compile(r'HTTP Request: (POST|GET) https://.*"HTTP/1\.1 (200 OK|201 Created)"'),
     re.compile(r"openai\._base_client: (Sending HTTP|HTTP Response|request_id)"),

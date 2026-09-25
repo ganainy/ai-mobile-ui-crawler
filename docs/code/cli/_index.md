@@ -13,6 +13,7 @@ Click command-line interface (crawl, list, delete, report, config).
 - [[code/cli/crawl_batch|cli.crawl_batch]] - Runs `crawl` over several packages one after another, each package as its own Run.
 - [[code/cli/device_choice|cli.device_choice]] - Pick the device a CLI command talks to: the one given with --device, else the only connected one.
 - [[code/cli/docker_autostart_report|cli.docker_autostart_report]] - Console reporting for the CLI's Docker container auto-start attempts.
+- [[code/cli/event_printer|cli.event_printer]] - Human-readable crawl output for a terminal: one short, aligned line per event instead of JSON.
 - [[code/cli/main|cli.main]] - Main CLI entry point using Click.
 - [[code/cli/step_by_step_console|cli.step_by_step_console]] - Terminal side of `crawl --step-by-step`: summarize each paused step, advance on Enter.
 - [[code/cli/terminal_human_prompter|cli.terminal_human_prompter]] - Terminal bridge for Human Fallback: blocks the calling (crawl) thread on a console prompt.

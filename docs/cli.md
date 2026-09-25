@@ -158,6 +158,7 @@ mobile-crawler-cli crawl [--device <id|last>] --package <pkg|last> --model <mode
 | `--enable-mobsf-analysis` | Run MobSF static analysis after the crawl |
 | `--no-report` | Skip generating the run report |
 | `--log-level debug\|info\|warning\|error` | Minimum level of log events printed to stdout (default: `log_level` setting) |
+| `--format auto\|pretty\|json` | stdout format. `pretty`: one readable, colored line per event (step separators, actions, AI call summaries; known library noise dropped). `json`: one JSON event per line, for scripts. Default `auto`: pretty in a terminal, JSON when piped or redirected |
 | `--human-fallback / --no-human-fallback` | Ask a human in the terminal when the agent is stuck, or not |
 | `--parser-mode accessibility\|boost\|omniparser` | UI parser mode |
 | `--reasoning-mode / --no-reasoning-mode` | On (default): a Manager LLM call plans the next subgoal, then an Executor LLM call picks the actions (2 calls per step). Off: one FastAgent call decides and acts (faster and cheaper, less reliable on complex flows) |
@@ -167,7 +168,7 @@ mobile-crawler-cli crawl [--device <id|last>] --package <pkg|last> --model <mode
 
 All flags apply to that invocation only; they are never saved to the settings store. Without a flag, the persisted setting (as set in the GUI or with `config set`) is used.
 
-Output: lifecycle and log events as JSON lines on stdout; warnings (pre-run checks such as Portal off or Phoenix down), prompts and summaries on stderr.
+Output: lifecycle and log events on stdout (readable lines or JSON, see `--format`); warnings (pre-run checks such as Portal off or Phoenix down), prompts and summaries on stderr.
 
 ```powershell
 # 15 steps with Gemini on the only connected device
@@ -195,7 +196,7 @@ mobile-crawler-cli crawl --package com.a.app --package com.b.app --package com.c
 
 - Before each app the batch checks the device is still connected and the package is installed; a missing app is skipped, the previous app is force-stopped.
 - An app that errors doesn't stop the batch; a disconnected device or Ctrl+C does.
-- Ends with a `batch_completed` JSON event on stdout and a summary table on stderr.
+- Ends with a summary table on stderr, plus a `batch_completed` JSON event on stdout with JSON output.
 - Exit code 0 only if every app's run completed; 130 on Ctrl+C.
 - Pass `--no-human-fallback` for unattended batches, otherwise an unanswered prompt waits out its timeout.
 

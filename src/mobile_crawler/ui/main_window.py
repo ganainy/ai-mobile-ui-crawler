@@ -61,7 +61,7 @@ from mobile_crawler.infrastructure.telemetry_client import build_telemetry_clien
 from mobile_crawler.infrastructure.user_config_store import UserConfigStore
 from mobile_crawler.ui.human_fallback_dialog import QtHumanPrompter
 from mobile_crawler.ui.live_feed_worker import LiveFeedWorker
-from mobile_crawler.ui.log_cleaner import LogCleaner
+from mobile_crawler.core.log_cleaner import LogCleaner
 from mobile_crawler.ui.mobsf_startup_worker import MobSFStartupWorker
 from mobile_crawler.ui.omniparser_startup_worker import OmniParserStartupWorker
 from mobile_crawler.ui.phoenix_startup_worker import PhoenixStartupWorker

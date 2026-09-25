@@ -891,3 +891,98 @@ class TestCrawlBatch:
         result = self._run(["com.a.app", "com.b.app"], fallback_setting=False)
 
         assert "Human Fallback" not in result.stderr
+
+
+class TestJSONEventListenerAiRequest:
+    """ai_request_sent events print without the base64 screenshot."""
+
+    def _printed(self, capsys, request_data):
+        from mobile_crawler.cli.commands.crawl import JSONEventListener
+
+        JSONEventListener().on_ai_request_sent(1, 2, request_data)
+        return json.loads(capsys.readouterr().out)
+
+    def test_screenshot_is_replaced_with_a_placeholder(self, capsys):
+        request_data = {
+            "user_prompt": json.dumps({"text": "prompt", "screenshot": "/9j/" + "A" * 500}),
+            "vision_enabled": False,
+        }
+
+        event = self._printed(capsys, request_data)
+
+        prompt = json.loads(event["request_data"]["user_prompt"])
+        assert prompt == {"text": "prompt", "screenshot": "[BASE64_SCREENSHOT_REMOVED]"}
+        assert event["request_data"]["vision_enabled"] is False
+
+    def test_listener_does_not_modify_the_shared_request_data(self, capsys):
+        user_prompt = json.dumps({"text": "prompt", "screenshot": "/9j/AAAA"})
+        request_data = {"user_prompt": user_prompt}
+
+        self._printed(capsys, request_data)
+
+        assert request_data["user_prompt"] == user_prompt
+
+    def test_empty_screenshot_is_left_alone(self, capsys):
+        request_data = {"user_prompt": json.dumps({"text": "prompt", "screenshot": ""})}
+
+        event = self._printed(capsys, request_data)
+
+        assert json.loads(event["request_data"]["user_prompt"])["screenshot"] == ""
+
+
+class TestJSONEventListenerStream:
+    def test_writes_to_the_stream_that_was_stdout_at_creation(self, monkeypatch):
+        """Events written to the crawl's capturing stdout used to come back as `[stdout] {...}` events."""
+        import io
+        import sys
+
+        from mobile_crawler.cli.commands.crawl import JSONEventListener
+
+        real = io.StringIO()
+        monkeypatch.setattr(sys, "stdout", real)
+        listener = JSONEventListener()
+        swapped = io.StringIO()
+        monkeypatch.setattr(sys, "stdout", swapped)
+
+        listener.on_crawl_started(1, "com.example")
+
+        assert json.loads(real.getvalue())["event"] == "crawl_started"
+        assert swapped.getvalue() == ""
+
+
+class TestCrawlOutputFormat:
+    """--format picks the stdout listener; auto means JSON when stdout is not a terminal."""
+
+    def _listener(self, extra_args):
+        with (
+            patch("mobile_crawler.cli.commands.crawl.DatabaseManager"),
+            patch("mobile_crawler.cli.commands.crawl.ConfigManager") as config_cls,
+            patch("mobile_crawler.cli.commands.crawl.ReportGenerator"),
+            patch("mobile_crawler.cli.commands.crawl.CrawlerLoop") as loop_cls,
+            patch("mobile_crawler.cli.commands.crawl.RunRepository") as run_repo_cls,
+            patch("mobile_crawler.cli.commands.crawl.get_app_data_dir"),
+        ):
+            run_repo_cls.return_value.create_run.return_value = 7
+            config_cls.return_value.get.return_value = "INFO"
+            result = CliRunner().invoke(
+                cli,
+                ["crawl", "--device", "emulator-5554", "--package", "com.example.app", "--model", "m", *extra_args],
+            )
+        assert result.exit_code == 0, result.output
+        [listener] = loop_cls.call_args.kwargs["event_listeners"]
+        return listener
+
+    def test_auto_is_json_when_not_a_terminal(self):
+        from mobile_crawler.cli.commands.crawl import JSONEventListener
+
+        assert isinstance(self._listener([]), JSONEventListener)
+
+    def test_pretty_flag(self):
+        from mobile_crawler.cli.event_printer import PrettyEventListener
+
+        assert isinstance(self._listener(["--format", "pretty"]), PrettyEventListener)
+
+    def test_json_flag(self):
+        from mobile_crawler.cli.commands.crawl import JSONEventListener
+
+        assert isinstance(self._listener(["--format", "json"]), JSONEventListener)

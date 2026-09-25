@@ -16,5 +16,6 @@ Source: `src/mobile_crawler/core/crawler_event_listener.py`
 
 ## Imported by
 - [[code/cli/commands/crawl|cli.commands.crawl]]
+- [[code/cli/event_printer|cli.event_printer]]
 - [[code/core/crawler_loop|core.crawler_loop]]
 - [[code/core/run_stats_recorder|core.run_stats_recorder]]

@@ -10,6 +10,7 @@ from mobile_crawler.config.config_manager import ConfigManager
 from mobile_crawler.cli.console_reader import ConsoleReader
 from mobile_crawler.cli.crawl_batch import BatchResult, run_crawl_batch
 from mobile_crawler.cli.device_choice import DEVICE_HELP, resolve_device
+from mobile_crawler.cli.event_printer import PrettyEventListener
 from mobile_crawler.cli.step_by_step_console import StepByStepConsole
 from mobile_crawler.cli.terminal_human_prompter import TerminalHumanPrompter
 from mobile_crawler.core.crawler_event_listener import CrawlerEventListener
@@ -36,11 +37,42 @@ from mobile_crawler.infrastructure.telemetry_client import build_telemetry_clien
 _LOG_LEVELS = {"DEBUG": 10, "INFO": 20, "WARNING": 30, "ERROR": 40, "CRITICAL": 50}
 
 
+SCREENSHOT_PLACEHOLDER = "[BASE64_SCREENSHOT_REMOVED]"
+
+
+def _without_screenshot(request_data: dict[str, Any]) -> dict[str, Any]:
+    """Copy of request_data with the base64 screenshot in user_prompt replaced.
+
+    The screenshot is saved to disk and reported by screenshot_captured, so
+    printing it again as base64 on every step only floods stdout.
+    """
+    user_prompt = request_data.get("user_prompt")
+    if not isinstance(user_prompt, str):
+        return request_data
+    try:
+        prompt = json.loads(user_prompt)
+    except json.JSONDecodeError:
+        return request_data
+    if not isinstance(prompt, dict) or not prompt.get("screenshot"):
+        return request_data
+    prompt["screenshot"] = SCREENSHOT_PLACEHOLDER
+    return {**request_data, "user_prompt": json.dumps(prompt)}
+
+
 class JSONEventListener(CrawlerEventListener):
-    """Event listener that outputs JSON events to stdout."""
+    """Event listener that outputs JSON events to stdout.
+
+    Writes to the stream that was stdout when it was created: the crawl later swaps stdout for a
+    capturing stream, and events written there would come back as `[stdout] {...}` debug_log events.
+    """
 
     def __init__(self, log_level: str = "INFO") -> None:
         self._min_log_level = _LOG_LEVELS.get(log_level.upper(), 20)
+        self._out = sys.stdout
+
+    def _print(self, event: dict[str, Any]) -> None:
+        self._out.write(json.dumps(event) + "\n")
+        self._out.flush()
 
     def on_crawl_started(self, run_id: int, target_package: str) -> None:
         """Handle crawl started event."""
@@ -50,7 +82,7 @@ class JSONEventListener(CrawlerEventListener):
             "target_package": target_package,
             "timestamp": datetime.now().isoformat(),
         }
-        print(json.dumps(event), flush=True)
+        self._print(event)
 
     def on_state_changed(self, run_id: int, old_state: str, new_state: str) -> None:
         """Handle state change event."""
@@ -61,7 +93,7 @@ class JSONEventListener(CrawlerEventListener):
             "new_state": new_state,
             "timestamp": datetime.now().isoformat(),
         }
-        print(json.dumps(event), flush=True)
+        self._print(event)
 
     def on_crawl_completed(self, run_id: int, total_steps: int, duration_ms: float, reason: str) -> None:
         """Handle crawl completed event."""
@@ -73,7 +105,7 @@ class JSONEventListener(CrawlerEventListener):
             "reason": reason,
             "timestamp": datetime.now().isoformat(),
         }
-        print(json.dumps(event), flush=True)
+        self._print(event)
 
     def on_error(self, run_id: int | None, step_number: int | None, error: Exception) -> None:
         """Handle error event."""
@@ -84,7 +116,7 @@ class JSONEventListener(CrawlerEventListener):
             "error": str(error),
             "timestamp": datetime.now().isoformat(),
         }
-        print(json.dumps(event), flush=True)
+        self._print(event)
 
     def on_step_started(self, run_id: int, step_number: int) -> None:
         """Handle step started event."""
@@ -94,7 +126,7 @@ class JSONEventListener(CrawlerEventListener):
             "step_number": step_number,
             "timestamp": datetime.now().isoformat(),
         }
-        print(json.dumps(event), flush=True)
+        self._print(event)
 
     def on_screenshot_captured(self, run_id: int, step_number: int, screenshot_path: str) -> None:
         """Handle screenshot captured event."""
@@ -105,7 +137,7 @@ class JSONEventListener(CrawlerEventListener):
             "screenshot_path": screenshot_path,
             "timestamp": datetime.now().isoformat(),
         }
-        print(json.dumps(event), flush=True)
+        self._print(event)
 
     def on_ai_request_sent(self, run_id: int, step_number: int, request_data: dict[str, Any]) -> None:
         """Handle AI request sent event."""
@@ -113,10 +145,10 @@ class JSONEventListener(CrawlerEventListener):
             "event": "ai_request_sent",
             "run_id": run_id,
             "step_number": step_number,
-            "request_data": request_data,
+            "request_data": _without_screenshot(request_data),
             "timestamp": datetime.now().isoformat(),
         }
-        print(json.dumps(event), flush=True)
+        self._print(event)
 
     def on_ai_response_received(self, run_id: int, step_number: int, response_data: dict[str, Any]) -> None:
         """Handle AI response received event."""
@@ -127,7 +159,7 @@ class JSONEventListener(CrawlerEventListener):
             "response_data": response_data,
             "timestamp": datetime.now().isoformat(),
         }
-        print(json.dumps(event), flush=True)
+        self._print(event)
 
     def on_action_executed(self, run_id: int, step_number: int, action_index: int, result: ActionResult) -> None:
         """Handle action executed event."""
@@ -145,7 +177,7 @@ class JSONEventListener(CrawlerEventListener):
             },
             "timestamp": datetime.now().isoformat(),
         }
-        print(json.dumps(event), flush=True)
+        self._print(event)
 
     def on_step_completed(self, run_id: int, step_number: int, actions_count: int, duration_ms: float) -> None:
         """Handle step completed event."""
@@ -157,7 +189,7 @@ class JSONEventListener(CrawlerEventListener):
             "duration_ms": duration_ms,
             "timestamp": datetime.now().isoformat(),
         }
-        print(json.dumps(event), flush=True)
+        self._print(event)
 
     def on_screen_processed(
         self, run_id: int, step_number: int, screen_id: int, is_new: bool, visit_count: int, total_screens: int
@@ -173,7 +205,7 @@ class JSONEventListener(CrawlerEventListener):
             "total_screens": total_screens,
             "timestamp": datetime.now().isoformat(),
         }
-        print(json.dumps(event), flush=True)
+        self._print(event)
 
     def on_debug_log(self, run_id: int, step_number: int, message: str, level: str = "INFO") -> None:
         """Handle log event; records below the configured ``--log-level`` are dropped."""
@@ -187,7 +219,7 @@ class JSONEventListener(CrawlerEventListener):
             "message": message,
             "timestamp": datetime.now().isoformat(),
         }
-        print(json.dumps(event), flush=True)
+        self._print(event)
 
     def on_screenshot_timing(self, run_id: int, step_number: int, duration_ms: float) -> None:
         """Handle screenshot timing event."""
@@ -198,7 +230,17 @@ class JSONEventListener(CrawlerEventListener):
             "duration_ms": duration_ms,
             "timestamp": datetime.now().isoformat(),
         }
-        print(json.dumps(event), flush=True)
+        self._print(event)
+
+
+def _wants_pretty(output_format: str) -> bool:
+    """`--format auto` is pretty only when stdout is a terminal, so pipes keep getting JSON."""
+    if output_format.lower() != "auto":
+        return output_format.lower() == "pretty"
+    try:
+        return sys.stdout.isatty()
+    except Exception:
+        return False
 
 
 _LAST = "last"
@@ -236,6 +278,14 @@ def _resolve_last(value: str, config_manager: ConfigManager, key: str, option: s
     "--log-level",
     type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"], case_sensitive=False),
     help="Minimum level of log events printed to stdout (default: the log_level setting, INFO)",
+)
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["auto", "pretty", "json"], case_sensitive=False),
+    default="auto",
+    help="stdout format: readable lines (pretty) or JSON events (json). "
+    "Default auto: pretty in a terminal, json when piped or redirected",
 )
 @click.option(
     "--human-fallback/--no-human-fallback",
@@ -279,6 +329,7 @@ def crawl(
     enable_mobsf_analysis: bool,
     no_report: bool,
     log_level: str | None,
+    output_format: str,
     human_fallback: bool | None,
     parser_mode: str | None,
     reasoning_mode: bool | None,
@@ -333,6 +384,7 @@ def crawl(
             config_manager.override("restart_app_before_run", restart_app)
 
         effective_log_level = (log_level or config_manager.get("log_level", "INFO") or "INFO").upper()
+        pretty = _wants_pretty(output_format)
 
         report_docker_autostart("MobSF", ensure_mobsf_running_if_enabled(config_manager))
         report_docker_autostart("OmniParser", ensure_omniparser_running_if_enabled(config_manager))
@@ -369,7 +421,9 @@ def crawl(
                 config_manager=config_manager,
                 run_repository=run_repo,
                 session_folder_manager=session_folder_manager,
-                event_listeners=[JSONEventListener(effective_log_level)],
+                event_listeners=[
+                    PrettyEventListener(effective_log_level) if pretty else JSONEventListener(effective_log_level)
+                ],
                 report_generator=ReportGenerator(
                     db_manager,
                     telemetry_client_factory=build_telemetry_client_factory(config_manager),
@@ -400,7 +454,7 @@ def crawl(
                 err=True,
             )
         result = run_crawl_batch(packages, crawler)
-        _report_batch(result)
+        _report_batch(result, json_event=not pretty)
         sys.exit(result.exit_code)
 
     except Exception as e:
@@ -468,10 +522,11 @@ class _CliCrawler:
         )
 
 
-def _report_batch(result: BatchResult) -> None:
-    """Print the batch summary: one JSON event on stdout, a readable table on stderr."""
-    event = {"event": "batch_completed", **result.to_dict(), "timestamp": datetime.now().isoformat()}
-    print(json.dumps(event), flush=True)
+def _report_batch(result: BatchResult, json_event: bool = True) -> None:
+    """Print the batch summary: one JSON event on stdout (JSON output only), a readable table on stderr."""
+    if json_event:
+        event = {"event": "batch_completed", **result.to_dict(), "timestamp": datetime.now().isoformat()}
+        print(json.dumps(event), flush=True)
 
     width = max(len(e.package) for e in result.entries)
     click.echo("\nBatch summary:", err=True)

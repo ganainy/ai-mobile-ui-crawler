@@ -12,6 +12,7 @@ Crawl orchestration: crawl controller, state machine, main crawler loop, stuck/p
 - [[code/core/crawl_state_machine|core.crawl_state_machine]] - Crawl state machine for managing crawler lifecycle.
 - [[code/core/crawler_event_listener|core.crawler_event_listener]] - Protocol for crawler event listeners.
 - [[code/core/crawler_loop|core.crawler_loop]] - Crawler-agent-backed crawl lifecycle wrapper.
+- [[code/core/log_cleaner|core.log_cleaner]] - Log message cleaning: strips ANSI codes, deduplicates, suppresses noise.
 - [[code/core/log_sinks|core.log_sinks]] - Log sinks for multi-sink logging architecture.
 - [[code/core/logging_service|core.logging_service]] - Logging service with multi-sink architecture.
 - [[code/core/portal_actions|core.portal_actions]] - Blocking Portal check / enable / install helpers, shared by the Settings panel and the CLI.

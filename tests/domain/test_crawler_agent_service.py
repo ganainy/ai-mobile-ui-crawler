@@ -1117,6 +1117,57 @@ class TestCrawlerLogHandler:
         emit_debug.assert_not_called()
 
 
+class TestCrawlerLogHandlerStreaming:
+    """Streamed LLM chunks reach the log as one message, not one event per chunk."""
+
+    def _record(self, message, **extra):
+        record = logging.LogRecord("crawler_agent", logging.DEBUG, __file__, 1, message, None, None)
+        record.__dict__.update(extra)
+        return record
+
+    def test_chunks_are_joined_and_emitted_at_stream_end(self, tmp_path):
+        emit_debug = Mock()
+        handler = CrawlerLogHandler(1, str(tmp_path / "trace.jsonl"), emit_debug, True)
+
+        handler.emit(self._record("<thought>\nWe are", stream=True))
+        handler.emit(self._record(" starting.\n</thought>\n", stream=True))
+        emit_debug.assert_not_called()
+        handler.emit(self._record("", stream_end=True))
+
+        joined = "<thought>\nWe are starting.\n</thought>"
+        emit_debug.assert_called_once_with("on_debug_log", 1, 0, joined, "DEBUG")
+        lines = (tmp_path / "trace.jsonl").read_text(encoding="utf-8").splitlines()
+        assert [json.loads(line)["message"] for line in lines] == [joined]
+
+    def test_stream_end_without_chunks_emits_nothing(self, tmp_path):
+        emit_debug = Mock()
+        handler = CrawlerLogHandler(1, str(tmp_path / "trace.jsonl"), emit_debug, True)
+
+        handler.emit(self._record("", stream_end=True))
+
+        emit_debug.assert_not_called()
+
+
+class TestRunLoggingReplacesConsoleHandler:
+    """During a run the crawler_agent logger writes only to the run handler, not also to stdout."""
+
+    def test_console_handler_is_detached_during_the_run_and_restored_after(self, crawler_agent_service, tmp_path):
+        droid_logger = logging.getLogger("crawler_agent")
+        console = logging.StreamHandler()
+        original_handlers = list(droid_logger.handlers)
+        original_propagate = droid_logger.propagate
+        droid_logger.handlers = [console]
+        try:
+            crawler_agent_service.configure_run_logging(1, str(tmp_path / "trace.jsonl"), Mock(), True)
+            assert droid_logger.handlers == [crawler_agent_service._log_handler]
+
+            crawler_agent_service.clear_run_logging()
+            assert droid_logger.handlers == [console]
+        finally:
+            droid_logger.handlers = original_handlers
+            droid_logger.propagate = original_propagate
+
+
 class TestCancelledErrorFilter:
     """Tests for CancelledErrorFilter."""
 

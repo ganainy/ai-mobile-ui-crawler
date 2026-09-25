@@ -103,15 +103,33 @@ class CrawlerLogHandler(logging.Handler):
         self.log_path = log_path
         self.emit_debug = emit_debug
         self.enable_ui = enable_ui
+        self._stream_chunks: list[str] = []
 
     def emit(self, record: logging.LogRecord) -> None:
         try:
+            # Streamed LLM output arrives as one record per chunk; join it into one message.
+            if getattr(record, "stream", False) is True:
+                self._stream_chunks.append(record.getMessage())
+                return
+            if getattr(record, "stream_end", False) is True:
+                if self._stream_chunks:
+                    message = "".join(self._stream_chunks).strip("\n")
+                    self._stream_chunks = []
+                    self._forward(record.levelname, message)
+                return
             message = record.getMessage()
             if record.exc_info:
                 message = f"{message}\n{logging.Formatter().formatException(record.exc_info)}"
+            self._forward(record.levelname, message)
+        except Exception as e:
+            # Log the failure but avoid recursion by not re-emitting
+            logger.error(f"CrawlerLogHandler emit failed: {e}", exc_info=True)
+
+    def _forward(self, levelname: str, message: str) -> None:
+        try:
             payload = {
                 "timestamp": time.time(),
-                "level": record.levelname,
+                "level": levelname,
                 "run_id": self.run_id,
                 "message": message,
             }
@@ -121,7 +139,7 @@ class CrawlerLogHandler(logging.Handler):
 
             if self.enable_ui and self.emit_debug:
                 # emit_debug is CrawlerLoop._emit_event — call with method name first
-                self.emit_debug("on_debug_log", self.run_id, 0, message, record.levelname)
+                self.emit_debug("on_debug_log", self.run_id, 0, message, levelname)
         except Exception as e:
             # Log the failure but avoid recursion by not re-emitting
             logger.error(f"CrawlerLogHandler emit failed: {e}", exc_info=True)
@@ -183,6 +201,7 @@ class CrawlerAgentService:
         self._current_handler = None
         self._handler_loop = None
         self._log_handler = None
+        self._replaced_log_handlers: list[logging.Handler] = []
         self._is_initialized = False
         self._ui_context_manager = None
         self._omni_parser_client = None
@@ -412,16 +431,22 @@ class CrawlerAgentService:
             lg = logging.getLogger(name)
             lg.setLevel(logging.DEBUG)
 
+        # The run handler replaces the default console handler for the run: that handler
+        # prints to stdout, which the crawl captures and would log a second time.
         droid_logger = logging.getLogger("crawler_agent")
-        droid_logger.addHandler(handler)
+        self._replaced_log_handlers = list(droid_logger.handlers)
+        droid_logger.handlers = [handler]
         droid_logger.propagate = False
         self._log_handler = handler
 
     def clear_run_logging(self) -> None:
-        """Detach Crawler log handler if attached."""
+        """Detach Crawler log handler if attached and restore the handlers it replaced."""
         if self._log_handler:
             droid_logger = logging.getLogger("crawler_agent")
             droid_logger.removeHandler(self._log_handler)
+            for replaced in self._replaced_log_handlers:
+                droid_logger.addHandler(replaced)
+            self._replaced_log_handlers = []
             droid_logger.propagate = True
             self._log_handler = None
 

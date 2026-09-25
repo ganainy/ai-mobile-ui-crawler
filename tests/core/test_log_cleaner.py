@@ -1,6 +1,6 @@
 """Tests for UI log cleaning."""
 
-from mobile_crawler.ui.log_cleaner import LogCleaner
+from mobile_crawler.core.log_cleaner import LogCleaner
 
 
 def test_clean_strips_ansi_codes():

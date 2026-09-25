@@ -17,6 +17,7 @@ Source: `src/mobile_crawler/domain/models.py`
 
 ## Imported by
 - [[code/cli/commands/crawl|cli.commands.crawl]]
+- [[code/cli/event_printer|cli.event_printer]]
 - [[code/cli/step_by_step_console|cli.step_by_step_console]]
 - [[code/core/crawler_event_listener|core.crawler_event_listener]]
 - [[code/core/run_stats_recorder|core.run_stats_recorder]]
