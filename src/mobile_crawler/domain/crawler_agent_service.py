@@ -1693,6 +1693,17 @@ class CrawlerAgentService:
             "exploring the actual app."
         )
 
+        # System permission prompts stay on screen (the target-app guard no
+        # longer relaunches over them), so the agent must answer them.
+        description += (
+            "\n\nPERMISSION DIALOGS: When Android asks for a runtime permission "
+            "(location, camera, notifications, contacts, etc.), answer it right away: "
+            "tap 'While using the app', 'Only this time' or 'Allow' so the features "
+            "behind it stay reachable. Never leave a permission dialog open. If a "
+            "Google account picker appears, dismiss it unless you are deliberately "
+            "using Google sign-in."
+        )
+
         return CrawlerGoal(
             description=description,
             max_steps=max_steps,

@@ -599,6 +599,12 @@ class TestCrawlerAgentServiceErrorHandling:
         # Must name at least one common dismiss affordance
         assert any(token in description_lower for token in ("skip", "later", "not now", "x'"))
 
+    def test_create_exploration_goal_tells_agent_to_answer_permission_dialogs(self, crawler_agent_service):
+        """System permission dialogs are captured, so the agent must answer them on purpose."""
+        description = crawler_agent_service._create_exploration_goal("com.example.app", 10).description
+        assert "PERMISSION DIALOGS" in description
+        assert "While using the app" in description
+
     def test_create_exploration_goal_with_objective(self, crawler_agent_service):
         """Test _create_exploration_goal includes exploration objective."""
         goal = crawler_agent_service._create_exploration_goal("com.example.app", 10, "test login flow")

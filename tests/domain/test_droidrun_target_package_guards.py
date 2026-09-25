@@ -326,6 +326,49 @@ async def test_state_provider_relaunches_after_browser_grace_exhausted(android_s
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "dialog_package",
+    ["com.google.android.permissioncontroller", "com.android.permissioncontroller", "com.google.android.gms"],
+)
+async def test_state_provider_captures_system_dialog_without_relaunch(android_state_provider, dialog_package):
+    provider, driver = android_state_provider
+    mock_adb = Mock()
+    mock_adb.get_current_package.return_value = dialog_package
+
+    with patch("mobile_crawler.domain.adb_action_executor.ADBActionExecutor", return_value=mock_adb):
+        await provider.get_state()
+
+    mock_adb.am_start_recovery.assert_not_called()
+    driver.screenshot.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_state_provider_relaunches_after_system_dialog_grace_exhausted(android_state_provider):
+    provider, _ = android_state_provider
+    provider.system_dialog_grace_captures = 2
+    mock_adb = Mock()
+    mock_adb.get_current_package.side_effect = [
+        "com.google.android.permissioncontroller",
+        "com.google.android.permissioncontroller",
+        "com.google.android.permissioncontroller",
+        "com.example.app",
+    ]
+    mock_adb.am_start_recovery.return_value = CrawlerActionResult(
+        success=True,
+        action_type="am_start_recovery",
+        target="com.example.app",
+    )
+
+    with patch("mobile_crawler.domain.adb_action_executor.ADBActionExecutor", return_value=mock_adb):
+        await provider.get_state()
+        await provider.get_state()
+        mock_adb.am_start_recovery.assert_not_called()
+        await provider.get_state()
+
+    mock_adb.am_start_recovery.assert_called_once_with("com.example.app")
+
+
+@pytest.mark.asyncio
 async def test_state_provider_correct_package_proceeds_to_capture(android_state_provider):
     provider, driver = android_state_provider
     mock_adb = Mock()

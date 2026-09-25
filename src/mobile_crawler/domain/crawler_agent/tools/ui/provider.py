@@ -54,6 +54,20 @@ BROWSER_PACKAGES = frozenset(
     }
 )
 
+# System UIs the target app summons over itself: runtime permission prompts
+# and the Google account picker / Smart Lock sheet. Relaunching the app over
+# them cancels the request (Android treats it as a denial), so the agent gets
+# a few captures to answer them.
+SYSTEM_DIALOG_PACKAGES = frozenset(
+    {
+        "com.google.android.permissioncontroller",
+        "com.android.permissioncontroller",
+        "com.android.packageinstaller",
+        "com.google.android.packageinstaller",
+        "com.google.android.gms",
+    }
+)
+
 
 async def fetch_state_with_retry(
     fetch: Callable[[], Awaitable[dict[str, Any]]],
@@ -179,6 +193,7 @@ class AndroidStateProvider(StateProvider):
         target_package: str | None = None,
         target_recovery_attempts: int = 3,
         external_grace_captures: int = 40,
+        system_dialog_grace_captures: int = 5,
         status_bar_exclusion_px: int = 0,
         bottom_bar_exclusion_px: int = 0,
     ) -> None:
@@ -200,6 +215,7 @@ class AndroidStateProvider(StateProvider):
         self.target_package = target_package
         self.target_recovery_attempts = target_recovery_attempts
         self.external_grace_captures = external_grace_captures
+        self.system_dialog_grace_captures = system_dialog_grace_captures
         self._external_captures = 0
         # Status Bar / Bottom Bar Exclusion: driver.screenshot() already
         # cropped this many px off the top/bottom (ADR-0002). OmniParser bbox
@@ -444,17 +460,25 @@ class AndroidStateProvider(StateProvider):
             self._external_captures = 0
             return
 
-        # Web login / OAuth flows open in a browser (custom tab). Yanking the
-        # app back would abandon the flow, so let the agent work there for a
-        # bounded number of captures before recovering.
-        if current_package in BROWSER_PACKAGES and self._external_captures < self.external_grace_captures:
+        # Web login / OAuth flows open in a browser (custom tab), and permission
+        # prompts / account pickers open in system packages. Yanking the app
+        # back would abandon them, so let the agent work there for a bounded
+        # number of captures before recovering.
+        if current_package in BROWSER_PACKAGES:
+            kind, grace = "browser", self.external_grace_captures
+        elif current_package in SYSTEM_DIALOG_PACKAGES:
+            kind, grace = "system dialog", self.system_dialog_grace_captures
+        else:
+            kind, grace = None, 0
+        if kind and self._external_captures < grace:
             self._external_captures += 1
             logger.info(
-                "Foreground is browser %s (target=%s); allowing capture %s/%s before recovery",
+                "Foreground is %s %s (target=%s); allowing capture %s/%s before recovery",
+                kind,
                 current_package,
                 self.target_package,
                 self._external_captures,
-                self.external_grace_captures,
+                grace,
             )
             return
         self._external_captures = 0
