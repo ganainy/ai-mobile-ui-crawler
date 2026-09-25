@@ -5,7 +5,7 @@ imports as [[wikilinks]], plus "imported by" backlinks. One _index.md per packag
 keeps a hand-written summary (between the summary markers) across regenerations.
 
 Usage: python scripts/gen_code_notes.py [--stage]
-  --stage  git add docs/code after writing (used by the pre-commit hook)
+  --stage  git add docs/code after writing
 """
 
 from __future__ import annotations
