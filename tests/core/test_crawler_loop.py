@@ -1311,3 +1311,30 @@ class TestCrawlerLoopRunStats:
         loop.run(1)
 
         assert mock_run_repository.update_run_stats.call_args.kwargs["unique_screens"] == 4
+
+
+class TestCrawlerLoopCtrlC:
+    """Ctrl+C (KeyboardInterrupt) while the crawl's event loop is waiting."""
+
+    def test_ctrl_c_lets_the_crawl_clean_up_before_the_loop_closes(self, crawler_loop):
+        import asyncio
+
+        cleaned_up = []
+
+        async def crawl():
+            asyncio.get_running_loop().call_soon(_raise_keyboard_interrupt)
+            try:
+                await asyncio.Event().wait()  # e.g. paused in step-by-step mode
+            finally:
+                await asyncio.sleep(0)  # cleanup that needs a running loop
+                cleaned_up.append(True)
+
+        with pytest.raises(KeyboardInterrupt):
+            crawler_loop._run_async(crawl())
+
+        assert cleaned_up == [True]
+        assert crawler_loop._cancel_requested is True
+
+
+def _raise_keyboard_interrupt():
+    raise KeyboardInterrupt

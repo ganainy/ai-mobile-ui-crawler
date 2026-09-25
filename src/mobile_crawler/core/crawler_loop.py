@@ -599,8 +599,19 @@ class CrawlerLoop:
     def _run_async(self, coroutine):
         """Run a coroutine in a dedicated event loop."""
         loop = asyncio.new_event_loop()
+        task = loop.create_task(coroutine)
         try:
-            return loop.run_until_complete(coroutine)
+            return loop.run_until_complete(task)
+        except KeyboardInterrupt:
+            # Ctrl+C stops the loop with the crawl suspended mid-await. Cancel it and let its
+            # cleanup (video, traffic capture, agent service) run on a live loop before closing it.
+            self._cancel_requested = True
+            task.cancel()
+            try:
+                loop.run_until_complete(task)
+            except (asyncio.CancelledError, Exception):
+                pass
+            raise
         finally:
             loop.close()
 
