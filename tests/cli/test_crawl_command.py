@@ -607,8 +607,8 @@ class TestCrawlLastDeviceAndPackage:
         assert "'last'" in result.output
 
 
-class TestCrawlPreRunWarnings:
-    """Pre-run warnings (Portal off, Phoenix down) are printed to stderr before the run starts."""
+class TestCrawlStartsWithWarnings:
+    """Non-blocking pre-run warnings (Portal off in boost, Phoenix down) go to stderr and the run starts."""
 
     def _run(self):
         with (
@@ -630,7 +630,9 @@ class TestCrawlPreRunWarnings:
         return result, loop_cls
 
     def test_warnings_go_to_stderr_and_the_run_still_starts(self, no_pre_run_warnings):
-        no_pre_run_warnings.return_value = ["Portal is off", "Phoenix is down"]
+        from mobile_crawler.core.pre_run_warnings import PreRunWarning
+
+        no_pre_run_warnings.return_value = [PreRunWarning("Portal is off", "enable"), PreRunWarning("Phoenix is down")]
 
         result, loop_cls = self._run()
 
@@ -677,6 +679,32 @@ class TestCrawlPreRunWarnings:
         assert "Fix: mobile-crawler-cli a11y-portal enable --device dev-1" in result.stderr
         assert result.stderr.count("Fix:") == 1
         assert "Warning: Phoenix is down" in result.stderr
+
+    def test_blocking_warning_stops_before_the_run_starts(self, no_pre_run_warnings):
+        from mobile_crawler.core.pre_run_warnings import PreRunWarning
+
+        no_pre_run_warnings.return_value = [
+            PreRunWarning("Portal is installed but its accessibility service is off", "enable", blocks_run=True),
+        ]
+        with (
+            patch("mobile_crawler.cli.commands.crawl.DatabaseManager"),
+            patch("mobile_crawler.cli.commands.crawl.ConfigManager") as config_cls,
+            patch("mobile_crawler.cli.commands.crawl.CrawlerLoop") as loop_cls,
+            patch("mobile_crawler.cli.commands.crawl.RunRepository") as run_repo_cls,
+            patch("mobile_crawler.cli.commands.crawl.get_app_data_dir"),
+            patch("mobile_crawler.cli.commands.crawl.ensure_mobsf_running_if_enabled", return_value=None),
+            patch("mobile_crawler.cli.commands.crawl.ensure_omniparser_running_if_enabled", return_value=None),
+        ):
+            config_cls.return_value.get.return_value = None
+            result = CliRunner().invoke(
+                cli, ["crawl", "--device", "dev-1", "--package", "com.example.app", "--model", "m"]
+            )
+
+        assert result.exit_code != 0
+        assert "Fix: mobile-crawler-cli a11y-portal enable --device dev-1" in result.stderr
+        assert "Crawl not started" in result.stderr
+        run_repo_cls.return_value.create_run.assert_not_called()
+        loop_cls.assert_not_called()
 
 
 

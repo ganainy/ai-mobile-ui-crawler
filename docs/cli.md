@@ -1,5 +1,5 @@
 ---
-updated: 2026-09-23
+updated: 2026-09-25
 ---
 # CLI Reference
 
@@ -274,7 +274,7 @@ mobile-crawler-cli scenarios generate -p com.example.app [--website-url URL] [--
 
 ## a11y-portal
 
-The `boost` (default) and `accessibility` parser modes read the screen through Mobilerun Portal, which must be installed on the device with its accessibility service on. The Portal app's sign-in, API key, IP and token are not needed. Without Portal, use [OmniParser](#optional-features).
+The `boost` (default) and `accessibility` parser modes read the screen through Mobilerun Portal, which must be installed on the device with its accessibility service on. In `accessibility` mode, `crawl` refuses to start while Portal is not ready (exit code 1); in `boost` it only warns and falls back to OmniParser. The Portal app's sign-in, API key, IP and token are not needed. Without Portal, use [OmniParser](#optional-features).
 
 ```powershell
 mobile-crawler-cli a11y-portal status  [--device <id>]   # read-only check

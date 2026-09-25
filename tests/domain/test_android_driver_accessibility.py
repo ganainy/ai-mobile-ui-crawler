@@ -68,6 +68,20 @@ async def test_portal_failure_leaves_an_empty_tree_with_the_reason():
 
 
 @pytest.mark.asyncio
+async def test_portal_failure_warning_does_not_promise_a_retry(caplog):
+    driver = _driver(use_accessibility=True)
+    failing = _portal_client(side_effect=RuntimeError("portal not installed"))
+    with (
+        patch("mobile_crawler.domain.crawler_agent.tools.android.portal_client.PortalClient", return_value=failing),
+        caplog.at_level("WARNING"),
+    ):
+        await driver.get_ui_tree()
+
+    warnings = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
+    assert warnings == ["Portal accessibility tree unavailable: portal not installed"]
+
+
+@pytest.mark.asyncio
 async def test_portal_error_status_is_reported_not_treated_as_a_tree():
     driver = _driver(use_accessibility=True)
     errored = _portal_client(return_value={"status": "error", "message": "no active window"})

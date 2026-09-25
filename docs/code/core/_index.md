@@ -16,7 +16,7 @@ Crawl orchestration: crawl controller, state machine, main crawler loop, stuck/p
 - [[code/core/logging_service|core.logging_service]] - Logging service with multi-sink architecture.
 - [[code/core/portal_actions|core.portal_actions]] - Blocking Portal check / enable / install helpers, shared by the Settings panel and the CLI.
 - [[code/core/pre_crawl_validator|core.pre_crawl_validator]] - Pre-crawl validation for ensuring all requirements are met.
-- [[code/core/pre_run_warnings|core.pre_run_warnings]] - Pre-run warnings: problems that do not stop a crawl but make it worse than the settings promise.
+- [[code/core/pre_run_warnings|core.pre_run_warnings]] - Pre-run warnings: problems that make a crawl worse than the settings promise, or make it pointless.
 - [[code/core/run_stats_recorder|core.run_stats_recorder]] - Run Stats recording: fills a RuntimeStatsCollector from crawler events and saves it to run_stats.
 - [[code/core/run_stats_sections|core.run_stats_sections]] - Qt-free layout and formatting of a persisted run_stats record.
 - [[code/core/runtime_stats_collector|core.runtime_stats_collector]] - Runtime statistics collector for crawl sessions.

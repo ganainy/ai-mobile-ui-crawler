@@ -341,7 +341,8 @@ def crawl(
         report_docker_autostart("Phoenix", phoenix_result if phoenix_result and phoenix_result[0] else None)
 
         # stderr: stdout is the JSON event stream.
-        for warning in collect_pre_run_warnings(config_manager, device):
+        pre_run_warnings = collect_pre_run_warnings(config_manager, device)
+        for warning in pre_run_warnings:
             click.echo(f"Warning: {warning.message}", err=True)
             if warning.portal_fix:
                 click.echo(
@@ -349,6 +350,8 @@ def crawl(
                     "(turns it on over adb; prints the manual steps if that fails)",
                     err=True,
                 )
+        if any(warning.blocks_run for warning in pre_run_warnings):
+            raise click.ClickException("Crawl not started: fix the problem above first.")
 
         # Initialize database
         db_manager = DatabaseManager()

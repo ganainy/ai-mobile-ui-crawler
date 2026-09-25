@@ -1084,7 +1084,10 @@ class MainWindow(QMainWindow):
             self.settings_panel.set_crawl_running(running)
 
     def _confirm_pre_run_warnings(self, config_manager: ConfigManager) -> bool:
-        """Show pre-run warnings (Portal off, Phoenix down, ...) and ask whether to start anyway."""
+        """Show pre-run warnings (Portal off, Phoenix down, ...) and ask whether to start anyway.
+
+        A warning that blocks the run offers only its fix or Cancel.
+        """
         from PySide6.QtWidgets import QApplication, QMessageBox
 
         device_id = self._selected_device.device_id if self._selected_device else None
@@ -1104,20 +1107,20 @@ class MainWindow(QMainWindow):
         text = "\n\n".join(w.message for w in warnings)
         if "install" in fixes:
             text += "\n\nInstall it with 'Install / enable Portal' in Settings (it takes a few minutes)."
-        box = QMessageBox(
-            QMessageBox.Icon.Warning, "Before the crawl starts", text + "\n\nStart the crawl anyway?", parent=self
-        )
+        blocked = any(w.blocks_run for w in warnings)
+        question = "The crawl cannot start until this is fixed." if blocked else "Start the crawl anyway?"
+        box = QMessageBox(QMessageBox.Icon.Warning, "Before the crawl starts", f"{text}\n\n{question}", parent=self)
         enable_button = None
         if "enable" in fixes and device_id:
             enable_button = box.addButton("Enable Portal and start", QMessageBox.ButtonRole.AcceptRole)
         if fixes:
             box.setDetailedText(PORTAL_MANUAL_STEPS)
-        start_button = box.addButton("Start anyway", QMessageBox.ButtonRole.YesRole)
+        start_button = None if blocked else box.addButton("Start anyway", QMessageBox.ButtonRole.YesRole)
         cancel_button = box.addButton(QMessageBox.StandardButton.Cancel)
         box.setDefaultButton(enable_button or cancel_button)
         box.exec()
         clicked = box.clickedButton()
-        if clicked is start_button:
+        if start_button is not None and clicked is start_button:
             return True
         if enable_button is None or clicked is not enable_button:
             return False

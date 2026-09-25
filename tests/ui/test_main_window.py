@@ -399,6 +399,22 @@ class TestPreRunPortalFix:
         assert "Enable Portal and start" not in labels
         assert "Start anyway" in labels
 
+    def test_no_start_anyway_when_a_warning_blocks_the_run(self, qt_app, monkeypatch):
+        from PySide6.QtWidgets import QMessageBox
+
+        from mobile_crawler.core.pre_run_warnings import PreRunWarning
+
+        window = self._window()
+        labels = []
+        monkeypatch.setattr(QMessageBox, "exec", lambda self: labels.extend(b.text() for b in self.buttons()) or 0)
+        monkeypatch.setattr(QMessageBox, "clickedButton", lambda self: None)
+
+        started = self._confirm(window, [PreRunWarning("Portal is off", "enable", blocks_run=True)])
+
+        assert started is False
+        assert "Enable Portal and start" in labels
+        assert "Start anyway" not in labels
+
 
 class TestPhoenixManagedService:
     """Phoenix is started like MobSF/OmniParser, only for a local phoenix_url with Phoenix tracing on."""

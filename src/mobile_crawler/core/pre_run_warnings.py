@@ -1,4 +1,4 @@
-"""Pre-run warnings: problems that do not stop a crawl but make it worse than the settings promise.
+"""Pre-run warnings: problems that make a crawl worse than the settings promise, or make it pointless.
 
 Shared by the GUI (shown in a dialog before the run starts) and the CLI (printed to stderr).
 Each check is best-effort: if it cannot be carried out, it stays silent rather than guessing.
@@ -20,10 +20,13 @@ class PreRunWarning:
 
     ``portal_fix`` says how ``core.portal_actions`` can fix a Portal problem: ``"enable"``
     (a few seconds over adb) or ``"install"`` (a download; minutes). None for other problems.
+    ``blocks_run`` marks a problem that would make the crawl fail at its first step, so it must
+    be fixed before the run starts.
     """
 
     message: str
     portal_fix: str | None = None
+    blocks_run: bool = False
 
 
 def collect_pre_run_warnings(config_manager, device_id: str | None) -> list[PreRunWarning]:
@@ -70,6 +73,7 @@ def _portal_warning(config_manager, device_id: str | None) -> PreRunWarning | No
         f"{portal.describe()}, so the phone cannot supply an accessibility tree and {effect} "
         f"(UI parser mode '{mode}').",
         portal_fix="enable" if portal.installed else "install",
+        blocks_run=mode == "accessibility",
     )
 
 
