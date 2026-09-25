@@ -457,7 +457,9 @@ class AndroidDriver(DeviceDriver):
             tree["phone_state"] = state.get("phone_state") or tree["phone_state"]
             tree["device_context"] = state.get("device_context") or tree["device_context"]
         except Exception as e:
-            logger.warning(f"Portal accessibility tree unavailable: {e} (retrying in {PORTAL_RETRY_SECONDS:.0f}s)")
+            # No "retrying" here: in accessibility mode the provider fails the step on this empty tree.
+            logger.warning(f"Portal accessibility tree unavailable: {e}")
+            logger.debug(f"Portal is not asked again for {PORTAL_RETRY_SECONDS:.0f}s")
             tree["a11y_error"] = self._portal_last_error = str(e)
             self._portal_retry_at = time.monotonic() + PORTAL_RETRY_SECONDS
         return tree

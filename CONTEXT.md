@@ -97,7 +97,7 @@ The statistics saved for one run when it ends (steps, actions, screens, AI calls
 _Avoid_: Metrics, run summary
 
 **Pre-run Warning**:
-A problem found just before a crawl starts that does not stop it but makes it worse than the settings promise (Portal's accessibility service off in boost/accessibility mode, Phoenix tracing on but its Managed Service could not be started). The GUI shows it in a dialog asking whether to start anyway (with "Enable Portal and start" when Portal is installed but off); the CLI prints it to stderr, with the `a11y-portal enable` command for Portal problems, and starts.
+A problem found just before a crawl starts that makes it worse than the settings promise (Portal's accessibility service off in boost/accessibility mode, Phoenix tracing on but its Managed Service could not be started). The GUI shows it in a dialog asking whether to start anyway (with "Enable Portal and start" when Portal is installed but off); the CLI prints it to stderr, with the `a11y-portal enable` command for Portal problems, and starts. A Portal problem in accessibility mode _blocks the run_: the crawl would fail at its first step, so the GUI offers only the fix or Cancel and the CLI exits 1 without starting.
 _Avoid_: Preflight error, validation error
 
 **Managed Service**:

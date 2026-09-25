@@ -46,6 +46,14 @@ def test_warns_when_portal_is_not_installed():
     assert warnings[0].portal_fix == "install"
 
 
+@pytest.mark.parametrize(("mode", "blocks"), [("accessibility", True), ("boost", False)])
+def test_portal_problem_blocks_the_run_only_in_accessibility_mode(mode, blocks):
+    for portal in (PortalStatus(True, "1.0", False), PortalStatus(False, None, False)):
+        warnings, _ = _collect(Config(ui_parser_mode=mode), portal=portal)
+
+        assert warnings[0].blocks_run is blocks
+
+
 def test_no_portal_warning_in_omniparser_mode_or_without_a_device():
     off = PortalStatus(True, "1.0", False)
 

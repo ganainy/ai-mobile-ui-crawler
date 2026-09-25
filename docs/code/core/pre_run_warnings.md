@@ -4,7 +4,7 @@ file: src/mobile_crawler/core/pre_run_warnings.py
 ---
 # mobile_crawler.core.pre_run_warnings
 
-Pre-run warnings: problems that do not stop a crawl but make it worse than the settings promise.
+Pre-run warnings: problems that make a crawl worse than the settings promise, or make it pointless.
 
 Source: `src/mobile_crawler/core/pre_run_warnings.py`
 
