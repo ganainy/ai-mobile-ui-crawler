@@ -95,3 +95,43 @@ async def test_input_text_clear_generates_move_end_then_deletes():
     assert parts[0] == "123"  # MOVE_END first
     assert all(p == "67" for p in parts[1:])  # All DEL
     assert len(parts) == 101  # 1 MOVE_END + 100 DEL
+
+
+@pytest.mark.asyncio
+async def test_input_text_types_otp_code_one_paced_digit_at_a_time(monkeypatch):
+    # Split OTP boxes move focus per digit; a single burst dropped a random digit.
+    driver = _driver()
+    driver.device.shell = AsyncMock(return_value="")
+    sleep = AsyncMock()
+    monkeypatch.setattr(
+        "mobile_crawler.domain.crawler_agent.tools.driver.android.asyncio.sleep", sleep
+    )
+
+    assert await driver.input_text("156503")
+
+    typed = [c.args[0] for c in driver.device.shell.await_args_list]
+    assert typed == [f'input text "{d}"' for d in "156503"]
+    assert sleep.await_count == 5  # a pause between each pair of digits
+
+
+@pytest.mark.asyncio
+async def test_input_text_otp_code_with_clear_clears_first():
+    driver = _driver()
+    driver.device.shell = AsyncMock(return_value="")
+
+    await driver.input_text("1234", clear=True)
+
+    calls = [c.args[0] for c in driver.device.shell.await_args_list]
+    assert calls[0].startswith("input keyevent 123")
+    assert calls[1:] == [f'input text "{d}"' for d in "1234"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("text", ["7", "123456789", "12a456", "+491701234"])
+async def test_input_text_non_otp_text_is_sent_in_one_command(text):
+    driver = _driver()
+    driver.device.shell = AsyncMock(return_value="")
+
+    await driver.input_text(text)
+
+    driver.device.shell.assert_called_once_with(f'input text "{text}"')

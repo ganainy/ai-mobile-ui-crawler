@@ -27,6 +27,15 @@ PORTAL_RETRY_SECONDS = 60.0
 
 _APP_LABEL_CONCURRENCY = 16
 
+# Pause between digits when typing a verification code (see _send_text).
+OTP_CHAR_DELAY_SECONDS = 0.1
+_OTP_MAX_LEN = 8
+
+
+def _is_otp_code(text: str) -> bool:
+    """A short all-digit string, e.g. a verification code typed into split boxes."""
+    return 2 <= len(text) <= _OTP_MAX_LEN and text.isascii() and text.isdigit()
+
 
 class AndroidDriver(DeviceDriver):
     """Raw Android device I/O via ADB only - no Portal needed."""
@@ -166,40 +175,39 @@ class AndroidDriver(DeviceDriver):
     async def input_text(self, text: str, clear: bool = False) -> bool:
         try:
             await self.ensure_connected()
-
-            if clear:
-                # Clear existing text by moving cursor to end and sending DEL key events in a single command
-                keycodes = ["123"] + ["67"] * 100  # KEYCODE_MOVE_END = 123, KEYCODE_DEL = 67
-                await self.device.shell(f"input keyevent {' '.join(keycodes)}")
-
-            # Escape special characters for shell
-            escaped_text = (
-                text.replace("\\", "\\\\")
-                .replace('"', '\\"')
-                .replace("$", "\\$")
-                .replace("`", "\\`")
-                .replace(" ", "%s")
-            )
-
-            # Use ADB input text
-            await self.device.shell(f'input text "{escaped_text}"')
+            await self._send_text(text, clear)
             return True
         except Exception as e:
             if await self._handle_connection_drop(e):
-                escaped_text = (
-                    text.replace("\\", "\\\\")
-                    .replace('"', '\\"')
-                    .replace("$", "\\$")
-                    .replace("`", "\\`")
-                    .replace(" ", "%s")
-                )
-                if clear:
-                    keycodes = ["123"] + ["67"] * 100
-                    await self.device.shell(f"input keyevent {' '.join(keycodes)}")
-                await self.device.shell(f'input text "{escaped_text}"')
+                await self._send_text(text, clear)
                 return True
             else:
                 raise
+
+    async def _send_text(self, text: str, clear: bool) -> None:
+        if clear:
+            # Clear existing text by moving cursor to end and sending DEL key events in a single command
+            keycodes = ["123"] + ["67"] * 100  # KEYCODE_MOVE_END = 123, KEYCODE_DEL = 67
+            await self.device.shell(f"input keyevent {' '.join(keycodes)}")
+
+        if _is_otp_code(text):
+            # Split OTP fields (one box per digit) move focus after each digit; a burst
+            # of key events outruns that focus change and drops digits, so pace them.
+            for i, digit in enumerate(text):
+                if i:
+                    await asyncio.sleep(OTP_CHAR_DELAY_SECONDS)
+                await self.device.shell(f'input text "{digit}"')
+            return
+
+        # Escape special characters for shell
+        escaped_text = (
+            text.replace("\\", "\\\\")
+            .replace('"', '\\"')
+            .replace("$", "\\$")
+            .replace("`", "\\`")
+            .replace(" ", "%s")
+        )
+        await self.device.shell(f'input text "{escaped_text}"')
 
     async def hide_keyboard(self) -> bool:
         """Send BACK only when the IME is actually shown (BACK otherwise navigates)."""
