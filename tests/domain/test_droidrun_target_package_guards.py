@@ -369,6 +369,20 @@ async def test_state_provider_relaunches_after_system_dialog_grace_exhausted(and
 
 
 @pytest.mark.asyncio
+async def test_state_provider_never_relaunches_over_google_play_services(android_state_provider):
+    provider, _ = android_state_provider
+    provider.system_dialog_grace_captures = 2
+    mock_adb = Mock()
+    mock_adb.get_current_package.return_value = "com.google.android.gms"
+
+    with patch("mobile_crawler.domain.adb_action_executor.ADBActionExecutor", return_value=mock_adb):
+        for _ in range(10):
+            await provider.get_state()
+
+    mock_adb.am_start_recovery.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_state_provider_correct_package_proceeds_to_capture(android_state_provider):
     provider, driver = android_state_provider
     mock_adb = Mock()

@@ -69,6 +69,11 @@ SYSTEM_DIALOG_PACKAGES = frozenset(
     }
 )
 
+# Google Play services hosts Google sign-in (account picker, consent, verification).
+# Relaunching the app over it cancels the sign-in however long the agent takes,
+# so it is never recovered from (the run's time/step limit still ends the crawl).
+UNLIMITED_GRACE_PACKAGES = frozenset({"com.google.android.gms"})
+
 
 async def fetch_state_with_retry(
     fetch: Callable[[], Awaitable[dict[str, Any]]],
@@ -478,6 +483,14 @@ class AndroidStateProvider(StateProvider):
             kind, grace = "system dialog", self.system_dialog_grace_captures
         else:
             kind, grace = None, 0
+        if current_package in UNLIMITED_GRACE_PACKAGES:
+            logger.info(
+                "Foreground is %s %s (target=%s); leaving it open (no recovery relaunch)",
+                kind,
+                current_package,
+                self.target_package,
+            )
+            return
         if kind and self._external_captures < grace:
             self._external_captures += 1
             logger.info(
