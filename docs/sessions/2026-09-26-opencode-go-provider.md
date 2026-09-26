@@ -19,3 +19,5 @@ Not tried: a real subscription, the GUI, whether `kimi-k3` handles the agent pro
 The user's console log showed the Test call arrived as product `go` on `/inference/go/openai/v1/chat/completions` and returned 400 `inference_failed` (kimi-k3, max_tokens 1). The key was valid; the check mapped 400 to "Key rejected". Fixed: only 401/403 reject, 400 counts as accepted, max_tokens 16. The cause of the 400 is not known.
 
 A working call from the user's OpenCode desktop app: `glm-5.3`, streaming, same endpoint/key type. Default/test model switched from `kimi-k3` to `glm-5.3`.
+
+glm-5.3 Test call also 400 (non-streaming, 87-byte body, 23 ms, key accepted). Hypothesis: the Go endpoint needs `stream: true`; asked the user to curl both. If confirmed, stream in the key check and default crawls to streaming for OpenCode Go.
