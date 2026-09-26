@@ -32,6 +32,17 @@ SMS_WAIT_SECONDS = 60.0
 _SKIP_HINT = "Skip authentication now (call skip_authentication) and continue exploring the screens you can reach."
 
 
+_GOOGLE_SIGN_IN_RULE = (
+    "GOOGLE SIGN-IN: if the app only offers 'Sign in with Google' / 'Continue with Google' (no email sign-up), "
+    "use it with the Google account already on the device: tap the sign-in button, choose the device account "
+    "(e.g. 'Continue as <name>') and accept every consent or verification screen from Google Play services "
+    "(tap Continue / Allow / Agree / I agree). Never press Back on those Google screens: it cancels the sign-in "
+    "and leaves the app. Only call skip_authentication if the Google flow fails after you completed it, "
+    "never while a Google account picker or consent screen is showing. After signing in, never tap "
+    "'Sign out' / 'Log out'."
+)
+
+
 def generate_password() -> str:
     """Random password meeting common complexity rules (upper, lower, digit, symbol)."""
     rng = secrets.SystemRandom()
@@ -98,7 +109,8 @@ class AuthenticationSession:
                 f"(username: {account.username}, password: {account.password}). "
                 "If the app logs you out later (you are logged out), log in again with the same account. "
                 "Do not create a new account. Email or SMS codes: use get_email_code / get_sms_code "
-                f"(at most {cap} code attempts). If login is impossible, call skip_authentication "
+                f"(at most {cap} code attempts). {_GOOGLE_SIGN_IN_RULE} "
+                "If login is impossible, call skip_authentication "
                 "and continue exploring the reachable screens."
             )
         address = self.signup_address()
@@ -121,6 +133,7 @@ class AuthenticationSession:
             "These credentials are for a NEW account only: never enter them on a log-in form and never try to "
             "log in (no account exists, so it will fail). If a screen only offers log in, or shows a "
             "wrong email or password error, look for the app's sign-up / create-account option instead. "
+            f"{_GOOGLE_SIGN_IN_RULE} "
             "If sign-up is impossible or blocked, call skip_authentication and continue exploring "
             "the reachable screens."
         )
@@ -161,7 +174,10 @@ class AuthenticationSession:
                 "parameters": {
                     "reason": {"type": "string", "required": True, "description": "Why authentication cannot be done"},
                 },
-                "description": "Give up on sign-up/login and continue exploring reachable screens.",
+                "description": (
+                    "Give up on sign-up/login and continue exploring reachable screens. "
+                    "Do not call it while a Google account picker or consent screen is showing: complete that flow."
+                ),
                 "function": self._skip_authentication,
             },
         }

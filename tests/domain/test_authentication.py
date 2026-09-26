@@ -98,6 +98,13 @@ def test_goal_section_signup_when_no_account():
     assert "save_app_account" in text
 
 
+def test_goal_section_covers_google_only_apps_in_signup_and_login():
+    for text in (make().goal_section(), make(account=AppAccount("bob", "secret")).goal_section()):
+        assert "GOOGLE SIGN-IN" in text
+        assert "Never press Back" in text
+        assert "Sign out" in text
+
+
 def test_goal_section_uses_address_override_for_signup():
     s = make()
     s.address_override = "me@x.com"

@@ -1736,8 +1736,10 @@ class CrawlerAgentService:
             "(location, camera, notifications, contacts, etc.), answer it right away: "
             "tap 'While using the app', 'Only this time' or 'Allow' so the features "
             "behind it stay reachable. Never leave a permission dialog open. If a "
-            "Google account picker appears, dismiss it unless you are deliberately "
-            "using Google sign-in."
+            "Google account picker or Google consent screen appears while signing in, "
+            "complete it (choose the device account, tap Continue/Allow) instead of "
+            "pressing Back. Dismiss it only when no sign-in is in progress. Never tap "
+            "'Sign out' or 'Log out'."
         )
 
         return CrawlerGoal(
