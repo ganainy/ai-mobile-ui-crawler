@@ -2,7 +2,7 @@
 
 import requests
 
-from mobile_crawler.domain.opencode_go import OPENCODE_GO_BASE_URL, OPENCODE_GO_DEFAULT_MODEL
+from mobile_crawler.domain.opencode_go import OPENCODE_GO_BASE_URL, OPENCODE_GO_DEFAULT_MODEL, request_headers
 
 _GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 _OPENROUTER_URL = "https://openrouter.ai/api/v1/auth/key"  # /models is public, this one validates the key
@@ -27,7 +27,7 @@ def check_api_key(provider: str, api_key: str) -> tuple[bool, str]:
             # /models is public and there is no key endpoint, so send a one-token chat call.
             response = requests.post(
                 f"{OPENCODE_GO_BASE_URL}/chat/completions",
-                headers={"Authorization": f"Bearer {api_key}"},
+                headers={"Authorization": f"Bearer {api_key}", **request_headers()},
                 json={
                     "model": OPENCODE_GO_DEFAULT_MODEL,
                     "messages": [{"role": "user", "content": "hi"}],

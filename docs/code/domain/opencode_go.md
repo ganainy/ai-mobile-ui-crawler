@@ -12,6 +12,8 @@ Source: `src/mobile_crawler/domain/opencode_go.py`
 - `OpenCodeGoLimitError`
 
 ## Functions
+- `request_headers`
+- `llm_kwargs`
 - `chat_models_from_ids`
 - `is_limit_error`
 - `is_opencode_go_llm`

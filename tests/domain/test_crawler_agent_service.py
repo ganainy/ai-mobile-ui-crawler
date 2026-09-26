@@ -713,6 +713,8 @@ class TestCrawlerAgentServiceConfig:
             assert profile["model"] == "kimi-k3"
             assert profile["kwargs"]["api_key"] == "oc-test-key"
             assert profile["kwargs"]["api_base"] == "https://opencode.ai/zen/go/v1"
+            assert profile["kwargs"]["default_headers"]["x-opencode-session"]
+            assert profile["kwargs"]["default_headers"]["User-Agent"].startswith("mobile-crawler/")
 
     @patch.dict(os.environ, {"OPENROUTER_API_KEY": "sk-or-env-key"}, clear=False)
     def test_get_crawler_agent_config_openrouter_uses_env_api_key(self, crawler_agent_service, mock_config_manager):

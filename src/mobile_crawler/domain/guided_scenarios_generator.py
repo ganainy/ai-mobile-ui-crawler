@@ -17,7 +17,7 @@ from llama_index.core.base.llms.types import ChatMessage
 from mobile_crawler.config.config_manager import ConfigManager
 from mobile_crawler.domain.crawler_agent.agent.utils.inference import acall_with_retries
 from mobile_crawler.domain.crawler_agent.agent.utils.llm_picker import load_llm
-from mobile_crawler.domain.opencode_go import OPENCODE_GO_LLM_KWARGS
+from mobile_crawler.domain.opencode_go import llm_kwargs as opencode_go_llm_kwargs
 from mobile_crawler.infrastructure.app_web_profile_resolver import AppWebProfileResolver
 
 logger = logging.getLogger("crawler_agent")
@@ -121,7 +121,7 @@ def _build_extraction_llm(config_manager: ConfigManager):
         primary_key, env_keys = _PROVIDER_API_KEY_ENV[ai_provider]
         api_key = _resolve_api_key(config_manager, primary_key, env_keys)
 
-    extra_kwargs = OPENCODE_GO_LLM_KWARGS if ai_provider == "opencode_go" else {}
+    extra_kwargs = opencode_go_llm_kwargs() if ai_provider == "opencode_go" else {}
     return load_llm(
         provider_name=_PROVIDER_MAPPING[ai_provider],
         model=ai_model,

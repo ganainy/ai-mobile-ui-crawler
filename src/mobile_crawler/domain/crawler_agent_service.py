@@ -45,7 +45,7 @@ from mobile_crawler.domain.jev_shadow import (
     jev_shadow_problem,
 )
 from mobile_crawler.domain.models import ActionResult, AIAction, BoundingBox
-from mobile_crawler.domain.opencode_go import OPENCODE_GO_LLM_KWARGS
+from mobile_crawler.domain.opencode_go import llm_kwargs as opencode_go_llm_kwargs
 from mobile_crawler.domain.prompt_builder import format_login_and_form_data
 from mobile_crawler.domain.run_outcome import build_guided_progress
 from mobile_crawler.domain.screen_tracker import ScreenState, ScreenTracker
@@ -419,7 +419,7 @@ class CrawlerAgentService:
         elif ai_provider == "opencode_go":
             api_key = resolve_api_key("opencode_go_api_key", ["OPENCODE_GO_API_KEY"])
             for profile in config["llm_profiles"].values():
-                profile["kwargs"].update(OPENCODE_GO_LLM_KWARGS)
+                profile["kwargs"].update(opencode_go_llm_kwargs(self.trace_session_id or None))
             if api_key:
                 set_llm_api_key(api_key)
 

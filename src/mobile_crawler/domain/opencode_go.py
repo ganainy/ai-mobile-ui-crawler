@@ -1,5 +1,6 @@
 """OpenCode Go (opencode.ai/go): a subscription AI Provider served through an OpenAI-style chat endpoint."""
 
+import uuid
 from typing import Any
 
 OPENCODE_GO_BASE_URL = "https://opencode.ai/zen/go/v1"
@@ -10,8 +11,22 @@ OPENCODE_GO_VISION_MODEL = "deepseek-v4-flash-vision-exp"
 # `responses` (GPT, Grok, Muse) and Anthropic `messages` (MiniMax, Qwen) families are hidden.
 _CHAT_COMPLETIONS_PREFIXES = ("glm-", "kimi-", "deepseek-", "longcat-", "hy")
 
-# OpenAILike defaults to a 3900-token context window; these are large-context models.
-OPENCODE_GO_LLM_KWARGS = {"api_base": OPENCODE_GO_BASE_URL, "context_window": 128_000}
+OPENCODE_GO_USER_AGENT = "mobile-crawler/1.0"
+
+
+def request_headers(session_id: str | None = None) -> dict[str, str]:
+    """Headers OpenCode Go requires: a stable session id per conversation and the client's own user agent."""
+    return {"x-opencode-session": session_id or str(uuid.uuid4()), "User-Agent": OPENCODE_GO_USER_AGENT}
+
+
+def llm_kwargs(session_id: str | None = None) -> dict[str, Any]:
+    """OpenAILike kwargs for OpenCode Go. Its default context window is 3900 tokens; these models take far more."""
+    return {
+        "api_base": OPENCODE_GO_BASE_URL,
+        "context_window": 128_000,
+        "default_headers": request_headers(session_id),
+    }
+
 
 LIMIT_MESSAGE = (
     "OpenCode Go usage limit reached (capped per 5 hours, week and month). Wait for the limit to reset, "

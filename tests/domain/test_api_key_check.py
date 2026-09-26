@@ -45,7 +45,10 @@ def test_opencode_go_key_checked_with_a_tiny_chat_call():
     with patch("mobile_crawler.domain.api_key_check.requests.post", return_value=_response(200)) as post:
         assert check_api_key("opencode_go", " k ") == (True, "Key works")
     assert post.call_args.args[0].endswith("/chat/completions")
-    assert post.call_args.kwargs["headers"] == {"Authorization": "Bearer k"}
+    headers = post.call_args.kwargs["headers"]
+    assert headers["Authorization"] == "Bearer k"
+    assert headers["x-opencode-session"]
+    assert headers["User-Agent"].startswith("mobile-crawler/")
     assert post.call_args.kwargs["json"]["max_tokens"] == 16
 
 
