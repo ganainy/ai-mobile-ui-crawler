@@ -31,12 +31,15 @@ def check_api_key(provider: str, api_key: str) -> tuple[bool, str]:
                 json={
                     "model": OPENCODE_GO_DEFAULT_MODEL,
                     "messages": [{"role": "user", "content": "hi"}],
-                    "max_tokens": 1,
+                    "max_tokens": 16,
                 },
                 timeout=_TIMEOUT_SECONDS,
             )
             if response.status_code == 429:
                 return True, "Key works, but the usage limit is reached"
+            if response.status_code == 400:
+                # Auth passed (a bad key is 401/403); the tiny test call itself was refused.
+                return True, "Key accepted (test call returned HTTP 400)"
         else:
             raise ValueError(f"Unknown provider: {provider}")
     except requests.RequestException as exc:

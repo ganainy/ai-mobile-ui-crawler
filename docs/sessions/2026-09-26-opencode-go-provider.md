@@ -14,3 +14,6 @@ Implemented the design from [the grill](2026-09-26-opencode-go-provider-grill.md
 - Wired: service config, guided scenarios, model selector, settings panel, main window, pre-crawl validator, CLI help, `docs/cli.md`, README.
 
 Not tried: a real subscription, the GUI, whether `kimi-k3` handles the agent prompts.
+
+## Follow-up: "Key rejected"
+The user's console log showed the Test call arrived as product `go` on `/inference/go/openai/v1/chat/completions` and returned 400 `inference_failed` (kimi-k3, max_tokens 1). The key was valid; the check mapped 400 to "Key rejected". Fixed: only 401/403 reject, 400 counts as accepted, max_tokens 16. The cause of the 400 is not known.
