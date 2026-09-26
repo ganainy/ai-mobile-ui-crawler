@@ -20,3 +20,4 @@ Source: `src/mobile_crawler/infrastructure/mobsf_docker.py`
 - [[code/infrastructure/omniparser_docker|infrastructure.omniparser_docker]]
 - [[code/ui/main_window|ui.main_window]]
 - [[code/ui/mobsf_startup_worker|ui.mobsf_startup_worker]]
+- [[code/ui/widgets/run_history_view|ui.widgets.run_history_view]]

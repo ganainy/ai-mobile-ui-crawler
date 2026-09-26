@@ -7,9 +7,10 @@ MobSF on its own.
 
 import logging
 import shutil
-import socket
 import subprocess
 import time
+import urllib.error
+import urllib.request
 from urllib.parse import urlparse
 
 from mobile_crawler.config.defaults import MOBSF_DEFAULT_URL
@@ -62,11 +63,18 @@ class MobSFDockerService:
             return False
 
     def is_mobsf_reachable(self) -> bool:
-        """Return True if the MobSF server accepts connections at the URL's host and port."""
+        """Return True once the MobSF web server answers HTTP at the URL.
+
+        A bare TCP connect is not enough: Docker's port forwarding accepts
+        connections while MobSF is still booting, so the API would refuse the
+        first requests. Any HTTP response (even an error status) counts.
+        """
         try:
-            with socket.create_connection((self.host, self.port), timeout=2):
-                return True
-        except OSError:
+            urllib.request.urlopen(f"http://{self.host}:{self.port}/", timeout=3).close()
+            return True
+        except urllib.error.HTTPError:
+            return True
+        except (OSError, ValueError):
             return False
 
     def container_state(self) -> str:

@@ -209,6 +209,14 @@ class TestPortFromUrl:
 
     def test_reachability_probes_url_host_and_port(self):
         service = MobSFDockerService("http://192.168.1.5:9123")
-        with patch("mobile_crawler.infrastructure.mobsf_docker.socket.create_connection") as connect:
+        with patch("mobile_crawler.infrastructure.mobsf_docker.urllib.request.urlopen") as urlopen:
             assert service.is_mobsf_reachable() is True
-        assert connect.call_args[0][0] == ("192.168.1.5", 9123)
+        assert urlopen.call_args[0][0] == "http://192.168.1.5:9123/"
+
+    def test_open_port_without_http_answer_is_not_reachable(self):
+        service = MobSFDockerService()
+        with patch(
+            "mobile_crawler.infrastructure.mobsf_docker.urllib.request.urlopen",
+            side_effect=ConnectionResetError,
+        ):
+            assert service.is_mobsf_reachable() is False

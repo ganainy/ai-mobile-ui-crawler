@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QMessageBox,
+    QPlainTextEdit,
     QPushButton,
     QScrollArea,
     QTableWidget,
@@ -21,6 +22,7 @@ from PySide6.QtWidgets import (
 )
 
 from mobile_crawler.core.run_stats_sections import RUN_STATS_SECTIONS, format_stat_value
+from mobile_crawler.infrastructure.mobsf_docker import MobSFDockerService
 
 if TYPE_CHECKING:
     from mobile_crawler.domain.report_generator import ReportGenerator
@@ -34,6 +36,8 @@ class MobSFAnalysisWorker(QThread):
 
     analysis_finished = Signal(int, object)
     analysis_failed = Signal(int, str)
+    status_changed = Signal(str)
+    log_message = Signal(str)
 
     def __init__(self, run, mobsf_manager: "MobSFManager"):
         super().__init__()
@@ -42,10 +46,66 @@ class MobSFAnalysisWorker(QThread):
 
     def run(self):
         try:
-            result = self._mobsf_manager.analyze_run(self._run, self._run.device_id)
+            config_manager = getattr(self._mobsf_manager, "config_manager", None)
+            if config_manager is not None and config_manager.get("enable_mobsf_analysis", False):
+                self.status_changed.emit("Starting MobSF...")
+                self.log_message.emit("Starting the MobSF container (first start can take a minute or two)...")
+                ok, message = MobSFDockerService(config_manager.get("mobsf_api_url")).prepare()
+                if not ok:
+                    raise RuntimeError(f"Could not start MobSF: {message}")
+            self.status_changed.emit("Running MobSF...")
+            result = self._mobsf_manager.analyze_run(
+                self._run, self._run.device_id, log_callback=lambda message, _color=None: self.log_message.emit(message)
+            )
             self.analysis_finished.emit(self._run.id, result)
         except Exception as e:
             self.analysis_failed.emit(self._run.id, str(e))
+
+
+class MobSFProgressDialog(QDialog):
+    """Live log of a running MobSF analysis. Closing it leaves the analysis running."""
+
+    def __init__(self, title: str, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(title)
+        self.resize(640, 380)
+        layout = QVBoxLayout(self)
+        self._status = QLabel("Starting...")
+        layout.addWidget(self._status)
+        self._log = QPlainTextEdit()
+        self._log.setReadOnly(True)
+        layout.addWidget(self._log)
+        buttons = QHBoxLayout()
+        buttons.addStretch()
+        self.close_button = QPushButton("Close (analysis keeps running)")
+        self.close_button.clicked.connect(self.close)
+        buttons.addWidget(self.close_button)
+        layout.addLayout(buttons)
+
+    def set_status(self, text: str) -> None:
+        self._status.setText(text)
+
+    def append_log(self, message: str) -> None:
+        self._log.appendPlainText(message)
+
+
+class ReportWorker(QThread):
+    """Background worker for report generation (telemetry fetch can block on the network)."""
+
+    report_finished = Signal(int, str)
+    report_failed = Signal(int, str)
+
+    def __init__(self, run_id: int, report_generator):
+        super().__init__()
+        self._run_id = run_id
+        self._report_generator = report_generator
+
+    def run(self):
+        try:
+            path = self._report_generator.generate(self._run_id, fetch_telemetry=True)
+            self.report_finished.emit(self._run_id, str(path))
+        except Exception as e:
+            self.report_failed.emit(self._run_id, str(e))
 
 
 class RunStatsDialog(QDialog):
@@ -118,6 +178,7 @@ class RunHistoryView(QWidget):
         self._mobsf_manager = mobsf_manager
         self._run_stats_repository = run_stats_repository
         self._mobsf_worker = None
+        self._report_worker = None
 
         self.setMinimumHeight(170)
 
@@ -310,7 +371,7 @@ class RunHistoryView(QWidget):
         has_selection = len(selected_items) > 0
 
         self.delete_button.setEnabled(has_selection)
-        self.report_button.setEnabled(has_selection)
+        self.report_button.setEnabled(has_selection and self._report_worker is None)
         self.mobsf_button.setEnabled(has_selection)
         self._update_stats_button_state()
 
@@ -420,12 +481,30 @@ class RunHistoryView(QWidget):
         )
 
         if reply == QMessageBox.StandardButton.Yes:
-            try:
-                report_path = self._report_generator.generate(run_id, fetch_telemetry=True)
-                self.report_generated.emit(run_id)
-                QMessageBox.information(self, "Report Generated", f"Report generated successfully:\n{report_path}")
-            except Exception as e:
-                QMessageBox.critical(self, "Error", f"Failed to generate report: {e}")
+            self.report_button.setEnabled(False)
+            self.report_button.setText("Generating...")
+            worker = ReportWorker(run_id, self._report_generator)
+            worker.report_finished.connect(self._on_report_finished)
+            worker.report_failed.connect(self._on_report_failed)
+            worker.finished.connect(worker.deleteLater)
+            worker.finished.connect(lambda: setattr(self, "_report_worker", None))
+            self._report_worker = worker
+            worker.start()
+
+    def _reset_report_button(self):
+        self.report_button.setText("Generate Report")
+        self.report_button.setEnabled(self.get_selected_run_id() is not None)
+
+    def _on_report_finished(self, run_id: int, report_path: str):
+        """Handle report worker completion."""
+        self._reset_report_button()
+        self.report_generated.emit(run_id)
+        QMessageBox.information(self, "Report Generated", f"Report generated successfully:\n{report_path}")
+
+    def _on_report_failed(self, run_id: int, error: str):
+        """Handle report worker failure."""
+        self._reset_report_button()
+        QMessageBox.critical(self, "Error", f"Failed to generate report: {error}")
 
     def _on_mobsf_clicked(self):
         """Handle MobSF button click."""
@@ -473,6 +552,13 @@ class RunHistoryView(QWidget):
                 self.mobsf_button.setEnabled(False)
                 self.mobsf_button.setText("Running MobSF...")
                 worker = MobSFAnalysisWorker(run, self._mobsf_manager)
+                self._close_mobsf_progress()
+                dialog = MobSFProgressDialog(f"MobSF Analysis - {package}", self)
+                worker.status_changed.connect(self.mobsf_button.setText)
+                worker.status_changed.connect(dialog.set_status)
+                worker.log_message.connect(dialog.append_log)
+                self._mobsf_progress = dialog
+                dialog.show()
                 worker.analysis_finished.connect(self._on_mobsf_finished)
                 worker.analysis_failed.connect(self._on_mobsf_failed)
                 worker.finished.connect(worker.deleteLater)
@@ -488,8 +574,15 @@ class RunHistoryView(QWidget):
             return self._run_repository.get_run_by_id(run_id)
         return next((run for run in self._run_repository.get_all_runs() if run.id == run_id), None)
 
+    def _close_mobsf_progress(self):
+        dialog = getattr(self, "_mobsf_progress", None)
+        self._mobsf_progress = None
+        if dialog is not None:
+            dialog.close()
+
     def _on_mobsf_finished(self, run_id: int, result):
         """Handle MobSF worker completion."""
+        self._close_mobsf_progress()
         self.mobsf_button.setText("Run MobSF")
         self.mobsf_button.setEnabled(self.get_selected_run_id() is not None)
         self.refresh()
@@ -514,6 +607,7 @@ class RunHistoryView(QWidget):
 
     def _on_mobsf_failed(self, run_id: int, error: str):
         """Handle unexpected MobSF worker exceptions."""
+        self._close_mobsf_progress()
         self.mobsf_button.setText("Run MobSF")
         self.mobsf_button.setEnabled(self.get_selected_run_id() is not None)
         self.refresh()

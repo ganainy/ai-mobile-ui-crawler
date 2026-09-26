@@ -338,6 +338,8 @@ class TestGenerateReport:
         # Select first row and click generate report
         view.table.selectRow(0)
         view._on_generate_report_clicked()
+        view._report_worker.wait(5000)
+        qt_app.processEvents()
 
         assert signal_emitted
         assert emitted_run_id == run.id
@@ -356,6 +358,8 @@ class TestGenerateReport:
         # Select first row and click generate report
         view.table.selectRow(0)
         view._on_generate_report_clicked()
+        view._report_worker.wait(5000)
+        qt_app.processEvents()
 
         # Check that report generator was called
         # (MockReportGenerator.generate is called, we can verify by checking it exists)
@@ -386,6 +390,8 @@ class TestMobSF:
                 self.manager = manager
                 self.analysis_finished = FakeSignal()
                 self.analysis_failed = FakeSignal()
+                self.status_changed = FakeSignal()
+                self.log_message = FakeSignal()
                 self.finished = FakeSignal()
                 self.started = False
                 FakeWorker.instances.append(self)
@@ -540,5 +546,114 @@ class TestManualReportFetchesTelemetry:
 
         view.table.selectRow(0)
         view._on_generate_report_clicked()
+        view._report_worker.wait(5000)
+        qt_app.processEvents()
 
         assert mock_report_generator.calls == [(run.id, True)]
+
+    def test_report_runs_off_the_ui_thread(self, qt_app, mock_run_repository, mock_mobsf_manager, monkeypatch):
+        import threading
+
+        mock_run_repository.add_run("emulator-5554", "com.example.app", "STOPPED")
+        threads = []
+
+        class SlowGenerator:
+            def generate(self, run_id, fetch_telemetry=False):
+                threads.append(threading.current_thread())
+                return "/path/report.html"
+
+        view = _create_run_history_view(mock_run_repository, SlowGenerator(), mock_mobsf_manager)
+        monkeypatch.setattr(QMessageBox, "question", lambda *args, **kwargs: QMessageBox.StandardButton.Yes)
+        monkeypatch.setattr(QMessageBox, "information", lambda *args, **kwargs: None)
+
+        view.table.selectRow(0)
+        view._on_generate_report_clicked()
+        assert not view.report_button.isEnabled()
+        view._report_worker.wait(5000)
+        qt_app.processEvents()
+
+        assert threads and threads[0] is not threading.main_thread()
+        assert view.report_button.text() == "Generate Report"
+        assert view.report_button.isEnabled()
+
+
+class TestMobSFWorkerStartsServer:
+    """The Run MobSF button starts the MobSF container when it isn't running."""
+
+    def _worker(self, monkeypatch, prepare_result):
+        prepared = []
+
+        class FakeDocker:
+            def __init__(self, url):
+                prepared.append(url)
+
+            def prepare(self):
+                return prepare_result
+
+        from mobile_crawler.ui.widgets import run_history_view as run_history_module
+
+        monkeypatch.setattr(run_history_module, "MobSFDockerService", FakeDocker)
+        manager = Mock()
+        manager.config_manager.get.side_effect = lambda key, default=None: {
+            "enable_mobsf_analysis": True,
+            "mobsf_api_url": "http://localhost:8000",
+        }.get(key, default)
+        manager.analyze_run.return_value = Mock(success=True)
+        worker = run_history_module.MobSFAnalysisWorker(Mock(id=1, device_id="d"), manager)
+        return worker, manager, prepared
+
+    def test_starts_server_before_analysis(self, qt_app, monkeypatch):
+        worker, manager, prepared = self._worker(monkeypatch, (True, "MobSF is ready"))
+        finished = []
+        worker.analysis_finished.connect(lambda run_id, result: finished.append(run_id))
+
+        worker.run()
+
+        assert prepared == ["http://localhost:8000"]
+        manager.analyze_run.assert_called_once()
+        assert finished == [1]
+
+    def test_start_failure_is_reported_without_analysis(self, qt_app, monkeypatch):
+        worker, manager, _ = self._worker(monkeypatch, (False, "Docker not installed"))
+        errors = []
+        worker.analysis_failed.connect(lambda run_id, error: errors.append(error))
+
+        worker.run()
+
+        manager.analyze_run.assert_not_called()
+        assert "Docker not installed" in errors[0]
+
+
+class TestMobSFProgressDialog:
+    def test_worker_streams_scan_logs(self, qt_app):
+        manager = Mock()
+        manager.config_manager.get.return_value = False
+
+        def fake_analyze(run, device_id, log_callback=None):
+            log_callback("Uploading APK", None)
+            return Mock(success=True)
+
+        manager.analyze_run.side_effect = fake_analyze
+        worker = run_history_module_worker(manager)
+        lines = []
+        worker.log_message.connect(lines.append)
+
+        worker.run()
+
+        assert lines == ["Uploading APK"]
+
+    def test_dialog_shows_status_and_log(self, qt_app):
+        from mobile_crawler.ui.widgets.run_history_view import MobSFProgressDialog
+
+        dialog = MobSFProgressDialog("t")
+        dialog.set_status("Running MobSF...")
+        dialog.append_log("Uploading APK")
+
+        assert dialog._status.text() == "Running MobSF..."
+        assert "Uploading APK" in dialog._log.toPlainText()
+
+
+def run_history_module_worker(manager):
+    from mobile_crawler.ui.widgets.run_history_view import MobSFAnalysisWorker
+
+    return MobSFAnalysisWorker(Mock(id=1, device_id="d"), manager)
