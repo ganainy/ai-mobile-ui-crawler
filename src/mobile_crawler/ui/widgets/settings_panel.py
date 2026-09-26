@@ -73,6 +73,7 @@ class SettingsPanel(QWidget):
     _status_bar_preview_captured = Signal(bytes)  # type: ignore
     _status_bar_preview_failed = Signal(str)  # type: ignore
     _portal_status_ready = Signal(str, bool)  # type: ignore  # status text, ready
+    _api_key_test_done = Signal(str, bool, str)  # type: ignore  # provider, ok, message
 
     def __init__(self, config_store: "UserConfigStore", parent=None):
         """Initialize settings panel widget.
@@ -98,6 +99,7 @@ class SettingsPanel(QWidget):
         self._status_bar_preview_captured.connect(self._on_status_bar_preview_captured)
         self._status_bar_preview_failed.connect(self._on_status_bar_preview_failed)
         self._portal_status_ready.connect(self._on_portal_status_ready)
+        self._api_key_test_done.connect(self._on_api_key_test_done)
         self._load_settings()
 
     def _setup_ui(self):
@@ -565,6 +567,11 @@ class SettingsPanel(QWidget):
         self.gemini_api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
         self.gemini_api_key_input.setPlaceholderText("Enter Gemini API key")
         gemini_layout.addWidget(self.gemini_api_key_input)
+        self.gemini_test_button = QPushButton("Test")
+        self.gemini_test_button.clicked.connect(lambda: self._test_api_key("gemini"))
+        gemini_layout.addWidget(self.gemini_test_button)
+        self.gemini_test_status_label = QLabel("")
+        gemini_layout.addWidget(self.gemini_test_status_label)
         api_keys_layout.addLayout(gemini_layout)
 
         # OpenRouter API Key
@@ -575,6 +582,11 @@ class SettingsPanel(QWidget):
         self.openrouter_api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
         self.openrouter_api_key_input.setPlaceholderText("Enter OpenRouter API key")
         openrouter_layout.addWidget(self.openrouter_api_key_input)
+        self.openrouter_test_button = QPushButton("Test")
+        self.openrouter_test_button.clicked.connect(lambda: self._test_api_key("openrouter"))
+        openrouter_layout.addWidget(self.openrouter_test_button)
+        self.openrouter_test_status_label = QLabel("")
+        openrouter_layout.addWidget(self.openrouter_test_status_label)
         api_keys_layout.addLayout(openrouter_layout)
 
         api_keys_group.setLayout(api_keys_layout)
@@ -1477,6 +1489,33 @@ class SettingsPanel(QWidget):
 
     def _check_portal(self) -> None:
         self._run_portal_action("Checking Portal...", "check")
+
+    def _api_key_widgets(self, provider: str) -> tuple[QLineEdit, QPushButton, QLabel]:
+        if provider == "gemini":
+            return self.gemini_api_key_input, self.gemini_test_button, self.gemini_test_status_label
+        return self.openrouter_api_key_input, self.openrouter_test_button, self.openrouter_test_status_label
+
+    def _test_api_key(self, provider: str) -> None:
+        key_input, button, status_label = self._api_key_widgets(provider)
+        button.setEnabled(False)
+        status_label.setStyleSheet("")
+        status_label.setText("Testing...")
+        threading.Thread(target=self._api_key_test_worker, args=(provider, key_input.text()), daemon=True).start()
+
+    def _api_key_test_worker(self, provider: str, api_key: str) -> None:
+        from mobile_crawler.domain.api_key_check import check_api_key
+
+        try:
+            ok, message = check_api_key(provider, api_key)
+        except Exception as exc:
+            ok, message = False, str(exc)
+        self._api_key_test_done.emit(provider, ok, message)
+
+    def _on_api_key_test_done(self, provider: str, ok: bool, message: str) -> None:
+        _, button, status_label = self._api_key_widgets(provider)
+        button.setEnabled(True)
+        status_label.setStyleSheet(f"color: {'#2e7d32' if ok else '#c62828'};")
+        status_label.setText(message)
 
     def _install_portal(self) -> None:
         self._run_portal_action("Enabling Portal (installing it can take a few minutes)...", "install")

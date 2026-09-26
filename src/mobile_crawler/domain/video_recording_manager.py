@@ -16,6 +16,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+PULL_TIMEOUT_SECONDS = 300.0
+
 
 @dataclass
 class VideoSegment:
@@ -143,7 +145,11 @@ class VideoRecordingManager:
         self._recording = False
         await self._write_manifest_async()
 
-        saved_segments = [segment.local_path for segment in self._segments if segment.local_path]
+        saved_segments = [
+            segment.local_path
+            for segment in self._segments
+            if segment.local_path and not segment.error
+        ]
         if saved_segments:
             logger.info("Video recording saved: %s", saved_segments[-1])
             return saved_segments[-1]
@@ -254,10 +260,16 @@ class VideoRecordingManager:
 
         output, retcode = await self._run_adb_command_async(
             ["pull", segment.device_path, local_path],
+            timeout=PULL_TIMEOUT_SECONDS,
         )
         if retcode != 0:
             segment.error = f"Failed to pull video segment: {output}".strip()
             logger.warning(segment.error)
+            # A killed pull leaves a truncated, unplayable mp4; the device copy is kept.
+            try:
+                os.remove(local_path)
+            except OSError:
+                pass
             self._segments.append(segment)
             self._current_segment = None
             await self._write_manifest_async()

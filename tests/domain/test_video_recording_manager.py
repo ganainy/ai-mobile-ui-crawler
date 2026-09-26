@@ -110,6 +110,39 @@ def test_stop_pulls_segment_and_writes_manifest(mock_create_process, tmp_path):
 
 
 @patch("mobile_crawler.domain.video_recording_manager.asyncio.create_subprocess_exec")
+def test_failed_pull_removes_truncated_file_and_uses_long_timeout(mock_create_process, tmp_path):
+    process = Mock()
+    process.returncode = None
+    process.wait = AsyncMock(return_value=0)
+    mock_create_process.return_value = process
+
+    pull_timeouts = []
+
+    async def adb_side_effect(cmd, suppress_stderr=False, timeout=None):
+        device_cmd = cmd[2:] if cmd[:2] == ["-s", "dev1"] else cmd
+        if device_cmd and device_cmd[0] == "pull":
+            pull_timeouts.append(timeout)
+            Path(device_cmd[2]).write_bytes(b"truncated")
+            return ("Command timed out after 30.0s", 1)
+        return ("", 0)
+
+    adb_client = Mock()
+    adb_client.execute_async = AsyncMock(side_effect=adb_side_effect)
+    manager = VideoRecordingManager(_config(), adb_client=adb_client, device_id="dev1")
+
+    async def run_lifecycle():
+        await manager.start_recording_async(42, str(tmp_path), "com.test.app")
+        return await manager.stop_recording_and_save_async()
+
+    assert asyncio.run(run_lifecycle()) is None
+
+    assert pull_timeouts and pull_timeouts[0] >= 120
+    assert list((tmp_path / "videos").glob("*.mp4")) == []
+    manifest = json.loads((tmp_path / "videos" / "manifest.json").read_text(encoding="utf-8"))
+    assert "Failed to pull" in manifest["segments"][0]["error"]
+
+
+@patch("mobile_crawler.domain.video_recording_manager.asyncio.create_subprocess_exec")
 def test_start_failure_is_graceful(mock_create_process, tmp_path):
     mock_create_process.side_effect = OSError("adb unavailable")
     adb_client = Mock()
