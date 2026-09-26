@@ -69,6 +69,7 @@ class VideoRecordingManager:
 
         self._process: asyncio.subprocess.Process | None = None
         self._segment_task: asyncio.Task | None = None
+        self._pull_tasks: set[asyncio.Task] = set()
         self._stop_requested = asyncio.Event()
         self._part = 0
         self._current_segment: VideoSegment | None = None
@@ -96,6 +97,7 @@ class VideoRecordingManager:
         self.manifest_path = self.video_dir / "manifest.json"
         self._stop_requested = asyncio.Event()
         self._segments = []
+        self._pull_tasks = set()
         self._part = 0
 
         output, retcode = await self._run_adb_command_async(
@@ -140,14 +142,18 @@ class VideoRecordingManager:
                 self._segment_task = None
 
         if self._current_segment:
-            await self._pull_current_segment()
+            segment, self._current_segment = self._current_segment, None
+            await self._pull_segment(segment)
+
+        if self._pull_tasks:
+            await asyncio.gather(*self._pull_tasks, return_exceptions=True)
 
         self._recording = False
         await self._write_manifest_async()
 
         saved_segments = [
             segment.local_path
-            for segment in self._segments
+            for segment in sorted(self._segments, key=lambda seg: seg.part)
             if segment.local_path and not segment.error
         ]
         if saved_segments:
@@ -165,18 +171,39 @@ class VideoRecordingManager:
             if process is None:
                 return
 
+            started = time.monotonic()
             await process.wait()
-            if self._current_segment:
-                await self._pull_current_segment()
+            finished, self._current_segment = self._current_segment, None
 
-            if not self._stop_requested.is_set():
+            if self._stop_requested.is_set():
+                self._current_segment = finished
+                return
+
+            if time.monotonic() - started < 2.0:
+                # screenrecord died immediately; avoid a tight restart loop.
                 try:
-                    await self._start_next_segment()
-                except Exception as exc:
-                    logger.warning("Failed to roll video recording segment: %s", exc)
-                    self._recording = False
-                    await self._write_manifest_async()
+                    await asyncio.wait_for(self._stop_requested.wait(), timeout=1.0)
+                except TimeoutError:
+                    pass
+                if self._stop_requested.is_set():
+                    self._current_segment = finished
                     return
+
+            # Restart recording before pulling: the pull can take minutes and
+            # would otherwise leave a gap in the video.
+            try:
+                await self._start_next_segment()
+            except Exception as exc:
+                logger.warning("Failed to roll video recording segment: %s", exc)
+                self._recording = False
+                if finished:
+                    await self._pull_segment(finished)
+                await self._write_manifest_async()
+                return
+            if finished:
+                task = asyncio.create_task(self._pull_segment(finished))
+                self._pull_tasks.add(task)
+                task.add_done_callback(self._pull_tasks.discard)
 
     async def _start_next_segment(self) -> None:
         self._part += 1
@@ -229,11 +256,7 @@ class VideoRecordingManager:
                 process.kill()
                 await process.wait()
 
-    async def _pull_current_segment(self) -> None:
-        segment = self._current_segment
-        if not segment:
-            return
-
+    async def _pull_segment(self, segment: VideoSegment) -> None:
         segment.stopped_at = time.strftime("%Y-%m-%dT%H:%M:%S")
         if self.finalize_wait > 0:
             await asyncio.sleep(self.finalize_wait)
@@ -242,7 +265,6 @@ class VideoRecordingManager:
         if not local_path:
             segment.error = "Local segment path not set"
             self._segments.append(segment)
-            self._current_segment = None
             await self._write_manifest_async()
             return
 
@@ -254,7 +276,6 @@ class VideoRecordingManager:
             segment.error = f"Device video file not found: {output}".strip()
             logger.warning(segment.error)
             self._segments.append(segment)
-            self._current_segment = None
             await self._write_manifest_async()
             return
 
@@ -271,7 +292,6 @@ class VideoRecordingManager:
             except OSError:
                 pass
             self._segments.append(segment)
-            self._current_segment = None
             await self._write_manifest_async()
             return
 
@@ -288,7 +308,6 @@ class VideoRecordingManager:
             logger.warning(segment.error)
 
         self._segments.append(segment)
-        self._current_segment = None
         await self._write_manifest_async()
 
     async def _write_manifest_async(self) -> None:
@@ -300,7 +319,10 @@ class VideoRecordingManager:
             "package": self.app_package,
             "device_id": self.device_id,
             "segment_seconds": self.segment_seconds,
-            "segments": [asdict(segment) for segment in self._segments],
+            "segments": [
+                asdict(segment)
+                for segment in sorted(self._segments, key=lambda seg: seg.part)
+            ],
         }
         if self._current_segment:
             payload["active_segment"] = asdict(self._current_segment)
