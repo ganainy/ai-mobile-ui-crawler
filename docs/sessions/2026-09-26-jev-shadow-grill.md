@@ -20,5 +20,5 @@ Grill (no code) on whether TypeSafe's Jev (a "System One" model: text state + ty
 - Glossary: added **Experimental Feature**; Pre-run Warning examples extended.
 
 ## Follow-ups
-- User to confirm the design, then file it as a GitHub issue.
+- Filed as issue #29 (labelled `ready-for-agent`).
 - Installing `typesafe-sdk` into `.venv312` needs the user's OK.
