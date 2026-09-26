@@ -24,6 +24,7 @@ AVD (command-line tools, no Android Studio needed), **Pixel 6 (or "Medium Phone"
    & "$SDK\cmdline-tools\latest\bin\avdmanager.bat" create avd -n tls33 -k "system-images;android-33;google_apis;x86_64" -d pixel_6
    ```
    If it says "Java version 17 or higher is required" although `java -version` shows 26: the tools cannot parse a version string without a dot. Run `$env:SKIP_JDK_VERSION_CHECK = "1"` first; if Java 26 is then too new for them, set `$env:JAVA_HOME` to Android Studio's bundled JDK (`C:\Program Files\Android\Android Studio\jbr`) and put its `bin` first on `PATH`.
+   `--licenses` asks about each license; answer `y` to all (or pipe them: `1..20 | ForEach-Object { "y" } | & "$SDK\cmdline-tools\latest\bin\sdkmanager.bat" --licenses`). If `avdmanager` prints "Could not load devices ... devices.xml" (Java 26), use Android Studio's JDK as above; the AVD is usually created anyway, check with `& "$SDK\emulator\emulator.exe" -list-avds`.
    (PowerShell syntax; in `cmd` use `set SDK=%LOCALAPPDATA%\Android\Sdk` and `%SDK%\...`.)
 3. Start it writable from a terminal (the flag only works from the command line):
    ```powershell
@@ -35,9 +36,9 @@ AVD (command-line tools, no Android Studio needed), **Pixel 6 (or "Medium Phone"
    adb disable-verity
    adb reboot
    ```
-   Wait for boot, then `adb root` and `adb remount`. If remount fails, restart the emulator with the step 3 command.
+   Wait for boot, then `adb root` and `adb remount`. If remount fails, restart the emulator with the step 3 command. (Verified: on `tls33`, `root`, `disable-verity` and `remount` all succeed.)
 5. Install PCAPdroid and its mitm add-on on the emulator (from F-Droid or GitHub releases; the emulator has no Play Store, so `adb install` the APKs). Open PCAPdroid > Settings > enable **TLS decryption** > install the add-on when prompted, and note the CA it generates.
-6. Export PCAPdroid's CA (Settings > TLS decryption > Export CA certificate, or `adb pull` it). Convert it to the system-store name and push it:
+6. Find PCAPdroid's CA. With root you can look for it: `adb shell "find /data/data/com.pcapdroid.mitm -iname '*ca-cert*'"`, then `adb pull` it (file name and location not verified). Convert it to the system-store name and push it:
    ```
    openssl x509 -inform PEM -subject_hash_old -in ca.pem | head -1     # prints e.g. 0a1b2c3d
    copy ca.pem 0a1b2c3d.0
