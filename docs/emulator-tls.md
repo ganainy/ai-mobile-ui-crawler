@@ -7,7 +7,7 @@ Why: on a normal phone the pcap stays TLS-encrypted (apps ignore user CAs, Googl
 
 ## Which emulator
 
-Android Studio AVD, **Pixel 6 (or "Medium Phone"), API 33, "Google APIs" x86_64 image**.
+AVD (command-line tools, no Android Studio needed), **Pixel 6 (or "Medium Phone"), API 33, "Google APIs" x86_64 image**.
 
 - **Not "Google Play"**: Play images cannot be rooted (`adb root` is refused). Your existing `Medium_Phone` AVD (API 37, Play Store, 16 KB pages) is one of these, so it will not work.
 - **API 33, not 34+**: up to API 33 the system CA store can be made writable with `-writable-system`. From API 34 the CAs live in the Conscrypt APEX and need a fiddly overlay.
@@ -15,8 +15,14 @@ Android Studio AVD, **Pixel 6 (or "Medium Phone"), API 33, "Google APIs" x86_64 
 
 ## One-time setup
 
-1. Android Studio > Tools > SDK Manager > SDK Platforms > tick **Android 13 (API 33)** > Show Package Details > **Google APIs Intel x86_64 Atom System Image**. Apply.
-2. Device Manager > Create Virtual Device > Pixel 6 > select that image > name it `tls33` > Finish.
+1. Android Studio is not needed. Download "Command line tools only" from https://developer.android.com/studio#command-tools and unzip it into `%LOCALAPPDATA%\Android\Sdk\cmdline-tools\latest` (rename the inner `cmdline-tools` folder to `latest`, so `latestin\sdkmanager.bat` exists).
+2. Install the image and create the AVD:
+   ```
+   set SDK=%LOCALAPPDATA%\Android\Sdk
+   %SDK%\cmdline-tools\latestin\sdkmanager.bat "system-images;android-33;google_apis;x86_64"
+   %SDK%\cmdline-tools\latestin\sdkmanager.bat --licenses
+   %SDK%\cmdline-tools\latestinvdmanager.bat create avd -n tls33 -k "system-images;android-33;google_apis;x86_64" -d pixel_6
+   ```
 3. Start it writable from a terminal (the flag only works from the command line):
    ```
    %LOCALAPPDATA%\Android\Sdk\emulator\emulator.exe -avd tls33 -writable-system -no-snapshot
