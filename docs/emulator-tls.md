@@ -17,15 +17,16 @@ AVD (command-line tools, no Android Studio needed), **Pixel 6 (or "Medium Phone"
 
 1. Android Studio is not needed. Download "Command line tools only" from https://developer.android.com/studio#command-tools and unzip it into `%LOCALAPPDATA%\Android\Sdk\cmdline-tools\latest` (rename the inner `cmdline-tools` folder to `latest`, so `latest\bin\sdkmanager.bat` exists).
 2. Install the image and create the AVD:
+   ```powershell
+   $SDK = "$env:LOCALAPPDATA\Android\Sdk"
+   & "$SDK\cmdline-tools\latest\bin\sdkmanager.bat" "system-images;android-33;google_apis;x86_64"
+   & "$SDK\cmdline-tools\latest\bin\sdkmanager.bat" --licenses
+   & "$SDK\cmdline-tools\latest\bin\avdmanager.bat" create avd -n tls33 -k "system-images;android-33;google_apis;x86_64" -d pixel_6
    ```
-   set SDK=%LOCALAPPDATA%\Android\Sdk
-   %SDK%\cmdline-tools\latest\bin\sdkmanager.bat "system-images;android-33;google_apis;x86_64"
-   %SDK%\cmdline-tools\latest\bin\sdkmanager.bat --licenses
-   %SDK%\cmdline-tools\latest\bin\avdmanager.bat create avd -n tls33 -k "system-images;android-33;google_apis;x86_64" -d pixel_6
-   ```
+   (PowerShell syntax; in `cmd` use `set SDK=%LOCALAPPDATA%\Android\Sdk` and `%SDK%\...`.)
 3. Start it writable from a terminal (the flag only works from the command line):
-   ```
-   %LOCALAPPDATA%\Android\Sdk\emulator\emulator.exe -avd tls33 -writable-system -no-snapshot
+   ```powershell
+   & "$env:LOCALAPPDATA\Android\Sdk\emulator\emulator.exe" -avd tls33 -writable-system -no-snapshot
    ```
 4. In a second terminal (other phones unplugged, or add `-s emulator-5554` to every adb command):
    ```
