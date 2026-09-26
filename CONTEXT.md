@@ -100,6 +100,10 @@ _Avoid_: Metrics, run summary
 A problem found just before a crawl starts that makes it worse than the settings promise (Portal's accessibility service off in boost/accessibility mode, Phoenix tracing on but its Managed Service could not be started). The GUI shows it in a dialog asking whether to start anyway (with "Enable Portal and start" when Portal is installed but off); the CLI prints it to stderr, with the `a11y-portal enable` command for Portal problems, and starts. A Portal problem in accessibility mode _blocks the run_: the crawl would fail at its first step, so the GUI offers only the fix or Cancel and the CLI exits 1 without starting.
 _Avoid_: Preflight error, validation error
 
+**Experimental Feature**:
+A feature that is off by default, lives in the Settings "Experimental" tab, and is switched on with a saved setting (also settable with `config set`), never an environment variable. It may be log-only, unfinished or unproven. The first is Jev shadowing (`jev_shadow_enabled`): TypeSafe Jev's element pick is logged beside the Executor's in `reports/jev_shadow.jsonl` and never acts on the device.
+_Avoid_: Beta, preview, feature flag
+
 **Managed Service**:
 A local server the app runs in Docker when a feature needs it (MobSF for static analysis, OmniParser for screen parsing, Phoenix for tracing). The app starts it when that feature is on, reuses one already answering at the configured local address instead of starting a second, and never manages one at a remote address. The CLI leaves it running; the GUI offers to stop it on exit.
 _Avoid_: Docker container, backend, sidecar

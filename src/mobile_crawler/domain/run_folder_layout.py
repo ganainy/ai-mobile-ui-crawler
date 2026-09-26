@@ -9,6 +9,7 @@ videos, APKs) stay in their own folders at the run folder's root::
     │   ├── analysis/            # Analysis Bundle
     │   ├── mobsf/               # MobSF JSON/PDF
     │   ├── config_snapshot.json
+    │   ├── jev_shadow.jsonl     # Jev shadow spike (Experimental)
     │   └── crawler_trace.jsonl
     ├── screenshots/  videos/  pcap/  apks/
 """
@@ -47,6 +48,10 @@ class RunFolderLayout:
     @property
     def config_snapshot(self) -> Path:
         return self.reports_dir / "config_snapshot.json"
+
+    @property
+    def jev_shadow(self) -> Path:
+        return self.reports_dir / "jev_shadow.jsonl"
 
     @property
     def crawler_trace(self) -> Path:

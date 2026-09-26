@@ -17,6 +17,7 @@ Source: `src/mobile_crawler/core/pre_run_warnings.py`
 ## Imports
 - [[code/domain/crawler_agent/agent/utils/tracing_setup|domain.crawler_agent.agent.utils.tracing_setup]]
 - [[code/domain/crawler_agent/portal|domain.crawler_agent.portal]]
+- [[code/domain/jev_shadow|domain.jev_shadow]]
 - [[code/infrastructure/phoenix_docker|infrastructure.phoenix_docker]]
 
 ## Imported by

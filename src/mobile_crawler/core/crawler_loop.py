@@ -269,6 +269,7 @@ class CrawlerLoop:
             )
             self._crawler_agent_service.human_prompter = self._human_prompter
             self._crawler_agent_service.human_fallback_enabled_override = self._human_fallback_enabled_override
+            self._crawler_agent_service.jev_shadow_path = str(RunFolderLayout(session_path).jev_shadow)
 
             # Initialize step phase tracking per D-01 (wrap at action level)
             self._crawler_agent_service.begin_step_tracking(

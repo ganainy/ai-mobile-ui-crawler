@@ -23,6 +23,8 @@ _PLAIN_KEYS = (
     "enable_traffic_capture",
     "enable_video_recording",
     "restart_app_before_run",
+    "jev_shadow_enabled",
+    "jev_shadow_model",
 )
 
 

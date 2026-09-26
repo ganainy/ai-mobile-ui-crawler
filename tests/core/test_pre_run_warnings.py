@@ -155,3 +155,40 @@ def test_a_failing_check_is_skipped():
 
     assert len(warnings) == 1
     assert "Phoenix" in warnings[0].message
+
+
+# --- Jev shadowing (Experimental Feature) ---------------------------------
+
+
+def test_no_jev_warning_when_shadowing_is_off(monkeypatch):
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+
+    warnings, _ = _collect(Config(ui_parser_mode="boost"))
+
+    assert warnings == []
+
+
+def test_warns_when_jev_shadowing_has_no_openrouter_key(monkeypatch):
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+
+    warnings, _ = _collect(Config(ui_parser_mode="boost", jev_shadow_enabled=True))
+
+    assert len(warnings) == 1
+    assert "Jev shadowing" in warnings[0].message
+    assert "OpenRouter" in warnings[0].message
+    assert not warnings[0].blocks_run
+
+
+def test_warns_when_typesafe_sdk_is_missing(monkeypatch):
+    monkeypatch.setattr("mobile_crawler.domain.jev_shadow.sdk_available", lambda: False)
+
+    warnings, _ = _collect(Config(ui_parser_mode="boost", jev_shadow_enabled=True, openrouter_api_key="k"))
+
+    assert len(warnings) == 1
+    assert "typesafe-sdk" in warnings[0].message
+
+
+def test_no_jev_warning_when_key_and_sdk_are_present():
+    warnings, _ = _collect(Config(ui_parser_mode="boost", jev_shadow_enabled=True, openrouter_api_key="k"))
+
+    assert warnings == []

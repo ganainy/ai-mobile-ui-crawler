@@ -9,10 +9,12 @@ import time
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from workflows.errors import WorkflowCancelledByUser
 
+from mobile_crawler.config.api_keys import resolve_api_key as resolve_api_key_from_config
 from mobile_crawler.config.config_manager import ConfigManager
 from mobile_crawler.domain.action_verifier import ActionVerifier
 from mobile_crawler.domain.authentication import AuthenticationSession
@@ -35,6 +37,13 @@ from mobile_crawler.domain.crawler_agent.agent.manager.events import ManagerResp
 from mobile_crawler.domain.errors import ErrorContext, FatalError
 from mobile_crawler.domain.guided_scenarios_generator import guided_scenarios_config_key
 from mobile_crawler.domain.human_fallback import HumanFallback, HumanFallbackConfig, HumanPrompter
+from mobile_crawler.domain.jev_shadow import (
+    JevShadow,
+    jev_shadow_enabled,
+    jev_shadow_model,
+    jev_shadow_openrouter_key,
+    jev_shadow_problem,
+)
 from mobile_crawler.domain.models import ActionResult, AIAction, BoundingBox
 from mobile_crawler.domain.prompt_builder import format_login_and_form_data
 from mobile_crawler.domain.run_outcome import build_guided_progress
@@ -197,6 +206,9 @@ class CrawlerAgentService:
         self.human_prompter: HumanPrompter | None = None
         # Set by the crawl loop for a single-run CLI override; None means use the persisted setting.
         self.human_fallback_enabled_override: bool | None = None
+        # Set by the crawl loop: where the Jev shadow spike (Experimental Feature) writes its JSONL.
+        self.jev_shadow_path: str | None = None
+        self._jev_shadow: JevShadow | None = None
         self._auth_session: AuthenticationSession | None = None
         self._current_handler = None
         self._handler_loop = None
@@ -274,18 +286,7 @@ class CrawlerAgentService:
         droid_provider = provider_mapping[ai_provider]
 
         def resolve_api_key(primary_key: str, env_keys: list[str]) -> str | None:
-            key_value = self.config_manager.get(primary_key)
-            if not key_value:
-                try:
-                    key_value = self.config_manager.user_config_store.get_secret_plaintext(primary_key)
-                except (KeyError, AttributeError):
-                    key_value = None
-            if not key_value:
-                for env_key in env_keys:
-                    key_value = os.environ.get(env_key)
-                    if key_value:
-                        break
-            return key_value
+            return resolve_api_key_from_config(self.config_manager, primary_key, env_keys)
 
         config = {
             "agent": {
@@ -760,6 +761,33 @@ class CrawlerAgentService:
 
         # after_sleep_action is now a real delay driven by UIWaitPredicate
         # (wait_for_ui_settled) in the agents — no longer forced to 0.0
+
+    async def _attach_jev_shadow(self) -> None:
+        """Give the Executor a Jev shadow when the Experimental setting is on and usable."""
+        await self._close_jev_shadow()
+        executor = getattr(self._crawler_agent, "executor_agent", None)
+        if executor is None or not self.jev_shadow_path or not jev_shadow_enabled(self.config_manager):
+            return
+        problem = jev_shadow_problem(self.config_manager)
+        if problem:
+            logger.warning(f"Jev shadowing skipped: {problem}.")
+            return
+        self._jev_shadow = JevShadow(
+            api_key=jev_shadow_openrouter_key(self.config_manager),
+            jsonl_path=Path(self.jev_shadow_path),
+            model=jev_shadow_model(self.config_manager),
+            step_provider=lambda: self._current_step_number,
+        )
+        executor.shadow = self._jev_shadow
+        logger.info(f"Jev shadowing on (log only): model={self._jev_shadow.model}")
+
+    async def _close_jev_shadow(self) -> None:
+        shadow, self._jev_shadow = self._jev_shadow, None
+        if shadow is not None:
+            try:
+                await shadow.aclose()
+            except Exception as e:
+                logger.debug(f"Jev shadow close failed: {e}")
 
     def _start_sub_phase(self, phase_name: str) -> None:
         """Record the start timestamp for a diagnostic sub-phase."""
@@ -1801,6 +1829,7 @@ class CrawlerAgentService:
 
                 # Wire observers to the Crawler agent's state_provider and driver
                 self._wire_observers_to_agent()
+                await self._attach_jev_shadow()
 
                 result = self._crawler_agent.run()
                 try:
@@ -2325,6 +2354,7 @@ class CrawlerAgentService:
     async def cleanup(self) -> None:
         """Cleanup agent resources."""
         await self._shutdown_active_workflow()
+        await self._close_jev_shadow()
         if self._crawler_agent:
             try:
                 # Close LLM clients to ensure AsyncClient.aclose() is called

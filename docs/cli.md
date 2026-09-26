@@ -55,6 +55,7 @@ Each run gets `%APPDATA%\mobile-crawler\output_data\run_<run-id>_<date>_<time>\`
 | `reports\mobsf\` | MobSF JSON/PDF reports, when MobSF is on |
 | `reports\config_snapshot.json` | Settings the run used |
 | `reports\crawler_trace.jsonl` | Full agent trace |
+| `reports\jev_shadow.jsonl` | Jev's pick beside the Executor's, only with `config set jev_shadow_enabled true` (experimental; needs an OpenRouter key; summarize with `scripts/jev_shadow_summary.py RUN_FOLDER`) |
 | `screenshots\step_0001.png`, ... | One screenshot per step |
 | `videos\`, `pcap\`, `apks\` | Screen video, traffic capture and the APK MobSF scanned, when those are on |
 

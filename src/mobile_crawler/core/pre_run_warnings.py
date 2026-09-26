@@ -34,7 +34,7 @@ def collect_pre_run_warnings(config_manager, device_id: str | None) -> list[PreR
 
     The checks run in parallel (each waits on the network or adb for up to ~2 s).
     """
-    checks = (_portal_warning, _phoenix_warning)
+    checks = (_portal_warning, _phoenix_warning, _jev_shadow_warning)
     with ThreadPoolExecutor(max_workers=len(checks)) as pool:
         futures = [(check, pool.submit(check, config_manager, device_id)) for check in checks]
     warnings = []
@@ -121,4 +121,17 @@ def _phoenix_warning(config_manager, device_id: str | None) -> PreRunWarning | N
         f"Phoenix tracing is enabled but Phoenix could not be started in Docker at {endpoint}"
         f"{f' ({reason})' if reason else ''}, {no_trace}. "
         f"Fix: {fix}, or turn tracing off in Settings."
+    )
+
+
+def _jev_shadow_warning(config_manager, device_id: str | None) -> PreRunWarning | None:
+    """Jev shadowing (Experimental) is on but cannot run: no OpenRouter key or no typesafe-sdk."""
+    from mobile_crawler.domain.jev_shadow import jev_shadow_problem
+
+    problem = jev_shadow_problem(config_manager)
+    if problem is None:
+        return None
+    return PreRunWarning(
+        f"Jev shadowing is enabled but {problem}, so this run will not log Jev's picks. "
+        "Fix: add the key or install typesafe-sdk, or turn it off in Settings > Experimental."
     )

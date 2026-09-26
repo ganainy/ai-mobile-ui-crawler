@@ -9,6 +9,7 @@ This agent is responsible for:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
@@ -37,6 +38,7 @@ if TYPE_CHECKING:
     from mobile_crawler.domain.crawler_agent.agent.action_context import ActionContext
     from mobile_crawler.domain.crawler_agent.agent.droid import CrawlerAgentState
     from mobile_crawler.domain.crawler_agent.agent.tool_registry import ToolRegistry
+    from mobile_crawler.domain.jev_shadow import JevShadow
 
 logger = logging.getLogger("crawler_agent")
 
@@ -79,6 +81,8 @@ class ExecutorAgent(Workflow):
         self.action_ctx = action_ctx
         self.shared_state = shared_state
         self.prompt_resolver = prompt_resolver or PromptResolver()
+        # Jev shadow spike (Experimental Feature): set by the service when enabled, else None.
+        self.shadow: JevShadow | None = None
 
         logger.debug("ExecutorAgent initialized.")
 
@@ -166,6 +170,7 @@ class ExecutorAgent(Workflow):
         prompt_text = messages[0].content if messages else None
         screenshot = self.shared_state.screenshot
 
+        shadow_task = self._start_shadow(ev.subgoal)
         try:
             logger.info("Executor response:", extra={"color": "green"})
             llm_start = time.perf_counter()
@@ -173,6 +178,7 @@ class ExecutorAgent(Workflow):
             executor_llm_ms = (time.perf_counter() - llm_start) * 1000
             response_text = str(response)
         except ValueError as e:
+            self._finish_shadow(shadow_task, ev.subgoal, None, None)
             logger.warning(f"Executor LLM returned empty response: {e}")
             error_response = (
                 "### Thought\nExecutor failed to respond, try again\n"
@@ -192,7 +198,12 @@ class ExecutorAgent(Workflow):
             )
             ctx.write_event_to_stream(event)
             return event
+        except asyncio.CancelledError:
+            if shadow_task is not None:
+                shadow_task.cancel()
+            raise
         except Exception as e:
+            self._finish_shadow(shadow_task, ev.subgoal, None, None)
             raise RuntimeError(f"Error calling LLM in executor: {e}") from e
 
         # Extract usage
@@ -210,6 +221,7 @@ class ExecutorAgent(Workflow):
             parsed_action = parse_executor_response(response_text)
         except Exception as e:
             logger.warning(f"Failed to parse executor response in get_response: {e}")
+        self._finish_shadow(shadow_task, ev.subgoal, (parsed_action or {}).get("actions"), executor_llm_ms)
 
         event = ExecutorResponseEvent(
             response=response_text,
@@ -223,6 +235,24 @@ class ExecutorAgent(Workflow):
         )
         ctx.write_event_to_stream(event)
         return event
+
+    def _start_shadow(self, subgoal: str):
+        """Ask Jev alongside the LLM call (Experimental Feature); never raises, never waits."""
+        if self.shadow is None:
+            return None
+        try:
+            return self.shadow.start(subgoal, self.shared_state.a11y_tree)
+        except Exception as e:
+            logger.debug(f"Jev shadow start failed: {e}")
+            return None
+
+    def _finish_shadow(self, task, subgoal: str, actions: list[dict] | None, executor_ms: float | None) -> None:
+        if task is None or self.shadow is None:
+            return
+        try:
+            self.shadow.finish(task, subgoal, actions, executor_ms)
+        except Exception as e:
+            logger.debug(f"Jev shadow finish failed: {e}")
 
     @step
     async def process_response(self, ctx: Context, ev: ExecutorResponseEvent) -> ExecutorActionEvent:

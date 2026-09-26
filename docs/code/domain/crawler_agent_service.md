@@ -16,6 +16,7 @@ Source: `src/mobile_crawler/domain/crawler_agent_service.py`
 - `CrawlerAgentService`
 
 ## Imports
+- [[code/config/api_keys|config.api_keys]]
 - [[code/config/config_manager|config.config_manager]]
 - [[code/domain/action_verifier|domain.action_verifier]]
 - [[code/domain/adb_action_executor|domain.adb_action_executor]]
@@ -31,6 +32,7 @@ Source: `src/mobile_crawler/domain/crawler_agent_service.py`
 - [[code/domain/errors|domain.errors]]
 - [[code/domain/guided_scenarios_generator|domain.guided_scenarios_generator]]
 - [[code/domain/human_fallback|domain.human_fallback]]
+- [[code/domain/jev_shadow|domain.jev_shadow]]
 - [[code/domain/models|domain.models]]
 - [[code/domain/omni_parser_client|domain.omni_parser_client]]
 - [[code/domain/prompt_builder|domain.prompt_builder]]

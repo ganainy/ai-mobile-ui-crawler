@@ -108,7 +108,7 @@ def _shared_state():
     )
 
 
-def _run_batch(actions_json, registry=None, max_actions=5, foreground_packages=None, monkeypatch=None):
+def _run_batch(actions_json, registry=None, max_actions=5, foreground_packages=None, monkeypatch=None, shadow=None):
     registry = registry or FakeRegistry()
     settles = []
 
@@ -134,6 +134,7 @@ def _run_batch(actions_json, registry=None, max_actions=5, foreground_packages=N
             foreground_package=foreground,
             timeout=30,
         )
+        agent.shadow = shadow
         return await agent.run(subgoal="fill and submit")
 
     return asyncio.run(go()), registry, settles
@@ -199,3 +200,44 @@ def test_ui_settle_wait_runs_once_after_the_whole_batch(monkeypatch):
     _, _, settles = _run_batch(FORM, monkeypatch=monkeypatch)
 
     assert settles == ["click"]
+
+
+# --- Jev shadow hook ---------------------------------------------------------
+
+
+class RecordingShadow:
+    def __init__(self, fail_start=False):
+        self.fail_start = fail_start
+        self.started = []
+        self.finished = []
+
+    def start(self, subgoal, elements):
+        if self.fail_start:
+            raise RuntimeError("boom")
+        self.started.append(subgoal)
+        return "task"
+
+    def finish(self, task, subgoal, actions, executor_ms):
+        self.finished.append((task, subgoal, actions, executor_ms))
+
+
+def test_shadow_gets_the_subgoal_and_the_batched_actions(monkeypatch):
+    shadow = RecordingShadow()
+
+    result, _, _ = _run_batch(FORM, monkeypatch=monkeypatch, shadow=shadow)
+
+    assert shadow.started == ["fill and submit"]
+    ((task, subgoal, actions, executor_ms),) = shadow.finished
+    assert (task, subgoal) == ("task", "fill and submit")
+    assert [a["index"] for a in actions] == [5, 3, 4]
+    assert executor_ms >= 0
+    assert result["outcome"] is True
+
+
+def test_shadow_failure_never_fails_the_step(monkeypatch):
+    shadow = RecordingShadow(fail_start=True)
+
+    result, registry, _ = _run_batch(FORM, monkeypatch=monkeypatch, shadow=shadow)
+
+    assert result["outcome"] is True
+    assert shadow.finished == []

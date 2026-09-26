@@ -20,6 +20,7 @@ Exploration logic: action execution/verification, screen and state tracking, OCR
 - [[code/domain/guided_scenarios_generator|domain.guided_scenarios_generator]] - Generates a Guided Scenarios list for an app from its App Web Profile.
 - [[code/domain/human_fallback|domain.human_fallback]] - Human Fallback: opt-in prompt for codes and manual auth steps, with timeout (see CONTEXT.md).
 - [[code/domain/input_dictionary|domain.input_dictionary]] - Context-aware form input dictionary for matching UI fields to appropriate test values.
+- [[code/domain/jev_shadow|domain.jev_shadow]] - Jev shadow spike (Experimental Feature): log TypeSafe Jev's element pick beside the Executor's.
 - [[code/domain/model_adapters|domain.model_adapters]] - Abstract base class for AI model adapters.
 - [[code/domain/models|domain.models]] - Domain models for the mobile crawler.
 - [[code/domain/omni_parser_client|domain.omni_parser_client]] - OmniParser client for vision-based UI parsing.

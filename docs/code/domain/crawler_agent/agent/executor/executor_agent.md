@@ -22,6 +22,7 @@ Source: `src/mobile_crawler/domain/crawler_agent/agent/executor/executor_agent.p
 - [[code/domain/crawler_agent/agent/utils/prompt_resolver|domain.crawler_agent.agent.utils.prompt_resolver]]
 - [[code/domain/crawler_agent/config_manager/config_manager|domain.crawler_agent.config_manager.config_manager]]
 - [[code/domain/crawler_agent/config_manager/prompt_loader|domain.crawler_agent.config_manager.prompt_loader]]
+- [[code/domain/jev_shadow|domain.jev_shadow]]
 - [[code/domain/ui_wait_predicate|domain.ui_wait_predicate]]
 
 ## Imported by

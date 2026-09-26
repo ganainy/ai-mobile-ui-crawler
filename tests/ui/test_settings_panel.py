@@ -220,12 +220,13 @@ class TestSettingsPanelInit:
     def test_settings_tabs_are_grouped_by_workflow(self, qt_app, mock_config_store):
         """Test settings tabs use the consolidated workflow grouping."""
         panel = _create_settings_panel(mock_config_store)
-        assert panel.tab_widget.count() == 4
+        assert panel.tab_widget.count() == 5
         assert [panel.tab_widget.tabText(i) for i in range(panel.tab_widget.count())] == [
             "General",
             "AI Crawler",
             "API Keys & Parsing",
             "Integrations",
+            "Experimental",
         ]
 
     def test_settings_tabs_are_scrollable(self, qt_app, mock_config_store):
@@ -969,6 +970,32 @@ class TestRestartAppBeforeRun:
         assert mock_config_store.get_setting("restart_app_before_run", default=True) is False
         reloaded = _create_settings_panel(mock_config_store)
         assert not reloaded.restart_app_checkbox.isChecked()
+
+
+class TestExperimentalTab:
+    """The Experimental tab holds the Jev shadowing settings."""
+
+    def test_tab_exists_and_defaults_are_off(self, qt_app, mock_config_store):
+        panel = _create_settings_panel(mock_config_store)
+
+        titles = [panel.tab_widget.tabText(i) for i in range(panel.tab_widget.count())]
+        assert titles[-1] == "Experimental"
+        assert not panel.jev_shadow_checkbox.isChecked()
+        assert panel.jev_shadow_model_input.text() == "~typesafe/jev-latest"
+
+    def test_choices_are_saved_and_reloaded(self, qt_app, mock_config_store, monkeypatch):
+        monkeypatch.setattr(QMessageBox, "information", lambda parent, title, message: None)
+        panel = _create_settings_panel(mock_config_store)
+        panel.jev_shadow_checkbox.setChecked(True)
+        panel.jev_shadow_model_input.setText("~typesafe/jev-x")
+
+        panel._on_save_clicked()
+
+        assert mock_config_store.get_setting("jev_shadow_enabled", default=False) is True
+        assert mock_config_store.get_setting("jev_shadow_model", default="") == "~typesafe/jev-x"
+        reloaded = _create_settings_panel(mock_config_store)
+        assert reloaded.jev_shadow_checkbox.isChecked()
+        assert reloaded.jev_shadow_model_input.text() == "~typesafe/jev-x"
 
 
 class TestVerificationInboxGroup:

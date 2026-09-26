@@ -31,6 +31,7 @@ from PySide6.QtWidgets import (
 
 from mobile_crawler.config.defaults import MOBSF_DEFAULT_URL, OMNIPARSER_DEFAULT_URL, correct_mobsf_api_url
 from mobile_crawler.core.portal_actions import PORTAL_MANUAL_STEPS
+from mobile_crawler.domain.jev_shadow import DEFAULT_MODEL as JEV_DEFAULT_MODEL
 from mobile_crawler.infrastructure.app_account_store import AppAccount
 from mobile_crawler.ui.widgets.status_bar_exclusion_preview import StatusBarExclusionPreview
 
@@ -117,6 +118,9 @@ class SettingsPanel(QWidget):
 
         # 4. Integrations Tab (Traffic, Video, MobSF, Tracing)
         self.tab_widget.addTab(self._setup_integrations_tab(), "Integrations")
+
+        # 5. Experimental Tab (Experimental Features: log-only or unfinished)
+        self.tab_widget.addTab(self._setup_experimental_tab(), "Experimental")
 
         main_layout.addWidget(self.tab_widget, 1)
 
@@ -739,6 +743,35 @@ class SettingsPanel(QWidget):
         layout.addStretch()
         return self._wrap_in_scroll_area(tab)
 
+    def _setup_experimental_tab(self) -> QWidget:
+        """Create the Experimental tab (Experimental Features)."""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+
+        jev_group = QGroupBox("Jev shadowing")
+        jev_layout = QVBoxLayout()
+        self.jev_shadow_checkbox = QCheckBox("Jev shadowing (log only, never acts)")
+        jev_layout.addWidget(self.jev_shadow_checkbox)
+
+        model_layout = QHBoxLayout()
+        model_layout.addWidget(QLabel("Model:"))
+        self.jev_shadow_model_input = QLineEdit()
+        self.jev_shadow_model_input.setPlaceholderText(JEV_DEFAULT_MODEL)
+        model_layout.addWidget(self.jev_shadow_model_input)
+        jev_layout.addLayout(model_layout)
+
+        note = QLabel(
+            "Uses the OpenRouter key from API Keys & Parsing. Sends each step's element text to "
+            "OpenRouter and writes jev_shadow.jsonl in the run's reports folder. The crawl itself "
+            "is unchanged."
+        )
+        note.setWordWrap(True)
+        jev_layout.addWidget(note)
+        jev_group.setLayout(jev_layout)
+        layout.addWidget(jev_group)
+        layout.addStretch()
+        return self._wrap_in_scroll_area(tab)
+
     def _setup_integrations_tab(self) -> QWidget:
         """Create the Integrations tab."""
         tab = QWidget()
@@ -1001,6 +1034,11 @@ class SettingsPanel(QWidget):
             bool(self._config_store.get_setting("restart_app_before_run", default=True))
         )
 
+        self.jev_shadow_checkbox.setChecked(bool(self._config_store.get_setting("jev_shadow_enabled", default=False)))
+        self.jev_shadow_model_input.setText(
+            str(self._config_store.get_setting("jev_shadow_model", default=JEV_DEFAULT_MODEL) or JEV_DEFAULT_MODEL)
+        )
+
         # Load screen configuration
         top_bar_height = self._config_store.get_setting("top_bar_height", default=80)
         self.top_bar_height_input.setValue(top_bar_height)
@@ -1192,6 +1230,11 @@ class SettingsPanel(QWidget):
                 self._config_store.set_setting("limit_type", limit_type, "string")
                 self._config_store.set_setting(
                     "restart_app_before_run", self.restart_app_checkbox.isChecked(), "bool"
+                )
+
+                self._config_store.set_setting("jev_shadow_enabled", self.jev_shadow_checkbox.isChecked(), "bool")
+                self._config_store.set_setting(
+                    "jev_shadow_model", self.jev_shadow_model_input.text().strip() or JEV_DEFAULT_MODEL, "string"
                 )
 
                 # Save screen configuration
@@ -1809,6 +1852,8 @@ class SettingsPanel(QWidget):
         self.max_steps_input.setValue(100)
         self.max_duration_input.setValue(300)
         self.restart_app_checkbox.setChecked(True)
+        self.jev_shadow_checkbox.setChecked(False)
+        self.jev_shadow_model_input.setText(JEV_DEFAULT_MODEL)
         self.test_address_input.setText("Kaiserstraße 12, 60311 Frankfurt am Main, Germany")
         self.test_phone_input.clear()
         self.verification_inbox_address_input.clear()
