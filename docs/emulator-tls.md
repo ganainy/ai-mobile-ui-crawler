@@ -110,7 +110,7 @@ There is no Play Store, so install APKs with `adb`.
   ```powershell
   adb -s emulator-5554 install-multiple 00_base.apk 01_split_config.arm64_v8a.apk 02_split_config.xxhdpi.apk
   ```
-  (untested) The phone's copy has an arm64 split; the x86_64 emulator needs ARM translation to run arm64-only native code. Android 11+ x86 images normally include it, but this is not verified. If the app crashes with a native-library error, get an x86_64 build instead.
+  **Fails on `tls33`** with `INSTALL_FAILED_NO_MATCHING_ABIS` (res=-113) for Flow: the phone's copy only has an arm64 split, and this "Google APIs" x86_64 image has no ARM translation. You need an **x86_64 (or universal) build** of the app, or add `libndk_translation` to `/system` yourself (root allows it; untested). Apps without native code (e.g. the Portal APK) install fine.
 - **From your phone:**
   ```powershell
   adb -s <phone-serial> shell pm path <package>       # lists base + split APK paths
