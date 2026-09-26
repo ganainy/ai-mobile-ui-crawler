@@ -1051,3 +1051,22 @@ class TestHumanFallbackGroup:
         reloaded = _create_settings_panel(mock_config_store)
         assert reloaded.human_fallback_checkbox.isChecked()
         assert reloaded.human_fallback_timeout_input.value() == 9
+
+
+class TestKeyTestUsesSelectedModel:
+    def test_key_test_passes_the_general_tab_model_for_its_provider(self, qt_app, mock_config_store):
+        from unittest.mock import patch
+
+        panel = _create_settings_panel(mock_config_store)
+        panel.opencode_go_api_key_input.setText("k")
+        panel.set_selected_ai("opencode_go", "glm-5.3")
+
+        with patch("mobile_crawler.domain.api_key_check.check_api_key", return_value=(True, "Key works")) as check:
+            panel._api_key_test_worker("opencode_go", "k", panel._model_for_key_test("opencode_go"))
+
+        check.assert_called_once_with("opencode_go", "k", "glm-5.3")
+
+    def test_other_providers_selection_is_ignored(self, qt_app, mock_config_store):
+        panel = _create_settings_panel(mock_config_store)
+        panel.set_selected_ai("gemini", "gemini-3.8-flash")
+        assert panel._model_for_key_test("opencode_go") is None

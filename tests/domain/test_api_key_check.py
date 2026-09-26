@@ -69,3 +69,9 @@ def test_opencode_go_400_means_key_was_accepted():
         ok, message = check_api_key("opencode_go", "k")
     assert ok
     assert "400" in message
+
+
+def test_opencode_go_test_uses_the_selected_model():
+    with patch("mobile_crawler.domain.api_key_check.requests.post", return_value=_response(200)) as post:
+        check_api_key("opencode_go", "k", model="kimi-k3")
+    assert post.call_args.kwargs["json"]["model"] == "kimi-k3"

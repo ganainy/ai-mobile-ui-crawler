@@ -1477,6 +1477,7 @@ class MainWindow(QMainWindow):
         """
         self._ai_provider = provider
         self._ai_model = model
+        self.settings_panel.set_selected_ai(provider, model)
         self._update_start_button_state()
 
     def _on_settings_saved(self) -> None:

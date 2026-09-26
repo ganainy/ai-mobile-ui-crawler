@@ -1526,13 +1526,22 @@ class SettingsPanel(QWidget):
         button.setEnabled(False)
         status_label.setStyleSheet("")
         status_label.setText("Testing...")
-        threading.Thread(target=self._api_key_test_worker, args=(provider, key_input.text()), daemon=True).start()
+        model = self._model_for_key_test(provider)
+        threading.Thread(target=self._api_key_test_worker, args=(provider, key_input.text(), model), daemon=True).start()
 
-    def _api_key_test_worker(self, provider: str, api_key: str) -> None:
+    def set_selected_ai(self, provider: str | None, model: str | None) -> None:
+        """Remember the General tab's provider/model so the key Test uses the chosen model."""
+        self._selected_ai = (provider, model)
+
+    def _model_for_key_test(self, provider: str) -> str | None:
+        selected_provider, selected_model = getattr(self, "_selected_ai", (None, None))
+        return selected_model if selected_provider == provider else None
+
+    def _api_key_test_worker(self, provider: str, api_key: str, model: str | None = None) -> None:
         from mobile_crawler.domain.api_key_check import check_api_key
 
         try:
-            ok, message = check_api_key(provider, api_key)
+            ok, message = check_api_key(provider, api_key, model)
         except Exception as exc:
             ok, message = False, str(exc)
         self._api_key_test_done.emit(provider, ok, message)

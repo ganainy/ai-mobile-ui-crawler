@@ -23,3 +23,5 @@ A working call from the user's OpenCode desktop app: `glm-5.3`, streaming, same 
 glm-5.3 Test call also 400 (non-streaming, 87-byte body, 23 ms, key accepted). Hypothesis: the Go endpoint needs `stream: true`; asked the user to curl both. If confirmed, stream in the key check and default crawls to streaming for OpenCode Go.
 
 Cause of the 400s: `MissingSessionID` (user's curl). Fix: send `x-opencode-session` and a `mobile-crawler/1.0` user agent on the key test, crawl and Guided Scenarios calls.
+
+Key Test uses the model selected in the General tab (only when the selected provider is the one being tested).

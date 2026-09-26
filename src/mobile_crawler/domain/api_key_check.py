@@ -9,8 +9,11 @@ _OPENROUTER_URL = "https://openrouter.ai/api/v1/auth/key"  # /models is public, 
 _TIMEOUT_SECONDS = 10
 
 
-def check_api_key(provider: str, api_key: str) -> tuple[bool, str]:
-    """Return (ok, message) for a "gemini", "openrouter" or "opencode_go" key."""
+def check_api_key(provider: str, api_key: str, model: str | None = None) -> tuple[bool, str]:
+    """Return (ok, message) for a "gemini", "openrouter" or "opencode_go" key.
+
+    ``model`` is the model selected in the General tab; only the OpenCode Go test makes a model call.
+    """
     api_key = api_key.strip()
     if not api_key:
         return False, "Enter a key first"
@@ -29,7 +32,7 @@ def check_api_key(provider: str, api_key: str) -> tuple[bool, str]:
                 f"{OPENCODE_GO_BASE_URL}/chat/completions",
                 headers={"Authorization": f"Bearer {api_key}", **request_headers()},
                 json={
-                    "model": OPENCODE_GO_DEFAULT_MODEL,
+                    "model": model or OPENCODE_GO_DEFAULT_MODEL,
                     "messages": [{"role": "user", "content": "hi"}],
                     "max_tokens": 16,
                 },
