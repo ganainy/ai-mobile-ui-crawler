@@ -16,3 +16,5 @@ Open: why `adb pull` took minutes; not investigated.
 ## Follow-up: pcap size and TLS
 
 The 75 MB pcap is all Flow traffic (filter works): one Google server, front-loaded, hosts `www.gstatic.com` and `aisandbox-pa.googleapis.com`. Decryption is requested but not happening on the phone. Issue #31 and `docs/emulator-tls.md` describe the rooted-emulator route (untested). Commit d8bd316.
+
+The emulator guide was reworked to use the SDK command-line tools (sdkmanager/avdmanager) instead of Android Studio (commits def32c1, 24f14c8).
