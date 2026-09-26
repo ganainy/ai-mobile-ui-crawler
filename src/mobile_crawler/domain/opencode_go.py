@@ -3,7 +3,7 @@
 from typing import Any
 
 OPENCODE_GO_BASE_URL = "https://opencode.ai/zen/go/v1"
-OPENCODE_GO_DEFAULT_MODEL = "kimi-k3"
+OPENCODE_GO_DEFAULT_MODEL = "glm-5.3"
 OPENCODE_GO_VISION_MODEL = "deepseek-v4-flash-vision-exp"
 
 # `/models` lists ids only. These prefixes are the models served through `chat/completions`; the
