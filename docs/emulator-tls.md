@@ -15,13 +15,13 @@ AVD (command-line tools, no Android Studio needed), **Pixel 6 (or "Medium Phone"
 
 ## One-time setup
 
-1. Android Studio is not needed. Download "Command line tools only" from https://developer.android.com/studio#command-tools and unzip it into `%LOCALAPPDATA%\Android\Sdk\cmdline-tools\latest` (rename the inner `cmdline-tools` folder to `latest`, so `latestin\sdkmanager.bat` exists).
+1. Android Studio is not needed. Download "Command line tools only" from https://developer.android.com/studio#command-tools and unzip it into `%LOCALAPPDATA%\Android\Sdk\cmdline-tools\latest` (rename the inner `cmdline-tools` folder to `latest`, so `latest\bin\sdkmanager.bat` exists).
 2. Install the image and create the AVD:
    ```
    set SDK=%LOCALAPPDATA%\Android\Sdk
-   %SDK%\cmdline-tools\latestin\sdkmanager.bat "system-images;android-33;google_apis;x86_64"
-   %SDK%\cmdline-tools\latestin\sdkmanager.bat --licenses
-   %SDK%\cmdline-tools\latestinvdmanager.bat create avd -n tls33 -k "system-images;android-33;google_apis;x86_64" -d pixel_6
+   %SDK%\cmdline-tools\latest\bin\sdkmanager.bat "system-images;android-33;google_apis;x86_64"
+   %SDK%\cmdline-tools\latest\bin\sdkmanager.bat --licenses
+   %SDK%\cmdline-tools\latest\bin\avdmanager.bat create avd -n tls33 -k "system-images;android-33;google_apis;x86_64" -d pixel_6
    ```
 3. Start it writable from a terminal (the flag only works from the command line):
    ```
