@@ -104,6 +104,10 @@ _Avoid_: Preflight error, validation error
 A feature that is off by default, lives in the Settings "Experimental" tab, and is switched on with a saved setting (also settable with `config set`), never an environment variable. It may be log-only, unfinished or unproven. The first is Jev shadowing (`jev_shadow_enabled`): TypeSafe Jev's element pick is logged beside the Executor's in `reports/jev_shadow.jsonl` and never acts on the device.
 _Avoid_: Beta, preview, feature flag
 
+**AI Provider**:
+The service that supplies the LLM for a crawl (Gemini, OpenAI, Anthropic, OpenRouter, Ollama, OpenCode Go), chosen together with one model that serves every agent role (Manager, Executor, app opener). Each hosted provider has its own API key. OpenCode Go is a flat-fee subscription provider whose usage is capped per 5 hours, week and month; only the models it serves through its OpenAI-style chat endpoint are offered, and only one of them accepts images.
+_Avoid_: LLM vendor, backend, engine
+
 **Managed Service**:
 A local server the app runs in Docker when a feature needs it (MobSF for static analysis, OmniParser for screen parsing, Phoenix for tracing). The app starts it when that feature is on, reuses one already answering at the configured local address instead of starting a second, and never manages one at a remote address. The CLI leaves it running; the GUI offers to stop it on exit.
 _Avoid_: Docker container, backend, sidecar
