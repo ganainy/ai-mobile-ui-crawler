@@ -13,6 +13,9 @@ Source: `src/mobile_crawler/domain/crawler_agent/agent/utils/inference.py`
 - `acomplete_with_retries`
 - `astructured_predict_with_retries`
 
+## Imports
+- [[code/domain/opencode_go|domain.opencode_go]]
+
 ## Imported by
 - [[code/domain/crawler_agent/agent/executor/executor_agent|domain.crawler_agent.agent.executor.executor_agent]]
 - [[code/domain/crawler_agent/agent/fast_agent/fast_agent|domain.crawler_agent.agent.fast_agent.fast_agent]]

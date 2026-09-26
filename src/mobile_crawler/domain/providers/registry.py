@@ -6,6 +6,8 @@ from typing import Any
 
 import requests
 
+from mobile_crawler.domain.opencode_go import OPENCODE_GO_BASE_URL, chat_models_from_ids
+
 logger = logging.getLogger(__name__)
 
 
@@ -193,6 +195,24 @@ class ProviderRegistry:
                     "pricing": {"prompt_per_1M": "1.2500", "completion_per_1M": "5.0000", "image_per_1M": "1.2500"},
                 },
             ]
+
+    def fetch_opencode_go_models(self) -> list[dict[str, Any]]:
+        """Fetch the OpenCode Go models served through `chat/completions` (the model list is public)."""
+        cache_key = "opencode_go"
+        if cache_key in self._cache:
+            return self._cache[cache_key]
+
+        try:
+            response = requests.get(f"{OPENCODE_GO_BASE_URL}/models", timeout=10)
+            response.raise_for_status()
+            result = chat_models_from_ids([model["id"] for model in response.json().get("data", [])])
+        except Exception as e:
+            logger.warning(f"Failed to fetch OpenCode Go models: {e}")
+            raise RuntimeError(f"Failed to fetch OpenCode Go models: {e}") from e
+
+        self._cache[cache_key] = result
+        self._save_persistent_cache()
+        return result
 
     def fetch_ollama_models(self, base_url: str = "http://localhost:11434") -> list[dict[str, Any]]:
         """Fetch available Ollama models.

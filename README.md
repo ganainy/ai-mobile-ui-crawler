@@ -51,7 +51,7 @@ mobile-crawler-cli crawl --device emulator-5554 --package com.example.app --prov
 
 - Python 3.12. `pyproject.toml` currently requires `>=3.12,<3.13`.
 - Android device or emulator reachable through ADB.
-- AI provider credentials for the selected provider. Current config mapping supports Gemini, OpenAI, Anthropic, Ollama, and OpenRouter in `CrawlerAgentService`.
+- AI provider credentials for the selected provider. Current config mapping supports Gemini, OpenAI, Anthropic, Ollama, OpenRouter, and OpenCode Go in `CrawlerAgentService`.
 
 Optional integrations:
 

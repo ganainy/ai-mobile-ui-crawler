@@ -17,6 +17,7 @@ from llama_index.core.base.llms.types import ChatMessage
 from mobile_crawler.config.config_manager import ConfigManager
 from mobile_crawler.domain.crawler_agent.agent.utils.inference import acall_with_retries
 from mobile_crawler.domain.crawler_agent.agent.utils.llm_picker import load_llm
+from mobile_crawler.domain.opencode_go import OPENCODE_GO_LLM_KWARGS
 from mobile_crawler.infrastructure.app_web_profile_resolver import AppWebProfileResolver
 
 logger = logging.getLogger("crawler_agent")
@@ -37,11 +38,13 @@ _PROVIDER_MAPPING = {
     "anthropic": "AnthropicAI",
     "ollama": "Ollama",
     "openrouter": "OpenRouter",
+    "opencode_go": "OpenAILike",
 }
 
 _PROVIDER_API_KEY_ENV = {
     "gemini": ("gemini_api_key", ["GEMINI_API_KEY", "GOOGLE_API_KEY"]),
     "openrouter": ("openrouter_api_key", ["OPENROUTER_API_KEY"]),
+    "opencode_go": ("opencode_go_api_key", ["OPENCODE_GO_API_KEY"]),
     "openai": ("openai_api_key", ["OPENAI_API_KEY"]),
     "anthropic": ("anthropic_api_key", ["ANTHROPIC_API_KEY"]),
 }
@@ -118,12 +121,14 @@ def _build_extraction_llm(config_manager: ConfigManager):
         primary_key, env_keys = _PROVIDER_API_KEY_ENV[ai_provider]
         api_key = _resolve_api_key(config_manager, primary_key, env_keys)
 
+    extra_kwargs = OPENCODE_GO_LLM_KWARGS if ai_provider == "opencode_go" else {}
     return load_llm(
         provider_name=_PROVIDER_MAPPING[ai_provider],
         model=ai_model,
         temperature=0.0,
         max_tokens=1024,
         api_key=api_key,
+        **extra_kwargs,
     )
 
 

@@ -39,3 +39,23 @@ def test_network_error():
         ok, message = check_api_key("gemini", "k")
     assert not ok
     assert "ConnectionError" in message
+
+
+def test_opencode_go_key_checked_with_a_one_token_chat_call():
+    with patch("mobile_crawler.domain.api_key_check.requests.post", return_value=_response(200)) as post:
+        assert check_api_key("opencode_go", " k ") == (True, "Key works")
+    assert post.call_args.args[0].endswith("/chat/completions")
+    assert post.call_args.kwargs["headers"] == {"Authorization": "Bearer k"}
+    assert post.call_args.kwargs["json"]["max_tokens"] == 1
+
+
+def test_opencode_go_rejected_key():
+    with patch("mobile_crawler.domain.api_key_check.requests.post", return_value=_response(401)):
+        assert check_api_key("opencode_go", "bad") == (False, "Key rejected")
+
+
+def test_opencode_go_limit_reached_still_means_key_works():
+    with patch("mobile_crawler.domain.api_key_check.requests.post", return_value=_response(429)):
+        ok, message = check_api_key("opencode_go", "k")
+    assert ok
+    assert "limit" in message

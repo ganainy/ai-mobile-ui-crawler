@@ -1,5 +1,5 @@
 ---
-updated: 2026-09-25
+updated: 2026-09-26
 ---
 # CLI Reference
 
@@ -151,7 +151,7 @@ mobile-crawler-cli crawl [--device <id|last>] --package <pkg|last> --model <mode
 | `--device` | ADB device id (`adb devices` / `list devices`), or `last` for the device last used in the GUI. Optional when exactly one device is connected (it is used); required when several are |
 | `--package` (required) | App package (`list apps`), or `last`. Repeat to crawl several apps as a batch |
 | `--model` (required) | AI model name |
-| `--provider` | `gemini`, `openrouter` or `ollama` (default: configured provider) |
+| `--provider` | `gemini`, `openrouter`, `opencode_go` or `ollama` (default: configured provider) |
 | `--steps N` | Max steps per app |
 | `--duration SECONDS` | Max duration per app. Mutually exclusive with `--steps`; with neither, the configured limit is used |
 | `--enable-traffic-capture` | PCAPdroid capture during the crawl |
@@ -209,6 +209,7 @@ The LLM key is looked up in the settings store first, then the environment:
 |---|---|---|
 | gemini | `gemini_api_key` | `GEMINI_API_KEY`, `GOOGLE_API_KEY` |
 | openrouter | `openrouter_api_key` | `OPENROUTER_API_KEY` |
+| opencode_go | `opencode_go_api_key` | `OPENCODE_GO_API_KEY` |
 | OmniParser (Replicate) | `replicate_api_key` | `REPLICATE_API_KEY` |
 
 Store one with `mobile-crawler-cli config set gemini_api_key <key>`.

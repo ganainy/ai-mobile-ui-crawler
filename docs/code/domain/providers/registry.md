@@ -11,6 +11,9 @@ Source: `src/mobile_crawler/domain/providers/registry.py`
 ## Classes
 - `ProviderRegistry`
 
+## Imports
+- [[code/domain/opencode_go|domain.opencode_go]]
+
 ## Imported by
 - [[code/domain/providers/vision_detector|domain.providers.vision_detector]]
 - [[code/ui/main_window|ui.main_window]]

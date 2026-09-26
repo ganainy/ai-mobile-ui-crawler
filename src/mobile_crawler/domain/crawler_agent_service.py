@@ -45,6 +45,7 @@ from mobile_crawler.domain.jev_shadow import (
     jev_shadow_problem,
 )
 from mobile_crawler.domain.models import ActionResult, AIAction, BoundingBox
+from mobile_crawler.domain.opencode_go import OPENCODE_GO_LLM_KWARGS
 from mobile_crawler.domain.prompt_builder import format_login_and_form_data
 from mobile_crawler.domain.run_outcome import build_guided_progress
 from mobile_crawler.domain.screen_tracker import ScreenState, ScreenTracker
@@ -278,6 +279,7 @@ class CrawlerAgentService:
             "anthropic": "AnthropicAI",
             "ollama": "Ollama",
             "openrouter": "OpenRouter",
+            "opencode_go": "OpenAILike",
         }
 
         if ai_provider not in provider_mapping:
@@ -414,6 +416,12 @@ class CrawlerAgentService:
             if api_key:
                 set_llm_api_key(api_key)
                 os.environ["OPENROUTER_API_KEY"] = api_key
+        elif ai_provider == "opencode_go":
+            api_key = resolve_api_key("opencode_go_api_key", ["OPENCODE_GO_API_KEY"])
+            for profile in config["llm_profiles"].values():
+                profile["kwargs"].update(OPENCODE_GO_LLM_KWARGS)
+            if api_key:
+                set_llm_api_key(api_key)
 
         return config
 

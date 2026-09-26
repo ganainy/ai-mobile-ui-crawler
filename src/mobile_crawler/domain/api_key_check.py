@@ -2,13 +2,15 @@
 
 import requests
 
+from mobile_crawler.domain.opencode_go import OPENCODE_GO_BASE_URL, OPENCODE_GO_DEFAULT_MODEL
+
 _GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 _OPENROUTER_URL = "https://openrouter.ai/api/v1/auth/key"  # /models is public, this one validates the key
 _TIMEOUT_SECONDS = 10
 
 
 def check_api_key(provider: str, api_key: str) -> tuple[bool, str]:
-    """Return (ok, message) for a "gemini" or "openrouter" key."""
+    """Return (ok, message) for a "gemini", "openrouter" or "opencode_go" key."""
     api_key = api_key.strip()
     if not api_key:
         return False, "Enter a key first"
@@ -21,6 +23,20 @@ def check_api_key(provider: str, api_key: str) -> tuple[bool, str]:
             response = requests.get(
                 _OPENROUTER_URL, headers={"Authorization": f"Bearer {api_key}"}, timeout=_TIMEOUT_SECONDS
             )
+        elif provider == "opencode_go":
+            # /models is public and there is no key endpoint, so send a one-token chat call.
+            response = requests.post(
+                f"{OPENCODE_GO_BASE_URL}/chat/completions",
+                headers={"Authorization": f"Bearer {api_key}"},
+                json={
+                    "model": OPENCODE_GO_DEFAULT_MODEL,
+                    "messages": [{"role": "user", "content": "hi"}],
+                    "max_tokens": 1,
+                },
+                timeout=_TIMEOUT_SECONDS,
+            )
+            if response.status_code == 429:
+                return True, "Key works, but the usage limit is reached"
         else:
             raise ValueError(f"Unknown provider: {provider}")
     except requests.RequestException as exc:

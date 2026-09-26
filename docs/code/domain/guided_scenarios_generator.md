@@ -20,6 +20,7 @@ Source: `src/mobile_crawler/domain/guided_scenarios_generator.py`
 - [[code/config/config_manager|config.config_manager]]
 - [[code/domain/crawler_agent/agent/utils/inference|domain.crawler_agent.agent.utils.inference]]
 - [[code/domain/crawler_agent/agent/utils/llm_picker|domain.crawler_agent.agent.utils.llm_picker]]
+- [[code/domain/opencode_go|domain.opencode_go]]
 - [[code/infrastructure/app_web_profile_resolver|infrastructure.app_web_profile_resolver]]
 
 ## Imported by

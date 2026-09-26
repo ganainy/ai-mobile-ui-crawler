@@ -50,7 +50,7 @@ class PreCrawlValidator:
         Args:
             device_id: Target device identifier
             app_package: Target app package name
-            ai_provider: AI provider (gemini, openrouter, ollama)
+            ai_provider: AI provider (gemini, openrouter, opencode_go, ollama)
             ai_model: AI model name
 
         Returns:
@@ -268,6 +268,24 @@ class PreCrawlValidator:
                     field="openrouter_api_key",
                     message=f"Failed to check API key: {e}",
                     severity="error"
+                )
+
+        # Check for OpenCode Go API key
+        if ai_provider == "opencode_go":
+            try:
+                api_key = self._credential_store.get("opencode_go_api_key")
+                if not api_key:
+                    return ValidationError(
+                        field="opencode_go_api_key",
+                        message="OpenCode Go API key not configured. Set it in settings.",
+                        severity="error",
+                    )
+            except Exception as e:
+                logger.error(f"Error checking OpenCode Go API key: {e}")
+                return ValidationError(
+                    field="opencode_go_api_key",
+                    message=f"Failed to check API key: {e}",
+                    severity="error",
                 )
 
         return None

@@ -35,6 +35,7 @@ Source: `src/mobile_crawler/domain/crawler_agent_service.py`
 - [[code/domain/jev_shadow|domain.jev_shadow]]
 - [[code/domain/models|domain.models]]
 - [[code/domain/omni_parser_client|domain.omni_parser_client]]
+- [[code/domain/opencode_go|domain.opencode_go]]
 - [[code/domain/prompt_builder|domain.prompt_builder]]
 - [[code/domain/run_outcome|domain.run_outcome]]
 - [[code/domain/screen_tracker|domain.screen_tracker]]

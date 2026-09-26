@@ -690,6 +690,30 @@ class TestCrawlerAgentServiceConfig:
             assert profile["kwargs"]["api_key"] == "sk-or-test-key"
         assert os.environ["OPENROUTER_API_KEY"] == "sk-or-test-key"
 
+    @patch.dict(os.environ, {}, clear=False)
+    def test_get_crawler_agent_config_opencode_go_provider(self, crawler_agent_service, mock_config_manager):
+        """OpenCode Go runs through OpenAILike on its fixed base URL with its own key."""
+        settings = {
+            "ai_provider": "opencode_go",
+            "ai_model": "kimi-k3",
+            "opencode_go_api_key": "oc-test-key",
+            "crawler_reasoning_mode": True,
+            "crawler_streaming": False,
+            "crawler_telemetry_enabled": False,
+            "ui_parser_mode": "omniparser",
+            "omniparser_backend": "replicate",
+            "replicate_api_key": "fake_replicate_key",
+        }
+        mock_config_manager.get.side_effect = lambda key, default=None: settings.get(key, default)
+
+        config = crawler_agent_service._get_crawler_agent_config()
+
+        for profile in config["llm_profiles"].values():
+            assert profile["provider"] == "OpenAILike"
+            assert profile["model"] == "kimi-k3"
+            assert profile["kwargs"]["api_key"] == "oc-test-key"
+            assert profile["kwargs"]["api_base"] == "https://opencode.ai/zen/go/v1"
+
     @patch.dict(os.environ, {"OPENROUTER_API_KEY": "sk-or-env-key"}, clear=False)
     def test_get_crawler_agent_config_openrouter_uses_env_api_key(self, crawler_agent_service, mock_config_manager):
         """Test OpenRouter API key can come from OPENROUTER_API_KEY."""

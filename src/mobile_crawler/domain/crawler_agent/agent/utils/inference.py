@@ -10,6 +10,8 @@ from llama_index.core.base.llms.types import (
 from llama_index.core.prompts import PromptTemplate
 from pydantic import BaseModel
 
+from mobile_crawler.domain.opencode_go import OpenCodeGoLimitError, is_limit_error, is_opencode_go_llm
+
 logger = logging.getLogger("crawler_agent")
 
 T = TypeVar("T", bound=BaseModel)
@@ -67,6 +69,8 @@ async def acall_with_retries(
             last_exception = TimeoutError("Timed out")
 
         except Exception as e:
+            if is_opencode_go_llm(llm) and is_limit_error(e):
+                raise OpenCodeGoLimitError() from e
             logger.warning(f"Attempt {attempt} failed with error: {e!r}")
             last_exception = e
 

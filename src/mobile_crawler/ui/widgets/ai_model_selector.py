@@ -143,6 +143,7 @@ class AIModelSelector(QWidget):
         providers = [
             ("Gemini", "gemini"),
             ("OpenRouter", "openrouter"),
+            ("OpenCode Go", "opencode_go"),
             ("Ollama (Local)", "ollama"),
         ]
 
@@ -220,7 +221,7 @@ class AIModelSelector(QWidget):
 
         # Get API key for providers that require it
         api_key = None
-        if provider in ['gemini', 'openrouter']:
+        if provider in ['gemini', 'openrouter', 'opencode_go']:
             if self._api_key_callback:
                 api_key = self._api_key_callback(provider)
 
@@ -230,7 +231,7 @@ class AIModelSelector(QWidget):
                     QMessageBox.warning(
                         self,
                         "API Key Required",
-                        f"Please enter your {provider.title()} API key in the Settings panel below,\n"
+                        f"Please enter your {provider.replace('_', ' ').title()} API key in the Settings panel below,\n"
                         f"then click 'Save Settings' before selecting this provider."
                     )
                 self.model_combo.clear()
@@ -255,6 +256,8 @@ class AIModelSelector(QWidget):
             return self.provider_registry.fetch_gemini_models(api_key or "")
         if provider == "openrouter":
             return self.provider_registry.fetch_openrouter_models(api_key or "")
+        if provider == "opencode_go":
+            return self.provider_registry.fetch_opencode_go_models()
         if provider == "ollama":
             return self.provider_registry.fetch_ollama_models()
         raise ValueError(f"Unsupported provider: {provider}")

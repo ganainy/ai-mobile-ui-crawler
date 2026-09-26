@@ -669,7 +669,7 @@ class MainWindow(QMainWindow):
             return False
 
         # Check API key for providers that require it
-        if self._ai_provider in ["gemini", "openrouter"]:
+        if self._ai_provider in ["gemini", "openrouter", "opencode_go"]:
             api_key = self._get_api_key_for_provider(self._ai_provider)
             if not api_key:
                 self._show_error("API Key Missing", f"Please configure your {self._ai_provider} API key in Settings.")
@@ -713,6 +713,10 @@ class MainWindow(QMainWindow):
         openrouter_key = self.settings_panel.get_openrouter_api_key()
         if openrouter_key:
             config_manager.set("openrouter_api_key", openrouter_key)
+
+        opencode_go_key = self.settings_panel.get_opencode_go_api_key()
+        if opencode_go_key:
+            config_manager.set("opencode_go_api_key", opencode_go_key)
 
         # Set form fill data from settings panel
         config_manager.set("test_address", self.settings_panel.get_test_address())
@@ -1623,6 +1627,8 @@ class MainWindow(QMainWindow):
             return self.settings_panel.get_gemini_api_key()
         elif provider == "openrouter":
             return self.settings_panel.get_openrouter_api_key()
+        elif provider == "opencode_go":
+            return self.settings_panel.get_opencode_go_api_key()
         elif provider == "ollama":
             # Ollama doesn't need API key
             return "ollama"
@@ -1645,7 +1651,7 @@ class MainWindow(QMainWindow):
         )
 
         # Check API key for providers that require it
-        if can_start and self._ai_provider in ["gemini", "openrouter"]:
+        if can_start and self._ai_provider in ["gemini", "openrouter", "opencode_go"]:
             api_key = self._get_api_key_for_provider(self._ai_provider)
             can_start = can_start and bool(api_key)
 

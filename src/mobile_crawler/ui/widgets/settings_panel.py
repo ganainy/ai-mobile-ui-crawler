@@ -589,6 +589,20 @@ class SettingsPanel(QWidget):
         openrouter_layout.addWidget(self.openrouter_test_status_label)
         api_keys_layout.addLayout(openrouter_layout)
 
+        # OpenCode Go API Key
+        opencode_go_layout = QHBoxLayout()
+        opencode_go_layout.addWidget(QLabel("OpenCode Go API Key:"))
+        self.opencode_go_api_key_input = QLineEdit()
+        self.opencode_go_api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.opencode_go_api_key_input.setPlaceholderText("Enter OpenCode Go API key")
+        opencode_go_layout.addWidget(self.opencode_go_api_key_input)
+        self.opencode_go_test_button = QPushButton("Test")
+        self.opencode_go_test_button.clicked.connect(lambda: self._test_api_key("opencode_go"))
+        opencode_go_layout.addWidget(self.opencode_go_test_button)
+        self.opencode_go_test_status_label = QLabel("")
+        opencode_go_layout.addWidget(self.opencode_go_test_status_label)
+        api_keys_layout.addLayout(opencode_go_layout)
+
         api_keys_group.setLayout(api_keys_layout)
         layout.addWidget(api_keys_group)
 
@@ -1035,6 +1049,9 @@ class SettingsPanel(QWidget):
         else:
             self.openrouter_api_key_input.setText("")  # Clear field if no valid key
 
+        opencode_go_key = self._config_store.get_secret_plaintext("opencode_go_api_key")
+        self.opencode_go_api_key_input.setText(opencode_go_key or "")
+
         # Load crawl limits
         max_steps = self._config_store.get_setting("max_steps", default=100)
         self.max_steps_input.setValue(max_steps)
@@ -1215,6 +1232,8 @@ class SettingsPanel(QWidget):
             if openrouter_key and not self._validate_api_key(openrouter_key, "OpenRouter"):
                 return
 
+            opencode_go_key = self.opencode_go_api_key_input.text().strip()
+
             # Validate MobSF API URL if MobSF is enabled
             if self.enable_mobsf_analysis_checkbox.isChecked():
                 mobsf_url = self.mobsf_api_url_input.text().strip()
@@ -1232,6 +1251,11 @@ class SettingsPanel(QWidget):
                     self._config_store.set_secret_plaintext("openrouter_api_key", openrouter_key)
                 else:
                     self._config_store.delete_secret("openrouter_api_key")
+
+                if opencode_go_key:
+                    self._config_store.set_secret_plaintext("opencode_go_api_key", opencode_go_key)
+                else:
+                    self._config_store.delete_secret("opencode_go_api_key")
 
                 # Save crawl limits
                 self._config_store.set_setting("max_steps", self.max_steps_input.value(), "int")
@@ -1493,6 +1517,8 @@ class SettingsPanel(QWidget):
     def _api_key_widgets(self, provider: str) -> tuple[QLineEdit, QPushButton, QLabel]:
         if provider == "gemini":
             return self.gemini_api_key_input, self.gemini_test_button, self.gemini_test_status_label
+        if provider == "opencode_go":
+            return self.opencode_go_api_key_input, self.opencode_go_test_button, self.opencode_go_test_status_label
         return self.openrouter_api_key_input, self.openrouter_test_button, self.openrouter_test_status_label
 
     def _test_api_key(self, provider: str) -> None:
@@ -1626,6 +1652,10 @@ class SettingsPanel(QWidget):
             Current OpenRouter API key
         """
         return self.openrouter_api_key_input.text()
+
+    def get_opencode_go_api_key(self) -> str:
+        """Get the current OpenCode Go API key value."""
+        return self.opencode_go_api_key_input.text()
 
     def get_max_steps(self) -> int:
         """Get the current max steps value.
@@ -1887,6 +1917,7 @@ class SettingsPanel(QWidget):
         """Reset all settings to default values."""
         self.gemini_api_key_input.clear()
         self.openrouter_api_key_input.clear()
+        self.opencode_go_api_key_input.clear()
         self.replicate_api_key_input.clear()
         self.max_steps_input.setValue(100)
         self.max_duration_input.setValue(300)

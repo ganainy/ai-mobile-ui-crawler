@@ -26,6 +26,7 @@ Exploration logic: action execution/verification, screen and state tracking, OCR
 - [[code/domain/models|domain.models]] - Domain models for the mobile crawler.
 - [[code/domain/omni_parser_client|domain.omni_parser_client]] - OmniParser client for vision-based UI parsing.
 - [[code/domain/omniparser_warmup|domain.omniparser_warmup]] - Warm-up helper for the OmniParser backend.
+- [[code/domain/opencode_go|domain.opencode_go]] - OpenCode Go (opencode.ai/go): a subscription AI Provider served through an OpenAI-style chat endpoint.
 - [[code/domain/overlay_renderer|domain.overlay_renderer]] - Coordinate overlay rendering for mobile-crawler screenshots.
 - [[code/domain/prompt_builder|domain.prompt_builder]] - Prompt builder for AI interactions.
 - [[code/domain/prompts|domain.prompts]] - Default prompts for AI interactions.
