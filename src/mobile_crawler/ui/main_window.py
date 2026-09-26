@@ -731,6 +731,7 @@ class MainWindow(QMainWindow):
         )
         config_manager.set("top_bar_height", top_height)
         config_manager.set("bottom_bar_height", bottom_height)
+        self.stats_dashboard.set_live_exclusions(top_height, bottom_height)
 
         # Set feature flags from settings panel
         enable_traffic_capture = self.settings_panel.get_enable_traffic_capture()

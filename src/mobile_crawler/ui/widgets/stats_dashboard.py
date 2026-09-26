@@ -133,6 +133,8 @@ class _LiveFeedView(QWidget):
         self._boxes: list[tuple[int, int, int, int, int]] = []
         self._device_size: tuple[int, int] | None = None
         self._boxes_set_at = 0.0
+        self._top_exclusion_px = 0
+        self._bottom_exclusion_px = 0
         self._fade_timer = QTimer(self)
         self._fade_timer.setInterval(100)
         self._fade_timer.timeout.connect(self._on_fade_tick)
@@ -150,6 +152,12 @@ class _LiveFeedView(QWidget):
 
     def set_device_size(self, width: int, height: int):
         self._device_size = (width, height)
+
+    def set_exclusions(self, top_px: int, bottom_px: int):
+        """Status Bar / Bottom Bar Exclusion (device px) to shade as "Cropped"."""
+        self._top_exclusion_px = max(0, top_px)
+        self._bottom_exclusion_px = max(0, bottom_px)
+        self.update()
 
     def set_boxes(self, elements: list[dict] | None):
         self._boxes = parse_element_boxes(elements)
@@ -188,11 +196,15 @@ class _LiveFeedView(QWidget):
         top = (self.height() - scaled.height()) / 2
         painter.drawImage(QRectF(left, top, scaled.width(), scaled.height()), frame)
 
-        alpha = self.overlay_alpha()
         scale = self._device_scale(frame)
-        if alpha <= 0.0 or scale is None:
+        if scale is None:
             return
         k = scale * scaled.width() / frame.width()  # device px -> widget px
+        self._paint_cropped_bands(painter, left, top, scaled.width(), scaled.height(), k)
+
+        alpha = self.overlay_alpha()
+        if alpha <= 0.0:
+            return
         painter.setOpacity(alpha)
         font = painter.font()
         font.setBold(True)
@@ -206,6 +218,21 @@ class _LiveFeedView(QWidget):
             tag = QRectF(rect.left(), rect.top(), 8 + 7 * len(label), 16)
             painter.fillRect(tag, QColor("black"))
             painter.drawText(tag, Qt.AlignmentFlag.AlignCenter, label)
+
+    def _paint_cropped_bands(self, painter: QPainter, left: float, top: float, width: float, height: float, k: float):
+        """Shade the strips the crawler crops off, so the live view shows what the AI never sees."""
+        bands = []
+        if self._top_exclusion_px > 0:
+            bands.append(QRectF(left, top, width, min(self._top_exclusion_px * k, height)))
+        if self._bottom_exclusion_px > 0:
+            band_h = min(self._bottom_exclusion_px * k, height)
+            bands.append(QRectF(left, top + height - band_h, width, band_h))
+        painter.save()
+        for band in bands:
+            painter.fillRect(band, QColor(0, 0, 0, 140))
+            painter.setPen(QColor(255, 255, 255, 200))
+            painter.drawText(band, Qt.AlignmentFlag.AlignCenter, "Cropped")
+        painter.restore()
 
 
 class StatsDashboard(QWidget):
@@ -781,6 +808,9 @@ class StatsDashboard(QWidget):
 
     def set_live_device_size(self, width: int, height: int):
         self.live_view.set_device_size(width, height)
+
+    def set_live_exclusions(self, top_px: int, bottom_px: int):
+        self.live_view.set_exclusions(top_px, bottom_px)
 
     def stop_live_view(self, message: str | None = None, offer_restart: bool = False):
         """Fall back to the last static screenshot; optionally explain why."""

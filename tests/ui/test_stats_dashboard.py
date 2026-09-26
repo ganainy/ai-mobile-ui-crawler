@@ -276,6 +276,22 @@ class TestLiveFeed:
         assert 0 < view.overlay_alpha(start + OVERLAY_FADE_SECONDS / 2) < 1
         assert view.overlay_alpha(start + OVERLAY_FADE_SECONDS) == 0.0
 
+    def test_excluded_strips_are_shaded_over_live_frame(self, dashboard):
+        from PySide6.QtGui import QColor, QImage
+
+        frame = QImage(180, 320, QImage.Format.Format_RGB888)
+        frame.fill(QColor("white"))
+        view = dashboard.live_view
+        view.resize(180, 320)
+        view.set_frame(frame)
+        view.set_device_size(180, 320)
+        view.set_exclusions(top_px=40, bottom_px=30)
+
+        image = view.grab().toImage()
+        assert image.pixelColor(2, 2).red() < 200  # top strip shaded
+        assert image.pixelColor(2, 317).red() < 200  # bottom strip shaded
+        assert image.pixelColor(2, 160).red() == 255  # rest untouched
+
     def test_parse_element_boxes_skips_invalid(self):
         from mobile_crawler.ui.widgets.stats_dashboard import parse_element_boxes
 

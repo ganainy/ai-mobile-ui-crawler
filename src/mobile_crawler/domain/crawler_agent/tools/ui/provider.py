@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any
 
 from mobile_crawler.domain.crawler_agent.tools.driver.base import DeviceDisconnectedError
 from mobile_crawler.domain.crawler_agent.tools.ui.a11y_completeness import count_nodes, evaluate
+from mobile_crawler.domain.crawler_agent.tools.ui.a11y_exclusion import exclude_bars
 from mobile_crawler.domain.crawler_agent.tools.ui.state import UIState
 from mobile_crawler.domain.crawler_agent.tools.ui.stealth_state import StealthUIState
 
@@ -283,7 +284,14 @@ class AndroidStateProvider(StateProvider):
             screen_width = screen_bounds.get("width", 1080)
             screen_height = screen_bounds.get("height", 1920)
             phone_state = ui_tree.get("phone_state", {})
-            a11y_tree = ui_tree.get("a11y_tree", [])
+            # Portal reports the whole screen; the screenshot has the Status Bar /
+            # Bottom Bar Exclusion cropped off, so trim the tree to match.
+            a11y_tree = exclude_bars(
+                ui_tree.get("a11y_tree", []),
+                screen_height,
+                self.status_bar_exclusion_px,
+                self.bottom_bar_exclusion_px,
+            )
             a11y_error = ui_tree.get("a11y_error")
 
         # Determine UI parser mode and get elements
