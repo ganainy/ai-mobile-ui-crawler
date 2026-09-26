@@ -23,6 +23,7 @@ AVD (command-line tools, no Android Studio needed), **Pixel 6 (or "Medium Phone"
    & "$SDK\cmdline-tools\latest\bin\sdkmanager.bat" --licenses
    & "$SDK\cmdline-tools\latest\bin\avdmanager.bat" create avd -n tls33 -k "system-images;android-33;google_apis;x86_64" -d pixel_6
    ```
+   If it says "Java version 17 or higher is required" although `java -version` shows 26: the tools cannot parse a version string without a dot. Run `$env:SKIP_JDK_VERSION_CHECK = "1"` first; if Java 26 is then too new for them, set `$env:JAVA_HOME` to Android Studio's bundled JDK (`C:\Program Files\Android\Android Studio\jbr`) and put its `bin` first on `PATH`.
    (PowerShell syntax; in `cmd` use `set SDK=%LOCALAPPDATA%\Android\Sdk` and `%SDK%\...`.)
 3. Start it writable from a terminal (the flag only works from the command line):
    ```powershell
