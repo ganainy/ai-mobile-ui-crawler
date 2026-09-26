@@ -3,61 +3,134 @@ updated: 2026-09-27
 ---
 # Decrypting HTTPS on a rooted emulator
 
-Why: on a normal phone the pcap stays TLS-encrypted (apps ignore user CAs, Google hosts pin certificates). A rooted emulator lets you put the mitm CA in the **system** store. See issue #31. Untested end to end; adjust as you learn.
+Why: on a normal phone the pcap stays TLS-encrypted (apps ignore user-installed CAs, Google hosts pin certificates). A rooted emulator lets you put the mitm CA in the **system** certificate store. Background and open tasks: issue #31.
+
+Steps marked **(done)** were actually run on the user's PC (Windows, PowerShell) on 2026-09-27 and worked. Steps marked **(untested)** have not been tried yet.
 
 ## Which emulator
 
-AVD (command-line tools, no Android Studio needed), **Pixel 6 (or "Medium Phone"), API 33, "Google APIs" x86_64 image**.
+AVD **`tls33`**: Pixel 6, **API 33, "Google APIs" x86_64** image, created with the SDK command-line tools (no Android Studio needed).
 
-- **Not "Google Play"**: Play images cannot be rooted (`adb root` is refused). Your existing `Medium_Phone` AVD (API 37, Play Store, 16 KB pages) is one of these, so it will not work.
-- **API 33, not 34+**: up to API 33 the system CA store can be made writable with `-writable-system`. From API 34 the CAs live in the Conscrypt APEX and need a fiddly overlay.
-- "Google APIs" still ships Google Play services, so Google sign-in works. Add a Google account under Settings > Passwords & accounts. Sideload the app (no Play Store): the run already saves APKs in `apks/`, install with `adb install-multiple <run>/apks/*.apk`.
+- **Not "Google Play"**: Play images cannot be rooted. The old `Medium_Phone` AVD (API 37, Play Store, 16 KB pages) is one of these and will not work.
+- **API 33, not 34+**: up to API 33 the system partition can be made writable with `-writable-system`. From API 34 the CAs live in the Conscrypt APEX and need a fiddly overlay.
+- "Google APIs" ships Google Play services (Google sign-in works) but **no Play Store app**, so apps are sideloaded (see "Getting apps onto the emulator").
 
 ## One-time setup
 
-1. Android Studio is not needed. Download "Command line tools only" from https://developer.android.com/studio#command-tools and unzip it into `%LOCALAPPDATA%\Android\Sdk\cmdline-tools\latest` (rename the inner `cmdline-tools` folder to `latest`, so `latest\bin\sdkmanager.bat` exists).
-2. Install the image and create the AVD:
-   ```powershell
-   $SDK = "$env:LOCALAPPDATA\Android\Sdk"
-   & "$SDK\cmdline-tools\latest\bin\sdkmanager.bat" "system-images;android-33;google_apis;x86_64"
-   & "$SDK\cmdline-tools\latest\bin\sdkmanager.bat" --licenses
-   & "$SDK\cmdline-tools\latest\bin\avdmanager.bat" create avd -n tls33 -k "system-images;android-33;google_apis;x86_64" -d pixel_6
-   ```
-   If it says "Java version 17 or higher is required" although `java -version` shows 26: the tools cannot parse a version string without a dot. Run `$env:SKIP_JDK_VERSION_CHECK = "1"` first; if Java 26 is then too new for them, set `$env:JAVA_HOME` to Android Studio's bundled JDK (`C:\Program Files\Android\Android Studio\jbr`) and put its `bin` first on `PATH`.
-   `--licenses` asks about each license; answer `y` to all (or pipe them: `1..20 | ForEach-Object { "y" } | & "$SDK\cmdline-tools\latest\bin\sdkmanager.bat" --licenses`). If `avdmanager` prints "Could not load devices ... devices.xml" (Java 26), use Android Studio's JDK as above; the AVD is usually created anyway, check with `& "$SDK\emulator\emulator.exe" -list-avds`.
-   (PowerShell syntax; in `cmd` use `set SDK=%LOCALAPPDATA%\Android\Sdk` and `%SDK%\...`.)
-3. Start it writable from a terminal (the flag only works from the command line):
-   ```powershell
-   & "$env:LOCALAPPDATA\Android\Sdk\emulator\emulator.exe" -avd tls33 -writable-system -no-snapshot
-   ```
-4. In a second terminal (other phones unplugged, or add `-s emulator-5554` to every adb command):
-   ```
-   adb root
-   adb disable-verity
-   adb reboot
-   ```
-   Wait for boot, then `adb root` and `adb remount`. If remount fails, restart the emulator with the step 3 command. (Verified: on `tls33`, `root`, `disable-verity` and `remount` all succeed.)
-5. Install PCAPdroid and its mitm add-on on the emulator (from F-Droid or GitHub releases; the emulator has no Play Store, so `adb install` the APKs). Open PCAPdroid > Settings > enable **TLS decryption** > install the add-on when prompted, and note the CA it generates.
-6. Find PCAPdroid's CA. With root you can look for it: `adb shell "find /data/data/com.pcapdroid.mitm -iname '*ca-cert*'"`, then `adb pull` it (file name and location not verified). Convert it to the system-store name and push it:
-   ```
-   openssl x509 -inform PEM -subject_hash_old -in ca.pem | head -1     # prints e.g. 0a1b2c3d
-   copy ca.pem 0a1b2c3d.0
-   adb push 0a1b2c3d.0 /system/etc/security/cacerts/
-   adb shell chmod 644 /system/etc/security/cacerts/0a1b2c3d.0
-   adb reboot
-   ```
-7. Add a Google account, install Flow (`adb install-multiple`), open PCAPdroid once and accept the VPN consent.
+All commands are PowerShell. First: `$SDK = "$env:LOCALAPPDATA\Android\Sdk"`.
 
-## Run a crawl
+### 1. Command-line tools (done)
 
+Download "Command line tools only" from https://developer.android.com/studio#command-tools and unzip into `$SDK\cmdline-tools\latest` (rename the inner `cmdline-tools` folder to `latest`, so `latest\bin\sdkmanager.bat` exists).
+
+### 2. Java (done)
+
+The tools' version check rejects Java 26 ("Java version 17 or higher is required": it cannot parse a version string without a dot). Either `$env:SKIP_JDK_VERSION_CHECK = "1"`, or use Android Studio's bundled JDK 21, which is what made `avdmanager` work:
+
+```powershell
+$env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
+$env:PATH = "$env:JAVA_HOME\bin;$env:PATH"
 ```
-adb devices                      # note emulator-5554
-.venv312/Scripts/python.exe -m mobile_crawler.cli.main crawl --help   # then pass the emulator device id
+
+These settings last for that PowerShell window only.
+
+### 3. System image and AVD (done)
+
+```powershell
+& "$SDK\cmdline-tools\latest\bin\sdkmanager.bat" "system-images;android-33;google_apis;x86_64"
+1..20 | ForEach-Object { "y" } | & "$SDK\cmdline-tools\latest\bin\sdkmanager.bat" --licenses
+& "$SDK\cmdline-tools\latest\bin\avdmanager.bat" create avd -n tls33 -k "system-images;android-33;google_apis;x86_64" -d pixel_6
+& "$SDK\emulator\emulator.exe" -list-avds        # should list tls33
 ```
-Keep `pcapdroid_tls_decryption` true (the GUI sets it when traffic capture is on). Also set the PCAPdroid API key as for a phone, and turn on PCAPdroid's **Block QUIC** so HTTP/3 falls back to TCP.
+
+- `--licenses` asks per license; answer `y` to all (the pipe does that).
+- `avdmanager` may print "Could not load devices ... devices.xml" or "AVD already exists" under Java 26. The AVD was still written correctly; check with `-list-avds`.
+
+### 4. Start writable and root it (done)
+
+The `-writable-system` flag only works when starting from the command line, not from a GUI:
+
+```powershell
+& "$SDK\emulator\emulator.exe" -avd tls33 -writable-system -no-snapshot
+```
+
+In a second window (`-s emulator-5554` because a phone may also be connected):
+
+```powershell
+adb -s emulator-5554 root
+adb -s emulator-5554 disable-verity
+adb -s emulator-5554 reboot
+# wait for boot, then:
+adb -s emulator-5554 root
+adb -s emulator-5554 remount        # "remount succeeded"
+```
+
+The emulator must be started with `-writable-system` every time you want to change `/system`. After the CA is installed you can also start it normally.
+
+### 5. PCAPdroid and the mitm add-on (done)
+
+Both from GitHub releases (`emanuele-f/PCAPdroid`, `emanuele-f/PCAPdroid-mitm`). The emulator is x86_64, so take **`PCAPdroid-mitm_v2.4_x86_64.apk`** (not the arm64-v8a one) and the universal PCAPdroid APK.
+
+```powershell
+adb -s emulator-5554 install PCAPdroid-mitm_v2.4_x86_64.apk
+adb -s emulator-5554 install PCAPdroid_<version>.apk
+```
+
+Open PCAPdroid, turn on TLS decryption in its settings (it starts the add-on, which generates a CA).
+
+### 6. Install the mitm CA as a system certificate (done)
+
+With root the CA can be pulled straight from the add-on's data folder:
+
+```powershell
+adb -s emulator-5554 shell "find /data/data/com.pcapdroid.mitm -iname '*ca-cert*'"
+# /data/data/com.pcapdroid.mitm/files/.mitmproxy/mitmproxy-ca-cert.pem  (also .cer, .p12)
+
+cd $env:USERPROFILE\Downloads
+adb -s emulator-5554 pull /data/data/com.pcapdroid.mitm/files/.mitmproxy/mitmproxy-ca-cert.pem ca.pem
+
+$openssl = "C:\Program Files\Git\usr\bin\openssl.exe"      # ships with Git for Windows
+$hash = (& $openssl x509 -inform PEM -subject_hash_old -in ca.pem -noout).Trim()
+Copy-Item ca.pem "$hash.0"
+
+adb -s emulator-5554 root
+adb -s emulator-5554 remount
+adb -s emulator-5554 push "$hash.0" /system/etc/security/cacerts/
+adb -s emulator-5554 shell chmod 644 /system/etc/security/cacerts/$hash.0
+adb -s emulator-5554 reboot
+```
+
+Check on the emulator: Settings > Security > Encryption & credentials > Trusted credentials > **System**: "mitmproxy" is listed. (Done: it was.)
+
+## Getting apps onto the emulator
+
+There is no Play Store, so install APKs with `adb`.
+
+- **From a crawl you already ran:** each run saves the target app's APKs in `<run folder>\apks\` (`00_base.apk` plus split files). Install them together:
+  ```powershell
+  adb -s emulator-5554 install-multiple 00_base.apk 01_split_config.arm64_v8a.apk 02_split_config.xxhdpi.apk
+  ```
+  (untested) The phone's copy has an arm64 split; the x86_64 emulator needs ARM translation to run arm64-only native code. Android 11+ x86 images normally include it, but this is not verified. If the app crashes with a native-library error, get an x86_64 build instead.
+- **From your phone:**
+  ```powershell
+  adb -s <phone-serial> shell pm path <package>       # lists base + split APK paths
+  adb -s <phone-serial> pull <each path>
+  adb -s emulator-5554 install-multiple <all the pulled apks>
+  ```
+- **From the web:** APKMirror / APKPure (verify the source; prefer an x86_64 or "universal" build).
+- A Google account is added on the emulator under Settings > Passwords & accounts (needed for Flow's Google sign-in).
+
+## Run a crawl (untested)
+
+```powershell
+adb devices                       # note emulator-5554
+.venv312\Scripts\python.exe -m mobile_crawler.cli.main crawl --help    # then pass the emulator's device id
+```
+
+Keep `pcapdroid_tls_decryption` true (the GUI sets it when traffic capture is on), set the PCAPdroid API key as for a phone, accept the VPN consent once, and turn on PCAPdroid's **Block QUIC** so HTTP/3 falls back to TCP. Whether the crawler's device selector, scrcpy, Portal and screenrecord all work on the emulator is unverified.
 
 ## If it still doesn't decrypt
 
-- Google hosts pin their certificates: run Frida server on the emulator (`adb root`, push `frida-server` matching the ABI, run it) and load a universal pinning-bypass script.
-- Flow or Google sign-in may refuse an emulator (integrity checks). Then the emulator route is closed for that app.
-- Check the pcap: a decrypted capture shows plain HTTP after PCAPdroid's TLS layer; a still-encrypted one shows only SNI hostnames.
+- Google hosts pin their certificates: run Frida server on the emulator (`adb root`, push the `frida-server` matching the ABI, run it) and load a universal pinning-bypass script.
+- Flow or Google sign-in may refuse an emulator (integrity checks). Then this route is closed for that app.
+- Check the pcap: a decrypted capture shows plain HTTP inside the TLS flows; a still-encrypted one shows only SNI hostnames (`www.gstatic.com`, `aisandbox-pa.googleapis.com` in run 201).
