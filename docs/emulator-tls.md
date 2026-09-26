@@ -134,3 +134,22 @@ Keep `pcapdroid_tls_decryption` true (the GUI sets it when traffic capture is on
 - Google hosts pin their certificates: run Frida server on the emulator (`adb root`, push the `frida-server` matching the ABI, run it) and load a universal pinning-bypass script.
 - Flow or Google sign-in may refuse an emulator (integrity checks). Then this route is closed for that app.
 - Check the pcap: a decrypted capture shows plain HTTP inside the TLS flows; a still-encrypted one shows only SNI hostnames (`www.gstatic.com`, `aisandbox-pa.googleapis.com` in run 201).
+
+## Session log: what was tried on 2026-09-27
+
+Done and working:
+- SDK command-line tools, `tls33` AVD, `root` / `disable-verity` / `remount`, PCAPdroid + mitm add-on installed, mitm CA copied to the system store (shows under Trusted credentials > System).
+- `com.mobilerun.portal-0.7.25.apk` (the crawler's accessibility Portal) installs on the emulator (`adb -s emulator-5554 install ...`); no native code, no ABI problem.
+
+Failed:
+- Flow from the phone's APKs (`00_base.apk` + arm64/xxhdpi splits): `INSTALL_FAILED_NO_MATCHING_ABIS` (res=-113). Only x86 code runs on this image, so Flow needs an x86_64/universal build (none found yet) or ARM translation added to `/system` (untested).
+
+Wikipedia test (a pure-Java app, APKMirror build `4arch_7dpi`, installed OK):
+- A manual PCAPdroid capture showed connections to `en.wikipedia.org`, `upload.wikimedia.org` etc. as `HTTPS, 443`.
+- Connection #7's Payload tab was still **encrypted**: records start `17 03 03` (TLS application data), no readable HTTP.
+- Its Overview had **no decryption line** and `App: Unknown (-1)`. Reading: decryption was not attempted for this capture (a failed attempt should report an error there). Not confirmed.
+
+Next steps when resuming:
+1. In PCAPdroid: confirm TLS decryption is on and the mitm add-on is enabled; select **Wikipedia** as the target app (not "all"); start a **new** capture; reload articles; re-open a connection and read the Overview decryption line.
+2. If it reports an error: check the CA is still under Trusted credentials > System after the reboot, then consider pinning (Frida).
+3. Only then return to Flow (x86_64 build or ARM translation) and to a crawler run on `emulator-5554`.

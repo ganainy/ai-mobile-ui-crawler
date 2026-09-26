@@ -20,3 +20,5 @@ The 75 MB pcap is all Flow traffic (filter works): one Google server, front-load
 The emulator guide was reworked to use the SDK command-line tools (sdkmanager/avdmanager) instead of Android Studio (commits def32c1, 24f14c8).
 
 sdkmanager refused Java 26 ("17 or higher": version string has no dot); guide now lists SKIP_JDK_VERSION_CHECK / Android Studio's JDK as workarounds.
+
+Emulator progress and open questions are in the session log at the end of docs/emulator-tls.md.
