@@ -97,9 +97,13 @@ The statistics saved for one run when it ends (steps, actions, screens, AI calls
 _Avoid_: Metrics, run summary
 
 **Pre-run Warning**:
-A problem found just before a crawl starts that does not stop it but makes it worse than the settings promise (Portal's accessibility service off in boost/accessibility mode, Phoenix tracing on but its Managed Service could not be started). The GUI shows it in a dialog asking whether to start anyway (with "Enable Portal and start" when Portal is installed but off); the CLI prints it to stderr, with the `a11y-portal enable` command for Portal problems, and starts.
+A problem found just before a crawl starts that does not stop it but makes it worse than the settings promise (Portal's accessibility service off in boost/accessibility mode, Phoenix tracing on but its Managed Service could not be started, an Experimental Feature switched on but unable to run). The GUI shows it in a dialog asking whether to start anyway (with "Enable Portal and start" when Portal is installed but off); the CLI prints it to stderr, with the `a11y-portal enable` command for Portal problems, and starts.
 _Avoid_: Preflight error, validation error
 
 **Managed Service**:
 A local server the app runs in Docker when a feature needs it (MobSF for static analysis, OmniParser for screen parsing, Phoenix for tracing). The app starts it when that feature is on, reuses one already answering at the configured local address instead of starting a second, and never manages one at a remote address. The CLI leaves it running; the GUI offers to stop it on exit.
 _Avoid_: Docker container, backend, sidecar
+
+**Experimental Feature**:
+An opt-in feature, off by default, that exists to answer a question. It may change or be removed without keeping its saved settings working, and it never changes crawl behaviour unless its own purpose is to do so. Switched on or off from the Settings panel's Experimental tab (or the CLI's `config set`).
+_Avoid_: Beta feature, feature flag, lab feature
