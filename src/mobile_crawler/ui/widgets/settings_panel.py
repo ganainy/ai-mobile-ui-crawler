@@ -869,6 +869,14 @@ class SettingsPanel(QWidget):
         mobsf_hint.setStyleSheet("color: #666; font-size: 11px;")
         mobsf_layout.addWidget(mobsf_hint)
 
+        self.force_mobsf_rescan_checkbox = QCheckBox("Force rescan (ignore the cached per-package report)")
+        self.force_mobsf_rescan_checkbox.setEnabled(False)
+        self.force_mobsf_rescan_checkbox.setToolTip(
+            "A package's exact APK build is only scanned by MobSF once; later crawls reuse that "
+            "report. Check this to make MobSF rescan every time instead."
+        )
+        mobsf_layout.addWidget(self.force_mobsf_rescan_checkbox)
+
         self.enable_mobsf_analysis_checkbox.toggled.connect(self._on_mobsf_toggled)
         mobsf_group.setLayout(mobsf_layout)
         layout.addWidget(mobsf_group)
@@ -1002,6 +1010,7 @@ class SettingsPanel(QWidget):
         """
         self.mobsf_api_url_input.setEnabled(checked)
         self.auto_run_mobsf_after_crawl_checkbox.setEnabled(checked)
+        self.force_mobsf_rescan_checkbox.setEnabled(checked)
 
     def _on_tracing_toggled(self, checked: bool):
         """Handle tracing enabled checkbox toggle."""
@@ -1141,6 +1150,9 @@ class SettingsPanel(QWidget):
 
         mobsf_api_url = self._config_store.get_setting("mobsf_api_url", default=MOBSF_DEFAULT_URL)
         self.mobsf_api_url_input.setText(correct_mobsf_api_url(mobsf_api_url))
+
+        force_mobsf_rescan = self._config_store.get_setting("force_mobsf_rescan", default=False)
+        self.force_mobsf_rescan_checkbox.setChecked(force_mobsf_rescan)
 
         # Load Crawler Agent settings
         crawler_reasoning = self._config_store.get_setting("crawler_reasoning_mode", default=True)
@@ -1344,6 +1356,10 @@ class SettingsPanel(QWidget):
                     self._config_store.set_setting("mobsf_api_url", mobsf_api_url, "string")
                 else:
                     self._config_store.set_setting("mobsf_api_url", MOBSF_DEFAULT_URL, "string")
+
+                self._config_store.set_setting(
+                    "force_mobsf_rescan", self.force_mobsf_rescan_checkbox.isChecked(), "bool"
+                )
 
                 # Save Crawler Agent settings
                 crawler_reasoning = self.crawler_reasoning_checkbox.isChecked()
@@ -1749,6 +1765,10 @@ class SettingsPanel(QWidget):
             True if MobSF analysis should run automatically after a successful crawl
         """
         return self.auto_run_mobsf_after_crawl_checkbox.isChecked()
+
+    def get_force_mobsf_rescan(self) -> bool:
+        """Whether MobSF should ignore the per-package scan cache and rescan every time."""
+        return self.force_mobsf_rescan_checkbox.isChecked()
 
     def get_exploration_objective(self) -> str:
         """Get the current exploration objective / prompt for crawler agent.

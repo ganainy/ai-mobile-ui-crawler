@@ -25,7 +25,12 @@ def _echo_progress(message: str, _color: str | None = None) -> None:
 
 @click.command("mobsf-scan")
 @click.argument("run_id", type=int)
-def mobsf_scan(run_id: int):
+@click.option(
+    "--force-rescan",
+    is_flag=True,
+    help="Rescan even if this exact APK build was already analyzed (default: reuse the cached report)",
+)
+def mobsf_scan(run_id: int, force_rescan: bool):
     """Run MobSF static analysis on a finished run's stored APK.
 
     Scans the APK saved in the run's session folder (it is only saved if MobSF
@@ -47,6 +52,9 @@ def mobsf_scan(run_id: int):
             "MobSF analysis is disabled. Enable it with "
             "`mobile-crawler config set enable_mobsf_analysis true`"
         )
+
+    if force_rescan:
+        config_manager.override("force_mobsf_rescan", True)
 
     manager = MobSFManager(config_manager, session_folder_manager=SessionFolderManager())
     apk_path = manager.find_stored_apk(run)

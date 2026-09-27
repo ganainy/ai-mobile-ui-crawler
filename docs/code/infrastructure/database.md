@@ -30,6 +30,7 @@ Source: `src/mobile_crawler/infrastructure/database.py`
 - [[code/infrastructure/ai_interaction_repository|infrastructure.ai_interaction_repository]]
 - [[code/infrastructure/analysis_bundle|infrastructure.analysis_bundle]]
 - [[code/infrastructure/mobsf_manager|infrastructure.mobsf_manager]]
+- [[code/infrastructure/mobsf_scan_repository|infrastructure.mobsf_scan_repository]]
 - [[code/infrastructure/run_repository|infrastructure.run_repository]]
 - [[code/infrastructure/run_stats_repository|infrastructure.run_stats_repository]]
 - [[code/infrastructure/screen_repository|infrastructure.screen_repository]]

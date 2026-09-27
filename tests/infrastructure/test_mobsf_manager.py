@@ -1,8 +1,10 @@
 """Tests for MobSFManager."""
 
+import json
 import os
 import tempfile
 import zipfile
+from datetime import datetime
 from pathlib import Path
 from unittest.mock import Mock, mock_open, patch
 
@@ -14,6 +16,16 @@ from mobile_crawler.infrastructure.mobsf_manager import (
     MobSFAnalysisResult,
     MobSFManager,
 )
+from mobile_crawler.infrastructure.mobsf_scan_repository import MobSFScanRecord
+
+
+def _make_scan_repo_stub():
+    """A no-op MobSFScanRepository stand-in: always a cache miss, upsert does nothing."""
+    stub = Mock()
+    stub.find_by_version.return_value = None
+    stub.find_by_hash.return_value = None
+    stub.upsert.return_value = 1
+    return stub
 
 
 def _make_config_manager(**overrides):
@@ -187,7 +199,7 @@ class TestMobSFManager:
         )
 
         config = _make_config_manager()
-        manager = MobSFManager(config_manager=config)
+        manager = MobSFManager(config_manager=config, mobsf_scan_repository=_make_scan_repo_stub())
 
         # Mock _make_api_request to avoid actual HTTP calls and polling loop
         def mock_api_request(endpoint, method="GET", data=None, files=None, stream=False, timeout=None):
@@ -620,7 +632,9 @@ class TestStoredApk:
     ):
         apk = tmp_path / "stored.apk"
         apk.write_bytes(b"apk")
-        manager = MobSFManager(config_manager=_make_config_manager())
+        manager = MobSFManager(
+            config_manager=_make_config_manager(), mobsf_scan_repository=_make_scan_repo_stub()
+        )
         uploaded = []
 
         def api(endpoint, method="GET", data=None, files=None, stream=False, timeout=None):
@@ -694,3 +708,164 @@ class TestStoredApk:
         assert manager.find_stored_apk(run) == str(apk)
         manager.analyze_run(run, "device123", apk_path=str(apk))
         assert mock_perform.call_args.kwargs["session_path"] == str(found)
+
+
+class TestMobSFScanCache:
+    """A package's exact APK build is only ever sent through MobSF once."""
+
+    @patch.object(MobSFManager, "preflight", return_value=(True, ""))
+    def test_cache_hit_by_hash_skips_upload_and_reuses_report(self, mock_preflight, tmp_path):
+        apk = tmp_path / "stored.apk"
+        apk.write_bytes(b"same apk bytes")
+        apk_sha256 = MobSFManager._compute_sha256(str(apk))
+
+        cached_json = tmp_path / "old_hash_report.json"
+        cached_json.write_text(json.dumps({"security_score": 42}), encoding="utf-8")
+        cached_pdf = tmp_path / "old_hash_report.pdf"
+        cached_pdf.write_bytes(b"pdf")
+
+        scan_repo = Mock()
+        scan_repo.find_by_hash.return_value = MobSFScanRecord(
+            app_package="com.example.app",
+            app_version_key=None,
+            apk_sha256=apk_sha256,
+            file_hash="old_hash",
+            run_id=3,
+            pdf_report_path=str(cached_pdf),
+            json_report_path=str(cached_json),
+            scorecard_json=json.dumps({"security_score": 42}),
+            scanned_at=datetime(2026, 1, 1, 12, 0, 0),
+        )
+
+        manager = MobSFManager(config_manager=_make_config_manager(), mobsf_scan_repository=scan_repo)
+        manager._make_api_request = Mock()
+
+        success, summary = manager.perform_complete_scan(
+            "com.example.app", session_path=str(tmp_path), apk_path=str(apk)
+        )
+
+        assert success is True
+        assert summary["cached"] is True
+        assert summary["security_score"] == {"security_score": 42}
+        reused_json = tmp_path / "reports" / "mobsf" / "old_hash_report.json"
+        assert summary["json_report"] == str(reused_json)
+        assert reused_json.is_file()
+        manager._make_api_request.assert_not_called()
+        scan_repo.upsert.assert_not_called()
+
+    @patch.object(MobSFManager, "preflight", return_value=(True, ""))
+    def test_force_rescan_ignores_cache(self, mock_preflight, tmp_path):
+        apk = tmp_path / "stored.apk"
+        apk.write_bytes(b"same apk bytes")
+
+        scan_repo = Mock()
+        scan_repo.find_by_hash.return_value = MobSFScanRecord(
+            app_package="com.example.app",
+            app_version_key=None,
+            apk_sha256=MobSFManager._compute_sha256(str(apk)),
+            file_hash="old_hash",
+            run_id=3,
+            pdf_report_path=str(tmp_path / "missing.pdf"),
+            json_report_path=str(tmp_path / "missing.json"),
+            scorecard_json=None,
+            scanned_at=datetime(2026, 1, 1, 12, 0, 0),
+        )
+
+        config = _make_config_manager(force_mobsf_rescan=True)
+        manager = MobSFManager(config_manager=config, mobsf_scan_repository=scan_repo)
+
+        def api(endpoint, method="GET", data=None, files=None, stream=False, timeout=None):
+            if endpoint == "upload":
+                return True, {"hash": "new_hash"}
+            if endpoint == "report_json":
+                return True, {"x": 1}
+            if endpoint == "download_pdf":
+                return True, b"pdf"
+            if endpoint == "scorecard":
+                return True, {"score": 99}
+            return True, {}
+
+        manager._make_api_request = Mock(side_effect=api)
+
+        success, summary = manager.perform_complete_scan(
+            "com.example.app", session_path=str(tmp_path), apk_path=str(apk)
+        )
+
+        assert success is True
+        assert summary["file_hash"] == "new_hash"
+        scan_repo.find_by_hash.assert_not_called()
+        scan_repo.upsert.assert_called_once()
+
+    @patch.object(MobSFManager, "preflight", return_value=(True, ""))
+    @patch("time.sleep")
+    def test_successful_fresh_scan_is_cached_for_reuse(self, mock_sleep, mock_preflight, tmp_path):
+        apk = tmp_path / "stored.apk"
+        apk.write_bytes(b"fresh apk bytes")
+        expected_sha256 = MobSFManager._compute_sha256(str(apk))
+
+        scan_repo = Mock()
+        scan_repo.find_by_hash.return_value = None
+        manager = MobSFManager(config_manager=_make_config_manager(), mobsf_scan_repository=scan_repo)
+
+        def api(endpoint, method="GET", data=None, files=None, stream=False, timeout=None):
+            if endpoint == "upload":
+                return True, {"hash": "h1"}
+            if endpoint == "report_json":
+                return True, {"x": 1}
+            if endpoint == "download_pdf":
+                return True, b"pdf"
+            if endpoint == "scorecard":
+                return True, {"score": 70}
+            return True, {}
+
+        manager._make_api_request = Mock(side_effect=api)
+
+        success, summary = manager.perform_complete_scan(
+            "com.example.app", session_path=str(tmp_path), apk_path=str(apk)
+        )
+
+        assert success is True
+        scan_repo.upsert.assert_called_once()
+        record = scan_repo.upsert.call_args.args[0]
+        assert record.app_package == "com.example.app"
+        assert record.apk_sha256 == expected_sha256
+        assert record.file_hash == "h1"
+        assert json.loads(record.scorecard_json) == {"score": 70}
+
+    @patch.object(MobSFManager, "preflight", return_value=(True, ""))
+    @patch.object(MobSFManager, "extract_apk_from_device")
+    @patch("subprocess.run")
+    def test_cache_hit_by_version_skips_device_pull(self, mock_subprocess, mock_extract, mock_preflight, tmp_path):
+        mock_subprocess.return_value = Mock(
+            returncode=0,
+            stdout="    versionName=1.2.3\n    versionCode=45\n",
+            stderr="",
+        )
+        cached_json = tmp_path / "old_report.json"
+        cached_json.write_text(json.dumps({"security_score": 55}), encoding="utf-8")
+
+        scan_repo = Mock()
+        scan_repo.find_by_version.return_value = MobSFScanRecord(
+            app_package="com.example.app",
+            app_version_key="1.2.3:45",
+            apk_sha256="unused",
+            file_hash="old_hash",
+            run_id=9,
+            pdf_report_path=None,
+            json_report_path=str(cached_json),
+            scorecard_json=json.dumps({"security_score": 55}),
+            scanned_at=datetime(2026, 2, 1, 8, 0, 0),
+        )
+
+        manager = MobSFManager(config_manager=_make_config_manager(), mobsf_scan_repository=scan_repo)
+        manager._make_api_request = Mock()
+
+        success, summary = manager.perform_complete_scan(
+            "com.example.app", session_path=str(tmp_path), device_id="device123"
+        )
+
+        assert success is True
+        assert summary["cached"] is True
+        mock_extract.assert_not_called()
+        manager._make_api_request.assert_not_called()
+        scan_repo.find_by_version.assert_called_once_with("com.example.app", "1.2.3:45")

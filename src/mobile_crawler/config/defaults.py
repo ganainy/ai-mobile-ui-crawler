@@ -57,6 +57,8 @@ DEFAULTS: dict[str, Any] = {
     "pcapdroid_auto_accept_consent": True,
     "pcapdroid_consent_timeout_seconds": 15.0,
     "pcapdroid_consent_poll_interval_seconds": 1.0,
+    # Extract TLS ClientHello SNI hostnames into a .sni.txt next to the pulled pcap
+    "pcap_extract_sni": True,
     # Output directory for PCAP files (resolved to session directory at runtime)
     "traffic_capture_output_dir": None,
     # Default PCAPdroid output directory on device
@@ -86,6 +88,9 @@ DEFAULTS: dict[str, Any] = {
     "mobsf_poll_interval": 2,
     # HTTP request timeout for MobSF API calls (in seconds)
     "mobsf_request_timeout": 300,  # 5 minutes for large report downloads
+    # A package is scanned by MobSF once per APK build; later crawls of the same
+    # build reuse the cached report. Set True to ignore the cache and rescan.
+    "force_mobsf_rescan": False,
     # Test credentials
     # Crawler Agent Integration settings
     # Wake/unlock preflight before launching the target app or crawler

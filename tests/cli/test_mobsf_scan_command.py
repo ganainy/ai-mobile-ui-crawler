@@ -115,3 +115,26 @@ class TestMobSFScanCommand:
         result = CliRunner().invoke(cli, ["mobsf-scan", "abc"])
 
         assert result.exit_code != 0
+
+    def test_force_rescan_flag_overrides_config(self):
+        run = Mock(id=5, app_package="com.example.app", device_id="dev1")
+        result_obj = MobSFAnalysisResult(
+            success=True, report_path="/r.pdf", json_path="/r.json", scan_id="h", security_score={"score": 1}
+        )
+        config = Mock()
+        config.get.side_effect = lambda key, default=None: True if key == "enable_mobsf_analysis" else default
+        with (
+            patch(f"{MODULE}.DatabaseManager"),
+            patch(f"{MODULE}.ConfigManager", return_value=config),
+            patch(f"{MODULE}.SessionFolderManager"),
+            patch(f"{MODULE}.RunRepository") as repo_cls,
+            patch(f"{MODULE}.MobSFManager") as manager_cls,
+            patch(f"{MODULE}.ensure_mobsf_running_if_enabled", return_value=(True, "running")),
+        ):
+            repo_cls.return_value.get_run_by_id.return_value = run
+            manager_cls.return_value.find_stored_apk.return_value = "/apk"
+            manager_cls.return_value.analyze_run.return_value = result_obj
+            outcome = CliRunner().invoke(cli, ["mobsf-scan", "5", "--force-rescan"])
+
+        assert outcome.exit_code == 0, outcome.output
+        config.override.assert_called_once_with("force_mobsf_rescan", True)

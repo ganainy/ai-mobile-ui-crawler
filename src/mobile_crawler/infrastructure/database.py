@@ -282,6 +282,27 @@ class DatabaseManager:
         """
         )
 
+        # mobsf_scans table: one cached scan per (app_package, apk_sha256), so a
+        # package's exact APK build is only ever sent through MobSF once.
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS mobsf_scans (
+                id INTEGER PRIMARY KEY,
+                app_package TEXT NOT NULL,
+                app_version_key TEXT,            -- "versionName:versionCode" when known from adb
+                apk_sha256 TEXT NOT NULL,        -- sha256 of the scanned APK/.apks bytes
+                file_hash TEXT,                  -- MobSF's own upload hash, for its API calls
+                run_id INTEGER,                  -- run whose folder holds the canonical report files
+                pdf_report_path TEXT,
+                json_report_path TEXT,
+                scorecard_json TEXT,
+                scanned_at TEXT NOT NULL,
+                FOREIGN KEY (run_id) REFERENCES runs(id),
+                UNIQUE (app_package, apk_sha256)
+            )
+        """
+        )
+
         # step_phase_transitions table
         conn.execute(
             """
@@ -312,6 +333,10 @@ class DatabaseManager:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_omni_cache_screen ON omni_parser_cache(screen_key)")
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_phase_transitions_run ON step_phase_transitions(run_id, step_number)"
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_mobsf_scans_package ON mobsf_scans(app_package)")
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_mobsf_scans_version ON mobsf_scans(app_package, app_version_key)"
         )
 
         conn.commit()

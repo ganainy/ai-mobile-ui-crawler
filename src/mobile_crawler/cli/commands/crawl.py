@@ -273,6 +273,11 @@ def _resolve_last(value: str, config_manager: ConfigManager, key: str, option: s
 @click.option("--enable-traffic-capture", is_flag=True, help="Enable PCAPdroid traffic capture during crawl")
 @click.option("--enable-video-recording", is_flag=True, help="Enable video recording during crawl")
 @click.option("--enable-mobsf-analysis", is_flag=True, help="Enable MobSF static analysis after crawl")
+@click.option(
+    "--force-mobsf-rescan",
+    is_flag=True,
+    help="Rescan with MobSF even if this exact APK build was already analyzed (default: reuse the cached report)",
+)
 @click.option("--no-report", is_flag=True, help="Do not generate the run report after the crawl")
 @click.option(
     "--log-level",
@@ -327,6 +332,7 @@ def crawl(
     enable_traffic_capture: bool,
     enable_video_recording: bool,
     enable_mobsf_analysis: bool,
+    force_mobsf_rescan: bool,
     no_report: bool,
     log_level: str | None,
     output_format: str,
@@ -372,6 +378,8 @@ def crawl(
         if enable_mobsf_analysis:
             config_manager.override("enable_mobsf_analysis", True)
             config_manager.override("auto_run_mobsf_after_crawl", True)
+        if force_mobsf_rescan:
+            config_manager.override("force_mobsf_rescan", True)
         if no_report:
             config_manager.override("auto_generate_report_after_run", False)
         if parser_mode is not None:

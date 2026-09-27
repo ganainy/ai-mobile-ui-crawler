@@ -22,6 +22,7 @@ Persistence and device integration: SQLite database and repositories (runs, scre
 - [[code/infrastructure/installed_apps|infrastructure.installed_apps]] - Enumerates third-party packages installed on an Android device via ADB.
 - [[code/infrastructure/mobsf_docker|infrastructure.mobsf_docker]] - Docker lifecycle management for the MobSF static-analysis server.
 - [[code/infrastructure/mobsf_manager|infrastructure.mobsf_manager]] - MobSF Manager for APK analysis.
+- [[code/infrastructure/mobsf_scan_repository|infrastructure.mobsf_scan_repository]] - Repository for the one cached MobSF scan kept per (app_package, APK build).
 - [[code/infrastructure/omniparser_docker|infrastructure.omniparser_docker]] - Docker lifecycle management for the local OmniParser server.
 - [[code/infrastructure/phoenix_docker|infrastructure.phoenix_docker]] - Docker lifecycle management for the local Phoenix tracing server.
 - [[code/infrastructure/run_repository|infrastructure.run_repository]] - Repository for managing crawl runs in crawler.db.

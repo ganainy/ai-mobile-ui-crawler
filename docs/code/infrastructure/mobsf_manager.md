@@ -24,6 +24,7 @@ Source: `src/mobile_crawler/infrastructure/mobsf_manager.py`
 - [[code/domain/run_folder_layout|domain.run_folder_layout]]
 - [[code/infrastructure/adb_client|infrastructure.adb_client]]
 - [[code/infrastructure/database|infrastructure.database]]
+- [[code/infrastructure/mobsf_scan_repository|infrastructure.mobsf_scan_repository]]
 - [[code/infrastructure/run_repository|infrastructure.run_repository]]
 - [[code/infrastructure/session_folder_manager|infrastructure.session_folder_manager]]
 

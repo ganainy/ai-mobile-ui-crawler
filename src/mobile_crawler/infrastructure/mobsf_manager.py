@@ -4,14 +4,17 @@ Manages integration with Mobile Security Framework (MobSF) for
 static analysis of Android applications.
 """
 
+import hashlib
 import json
 import logging
 import os
 import re
+import shutil
 import subprocess
 import time
 import zipfile
 from collections.abc import Callable
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -19,6 +22,7 @@ import requests
 
 from mobile_crawler.config.defaults import MOBSF_DEFAULT_URL
 from mobile_crawler.domain.run_folder_layout import RunFolderLayout
+from mobile_crawler.infrastructure.mobsf_scan_repository import MobSFScanRecord, MobSFScanRepository
 
 if TYPE_CHECKING:
     from mobile_crawler.config.config_manager import ConfigManager
@@ -121,6 +125,7 @@ class MobSFManager:
         config_manager: "ConfigManager",
         adb_client: Optional["ADBClient"] = None,
         session_folder_manager: Optional["SessionFolderManager"] = None,
+        mobsf_scan_repository: Optional["MobSFScanRepository"] = None,
     ):
         """Initialize the MobSF manager.
 
@@ -128,10 +133,13 @@ class MobSFManager:
             config_manager: Configuration manager instance
             adb_client: Optional ADB client wrapper for executing commands
             session_folder_manager: Optional session folder manager for path resolution
+            mobsf_scan_repository: Optional per-package scan cache; defaults to one
+                backed by the shared crawler.db (lazily created on first use)
         """
         self.config_manager = config_manager
         self.adb_client = adb_client
         self.session_folder_manager = session_folder_manager
+        self.mobsf_scan_repository = mobsf_scan_repository
 
         self.api_key = ""
         self.api_url = config_manager.get("mobsf_api_url", MOBSF_DEFAULT_URL)
@@ -571,6 +579,101 @@ class MobSFManager:
             logger.error(f"Error saving JSON report: {str(e)}")
             return None
 
+    def _get_scan_repository(self) -> MobSFScanRepository:
+        """Return the per-package scan cache, creating one on the shared crawler.db if needed."""
+        if self.mobsf_scan_repository is None:
+            from mobile_crawler.infrastructure.database import DatabaseManager
+
+            self.mobsf_scan_repository = MobSFScanRepository(DatabaseManager())
+        return self.mobsf_scan_repository
+
+    @staticmethod
+    def _compute_sha256(path: str) -> str:
+        """Hash a file's contents, used to recognize an already-scanned APK build."""
+        digest = hashlib.sha256()
+        with open(path, "rb") as f:
+            for chunk in iter(lambda: f.read(1 << 20), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
+
+    def _get_device_app_version(self, package_name: str, device_id: str | None) -> str | None:
+        """Return "versionName:versionCode" for an installed package via a cheap ADB call.
+
+        Lets a cache hit skip pulling the APK entirely. Returns None if the
+        device is unreachable or the version can't be parsed from the output.
+        """
+        try:
+            result = subprocess.run(
+                self._adb_base_command(device_id) + ["shell", "dumpsys", "package", package_name],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=15,
+            )
+        except (OSError, subprocess.SubprocessError) as e:
+            logger.debug("Failed to query app version for %s: %s", package_name, e)
+            return None
+        if result.returncode != 0:
+            return None
+
+        version_name = None
+        version_code = None
+        for line in result.stdout.splitlines():
+            line = line.strip()
+            if line.startswith("versionName="):
+                version_name = line.split("=", 1)[1].strip()
+            elif line.startswith("versionCode="):
+                version_code = line.split("=", 1)[1].split()[0].strip()
+            if version_name and version_code:
+                break
+
+        if not version_name and not version_code:
+            return None
+        return f"{version_name or '?'}:{version_code or '?'}"
+
+    @staticmethod
+    def _cached_report_exists(cached: "MobSFScanRecord") -> bool:
+        """Whether a cached scan's JSON report is still on disk (the PDF is optional)."""
+        return bool(cached.json_report_path and os.path.isfile(cached.json_report_path))
+
+    def _reuse_cached_scan(
+        self,
+        cached: "MobSFScanRecord",
+        reports_dir: str,
+        package_name: str,
+        apk_path: str | None,
+    ) -> dict[str, Any]:
+        """Build a scan summary from a cached record, copying its reports into this run's folder."""
+        file_hash = cached.file_hash or cached.apk_sha256[:32]
+        json_path = None
+        pdf_path = None
+        try:
+            if cached.json_report_path and os.path.isfile(cached.json_report_path):
+                json_path = os.path.join(reports_dir, f"{file_hash}_report.json")
+                shutil.copyfile(cached.json_report_path, json_path)
+            if cached.pdf_report_path and os.path.isfile(cached.pdf_report_path):
+                pdf_path = os.path.join(reports_dir, f"{file_hash}_report.pdf")
+                shutil.copyfile(cached.pdf_report_path, pdf_path)
+        except OSError as e:
+            logger.warning("Failed to copy cached MobSF report into run folder: %s", e)
+
+        try:
+            security_score = json.loads(cached.scorecard_json) if cached.scorecard_json else "Unknown"
+        except json.JSONDecodeError:
+            security_score = "Unknown"
+
+        return {
+            "package_name": package_name,
+            "file_hash": file_hash,
+            "apk_path": apk_path,
+            "pdf_report": pdf_path,
+            "json_report": json_path,
+            "security_score": security_score,
+            "scan_complete": True,
+            "cached": True,
+        }
+
     def get_security_score(self, file_hash: str) -> tuple[bool, dict[str, Any]]:
         """Get security scorecard for a scanned file.
 
@@ -660,9 +763,26 @@ class MobSFManager:
         os.makedirs(reports_dir, exist_ok=True)
         os.makedirs(apks_dir, exist_ok=True)
 
+        force_rescan = bool(self.config_manager.get("force_mobsf_rescan", False))
+        scan_repo = self._get_scan_repository()
+        version_key = None
+
         if apk_path:
             _log(f"Using stored APK: {apk_path}", "blue")
         else:
+            if not force_rescan:
+                version_key = self._get_device_app_version(package_name, device_id)
+                if version_key:
+                    cached = scan_repo.find_by_version(package_name, version_key)
+                    if cached and self._cached_report_exists(cached):
+                        _log(
+                            f"{package_name} {version_key} was already analyzed by MobSF "
+                            f"(run {cached.run_id}, {cached.scanned_at:%Y-%m-%d %H:%M}); "
+                            "reusing the cached report instead of pulling the APK again",
+                            "blue",
+                        )
+                        return True, self._reuse_cached_scan(cached, reports_dir, package_name, None)
+
             # Extract APK from device
             _log("Extracting APK from device...", "blue")
             logger.debug(f"Extracting APK for package: {package_name}")
@@ -674,6 +794,18 @@ class MobSFManager:
                 return False, {"error": error_msg}
             _log(f"APK extracted to: {apk_path}", "green")
             logger.debug(f"APK extracted successfully: {apk_path}")
+
+        apk_sha256 = self._compute_sha256(apk_path)
+        if not force_rescan:
+            cached = scan_repo.find_by_hash(package_name, apk_sha256)
+            if cached and self._cached_report_exists(cached):
+                _log(
+                    f"This exact APK build of {package_name} was already analyzed by MobSF "
+                    f"(run {cached.run_id}, {cached.scanned_at:%Y-%m-%d %H:%M}); "
+                    "reusing the cached report",
+                    "blue",
+                )
+                return True, self._reuse_cached_scan(cached, reports_dir, package_name, apk_path)
 
         # Upload APK to MobSF
         _log("Uploading APK to MobSF...", "blue")
@@ -804,6 +936,23 @@ class MobSFManager:
             if score_success and isinstance(scorecard, dict):
                 score_value = scorecard.get("score", "N/A")
                 _log(f"Security Score: {score_value}", "green")
+
+            try:
+                scan_repo.upsert(
+                    MobSFScanRecord(
+                        app_package=package_name,
+                        app_version_key=version_key,
+                        apk_sha256=apk_sha256,
+                        file_hash=file_hash,
+                        run_id=run_id,
+                        pdf_report_path=pdf_path,
+                        json_report_path=json_path,
+                        scorecard_json=json.dumps(scorecard) if isinstance(scorecard, dict) else None,
+                        scanned_at=datetime.now(),
+                    )
+                )
+            except Exception as e:
+                logger.warning("Failed to cache MobSF scan result for %s: %s", package_name, e)
         else:
             _log(f"Warning: Scan timeout reached ({scan_timeout}s). Reports may not be available yet.", "orange")
             _log("You can manually retrieve reports later using the file hash.", "orange")
