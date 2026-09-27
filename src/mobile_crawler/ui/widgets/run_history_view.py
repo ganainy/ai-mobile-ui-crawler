@@ -1,5 +1,7 @@
 """Run history view widget for mobile-crawler GUI."""
 
+import logging
+import os
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import Qt, QThread, Signal
@@ -31,6 +33,8 @@ if TYPE_CHECKING:
     from mobile_crawler.infrastructure.mobsf_manager import MobSFManager
     from mobile_crawler.infrastructure.run_repository import RunRepository
     from mobile_crawler.infrastructure.run_stats_repository import RunStatsRepository
+
+logger = logging.getLogger(__name__)
 
 
 class MobSFAnalysisWorker(QThread):
@@ -285,15 +289,21 @@ class RunHistoryView(QWidget):
         # Save current selection if any
         selected_id = self.get_selected_run_id()
 
-        runs = self._run_repository.get_all_runs()
-
-        self.table.setRowCount(len(runs))
-
-        # Need session manager to resolve paths
-        # We'll create it on fly since it's lightweight, or we could inject it
         from mobile_crawler.infrastructure.session_folder_manager import SessionFolderManager
 
         session_manager = SessionFolderManager()
+
+        # A run whose recorded folder no longer exists (e.g. deleted by hand outside
+        # the app) is hidden rather than shown with broken artifacts. A run that never
+        # had a recorded path (old data, before session_path was tracked) is left
+        # alone -- that's not the same thing as "the user deleted it".
+        runs = [
+            run
+            for run in self._run_repository.get_all_runs()
+            if not (run.session_path and not os.path.exists(run.session_path))
+        ]
+
+        self.table.setRowCount(len(runs))
 
         for row, run in enumerate(runs):
             # ID
@@ -496,6 +506,17 @@ class RunHistoryView(QWidget):
 
         if reply == QMessageBox.StandardButton.Yes:
             try:
+                from mobile_crawler.infrastructure.session_folder_manager import SessionFolderManager
+
+                run = self._get_run_by_id(run_id)
+                session_manager = SessionFolderManager()
+                session_path = session_manager.get_session_path(run) if run else None
+                if session_path:
+                    try:
+                        session_manager.delete_session_folder(session_path)
+                    except Exception as e:
+                        logger.warning(f"Failed to delete session folder for run {run_id}: {e}")
+
                 deleted = self._run_repository.delete_run(run_id)
                 if deleted:
                     # Remove row from table

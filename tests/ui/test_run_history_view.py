@@ -40,7 +40,7 @@ class MockRunRepository:
                 return True
         return False
 
-    def add_run(self, device_id, app_package, status, steps=0, screens=0):
+    def add_run(self, device_id, app_package, status, steps=0, screens=0, session_path=None):
         """Add a test run."""
         from mobile_crawler.infrastructure.run_repository import Run
 
@@ -56,6 +56,7 @@ class MockRunRepository:
             ai_model="gemini-1.5-pro",
             total_steps=steps,
             unique_screens=screens,
+            session_path=session_path,
         )
         self._runs.append(run)
         self._next_id += 1
@@ -208,6 +209,36 @@ class TestRunHistoryTable:
         for col in (9, 10, 11, 12, 13, 14):
             assert view.table.item(0, col).text() == "—"
 
+    def test_table_hides_run_whose_recorded_folder_is_gone(
+        self, qt_app, mock_run_repository, mock_report_generator, mock_mobsf_manager, tmp_path
+    ):
+        """A run's folder deleted by hand outside the app disappears from the list."""
+        missing_path = str(tmp_path / "deleted_by_user")
+        mock_run_repository.add_run("emulator-5554", "com.example.app", "STOPPED", session_path=missing_path)
+        view = _create_run_history_view(mock_run_repository, mock_report_generator, mock_mobsf_manager)
+
+        assert view.table.rowCount() == 0
+
+    def test_table_keeps_run_whose_recorded_folder_still_exists(
+        self, qt_app, mock_run_repository, mock_report_generator, mock_mobsf_manager, tmp_path
+    ):
+        """A run whose folder is still on disk stays visible."""
+        session_dir = tmp_path / "run_1"
+        session_dir.mkdir()
+        mock_run_repository.add_run("emulator-5554", "com.example.app", "STOPPED", session_path=str(session_dir))
+        view = _create_run_history_view(mock_run_repository, mock_report_generator, mock_mobsf_manager)
+
+        assert view.table.rowCount() == 1
+
+    def test_table_keeps_run_with_no_recorded_path(
+        self, qt_app, mock_run_repository, mock_report_generator, mock_mobsf_manager
+    ):
+        """A run that never had session_path tracked (old data) is not treated as deleted."""
+        mock_run_repository.add_run("emulator-5554", "com.example.app", "STOPPED")
+        view = _create_run_history_view(mock_run_repository, mock_report_generator, mock_mobsf_manager)
+
+        assert view.table.rowCount() == 1
+
     def test_table_displays_multiple_runs(self, qt_app, mock_run_repository, mock_report_generator, mock_mobsf_manager):
         """Test that table displays multiple runs."""
         mock_run_repository.add_run("emulator-5554", "com.example.app1", "STOPPED")
@@ -307,6 +338,25 @@ class TestDeleteRun:
         view.table.selectRow(0)
         view._on_delete_clicked()
 
+        assert view.table.rowCount() == 0
+
+    def test_delete_removes_session_folder_from_disk(
+        self, qt_app, mock_run_repository, mock_report_generator, mock_mobsf_manager, monkeypatch, tmp_path
+    ):
+        """Deleting a run through the GUI also removes its files, not just the DB row."""
+        session_dir = tmp_path / "run_1"
+        session_dir.mkdir()
+        (session_dir / "screenshot.png").write_bytes(b"x")
+        mock_run_repository.add_run("emulator-5554", "com.example.app", "STOPPED", session_path=str(session_dir))
+        view = _create_run_history_view(mock_run_repository, mock_report_generator, mock_mobsf_manager)
+
+        monkeypatch.setattr(QMessageBox, "question", lambda *args, **kwargs: QMessageBox.StandardButton.Yes)
+        monkeypatch.setattr(QMessageBox, "information", lambda *args, **kwargs: None)
+
+        view.table.selectRow(0)
+        view._on_delete_clicked()
+
+        assert not session_dir.exists()
         assert view.table.rowCount() == 0
 
     def test_delete_with_no_confirmation(
