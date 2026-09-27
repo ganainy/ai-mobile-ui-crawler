@@ -18,3 +18,4 @@ Source: `src/mobile_crawler/domain/run_folder_layout.py`
 - [[code/domain/traffic_capture_manager|domain.traffic_capture_manager]]
 - [[code/infrastructure/mobsf_manager|infrastructure.mobsf_manager]]
 - [[code/infrastructure/session_folder_manager|infrastructure.session_folder_manager]]
+- [[code/ui/widgets/run_history_view|ui.widgets.run_history_view]]

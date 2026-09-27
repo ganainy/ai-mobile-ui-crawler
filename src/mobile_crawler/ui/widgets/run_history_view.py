@@ -22,6 +22,8 @@ from PySide6.QtWidgets import (
 )
 
 from mobile_crawler.core.run_stats_sections import RUN_STATS_SECTIONS, format_stat_value
+from mobile_crawler.domain.run_config_snapshot import read_config_snapshot
+from mobile_crawler.domain.run_folder_layout import RunFolderLayout
 from mobile_crawler.infrastructure.mobsf_docker import MobSFDockerService
 
 if TYPE_CHECKING:
@@ -196,9 +198,26 @@ class RunHistoryView(QWidget):
 
         # Table for run metadata
         self.table = QTableWidget()
-        self.table.setColumnCount(10)
+        self.table.setColumnCount(16)
         self.table.setHorizontalHeaderLabels(
-            ["ID", "Device", "Package", "Start Time", "End Time", "Status", "Steps", "Screens", "Model", "Actions"]
+            [
+                "ID",
+                "Device",
+                "Package",
+                "Start Time",
+                "End Time",
+                "Status",
+                "Steps",
+                "Screens",
+                "Model",
+                "PCAP+SNI",
+                "MobSF",
+                "Tracing",
+                "UI Parser",
+                "Video",
+                "Report",
+                "Actions",
+            ]
         )
 
         # Configure table
@@ -333,10 +352,34 @@ class RunHistoryView(QWidget):
             model_item = QTableWidgetItem(model_text)
             self.table.setItem(row, 8, model_item)
 
+            # Artifact presence columns (PCAP+SNI, MobSF, Tracing, UI Parser, Video, Report)
+            session_path = session_manager.get_session_path(run)
+            layout = RunFolderLayout(session_path) if session_path else None
+
+            pcap = layout.find_pcap() if layout else None
+            pcap_text = "—"
+            if pcap is not None:
+                sni_path = pcap.with_suffix(".sni.txt")
+                pcap_text = "✓ +SNI" if sni_path.exists() else "✓"
+            self.table.setItem(row, 9, self._artifact_item(pcap_text))
+
+            mobsf_found = layout.find_mobsf_json_report() is not None if layout else False
+            self.table.setItem(row, 10, self._artifact_item("✓" if mobsf_found else "—"))
+
+            self.table.setItem(row, 11, self._artifact_item("✓" if run.trace_id else "—"))
+
+            snapshot = read_config_snapshot(session_path)
+            ui_parser_mode = (snapshot or {}).get("ui_parser_mode")
+            self.table.setItem(row, 12, self._artifact_item(str(ui_parser_mode) if ui_parser_mode else "—"))
+
+            video_found = bool(layout and layout.videos_dir.is_dir() and any(layout.videos_dir.glob("*.mp4")))
+            self.table.setItem(row, 13, self._artifact_item("✓" if video_found else "—"))
+
+            report_found = bool(layout and layout.run_report_html.exists())
+            self.table.setItem(row, 14, self._artifact_item("✓" if report_found else "—"))
+
             # Action Button (Open Folder)
             # Only enable if folder exists
-            session_path = session_manager.get_session_path(run)
-
             open_btn = QPushButton("📂 Open")
             open_btn.setToolTip("Open Run Folder")
             if session_path:
@@ -345,7 +388,7 @@ class RunHistoryView(QWidget):
                 open_btn.setEnabled(False)
                 open_btn.setToolTip("Folder not found")
 
-            self.table.setCellWidget(row, 9, open_btn)
+            self.table.setCellWidget(row, 15, open_btn)
 
         # Restore selection
         if selected_id is not None:
@@ -354,6 +397,12 @@ class RunHistoryView(QWidget):
                 if item and item.data(Qt.ItemDataRole.UserRole) == selected_id:
                     self.table.selectRow(row)
                     break
+
+    def _artifact_item(self, text: str) -> QTableWidgetItem:
+        """Table cell for an artifact presence/value column: green when present, gray dash when absent."""
+        item = QTableWidgetItem(text)
+        item.setForeground(QColor("#666666") if text == "—" else QColor("#009900"))
+        return item
 
     def _open_folder(self, path: str):
         """Open folder in system file explorer."""

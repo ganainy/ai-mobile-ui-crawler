@@ -151,7 +151,7 @@ class TestRunHistoryTable:
     def test_table_has_correct_columns(self, qt_app, mock_run_repository, mock_report_generator, mock_mobsf_manager):
         """Test that table has correct columns."""
         view = _create_run_history_view(mock_run_repository, mock_report_generator, mock_mobsf_manager)
-        assert view.table.columnCount() == 10
+        assert view.table.columnCount() == 16
         assert view.table.horizontalHeaderItem(0).text() == "ID"
         assert view.table.horizontalHeaderItem(1).text() == "Device"
         assert view.table.horizontalHeaderItem(2).text() == "Package"
@@ -161,7 +161,13 @@ class TestRunHistoryTable:
         assert view.table.horizontalHeaderItem(6).text() == "Steps"
         assert view.table.horizontalHeaderItem(7).text() == "Screens"
         assert view.table.horizontalHeaderItem(8).text() == "Model"
-        assert view.table.horizontalHeaderItem(9).text() == "Actions"
+        assert view.table.horizontalHeaderItem(9).text() == "PCAP+SNI"
+        assert view.table.horizontalHeaderItem(10).text() == "MobSF"
+        assert view.table.horizontalHeaderItem(11).text() == "Tracing"
+        assert view.table.horizontalHeaderItem(12).text() == "UI Parser"
+        assert view.table.horizontalHeaderItem(13).text() == "Video"
+        assert view.table.horizontalHeaderItem(14).text() == "Report"
+        assert view.table.horizontalHeaderItem(15).text() == "Actions"
 
     def test_table_is_read_only(self, qt_app, mock_run_repository, mock_report_generator, mock_mobsf_manager):
         """Test that table is read-only."""
@@ -191,6 +197,16 @@ class TestRunHistoryTable:
         view = _create_run_history_view(mock_run_repository, mock_report_generator, mock_mobsf_manager)
 
         assert view.table.item(0, 8).text() == "gemini/gemini-1.5-pro"
+
+    def test_table_shows_dash_for_missing_artifacts(
+        self, qt_app, mock_run_repository, mock_report_generator, mock_mobsf_manager
+    ):
+        """A run with no session folder on disk shows dashes for every artifact column."""
+        mock_run_repository.add_run("emulator-5554", "com.example.app", "STOPPED")
+        view = _create_run_history_view(mock_run_repository, mock_report_generator, mock_mobsf_manager)
+
+        for col in (9, 10, 11, 12, 13, 14):
+            assert view.table.item(0, col).text() == "—"
 
     def test_table_displays_multiple_runs(self, qt_app, mock_run_repository, mock_report_generator, mock_mobsf_manager):
         """Test that table displays multiple runs."""

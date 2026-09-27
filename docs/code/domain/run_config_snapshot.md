@@ -22,3 +22,4 @@ Source: `src/mobile_crawler/domain/run_config_snapshot.py`
 - [[code/core/crawler_loop|core.crawler_loop]]
 - [[code/domain/report_generator|domain.report_generator]]
 - [[code/infrastructure/analysis_bundle|infrastructure.analysis_bundle]]
+- [[code/ui/widgets/run_history_view|ui.widgets.run_history_view]]

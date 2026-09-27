@@ -18,6 +18,8 @@ Source: `src/mobile_crawler/ui/widgets/run_history_view.py`
 ## Imports
 - [[code/core/run_stats_sections|core.run_stats_sections]]
 - [[code/domain/report_generator|domain.report_generator]]
+- [[code/domain/run_config_snapshot|domain.run_config_snapshot]]
+- [[code/domain/run_folder_layout|domain.run_folder_layout]]
 - [[code/infrastructure/mobsf_docker|infrastructure.mobsf_docker]]
 - [[code/infrastructure/mobsf_manager|infrastructure.mobsf_manager]]
 - [[code/infrastructure/run_repository|infrastructure.run_repository]]
