@@ -18,6 +18,7 @@ Source: `src/mobile_crawler/domain/traffic_capture_manager.py`
 - [[code/infrastructure/database|infrastructure.database]]
 - [[code/infrastructure/run_repository|infrastructure.run_repository]]
 - [[code/infrastructure/session_folder_manager|infrastructure.session_folder_manager]]
+- [[code/infrastructure/sni_extractor|infrastructure.sni_extractor]]
 
 ## Imported by
 - [[code/core/crawler_loop|core.crawler_loop]]

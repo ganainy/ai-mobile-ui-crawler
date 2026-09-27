@@ -30,6 +30,7 @@ Persistence and device integration: SQLite database and repositories (runs, scre
 - [[code/infrastructure/screen_repository|infrastructure.screen_repository]] - Repository for managing discovered screens in crawler.db.
 - [[code/infrastructure/session_folder_manager|infrastructure.session_folder_manager]] - Session folder management for crawler sessions.
 - [[code/infrastructure/sms_reader|infrastructure.sms_reader]] - Read verification SMS from a connected device over adb (see CONTEXT.md, Verification Challenge).
+- [[code/infrastructure/sni_extractor|infrastructure.sni_extractor]] - Extract TLS ClientHello SNI hostnames from a pcap file.
 - [[code/infrastructure/step_log_repository|infrastructure.step_log_repository]] - Repository for managing step logs in crawler.db.
 - [[code/infrastructure/step_phase_repository|infrastructure.step_phase_repository]] - Repository for managing step phase transitions in crawler.db.
 - [[code/infrastructure/telemetry_client|infrastructure.telemetry_client]] - Reads a run's telemetry back from Phoenix or Langfuse, by the run's trace session id.

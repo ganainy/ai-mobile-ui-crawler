@@ -818,6 +818,15 @@ class SettingsPanel(QWidget):
         pcap_key_layout.addWidget(self.pcapdroid_api_key_input)
         traffic_capture_layout.addLayout(pcap_key_layout)
 
+        self.pcap_extract_sni_checkbox = QCheckBox("Extract SNI hostnames after capture")
+        self.pcap_extract_sni_checkbox.setChecked(True)
+        self.pcap_extract_sni_checkbox.setEnabled(False)
+        self.pcap_extract_sni_checkbox.setToolTip(
+            "Parses the pulled pcap for TLS ClientHello SNI hostnames and writes them "
+            "to a .sni.txt file next to it, even when the traffic itself stays encrypted."
+        )
+        traffic_capture_layout.addWidget(self.pcap_extract_sni_checkbox)
+
         self.enable_traffic_capture_checkbox.toggled.connect(self._on_traffic_capture_toggled)
         traffic_capture_group.setLayout(traffic_capture_layout)
         layout.addWidget(traffic_capture_group)
@@ -1001,6 +1010,7 @@ class SettingsPanel(QWidget):
             checked: Whether traffic capture is enabled
         """
         self.pcapdroid_api_key_input.setEnabled(checked)
+        self.pcap_extract_sni_checkbox.setEnabled(checked)
 
     def _on_mobsf_toggled(self, checked: bool):
         """Handle MobSF analysis checkbox toggle.
@@ -1130,6 +1140,10 @@ class SettingsPanel(QWidget):
         pcapdroid_api_key = self._config_store.get_secret_plaintext("pcapdroid_api_key")
         if pcapdroid_api_key:
             self.pcapdroid_api_key_input.setText(pcapdroid_api_key)
+
+        self.pcap_extract_sni_checkbox.setChecked(
+            bool(self._config_store.get_setting("pcap_extract_sni", default=True))
+        )
 
         # Load video recording settings
         enable_video_recording = self._config_store.get_setting("enable_video_recording", default=False)
@@ -1332,6 +1346,10 @@ class SettingsPanel(QWidget):
                     self._config_store.set_secret_plaintext("pcapdroid_api_key", pcapdroid_api_key)
                 else:
                     self._config_store.delete_secret("pcapdroid_api_key")
+
+                self._config_store.set_setting(
+                    "pcap_extract_sni", self.pcap_extract_sni_checkbox.isChecked(), "bool"
+                )
 
                 # Save video recording settings
                 enable_video_recording = self.enable_video_recording_checkbox.isChecked()

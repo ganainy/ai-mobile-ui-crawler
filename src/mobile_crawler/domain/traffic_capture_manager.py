@@ -526,6 +526,8 @@ class TrafficCaptureManager:
                 # Always cleanup device PCAP file after successful pull
                 await self._cleanup_device_pcap_file_async(device_pcap_full_path)
                 logger.info(f"PCAP file saved: {self.local_pcap_file_path}")
+                if self.config_manager.get("pcap_extract_sni", True):
+                    self._extract_sni_report(self.local_pcap_file_path)
                 return os.path.abspath(self.local_pcap_file_path)
             else:
                 logger.error(f"PCAP file pulled to '{self.local_pcap_file_path}' but it is EMPTY.")
@@ -537,6 +539,16 @@ class TrafficCaptureManager:
                 f"but local file '{self.local_pcap_file_path}' not found."
             )
             return None
+
+    def _extract_sni_report(self, pcap_path: str) -> None:
+        """Best-effort: write the pulled pcap's SNI hostnames to a .sni.txt next to it."""
+        from mobile_crawler.infrastructure.sni_extractor import write_sni_report
+
+        try:
+            report_path = write_sni_report(pcap_path)
+            logger.info(f"SNI report saved: {report_path}")
+        except Exception:
+            logger.warning(f"Failed to extract SNI report for {pcap_path}", exc_info=True)
 
     async def _cleanup_device_pcap_file_async(self, device_pcap_full_path: str):
         """Deletes the PCAP file from the device.

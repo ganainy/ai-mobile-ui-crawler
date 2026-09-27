@@ -4,6 +4,7 @@ import asyncio
 import os
 import tempfile
 import time
+from pathlib import Path
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -509,6 +510,68 @@ class TestTrafficCaptureManager:
         ]
         assert stop_commands
         assert stop_commands[0][stop_commands[0].index("api_key") + 1] == "test_api_key"
+
+    @patch.object(TrafficCaptureManager, "_run_adb_command_async")
+    def test_extracts_sni_report_after_successful_pull(self, mock_run_adb, mock_config_manager, tmp_path):
+        """A successful pull should extract SNI hostnames next to the pcap by default."""
+        local_pcap = tmp_path / "capture.pcap"
+
+        async def adb_side_effect(cmd, suppress_stderr=False, timeout=None):
+            if cmd[0] == "pull":
+                Path(cmd[2]).write_bytes(b"fake pcap bytes")
+                return ("", 0)
+            if "test -f" in " ".join(cmd):
+                return ("", 0)
+            return ("", 0)
+
+        mock_run_adb.side_effect = adb_side_effect
+
+        manager = TrafficCaptureManager(config_manager=mock_config_manager, adb_client=Mock())
+        manager._is_currently_capturing = True
+        manager.pcap_filename_on_device = "capture.pcap"
+        manager.local_pcap_file_path = str(local_pcap)
+
+        with patch(
+            "mobile_crawler.infrastructure.sni_extractor.write_sni_report", return_value="report.sni.txt"
+        ) as mock_write_report:
+            result = asyncio.run(manager.stop_capture_and_pull_async(run_id=1))
+
+        assert result == os.path.abspath(str(local_pcap))
+        mock_write_report.assert_called_once_with(str(local_pcap))
+
+    @patch.object(TrafficCaptureManager, "_run_adb_command_async")
+    def test_skips_sni_extraction_when_disabled(self, mock_run_adb, mock_config_manager, tmp_path):
+        """pcap_extract_sni=False should skip the extraction step entirely."""
+        local_pcap = tmp_path / "capture.pcap"
+
+        async def adb_side_effect(cmd, suppress_stderr=False, timeout=None):
+            if cmd[0] == "pull":
+                Path(cmd[2]).write_bytes(b"fake pcap bytes")
+                return ("", 0)
+            if "test -f" in " ".join(cmd):
+                return ("", 0)
+            return ("", 0)
+
+        mock_run_adb.side_effect = adb_side_effect
+
+        base_values = {
+            "enable_traffic_capture": True,
+            "app_package": "com.test.app",
+            "device_pcap_dir": "/sdcard/Download/PCAPdroid",
+            "pcapdroid_finalize_wait": 0.0,
+            "pcap_extract_sni": False,
+        }
+        mock_config_manager.get.side_effect = lambda key, default=None: base_values.get(key, default)
+
+        manager = TrafficCaptureManager(config_manager=mock_config_manager, adb_client=Mock())
+        manager._is_currently_capturing = True
+        manager.pcap_filename_on_device = "capture.pcap"
+        manager.local_pcap_file_path = str(local_pcap)
+
+        with patch("mobile_crawler.infrastructure.sni_extractor.write_sni_report") as mock_write_report:
+            asyncio.run(manager.stop_capture_and_pull_async(run_id=1))
+
+        mock_write_report.assert_not_called()
 
     def test_consent_helper_taps_allow_with_capture_context(self, mock_config_manager):
         """Consent helper should tap the center of Allow only in capture/VPN context."""
