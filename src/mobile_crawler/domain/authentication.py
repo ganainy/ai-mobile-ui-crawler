@@ -1,10 +1,11 @@
 """Authentication as the first Guided Scenario (see CONTEXT.md: App Account, Verification Challenge).
 
 Builds the goal section that tells the agent to sign up or log in, and the agent tools it
-uses along the way: "get email code", "get SMS code", "save app account" and "skip
-authentication". Failures of the code tools route to Human Fallback; a hard cap on code
-attempts stops the agent from looping. When authentication is skipped the crawl continues
-on the reachable screens.
+uses along the way: "get email code", "get SMS code" and "save app account". The agent has
+no tool to voluntarily give up on authentication; failures of the code tools route to Human
+Fallback, and a hard cap on code attempts stops the agent from looping on a code that will
+never arrive. When that cap (or a declined/timed-out Human Fallback request) makes further
+code attempts pointless, the crawl records why and continues on the reachable screens.
 """
 
 import asyncio
@@ -29,7 +30,7 @@ DEFAULT_MAX_ATTEMPTS = 3
 EMAIL_WAIT_SECONDS = 90.0
 SMS_WAIT_SECONDS = 60.0
 
-_SKIP_HINT = "Skip authentication now (call skip_authentication) and continue exploring the screens you can reach."
+_GIVE_UP_HINT = "Do not retry this tool again; continue exploring the screens you can reach without finishing sign-in."
 
 
 _GOOGLE_SIGN_IN_RULE = (
@@ -37,9 +38,9 @@ _GOOGLE_SIGN_IN_RULE = (
     "use it with the Google account already on the device: tap the sign-in button, choose the device account "
     "(e.g. 'Continue as <name>') and accept every consent or verification screen from Google Play services "
     "(tap Continue / Allow / Agree / I agree). Never press Back on those Google screens: it cancels the sign-in "
-    "and leaves the app. Only call skip_authentication if the Google flow fails after you completed it, "
-    "never while a Google account picker or consent screen is showing. After signing in, never tap "
-    "'Sign out' / 'Log out'."
+    "and leaves the app. Never abandon the flow while a Google account picker or consent screen is showing; "
+    "if a step fails, retry it or restart from the sign-in button rather than giving up. After signing in, "
+    "never tap 'Sign out' / 'Log out'."
 )
 
 
@@ -110,8 +111,9 @@ class AuthenticationSession:
                 "If the app logs you out later (you are logged out), log in again with the same account. "
                 "Do not create a new account. Email or SMS codes: use get_email_code / get_sms_code "
                 f"(at most {cap} code attempts). {_GOOGLE_SIGN_IN_RULE} "
-                "If login is impossible, call skip_authentication "
-                "and continue exploring the reachable screens."
+                "Never give up on login voluntarily: keep retrying the sign-in flow and looking for "
+                "alternate paths. Only stop once a tool call itself reports the attempt cap is reached, "
+                "then continue exploring the reachable screens without a completed login."
             )
         address = self.signup_address()
         if address:
@@ -134,8 +136,9 @@ class AuthenticationSession:
             "log in (no account exists, so it will fail). If a screen only offers log in, or shows a "
             "wrong email or password error, look for the app's sign-up / create-account option instead. "
             f"{_GOOGLE_SIGN_IN_RULE} "
-            "If sign-up is impossible or blocked, call skip_authentication and continue exploring "
-            "the reachable screens."
+            "Never give up on sign-up voluntarily: keep retrying and looking for alternate paths "
+            "(e.g. a sign-up link on a log-in screen). Only stop once a tool call itself reports the "
+            "attempt cap is reached, then continue exploring the reachable screens without an account."
         )
 
     # -- tools ---------------------------------------------------------------
@@ -170,16 +173,6 @@ class AuthenticationSession:
                 "description": "Save the account you just created so the crawler can log in again later.",
                 "function": self._save_app_account,
             },
-            "skip_authentication": {
-                "parameters": {
-                    "reason": {"type": "string", "required": True, "description": "Why authentication cannot be done"},
-                },
-                "description": (
-                    "Give up on sign-up/login and continue exploring reachable screens. "
-                    "Do not call it while a Google account picker or consent screen is showing: complete that flow."
-                ),
-                "function": self._skip_authentication,
-            },
         }
 
     async def _save_app_account(self, username: str, password: str, ctx=None) -> tuple[bool, str]:
@@ -190,17 +183,13 @@ class AuthenticationSession:
         self.account_store.save(self.app_package, AppAccount(username, password, override))
         return True, f"Saved App Account {username} for {self.app_package}."
 
-    async def _skip_authentication(self, reason: str, ctx=None) -> tuple[bool, str]:
-        self._skipped_reason = f"authentication skipped: {reason}"
-        return True, "Authentication skipped. Continue exploring the reachable screens."
-
     def _begin_attempt(self) -> tuple[bool, str] | None:
         """Count a code attempt; return a failure result once the cap is reached."""
         if self.attempts >= self.max_attempts:
             self._skipped_reason = self._skipped_reason or (
                 f"authentication skipped: attempt cap of {self.max_attempts} reached"
             )
-            return False, f"Authentication attempt cap ({self.max_attempts}) reached. {_SKIP_HINT}"
+            return False, f"Authentication attempt cap ({self.max_attempts}) reached. {_GIVE_UP_HINT}"
         self.attempts += 1
         return None
 
@@ -244,4 +233,4 @@ class AuthenticationSession:
         )
         if outcome.answered and outcome.code:
             return True, f"Code from user: {outcome.code}"
-        return False, f"Could not get a code ({outcome.skip_note or problem}). {_SKIP_HINT}"
+        return False, f"Could not get a code ({outcome.skip_note or problem}). {_GIVE_UP_HINT}"

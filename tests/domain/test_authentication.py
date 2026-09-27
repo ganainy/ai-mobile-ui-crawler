@@ -159,7 +159,7 @@ async def test_failure_with_fallback_off_skips_authentication():
     human, _ = fallback(enabled=False)
     s = make(inbox=FakeInbox(error=InboxTimeoutError("none")), human=human)
     result = await s.tools()["get_email_code"]["function"](ctx=None)
-    assert result[0] is False and "skip authentication" in result[1].lower()
+    assert result[0] is False and "continue exploring" in result[1].lower()
     assert s.skipped_reason and "authentication skipped" in s.skipped_reason
 
 
@@ -212,14 +212,6 @@ async def test_cap_shared_across_email_and_sms_tools():
     await s.tools()["get_email_code"]["function"](ctx=None)
     result = await s.tools()["get_sms_code"]["function"](ctx=None)
     assert result[0] is False
-
-
-@pytest.mark.asyncio
-async def test_skip_authentication_tool_records_reason():
-    s = make()
-    result = await s.tools()["skip_authentication"]["function"](reason="app needs a phone number", ctx=None)
-    assert result[0] is True
-    assert "app needs a phone number" in s.skipped_reason
 
 
 def test_tool_specs_have_description_and_parameters():

@@ -581,7 +581,6 @@ class TestCrawlerAgentServiceErrorHandling:
             "get_email_code",
             "get_sms_code",
             "save_app_account",
-            "skip_authentication",
         }
         ucs.close()
 

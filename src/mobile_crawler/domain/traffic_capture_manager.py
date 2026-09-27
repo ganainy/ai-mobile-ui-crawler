@@ -17,6 +17,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+PULL_TIMEOUT_SECONDS = 300.0
+
 
 class TrafficCaptureManager:
     """Manages traffic capture using PCAPdroid.
@@ -66,25 +68,32 @@ class TrafficCaptureManager:
             return ["-s", self.device_id, *command_list]
         return command_list
 
-    async def _run_adb_command_async(self, command_list: list[str], suppress_stderr: bool = False) -> tuple[str, int]:
+    async def _run_adb_command_async(
+        self, command_list: list[str], suppress_stderr: bool = False, timeout: float | None = None
+    ) -> tuple[str, int]:
         """Async helper to run ADB commands.
 
         Args:
             command_list: List of ADB command arguments (without 'adb' prefix)
             suppress_stderr: If True, don't log stderr output
+            timeout: Command timeout in seconds (uses the client's default if None)
 
         Returns:
             Tuple of (combined_output, return_code)
         """
         if self.adb_client:
-            return await self.adb_client.execute_async(self._device_scoped_args(command_list), suppress_stderr)
+            return await self.adb_client.execute_async(
+                self._device_scoped_args(command_list), suppress_stderr, timeout=timeout
+            )
 
         # Fallback: create temporary ADB client
         from mobile_crawler.infrastructure.adb_client import ADBClient
 
         adb_executable = self.config_manager.get("adb_executable_path", "adb")
         temp_client = ADBClient(adb_executable=adb_executable)
-        return await temp_client.execute_async(self._device_scoped_args(command_list), suppress_stderr)
+        return await temp_client.execute_async(
+            self._device_scoped_args(command_list), suppress_stderr, timeout=timeout
+        )
 
     def is_capturing(self) -> bool:
         """Returns the internal state of whether capture is thought to be active."""
@@ -511,7 +520,9 @@ class TrafficCaptureManager:
 
         logger.debug(f"PCAP file exists on device, attempting to pull: {device_pcap_full_path}")
         pull_command_args = ["pull", device_pcap_full_path, self.local_pcap_file_path]
-        stdout_pull, retcode_pull = await self._run_adb_command_async(pull_command_args)
+        stdout_pull, retcode_pull = await self._run_adb_command_async(
+            pull_command_args, timeout=PULL_TIMEOUT_SECONDS
+        )
 
         if retcode_pull != 0:
             logger.error(
@@ -519,6 +530,11 @@ class TrafficCaptureManager:
                 f"ADB retcode: {retcode_pull}. Output: {stdout_pull}"
             )
             logger.error("  File exists on device but pull failed. Check ADB permissions and device connection.")
+            # A killed pull leaves a truncated, unreadable pcap; the device copy is kept.
+            try:
+                os.remove(self.local_pcap_file_path)
+            except OSError:
+                pass
             return None
 
         if os.path.exists(self.local_pcap_file_path):

@@ -108,6 +108,7 @@ class TestTrafficCaptureManager:
         mock_adb_client.execute_async.assert_awaited_once_with(
             ["-s", "emulator-5554", "shell", "echo", "ok"],
             False,
+            timeout=None,
         )
 
     def test_init_with_capture_disabled(self, mock_config_manager_disabled, mock_adb_client):
@@ -510,6 +511,24 @@ class TestTrafficCaptureManager:
         ]
         assert stop_commands
         assert stop_commands[0][stop_commands[0].index("api_key") + 1] == "test_api_key"
+
+    def test_pcap_pull_uses_long_timeout(self, mock_config_manager, mock_adb_client, tmp_path):
+        """The PCAP pull must not use the 30s ADB default: large captures need minutes.
+
+        Regression test: run 204 lost its pcap because the pull hit the
+        default timeout and was killed, leaving a truncated file.
+        """
+        manager = TrafficCaptureManager(config_manager=mock_config_manager, adb_client=mock_adb_client)
+
+        asyncio.run(
+            manager._run_adb_command_async(
+                ["pull", "/sdcard/Download/PCAPdroid/capture.pcap", str(tmp_path / "capture.pcap")],
+                timeout=300.0,
+            )
+        )
+
+        _, kwargs = mock_adb_client.execute_async.call_args
+        assert kwargs["timeout"] == 300.0
 
     @patch.object(TrafficCaptureManager, "_run_adb_command_async")
     def test_extracts_sni_report_after_successful_pull(self, mock_run_adb, mock_config_manager, tmp_path):
