@@ -114,6 +114,10 @@ async def type_text(
 
         success = await ctx.driver.input_text(text, clear)
         if success:
+            # Dismiss the keyboard so the IME commits any pending composing/predictive
+            # text instead of leaving it to auto-commit (e.g. a stray trailing period)
+            # when focus later moves to the next tapped element.
+            await ctx.driver.hide_keyboard()
             return ActionResult(
                 success=True, summary=f"Text typed successfully (clear={clear})"
             )
@@ -284,6 +288,10 @@ async def type_secret(
 
         ok = await ctx.driver.input_text(secret_value)
         if ok:
+            # Dismiss the keyboard so the IME commits any pending composing/predictive
+            # text instead of leaving it to auto-commit (e.g. a stray trailing period)
+            # when focus later moves to the next tapped element.
+            await ctx.driver.hide_keyboard()
             return ActionResult(
                 success=True,
                 summary=f"Successfully typed secret '{secret_id}' into element {index}",
