@@ -100,7 +100,7 @@ adb -s emulator-5554 shell chmod 644 /system/etc/security/cacerts/$hash.0
 adb -s emulator-5554 reboot
 ```
 
-Check on the emulator: Settings > Security > Encryption & credentials > Trusted credentials > **System**: "mitmproxy" is listed. (Done: it was.)
+Check on the emulator: Settings > Security > Encryption & credentials > Trusted credentials > **System**. The entry is named **"PCAPdroid CA"**, not "mitmproxy" — PCAPdroid's bundled mitm add-on generates its CA with that Subject/CN regardless of the on-disk filename (`mitmproxy-ca-cert.pem`, a naming holdover from the underlying mitmproxy library). Confirmed against [PCAPdroid's TLS decryption docs](https://emanuele-f.github.io/PCAPdroid/tls_decryption) on 2026-09-27, correcting this doc's earlier assumption. (Done: "PCAPdroid CA" was listed.)
 
 ## Getting apps onto the emulator
 
@@ -131,7 +131,12 @@ Keep `pcapdroid_tls_decryption` true (the GUI sets it when traffic capture is on
 
 ## If it still doesn't decrypt
 
-- Google hosts pin their certificates: run Frida server on the emulator (`adb root`, push the `frida-server` matching the ABI, run it) and load a universal pinning-bypass script.
+First tell apart two different causes, since the fix differs:
+
+1. **Decryption not attempted** (add-on/config issue, not pinning): open PCAPdroid > Settings > TLS decryption and confirm it's on and using the mitm add-on; confirm the capture's target app is the one under test (not a different app or none); start a **new** capture; open a connection's **Overview** tab. If there is no decryption line at all (`App: Unknown (-1)`, as seen with Wikipedia below), decryption was never attempted — recheck the add-on is actually running (PCAPdroid's home/status screen), and reinstall the CA if it's missing from Trusted credentials > System.
+2. **Decryption attempted but rejected** (pinning): the Overview tab shows an explicit decryption error, or the connection's **Payload** tab still starts with `17 03 03` (TLS handshake/application-data bytes) despite a decryption attempt. This is the app or host pinning its certificate. Fix: run Frida server on the emulator (`adb root`, push the `frida-server` matching the ABI, run it) and load a universal pinning-bypass script.
+
+Other notes:
 - Flow or Google sign-in may refuse an emulator (integrity checks). Then this route is closed for that app.
 - Check the pcap: a decrypted capture shows plain HTTP inside the TLS flows; a still-encrypted one shows only SNI hostnames (`www.gstatic.com`, `aisandbox-pa.googleapis.com` in run 201).
 
@@ -153,3 +158,5 @@ Next steps when resuming:
 1. In PCAPdroid: confirm TLS decryption is on and the mitm add-on is enabled; select **Wikipedia** as the target app (not "all"); start a **new** capture; reload articles; re-open a connection and read the Overview decryption line.
 2. If it reports an error: check the CA is still under Trusted credentials > System after the reboot, then consider pinning (Frida).
 3. Only then return to Flow (x86_64 build or ARM translation) and to a crawler run on `emulator-5554`.
+
+**Correction (2026-09-27, later the same day):** the system CA entry is expected to read "PCAPdroid CA", not "mitmproxy" as step 6 above originally said — see the note there and the "If it still doesn't decrypt" checklist for telling apart "add-on not active" from "certificate pinning".
