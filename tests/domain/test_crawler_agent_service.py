@@ -303,7 +303,7 @@ class TestCrawlerAgentServiceWireObservers:
         assert crawler_agent_service._ui_wait_predicate is None
 
     def test_wire_observers_with_state_provider(self, crawler_agent_service, mock_config_manager):
-        """Test _wire_observers_to_agent wires UIWaitPredicate and ActionVerifier."""
+        """Test _wire_observers_to_agent wires UIWaitPredicate, ActionVerifier and the ADB executor."""
         mock_agent = Mock()
         mock_state_provider = Mock()
         mock_driver = Mock()
@@ -315,15 +315,13 @@ class TestCrawlerAgentServiceWireObservers:
         with (
             patch("mobile_crawler.domain.crawler_agent_service.UIWaitPredicate") as mock_wait,
             patch("mobile_crawler.domain.crawler_agent_service.ActionVerifier") as mock_verifier,
-            patch("mobile_crawler.domain.crawler_agent_service.DeviceContextCapture") as mock_ctx,
-            patch("mobile_crawler.domain.crawler_agent_service.AppSwitchRecovery") as mock_recovery,
-            patch("mobile_crawler.domain.adb_action_executor.ADBActionExecutor"),
+            patch("mobile_crawler.domain.adb_action_executor.ADBActionExecutor") as mock_adb,
         ):
             crawler_agent_service._wire_observers_to_agent()
             mock_wait.assert_called_once()
             mock_verifier.assert_called_once()
-            mock_ctx.assert_called_once()
-            mock_recovery.assert_called_once()
+            mock_adb.assert_called_once()
+            assert crawler_agent_service._adb_executor is mock_adb.return_value
 
     def test_wire_observers_without_driver(self, crawler_agent_service):
         """Test _wire_observers_to_agent without driver skips ActionVerifier."""
@@ -337,8 +335,6 @@ class TestCrawlerAgentServiceWireObservers:
         with (
             patch("mobile_crawler.domain.crawler_agent_service.UIWaitPredicate") as mock_wait,
             patch("mobile_crawler.domain.crawler_agent_service.ActionVerifier") as mock_verifier,
-            patch("mobile_crawler.domain.crawler_agent_service.DeviceContextCapture"),
-            patch("mobile_crawler.domain.crawler_agent_service.AppSwitchRecovery"),
             patch("mobile_crawler.domain.adb_action_executor.ADBActionExecutor"),
         ):
             crawler_agent_service._wire_observers_to_agent()
@@ -367,7 +363,6 @@ class TestCrawlerAgentServiceHandleToolExecution:
         """Test _handle_tool_execution_event increments step number."""
         mock_machine = Mock()
         crawler_agent_service._step_phase_machine = mock_machine
-        crawler_agent_service._context_capture = None
         crawler_agent_service._ui_dump_validator = None
         crawler_agent_service._action_verifier = None
         crawler_agent_service._ui_wait_predicate = None
@@ -385,7 +380,6 @@ class TestCrawlerAgentServiceHandleToolExecution:
         """Test _handle_tool_execution_event drives normal phase transitions."""
         mock_machine = Mock()
         crawler_agent_service._step_phase_machine = mock_machine
-        crawler_agent_service._context_capture = None
         crawler_agent_service._ui_dump_validator = None
         crawler_agent_service._action_verifier = None
         crawler_agent_service._ui_wait_predicate = None
@@ -409,7 +403,6 @@ class TestCrawlerAgentServiceHandleToolExecution:
         """Test _handle_tool_execution_event skips phases when skip reason set."""
         mock_machine = Mock()
         crawler_agent_service._step_phase_machine = mock_machine
-        crawler_agent_service._context_capture = None
 
         # Mock UI dump validator to return invalid
         mock_validator = Mock()
@@ -445,7 +438,6 @@ class TestCrawlerAgentServiceHandleToolExecution:
     def test_ui_dump_validation_uses_shared_state_without_live_get_state(self, crawler_agent_service):
         mock_machine = Mock()
         crawler_agent_service._step_phase_machine = mock_machine
-        crawler_agent_service._context_capture = None
         crawler_agent_service._action_verifier = None
         crawler_agent_service._ui_wait_predicate = None
         crawler_agent_service._current_step_number = 0
@@ -472,7 +464,6 @@ class TestCrawlerAgentServiceHandleToolExecution:
     def test_ui_dump_validation_accepts_live_uistate_elements(self, crawler_agent_service):
         mock_machine = Mock()
         crawler_agent_service._step_phase_machine = mock_machine
-        crawler_agent_service._context_capture = None
         crawler_agent_service._action_verifier = None
         crawler_agent_service._ui_wait_predicate = None
         crawler_agent_service._current_step_number = 0

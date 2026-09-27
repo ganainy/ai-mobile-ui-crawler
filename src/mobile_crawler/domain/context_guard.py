@@ -1,10 +1,12 @@
-"""Device context capture and UI dump validation module for crawl step guardrails.
+"""UI dump validation module for crawl step guardrails.
 
 Provides:
-- DeviceContext / DeviceContextCapture for app-switch detection (Plan 01)
-- UIDumpValidator / UIDumpValidationResult for UI dump validation gate (Plan 02)
-- StepSkipReason enum for skip reason tracking (Plan 02+)
-- AppSwitchRecovery / RecoveryAttempt for app-switch recovery loop (Plan 03)
+- UIDumpValidator / UIDumpValidationResult for UI dump validation gate
+- StepSkipReason enum for skip reason tracking
+
+Target-app identity (whether the crawl drifted to the wrong foreground app)
+is Target Recovery's job, handled once in
+``crawler_agent.tools.ui.provider.AndroidStateProvider``, not here.
 """
 
 import enum
@@ -12,98 +14,14 @@ import logging
 import xml.etree.ElementTree as ET
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from datetime import datetime
 from typing import Any
-
-from mobile_crawler.domain.adb_action_executor import ADBActionExecutor
 
 logger = logging.getLogger(__name__)
 
 
-@dataclass
-class DeviceContext:
-    """Snapshot of the device's active app context at a point in time."""
-
-    package: str
-    activity: str
-    is_target_app: bool
-    captured_at: datetime
-
-
-class DeviceContextCapture:
-    """Captures device context (package/activity) for app-switch detection.
-
-    Takes a target package name and ADB executor, provides async capture
-    of current device context with comparison against the expected target app.
-    """
-
-    def __init__(self, target_package: str, adb_executor: ADBActionExecutor):
-        """Initialize context capture.
-
-        Args:
-            target_package: The expected app package (e.g., 'com.example.app').
-            adb_executor: ADBActionExecutor instance for running device commands.
-        """
-        self.target_package = target_package
-        self.adb_executor = adb_executor
-
-    async def capture(self) -> DeviceContext:
-        """Capture the current device context.
-
-        Queries ADB for the current package and activity, compares against
-        the target package to determine if we're still in the expected app.
-
-        Returns:
-            DeviceContext with package, activity, is_target_app flag, and timestamp.
-        """
-        package = self.adb_executor.get_current_package()
-        activity = self.adb_executor.get_current_activity()
-
-        activity = activity or ""
-
-        if not package:
-            # ADB returned None - transient state during Activity transitions.
-            # Don't treat this as a confirmed app switch; let the next step verify.
-            return DeviceContext(
-                package="",
-                activity=activity,
-                is_target_app=True,
-                captured_at=datetime.now(),
-            )
-
-        is_target_app = package == self.target_package if self.target_package else False
-
-        return DeviceContext(
-            package=package,
-            activity=activity,
-            is_target_app=is_target_app,
-            captured_at=datetime.now(),
-        )
-
-    def get_context_dict(self, ctx: DeviceContext) -> dict:
-        """Convert a DeviceContext to a dict suitable for persistence.
-
-        Args:
-            ctx: DeviceContext to convert.
-
-        Returns:
-            Dict with current_package and current_activity keys.
-        """
-        return {
-            "current_package": ctx.package,
-            "current_activity": ctx.activity,
-        }
-
-
 class StepSkipReason(enum.Enum):
-    """Reasons a crawl step may be skipped instead of proceeding to DECIDE/EXECUTE.
+    """Reasons a crawl step may be skipped instead of proceeding to DECIDE/EXECUTE."""
 
-    Used by both the UI dump validation gate (INVALID_UI_DUMP) and the
-    context pre-check (TARGET_APP_MISMATCH) to persist skip metadata in
-    step phase transitions.
-    """
-
-    TARGET_APP_MISMATCH = "target_app_mismatch"
     INVALID_UI_DUMP = "invalid_ui_dump"
 
 
@@ -304,96 +222,3 @@ class UIDumpValidator:
             )
 
         return result
-
-
-@dataclass
-class RecoveryAttempt:
-    """Record of a single app-switch recovery attempt."""
-
-    attempt_number: int
-    success: bool
-    package_before: str
-    package_after: str
-    duration_ms: float
-
-
-class AppSwitchRecovery:
-    """Detects app switches and recovers by relaunching to the target app.
-
-    Per D-06: Aborts after 3 consecutive failed recovery attempts.
-    Per D-05: Uses am start with launcher activity for recovery.
-    Per D-07: Always relaunches to main launcher activity, never deep activity.
-    """
-
-    MAX_CONSECUTIVE_FAILURES = 3
-
-    def __init__(
-        self,
-        target_package: str,
-        adb_executor: ADBActionExecutor,
-        context_capture: DeviceContextCapture,
-    ):
-        """Initialize app-switch recovery.
-
-        Args:
-            target_package: The expected app package name.
-            adb_executor: ADBActionExecutor instance for running am start recovery.
-            context_capture: DeviceContextCapture for verifying recovery success.
-        """
-        self.target_package = target_package
-        self.adb_executor = adb_executor
-        self.context_capture = context_capture
-        self._consecutive_failures = 0
-        self._total_recoveries = 0
-
-    async def detect_and_recover(self) -> tuple[bool, list[RecoveryAttempt]]:
-        """Detect app switch and attempt recovery. Returns (recovered, attempts).
-
-        If recovered=True, the app is back on target.
-        If recovered=False, MAX_CONSECUTIVE_FAILURES reached — caller should abort.
-
-        Returns:
-            Tuple of (recovered: bool, attempts: list of RecoveryAttempt).
-        """
-        attempts: list[RecoveryAttempt] = []
-
-        for attempt_num in range(1, self.MAX_CONSECUTIVE_FAILURES + 1):
-            # Try recovery via am start
-            result = self.adb_executor.am_start_recovery(self.target_package)
-
-            # Re-capture context to verify recovery
-            new_ctx = await self.context_capture.capture()
-
-            attempt = RecoveryAttempt(
-                attempt_number=attempt_num,
-                success=new_ctx.is_target_app,
-                package_before="",  # filled by caller if needed
-                package_after=new_ctx.package,
-                duration_ms=result.duration_ms,
-            )
-            attempts.append(attempt)
-
-            if new_ctx.is_target_app:
-                self._consecutive_failures = 0
-                self._total_recoveries += 1
-                logger.info(
-                    f"App switch recovery succeeded on attempt {attempt_num} "
-                    f"(package: {new_ctx.package})"
-                )
-                return True, attempts
-
-            self._consecutive_failures += 1
-            logger.warning(
-                f"App switch recovery attempt {attempt_num} failed: "
-                f"package_after={new_ctx.package}, expected={self.target_package}"
-            )
-
-        # All attempts failed — signal abort
-        logger.error(
-            f"App switch recovery failed after {len(attempts)} attempts — aborting"
-        )
-        return False, attempts
-
-    def should_abort(self) -> bool:
-        """Check if consecutive failures warrant run abort."""
-        return self._consecutive_failures >= self.MAX_CONSECUTIVE_FAILURES

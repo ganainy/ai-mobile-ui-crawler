@@ -18,12 +18,7 @@ from mobile_crawler.config.api_keys import resolve_api_key as resolve_api_key_fr
 from mobile_crawler.config.config_manager import ConfigManager
 from mobile_crawler.domain.action_verifier import ActionVerifier
 from mobile_crawler.domain.authentication import AuthenticationSession
-from mobile_crawler.domain.context_guard import (
-    AppSwitchRecovery,
-    DeviceContextCapture,
-    StepSkipReason,
-    UIDumpValidator,
-)
+from mobile_crawler.domain.context_guard import StepSkipReason, UIDumpValidator
 from mobile_crawler.domain.crawler_agent.agent.common.events import (
     ScreenshotEvent,
     StepAdvanceEvent,
@@ -34,7 +29,6 @@ from mobile_crawler.domain.crawler_agent.agent.droid.events import AppOpenerResp
 from mobile_crawler.domain.crawler_agent.agent.executor.events import ExecutorResponseEvent
 from mobile_crawler.domain.crawler_agent.agent.fast_agent.events import FastAgentResponseEvent
 from mobile_crawler.domain.crawler_agent.agent.manager.events import ManagerResponseEvent
-from mobile_crawler.domain.errors import ErrorContext, FatalError
 from mobile_crawler.domain.guided_scenarios_generator import guided_scenarios_config_key
 from mobile_crawler.domain.human_fallback import HumanFallback, HumanFallbackConfig, HumanPrompter
 from mobile_crawler.domain.jev_shadow import (
@@ -683,20 +677,15 @@ class CrawlerAgentService:
         self._ui_wait_predicate = None  # Wired after agent init
         self._action_verifier = None  # Wired after agent init
 
-        # Context guardrails (Plan 02: UI dump validation + app mismatch detection)
-        self._context_capture: DeviceContextCapture | None = None
+        # Context guardrails (UI dump validation gate)
         self._ui_dump_validator = UIDumpValidator()
         self._target_package: str | None = None
-        self._current_device_context = None  # Set during context capture for downstream recovery
-
-        # App-switch recovery (Plan 03: detect and recover from app switches)
-        self._app_switch_recovery: AppSwitchRecovery | None = None
         self._adb_executor: Any | None = None
 
         logger.debug(f"Step phase tracking initialized for run {run_id}")
 
     def _wire_observers_to_agent(self) -> None:
-        """Wire UIWaitPredicate, ActionVerifier, and DeviceContextCapture to the agent.
+        """Wire UIWaitPredicate, ActionVerifier, and the ADB executor to the agent.
 
         Called after Crawler agent is initialized, when state_provider, driver,
         and ADB executor are available on the agent object.
@@ -748,24 +737,11 @@ class CrawlerAgentService:
                     expensive_state_capture=expensive_state_polling,
                 )
 
-        # Wire DeviceContextCapture for app-switch detection (Plan 02)
+        # ADB executor for per-step device-context telemetry (record_device_context).
         if self._target_package and driver:
             from mobile_crawler.domain.adb_action_executor import ADBActionExecutor
 
-            adb_executor = ADBActionExecutor(device_id=self.device_id)
-            self._context_capture = DeviceContextCapture(
-                target_package=self._target_package,
-                adb_executor=adb_executor,
-            )
-            self._adb_executor = adb_executor
-
-            # Wire app-switch recovery (Plan 03)
-            self._app_switch_recovery = AppSwitchRecovery(
-                target_package=self._target_package,
-                adb_executor=adb_executor,
-                context_capture=self._context_capture,
-            )
-            logger.debug(f"DeviceContextCapture and AppSwitchRecovery wired with target_package={self._target_package}")
+            self._adb_executor = ADBActionExecutor(device_id=self.device_id)
 
         # after_sleep_action is now a real delay driven by UIWaitPredicate
         # (wait_for_ui_settled) in the agents — no longer forced to 0.0
@@ -1106,56 +1082,9 @@ class CrawlerAgentService:
         duration_text = f" in {duration_ms:.0f}ms" if isinstance(duration_ms, int | float) else ""
         logger.info(f"Step {self._current_step_number}: tool={tool_name} success={success}{duration_text}")
 
-        # --- Context pre-check (D-02): compare package against target ---
+        # Target-app identity is Target Recovery's job (AndroidStateProvider,
+        # before each capture) — nothing to pre-check here.
         skip_reason = None
-
-        if self._context_capture:
-            try:
-                device_ctx = await self._context_capture.capture()
-                self._current_device_context = device_ctx
-
-                if not device_ctx.is_target_app:
-                    # App switch detected — try recovery before skipping (Plan 03)
-                    if self._app_switch_recovery:
-                        logger.warning(
-                            f"Step {self._current_step_number}: app switch detected "
-                            f"(captured={device_ctx.package}, expected="
-                            f"{self._target_package}). Attempting recovery."
-                        )
-                        recovered, attempts = await self._app_switch_recovery.detect_and_recover()
-
-                        if recovered:
-                            # Re-capture context after successful recovery
-                            device_ctx = await self._context_capture.capture()
-                            self._current_device_context = device_ctx
-                            logger.info(
-                                f"Step {self._current_step_number}: app switch recovery "
-                                f"succeeded on attempt {attempts[-1].attempt_number}. "
-                                f"Continuing with fresh context."
-                            )
-                            # Continue with the step normally — no skip
-                        else:
-                            # MAX_CONSECUTIVE_FAILURES reached — abort the run
-                            logger.error(
-                                f"Step {self._current_step_number}: app switch recovery "
-                                f"failed after {len(attempts)} attempts. Aborting run."
-                            )
-                            # Record transition with abort metadata
-                            self._step_phase_machine.transition_to(StepPhase.CHECKPOINT)
-                            raise FatalError(
-                                f"Aborting: {len(attempts)} consecutive app-switch recovery failures",
-                                context=ErrorContext(run_id=self._current_run_id),
-                            )
-                    else:
-                        # No recovery handler available — fall back to skip behavior
-                        logger.warning(
-                            f"Step {self._current_step_number}: app mismatch detected "
-                            f"(current={device_ctx.package}, target="
-                            f"{self._target_package}). Skipping DECIDE/EXECUTE."
-                        )
-                        skip_reason = StepSkipReason.TARGET_APP_MISMATCH
-            except Exception as e:
-                logger.warning(f"Step {self._current_step_number}: context capture failed: {e}")
 
         # --- UI dump validation (D-03): check parseable and non-empty ---
         if skip_reason is None and self._ui_dump_validator:
@@ -1218,13 +1147,7 @@ class CrawlerAgentService:
         try:
             if skip_reason is not None:
                 # Skip DECIDE/EXECUTE — go CAPTURE -> CHECKPOINT with skip metadata
-                metadata = json.dumps(
-                    {
-                        "skip_reason": skip_reason.value,
-                        "package": getattr(self._current_device_context, "package", ""),
-                        "activity": getattr(self._current_device_context, "activity", ""),
-                    }
-                )
+                metadata = json.dumps({"skip_reason": skip_reason.value})
 
                 logger.info(f"Step {self._current_step_number}: skipping DECIDE/EXECUTE due to {skip_reason.value}")
 

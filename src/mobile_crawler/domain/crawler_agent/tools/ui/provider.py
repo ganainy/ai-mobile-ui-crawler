@@ -41,34 +41,6 @@ _MAX_RETRIES = 7
 # With the schedule above, this fires after ~11s (1+2+3+5).
 _RECOVERY_AFTER_ATTEMPT = 5
 
-# Browsers that host web login / OAuth flows launched from the target app.
-BROWSER_PACKAGES = frozenset(
-    {
-        "com.android.chrome",
-        "com.brave.browser",
-        "org.mozilla.firefox",
-        "com.microsoft.emmx",
-        "com.sec.android.app.sbrowser",
-        "com.opera.browser",
-        "com.duckduckgo.mobile.android",
-        "com.google.android.apps.chrome",
-    }
-)
-
-# System UIs the target app summons over itself: runtime permission prompts
-# and the Google account picker / Smart Lock sheet. Relaunching the app over
-# them cancels the request (Android treats it as a denial), so the agent gets
-# a few captures to answer them.
-SYSTEM_DIALOG_PACKAGES = frozenset(
-    {
-        "com.google.android.permissioncontroller",
-        "com.android.permissioncontroller",
-        "com.android.packageinstaller",
-        "com.google.android.packageinstaller",
-        "com.google.android.gms",
-    }
-)
-
 # Google Play services hosts Google sign-in (account picker, consent, verification).
 # Relaunching the app over it cancels the sign-in however long the agent takes,
 # so it is never recovered from (the run's time/step limit still ends the crawl).
@@ -198,8 +170,7 @@ class AndroidStateProvider(StateProvider):
         a11y_checks: dict | None = None,
         target_package: str | None = None,
         target_recovery_attempts: int = 3,
-        external_grace_captures: int = 40,
-        system_dialog_grace_captures: int = 5,
+        target_recovery_grace_captures: int = 40,
         status_bar_exclusion_px: int = 0,
         bottom_bar_exclusion_px: int = 0,
     ) -> None:
@@ -220,8 +191,7 @@ class AndroidStateProvider(StateProvider):
         self.a11y_checks = a11y_checks
         self.target_package = target_package
         self.target_recovery_attempts = target_recovery_attempts
-        self.external_grace_captures = external_grace_captures
-        self.system_dialog_grace_captures = system_dialog_grace_captures
+        self.target_recovery_grace_captures = target_recovery_grace_captures
         self._external_captures = 0
         # Status Bar / Bottom Bar Exclusion: driver.screenshot() already
         # cropped this many px off the top/bottom (ADR-0002). OmniParser bbox
@@ -473,33 +443,26 @@ class AndroidStateProvider(StateProvider):
             self._external_captures = 0
             return
 
-        # Web login / OAuth flows open in a browser (custom tab), and permission
-        # prompts / account pickers open in system packages. Yanking the app
-        # back would abandon them, so let the agent work there for a bounded
-        # number of captures before recovering.
-        if current_package in BROWSER_PACKAGES:
-            kind, grace = "browser", self.external_grace_captures
-        elif current_package in SYSTEM_DIALOG_PACKAGES:
-            kind, grace = "system dialog", self.system_dialog_grace_captures
-        else:
-            kind, grace = None, 0
+        # Any foreign foreground — a browser tab, a WebView, a system dialog, an
+        # unrecognized app, or an unresolvable (None) read — may be a legitimate
+        # flow the target app launched (web login, permission prompt, account
+        # picker). Yanking the app back would abandon it, so the agent gets a
+        # bounded number of captures to work there before recovery fires.
         if current_package in UNLIMITED_GRACE_PACKAGES:
             logger.info(
-                "Foreground is %s %s (target=%s); leaving it open (no recovery relaunch)",
-                kind,
+                "Foreground is %s (target=%s); leaving it open (no recovery relaunch)",
                 current_package,
                 self.target_package,
             )
             return
-        if kind and self._external_captures < grace:
+        if self._external_captures < self.target_recovery_grace_captures:
             self._external_captures += 1
             logger.info(
-                "Foreground is %s %s (target=%s); allowing capture %s/%s before recovery",
-                kind,
+                "Foreground is %s (target=%s); allowing capture %s/%s before recovery",
                 current_package,
                 self.target_package,
                 self._external_captures,
-                grace,
+                self.target_recovery_grace_captures,
             )
             return
         self._external_captures = 0

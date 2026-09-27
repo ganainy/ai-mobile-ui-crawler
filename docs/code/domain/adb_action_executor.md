@@ -19,7 +19,6 @@ Source: `src/mobile_crawler/domain/adb_action_executor.py`
 ## Imported by
 - [[code/cli/commands/crawl|cli.commands.crawl]]
 - [[code/core/crawler_loop|core.crawler_loop]]
-- [[code/domain/context_guard|domain.context_guard]]
 - [[code/domain/crawler_agent/agent/droid/crawler_agent|domain.crawler_agent.agent.droid.crawler_agent]]
 - [[code/domain/crawler_agent/tools/ui/provider|domain.crawler_agent.tools.ui.provider]]
 - [[code/domain/crawler_agent_service|domain.crawler_agent_service]]

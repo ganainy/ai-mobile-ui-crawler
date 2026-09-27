@@ -150,8 +150,9 @@ def android_state_provider():
 
 
 @pytest.mark.asyncio
-async def test_state_provider_relaunches_target_before_screenshot_and_omniparser(android_state_provider):
+async def test_state_provider_relaunches_target_when_grace_is_zero(android_state_provider):
     provider, driver = android_state_provider
+    provider.target_recovery_grace_captures = 0
     mock_adb = Mock()
     mock_adb.get_current_package.side_effect = ["com.android.launcher", "com.example.app"]
     mock_adb.am_start_recovery.return_value = CrawlerActionResult(
@@ -173,6 +174,26 @@ async def test_state_provider_lets_agent_work_in_browser_login_flow(android_stat
     provider, driver = android_state_provider
     mock_adb = Mock()
     mock_adb.get_current_package.return_value = "com.brave.browser"
+
+    with patch("mobile_crawler.domain.adb_action_executor.ADBActionExecutor", return_value=mock_adb):
+        await provider.get_state()
+
+    mock_adb.am_start_recovery.assert_not_called()
+    driver.screenshot.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("current_package", [None, "", "com.google.android.apps.labs.whisk.unrelated"])
+async def test_state_provider_tolerates_unresolvable_or_unrecognized_foreground(android_state_provider, current_package):
+    """An unresolvable (None) foreground read, or a package never seen before, gets the
+    same default grace as a known browser or system dialog — not an immediate relaunch.
+
+    Regression test: a transient `None` read during a Google Sign-In hand-off used to
+    fall outside every allowlist and get relaunched over on the very next capture.
+    """
+    provider, driver = android_state_provider
+    mock_adb = Mock()
+    mock_adb.get_current_package.return_value = current_package
 
     with patch("mobile_crawler.domain.adb_action_executor.ADBActionExecutor", return_value=mock_adb):
         await provider.get_state()
@@ -300,57 +321,20 @@ async def test_boost_runs_omniparser_when_a11y_has_text_but_nothing_clickable(an
 
 
 @pytest.mark.asyncio
-async def test_state_provider_relaunches_after_browser_grace_exhausted(android_state_provider):
-    provider, _ = android_state_provider
-    provider.external_grace_captures = 2
-    mock_adb = Mock()
-    mock_adb.get_current_package.side_effect = [
-        "com.brave.browser",
-        "com.brave.browser",
-        "com.brave.browser",
-        "com.example.app",
-    ]
-    mock_adb.am_start_recovery.return_value = CrawlerActionResult(
-        success=True,
-        action_type="am_start_recovery",
-        target="com.example.app",
-    )
-
-    with patch("mobile_crawler.domain.adb_action_executor.ADBActionExecutor", return_value=mock_adb):
-        await provider.get_state()
-        await provider.get_state()
-        mock_adb.am_start_recovery.assert_not_called()
-        await provider.get_state()
-
-    mock_adb.am_start_recovery.assert_called_once_with("com.example.app")
-
-
-@pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "dialog_package",
-    ["com.google.android.permissioncontroller", "com.android.permissioncontroller", "com.google.android.gms"],
+    "foreign_package",
+    ["com.brave.browser", "com.google.android.permissioncontroller", "com.android.launcher", None],
 )
-async def test_state_provider_captures_system_dialog_without_relaunch(android_state_provider, dialog_package):
-    provider, driver = android_state_provider
-    mock_adb = Mock()
-    mock_adb.get_current_package.return_value = dialog_package
-
-    with patch("mobile_crawler.domain.adb_action_executor.ADBActionExecutor", return_value=mock_adb):
-        await provider.get_state()
-
-    mock_adb.am_start_recovery.assert_not_called()
-    driver.screenshot.assert_awaited_once()
-
-
-@pytest.mark.asyncio
-async def test_state_provider_relaunches_after_system_dialog_grace_exhausted(android_state_provider):
+async def test_state_provider_relaunches_after_default_grace_exhausted(android_state_provider, foreign_package):
+    """Every kind of foreign foreground — browser, system dialog, unclassified app,
+    or an unresolvable read — shares the same default grace before recovery fires."""
     provider, _ = android_state_provider
-    provider.system_dialog_grace_captures = 2
+    provider.target_recovery_grace_captures = 2
     mock_adb = Mock()
     mock_adb.get_current_package.side_effect = [
-        "com.google.android.permissioncontroller",
-        "com.google.android.permissioncontroller",
-        "com.google.android.permissioncontroller",
+        foreign_package,
+        foreign_package,
+        foreign_package,
         "com.example.app",
     ]
     mock_adb.am_start_recovery.return_value = CrawlerActionResult(
@@ -371,12 +355,11 @@ async def test_state_provider_relaunches_after_system_dialog_grace_exhausted(and
 @pytest.mark.asyncio
 async def test_state_provider_never_relaunches_over_google_play_services(android_state_provider):
     provider, _ = android_state_provider
-    provider.system_dialog_grace_captures = 2
     mock_adb = Mock()
     mock_adb.get_current_package.return_value = "com.google.android.gms"
 
     with patch("mobile_crawler.domain.adb_action_executor.ADBActionExecutor", return_value=mock_adb):
-        for _ in range(10):
+        for _ in range(50):
             await provider.get_state()
 
     mock_adb.am_start_recovery.assert_not_called()
@@ -399,6 +382,7 @@ async def test_state_provider_correct_package_proceeds_to_capture(android_state_
 @pytest.mark.asyncio
 async def test_state_provider_failed_recovery_raises_before_screenshot_or_omniparser(android_state_provider):
     provider, driver = android_state_provider
+    provider.target_recovery_grace_captures = 0
     mock_adb = Mock()
     mock_adb.get_current_package.return_value = "com.android.launcher"
     mock_adb.am_start_recovery.return_value = CrawlerActionResult(

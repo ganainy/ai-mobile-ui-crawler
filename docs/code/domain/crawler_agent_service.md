@@ -29,7 +29,6 @@ Source: `src/mobile_crawler/domain/crawler_agent_service.py`
 - [[code/domain/crawler_agent/agent/fast_agent/events|domain.crawler_agent.agent.fast_agent.events]]
 - [[code/domain/crawler_agent/agent/manager/events|domain.crawler_agent.agent.manager.events]]
 - [[code/domain/crawler_agent/config_manager/config_manager|domain.crawler_agent.config_manager.config_manager]]
-- [[code/domain/errors|domain.errors]]
 - [[code/domain/guided_scenarios_generator|domain.guided_scenarios_generator]]
 - [[code/domain/human_fallback|domain.human_fallback]]
 - [[code/domain/jev_shadow|domain.jev_shadow]]

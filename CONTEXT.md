@@ -108,6 +108,10 @@ _Avoid_: Beta, preview, feature flag
 The service that supplies the LLM for a crawl (Gemini, OpenAI, Anthropic, OpenRouter, Ollama, OpenCode Go), chosen together with one model that serves every agent role (Manager, Executor, app opener). Each hosted provider has its own API key. OpenCode Go is a flat-fee subscription provider whose usage is capped per 5 hours, week and month; only the models it serves through its OpenAI-style chat endpoint are offered, and only one of them accepts images.
 _Avoid_: LLM vendor, backend, engine
 
+**Target Recovery**:
+Forcibly relaunching the target app when the device's foreground app isn't it, so a crawl doesn't spend the rest of a run stuck on the wrong app. Any foreign foreground — a browser, a WebView, an unrecognized app, an unresolvable read — gets the same grace period of captures before recovery fires; Google Play services (which hosts Google Sign-In) is the one exception, never recovered from however long sign-in takes.
+_Avoid_: guard, target-app guard, app-switch recovery, relaunch guard
+
 **Managed Service**:
 A local server the app runs in Docker when a feature needs it (MobSF for static analysis, OmniParser for screen parsing, Phoenix for tracing). The app starts it when that feature is on, reuses one already answering at the configured local address instead of starting a second, and never manages one at a remote address. The CLI leaves it running; the GUI offers to stop it on exit.
 _Avoid_: Docker container, backend, sidecar
