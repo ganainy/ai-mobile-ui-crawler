@@ -51,6 +51,7 @@ Source: `src/mobile_crawler/ui/main_window.py`
 - [[code/infrastructure/step_phase_repository|infrastructure.step_phase_repository]]
 - [[code/infrastructure/telemetry_client|infrastructure.telemetry_client]]
 - [[code/infrastructure/user_config_store|infrastructure.user_config_store]]
+- [[code/ui/app_identity|ui.app_identity]]
 - [[code/ui/human_fallback_dialog|ui.human_fallback_dialog]]
 - [[code/ui/live_feed_worker|ui.live_feed_worker]]
 - [[code/ui/mobsf_startup_worker|ui.mobsf_startup_worker]]
@@ -66,3 +67,6 @@ Source: `src/mobile_crawler/ui/main_window.py`
 - [[code/ui/widgets/run_history_view|ui.widgets.run_history_view]]
 - [[code/ui/widgets/settings_panel|ui.widgets.settings_panel]]
 - [[code/ui/widgets/stats_dashboard|ui.widgets.stats_dashboard]]
+
+## Imported by
+- [[code/ui/launcher|ui.launcher]]

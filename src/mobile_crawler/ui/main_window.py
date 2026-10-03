@@ -59,6 +59,8 @@ from mobile_crawler.infrastructure.step_log_repository import StepLogRepository
 from mobile_crawler.infrastructure.step_phase_repository import StepPhaseRepository
 from mobile_crawler.infrastructure.telemetry_client import build_telemetry_client_factory
 from mobile_crawler.infrastructure.user_config_store import UserConfigStore
+from mobile_crawler.ui.app_identity import get_gui_icon_path as _get_gui_icon_path
+from mobile_crawler.ui.app_identity import set_windows_app_user_model_id as _set_windows_app_user_model_id
 from mobile_crawler.ui.human_fallback_dialog import QtHumanPrompter
 from mobile_crawler.ui.live_feed_worker import LiveFeedWorker
 from mobile_crawler.core.log_cleaner import LogCleaner
@@ -81,27 +83,6 @@ from mobile_crawler.ui.widgets.settings_panel import SettingsPanel
 from mobile_crawler.ui.widgets.stats_dashboard import StatsDashboard
 
 logger = logging.getLogger(__name__)
-
-
-def _get_gui_icon_path() -> str:
-    """Return the absolute path to the GUI/taskbar icon."""
-    return str(Path(__file__).resolve().parents[3] / "crawler_logo.ico")
-
-
-def _set_windows_app_user_model_id() -> None:
-    """Set Windows taskbar identity so the taskbar uses the app icon."""
-    if sys.platform != "win32":
-        return
-
-    try:
-        import ctypes
-
-        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("MobileCrawler.MobileCrawler.GUI")
-    except Exception:
-        logging.getLogger(__name__).debug(
-            "Could not set Windows AppUserModelID",
-            exc_info=True,
-        )
 
 
 @dataclass
@@ -2377,22 +2358,36 @@ def _hide_child_console_windows() -> None:
     subprocess.Popen.__init__ = _init
 
 
-def run():
-    """Entry point for the GUI application."""
-    _set_windows_app_user_model_id()
+def run(app: QApplication | None = None, splash=None):
+    """Entry point for the GUI application.
+
+    ``ui.launcher`` passes in the QApplication and a splash screen it already
+    showed; without them (``python -m ...main_window``) both are created here.
+    """
     _hide_child_console_windows()
 
-    app = QApplication(sys.argv)
-    app.setApplicationName("Mobile Crawler")
-    app.setOrganizationName("mobile-crawler")
+    if app is None:
+        _set_windows_app_user_model_id()
+        app = QApplication(sys.argv)
+        app.setApplicationName("Mobile Crawler")
+        app.setOrganizationName("mobile-crawler")
 
-    # Set application icon for taskbar using absolute file path
-    # IMPORTANT: Must be set BEFORE creating the window for Windows taskbar
-    app.setWindowIcon(QIcon(_get_gui_icon_path()))
+        # Set application icon for taskbar using absolute file path
+        # IMPORTANT: Must be set BEFORE creating the window for Windows taskbar
+        app.setWindowIcon(QIcon(_get_gui_icon_path()))
 
     # Create window after setting the app icon
+    if splash is not None:
+        splash.showMessage(
+            "Starting...",
+            Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignHCenter,
+        )
+        app.processEvents()
+
     window = MainWindow()
     window.showMaximized()
+    if splash is not None:
+        splash.finish(window)
 
     # The taskbar button is sometimes created before Windows picks up the icon
     # (intermittent blank logo). Re-apply it once the native window exists.

@@ -8,8 +8,10 @@ PySide6 desktop interface: main window and widgets for device/app selection, liv
 <!-- summary:end -->
 
 ## Modules
+- [[code/ui/app_identity|ui.app_identity]] - Lightweight app identity helpers (icon path, taskbar id).
 - [[code/ui/async_utils|ui.async_utils]] - Utilities for asynchronous operations in the UI.
 - [[code/ui/human_fallback_dialog|ui.human_fallback_dialog]] - Qt bridge for Human Fallback: shows a non-blocking dialog on the GUI thread.
+- [[code/ui/launcher|ui.launcher]] - GUI entry point that shows a splash screen before the heavy imports.
 - [[code/ui/live_feed_worker|ui.live_feed_worker]] - Background thread that feeds the Live Feed board with decoded device frames.
 - [[code/ui/main_window|ui.main_window]] - Main window for the mobile-crawler GUI application.
 - [[code/ui/mobsf_startup_worker|ui.mobsf_startup_worker]] - Background worker that ensures MobSF is running at GUI startup.

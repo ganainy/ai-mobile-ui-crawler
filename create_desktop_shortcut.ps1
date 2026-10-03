@@ -44,7 +44,7 @@ $WshShell = New-Object -ComObject WScript.Shell
 # Create shortcut
 $Shortcut = $WshShell.CreateShortcut($ShortcutPath)
 $Shortcut.TargetPath = $pythonExe
-$Shortcut.Arguments = "-m mobile_crawler.ui.main_window"
+$Shortcut.Arguments = "-m mobile_crawler.ui.launcher"
 $Shortcut.WorkingDirectory = $ScriptDir
 $Shortcut.Description = "Launch Mobile Crawler"
 
