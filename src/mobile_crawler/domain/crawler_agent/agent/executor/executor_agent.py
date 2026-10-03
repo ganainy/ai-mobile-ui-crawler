@@ -29,6 +29,7 @@ from mobile_crawler.domain.crawler_agent.agent.executor.events import (
 from mobile_crawler.domain.crawler_agent.agent.executor.prompts import parse_executor_response
 from mobile_crawler.domain.crawler_agent.agent.usage import get_usage_from_response
 from mobile_crawler.domain.crawler_agent.agent.utils.inference import acall_with_retries
+from mobile_crawler.domain.llm_errors import LLMCallError
 from mobile_crawler.domain.crawler_agent.agent.utils.prompt_resolver import PromptResolver
 from mobile_crawler.domain.crawler_agent.config_manager.config_manager import AgentConfig
 from mobile_crawler.domain.crawler_agent.config_manager.prompt_loader import PromptLoader
@@ -201,6 +202,9 @@ class ExecutorAgent(Workflow):
         except asyncio.CancelledError:
             if shadow_task is not None:
                 shadow_task.cancel()
+            raise
+        except LLMCallError:
+            self._finish_shadow(shadow_task, ev.subgoal, None, None)
             raise
         except Exception as e:
             self._finish_shadow(shadow_task, ev.subgoal, None, None)

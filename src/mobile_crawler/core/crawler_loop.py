@@ -21,6 +21,7 @@ from mobile_crawler.domain.errors import (
     FatalError,
     RecorderError,
 )
+from mobile_crawler.domain.llm_errors import LLMCallError
 from mobile_crawler.domain.run_config_snapshot import (
     build_config_snapshot,
     current_git_commit,
@@ -508,6 +509,9 @@ class CrawlerLoop:
             reason_with_stats = reason + stats_suffix
 
             self._emit_event("on_crawl_completed", run_id, result.steps_completed, duration_ms, reason_with_stats)
+            if status == "ERROR" and final_state.get("llm_error_kind"):
+                # The AI model is dead (no credit, bad key, empty replies...): tell the user clearly.
+                self._emit_event("on_error", run_id, None, LLMCallError(reason, final_state["llm_error_kind"]))
 
             self._save_run_stats(run_id, run)
             self._generate_report(run_id)

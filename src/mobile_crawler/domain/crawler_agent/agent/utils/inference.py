@@ -10,11 +10,39 @@ from llama_index.core.base.llms.types import (
 from llama_index.core.prompts import PromptTemplate
 from pydantic import BaseModel
 
+from mobile_crawler.domain.llm_errors import classify_llm_error, is_fatal_llm_error, model_name
 from mobile_crawler.domain.opencode_go import OpenCodeGoLimitError, is_limit_error, is_opencode_go_llm
 
 logger = logging.getLogger("crawler_agent")
 
 T = TypeVar("T", bound=BaseModel)
+
+
+def describe_empty_response(response) -> str:
+    """What an HTTP-200 reply with no text did carry: finish reason, token usage, reasoning/tool-call blocks."""
+    if response is None:
+        return "no response object"
+    parts: list[str] = []
+    raw = getattr(response, "raw", None)
+    try:
+        choice = (raw.choices[0] if getattr(raw, "choices", None) else None) if not isinstance(raw, dict) else None
+        if choice is not None:
+            parts.append(f"finish_reason={getattr(choice, 'finish_reason', None)}")
+            msg = getattr(choice, "message", None)
+            for field in ("reasoning_content", "reasoning", "refusal", "tool_calls"):
+                value = getattr(msg, field, None)
+                if value:
+                    parts.append(f"{field}={str(value)[:200]!r}")
+        usage = getattr(raw, "usage", None)
+        if usage is not None:
+            parts.append(f"usage=in:{getattr(usage, 'prompt_tokens', None)}/out:{getattr(usage, 'completion_tokens', None)}")
+    except Exception as e:  # diagnostics must never break the retry loop
+        parts.append(f"raw unreadable: {e!r}")
+    message = getattr(response, "message", None)
+    blocks = [type(b).__name__ for b in getattr(message, "blocks", None) or []]
+    parts.append(f"blocks={blocks}")
+    parts.append(f"additional_kwargs={str(getattr(message, 'additional_kwargs', None))[:200]}")
+    return ", ".join(parts)
 
 
 async def acall_with_retries(
@@ -61,7 +89,7 @@ async def acall_with_retries(
                     logger.debug(f"{response.message.content}")
                 return response
             else:
-                logger.warning(f"Attempt {attempt} returned empty content")
+                logger.warning(f"Attempt {attempt} returned empty content ({describe_empty_response(response)})")
                 last_exception = ValueError("Empty response content")
 
         except TimeoutError:
@@ -71,15 +99,15 @@ async def acall_with_retries(
         except Exception as e:
             if is_opencode_go_llm(llm) and is_limit_error(e):
                 raise OpenCodeGoLimitError() from e
+            if is_fatal_llm_error(e):
+                raise classify_llm_error(e, model_name(llm)) from e
             logger.warning(f"Attempt {attempt} failed with error: {e!r}")
             last_exception = e
 
         if attempt < retries:
             await asyncio.sleep(delay * attempt)
 
-    if last_exception:
-        raise last_exception
-    raise ValueError("All attempts returned empty response content")
+    raise classify_llm_error(last_exception or ValueError("Empty response content"), model_name(llm)) from last_exception
 
 
 async def _stream_response(llm, messages: list, timeout: float) -> ChatResponse:
@@ -169,15 +197,15 @@ async def acomplete_with_retries(
             last_exception = TimeoutError("Timed out")
 
         except Exception as e:
+            if is_fatal_llm_error(e):
+                raise classify_llm_error(e, model_name(llm)) from e
             logger.warning(f"Attempt {attempt} failed with error: {e!r}")
             last_exception = e
 
         if attempt < retries:
             await asyncio.sleep(delay * attempt)
 
-    if last_exception:
-        raise last_exception
-    raise ValueError("All attempts returned empty response content")
+    raise classify_llm_error(last_exception or ValueError("Empty response content"), model_name(llm)) from last_exception
 
 
 async def _stream_complete_response(llm, prompt: str, timeout: float) -> CompletionResponse:
@@ -263,12 +291,12 @@ async def astructured_predict_with_retries(
             last_exception = TimeoutError("Timed out")
 
         except Exception as e:
+            if is_fatal_llm_error(e):
+                raise classify_llm_error(e, model_name(llm)) from e
             logger.warning(f"Attempt {attempt} failed with error: {e!r}")
             last_exception = e
 
         if attempt < retries:
             await asyncio.sleep(delay * attempt)
 
-    if last_exception:
-        raise last_exception
-    raise ValueError("All attempts returned empty response")
+    raise classify_llm_error(last_exception or ValueError("Empty response content"), model_name(llm)) from last_exception

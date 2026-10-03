@@ -23,6 +23,7 @@ Source: `src/mobile_crawler/core/crawler_loop.py`
 - [[code/domain/adb_action_executor|domain.adb_action_executor]]
 - [[code/domain/crawler_agent_service|domain.crawler_agent_service]]
 - [[code/domain/errors|domain.errors]]
+- [[code/domain/llm_errors|domain.llm_errors]]
 - [[code/domain/run_config_snapshot|domain.run_config_snapshot]]
 - [[code/domain/run_folder_layout|domain.run_folder_layout]]
 - [[code/domain/run_outcome|domain.run_outcome]]

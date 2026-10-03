@@ -31,6 +31,7 @@ Source: `src/mobile_crawler/ui/main_window.py`
 - [[code/core/pre_run_warnings|core.pre_run_warnings]]
 - [[code/core/stale_run_cleaner|core.stale_run_cleaner]]
 - [[code/domain/guided_scenarios_generator|domain.guided_scenarios_generator]]
+- [[code/domain/llm_errors|domain.llm_errors]]
 - [[code/domain/models|domain.models]]
 - [[code/domain/providers/registry|domain.providers.registry]]
 - [[code/domain/providers/vision_detector|domain.providers.vision_detector]]

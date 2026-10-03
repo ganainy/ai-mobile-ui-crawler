@@ -3,6 +3,8 @@
 import uuid
 from typing import Any
 
+from mobile_crawler.domain.llm_errors import KIND_USAGE_LIMIT, LLMCallError
+
 OPENCODE_GO_BASE_URL = "https://opencode.ai/zen/go/v1"
 OPENCODE_GO_DEFAULT_MODEL = "glm-5.3"
 OPENCODE_GO_VISION_MODEL = "deepseek-v4-flash-vision-exp"
@@ -34,11 +36,11 @@ LIMIT_MESSAGE = (
 )
 
 
-class OpenCodeGoLimitError(RuntimeError):
+class OpenCodeGoLimitError(LLMCallError):
     """OpenCode Go refused a request because the subscription's usage limit is used up."""
 
     def __init__(self) -> None:
-        super().__init__(LIMIT_MESSAGE)
+        super().__init__(LIMIT_MESSAGE, KIND_USAGE_LIMIT)
 
 
 def chat_models_from_ids(model_ids: list[str]) -> list[dict[str, Any]]:

@@ -29,6 +29,7 @@ Source: `src/mobile_crawler/domain/crawler_agent/agent/manager/manager_agent.py`
 - [[code/domain/crawler_agent/config_manager/prompt_loader|domain.crawler_agent.config_manager.prompt_loader]]
 - [[code/domain/crawler_agent/tools/driver/base|domain.crawler_agent.tools.driver.base]]
 - [[code/domain/crawler_agent/tools/ui/provider|domain.crawler_agent.tools.ui.provider]]
+- [[code/domain/llm_errors|domain.llm_errors]]
 
 ## Imported by
 - [[code/domain/crawler_agent/agent/manager/_index|domain.crawler_agent.agent.manager]]

@@ -43,6 +43,7 @@ from mobile_crawler.domain.crawler_agent.agent.manager.prompts import parse_mana
 from mobile_crawler.domain.crawler_agent.agent.usage import get_usage_from_response
 from mobile_crawler.domain.crawler_agent.agent.utils.chat_utils import filter_empty_messages
 from mobile_crawler.domain.crawler_agent.agent.utils.inference import acall_with_retries
+from mobile_crawler.domain.llm_errors import LLMCallError
 from mobile_crawler.domain.crawler_agent.agent.utils.prompt_resolver import PromptResolver
 from mobile_crawler.domain.crawler_agent.agent.utils.tracing_setup import record_langfuse_screenshot
 from mobile_crawler.domain.crawler_agent.app_cards.app_card_provider import AppCardProvider
@@ -507,6 +508,9 @@ class ManagerAgent(Workflow):
             response = await acall_with_retries(self.llm, messages, stream=self.agent_config.streaming)
             manager_llm_ms = (time.perf_counter() - llm_start) * 1000
             output = response.message.content
+        except LLMCallError as e:
+            logger.error(f"LLM call failed: {e}")
+            raise
         except Exception as e:
             logger.error(f"LLM call failed: {e}")
             raise RuntimeError(f"Error calling LLM in manager: {e}") from e

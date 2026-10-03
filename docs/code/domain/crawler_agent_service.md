@@ -32,6 +32,7 @@ Source: `src/mobile_crawler/domain/crawler_agent_service.py`
 - [[code/domain/guided_scenarios_generator|domain.guided_scenarios_generator]]
 - [[code/domain/human_fallback|domain.human_fallback]]
 - [[code/domain/jev_shadow|domain.jev_shadow]]
+- [[code/domain/llm_errors|domain.llm_errors]]
 - [[code/domain/models|domain.models]]
 - [[code/domain/omni_parser_client|domain.omni_parser_client]]
 - [[code/domain/opencode_go|domain.opencode_go]]

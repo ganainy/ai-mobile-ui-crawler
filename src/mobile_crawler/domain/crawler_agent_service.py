@@ -38,6 +38,7 @@ from mobile_crawler.domain.jev_shadow import (
     jev_shadow_openrouter_key,
     jev_shadow_problem,
 )
+from mobile_crawler.domain.llm_errors import find_llm_call_error
 from mobile_crawler.domain.models import ActionResult, AIAction, BoundingBox
 from mobile_crawler.domain.opencode_go import llm_kwargs as opencode_go_llm_kwargs
 from mobile_crawler.domain.prompt_builder import format_login_and_form_data
@@ -1950,7 +1951,22 @@ class CrawlerAgentService:
                 )
             except Exception as e:
                 duration_ms = (time.time() - start_time) * 1000
-                error_msg = str(e)
+                llm_error = find_llm_call_error(e)
+                error_msg = str(llm_error) if llm_error else str(e)
+
+                # A dead AI model ends the run at once: no transient retry, no app relaunch.
+                if llm_error is not None:
+                    logger.error(f"AI model failure ({llm_error.kind}): {error_msg}")
+                    if goal is not None:
+                        self._log_agent_interaction(run_id, goal, None, error_msg)
+                    return CrawlerRunResult(
+                        success=False,
+                        steps_completed=0,
+                        actions_taken=[],
+                        final_state={"llm_error_kind": llm_error.kind},
+                        error_message=error_msg,
+                        total_duration_ms=duration_ms,
+                    )
 
                 # Check if error is a transient UI-parser / network failure.
                 # Transient errors are checked BEFORE app-crash detection so

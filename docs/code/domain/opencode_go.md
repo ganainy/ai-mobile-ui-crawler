@@ -18,6 +18,9 @@ Source: `src/mobile_crawler/domain/opencode_go.py`
 - `is_limit_error`
 - `is_opencode_go_llm`
 
+## Imports
+- [[code/domain/llm_errors|domain.llm_errors]]
+
 ## Imported by
 - [[code/domain/api_key_check|domain.api_key_check]]
 - [[code/domain/crawler_agent/agent/utils/inference|domain.crawler_agent.agent.utils.inference]]

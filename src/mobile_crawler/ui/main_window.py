@@ -38,6 +38,7 @@ from mobile_crawler.domain.guided_scenarios_generator import (
     guided_scenarios_config_key,
     guided_scenarios_url_override_config_key,
 )
+from mobile_crawler.domain.llm_errors import LLMCallError
 from mobile_crawler.domain.models import ActionResult
 from mobile_crawler.domain.providers.registry import ProviderRegistry
 from mobile_crawler.domain.providers.vision_detector import VisionDetector
@@ -493,6 +494,7 @@ class MainWindow(QMainWindow):
         self.signal_adapter.action_executed.connect(self._on_action_executed)
         self.signal_adapter.step_completed.connect(self._on_step_completed)
         self.signal_adapter.crawl_completed.connect(self._on_crawl_completed)
+        self.signal_adapter.error_occurred.connect(self._on_run_error)
         self.signal_adapter.screen_processed.connect(self._on_screen_processed)
         self.signal_adapter.step_paused.connect(self._on_step_paused)
         self.signal_adapter.debug_log.connect(self._on_debug_log)
@@ -896,6 +898,12 @@ class MainWindow(QMainWindow):
         self._crawler_worker = None
         self._current_run_id = None
         self._crawler_loop = None
+
+    def _on_run_error(self, run_id: int, step_number: int, error: object) -> None:
+        """Alert the user when the AI model stopped the run (no credit, bad key, empty replies...)."""
+        if isinstance(error, LLMCallError):
+            self._append_clean_log(LogLevel.ERROR, f"AI model error: {error}", "ui")
+            self._show_error("AI model error - crawl stopped", str(error))
 
     def _on_step_by_step_toggled(self, enabled: bool) -> None:
         """Handle step-by-step mode toggle."""
