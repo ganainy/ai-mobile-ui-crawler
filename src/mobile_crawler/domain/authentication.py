@@ -43,6 +43,22 @@ _GOOGLE_SIGN_IN_RULE = (
     "never tap 'Sign out' / 'Log out'."
 )
 
+GOOGLE_PASSWORD_KEY = "google_account_password"
+
+
+def google_password_rule(google_password: str) -> str:
+    """Which password to use when a Google screen asks for the device account's password."""
+    if google_password:
+        return (
+            f"If a Google screen asks for the account password, type exactly {google_password} (the device "
+            "Google account's password) and tap Next. Never type any other password on a Google screen."
+        )
+    return (
+        "If a Google screen asks for the account password, never type the sign-up password (it is not the "
+        "Google account's password): tap 'Try another way' or choose another option instead. A wrong-password "
+        "error on a Google screen is not an app log-in failure; do not press Back because of it."
+    )
+
 
 def generate_password() -> str:
     """Random password meeting common complexity rules (upper, lower, digit, symbol)."""
@@ -70,6 +86,7 @@ class AuthenticationSession:
         sms_reader,
         human_fallback: HumanFallback,
         max_attempts: int = DEFAULT_MAX_ATTEMPTS,
+        google_password: str = "",
     ):
         self.app_package = app_package
         self.device_id = device_id
@@ -79,6 +96,7 @@ class AuthenticationSession:
         self.sms_reader = sms_reader
         self.human_fallback = human_fallback
         self.max_attempts = max_attempts
+        self.google_password = google_password
         self.attempts = 0
         self.address_override = ""
         self._skipped_reason: str | None = None
@@ -110,7 +128,7 @@ class AuthenticationSession:
                 f"(username: {account.username}, password: {account.password}). "
                 "If the app logs you out later (you are logged out), log in again with the same account. "
                 "Do not create a new account. Email or SMS codes: use get_email_code / get_sms_code "
-                f"(at most {cap} code attempts). {_GOOGLE_SIGN_IN_RULE} "
+                f"(at most {cap} code attempts). {_GOOGLE_SIGN_IN_RULE} {google_password_rule(self.google_password)} "
                 "Never give up on login voluntarily: keep retrying the sign-in flow and looking for "
                 "alternate paths. Only stop once a tool call itself reports the attempt cap is reached, "
                 "then continue exploring the reachable screens without a completed login."
@@ -134,8 +152,8 @@ class AuthenticationSession:
             "As soon as sign-up succeeds, call save_app_account with the username and password you used. "
             "These credentials are for a NEW account only: never enter them on a log-in form and never try to "
             "log in (no account exists, so it will fail). If a screen only offers log in, or shows a "
-            "wrong email or password error, look for the app's sign-up / create-account option instead. "
-            f"{_GOOGLE_SIGN_IN_RULE} "
+            "wrong email or password error on the app's own screens, look for the app's sign-up / create-account "
+            f"option instead. {_GOOGLE_SIGN_IN_RULE} {google_password_rule(self.google_password)} "
             "Never give up on sign-up voluntarily: keep retrying and looking for alternate paths "
             "(e.g. a sign-up link on a log-in screen). Only stop once a tool call itself reports the "
             "attempt cap is reached, then continue exploring the reachable screens without an account."

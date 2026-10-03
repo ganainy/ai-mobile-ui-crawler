@@ -320,6 +320,12 @@ class SettingsPanel(QWidget):
         inbox_layout.addWidget(QLabel("App password:"))
         inbox_layout.addWidget(self.verification_inbox_password_input)
 
+        self.google_password_input = QLineEdit()
+        self.google_password_input.setPlaceholderText("Device Google account password")
+        self.google_password_input.setEchoMode(QLineEdit.EchoMode.Password)
+        inbox_layout.addWidget(QLabel("Google account password (for 'Sign in with Google'):"))
+        inbox_layout.addWidget(self.google_password_input)
+
         inbox_group.setLayout(inbox_layout)
         layout.addWidget(inbox_group)
 
@@ -1124,6 +1130,8 @@ class SettingsPanel(QWidget):
             self._config_store.get_secret_plaintext("verification_inbox_password") or ""
         )
 
+        self.google_password_input.setText(self._config_store.get_secret_plaintext("google_account_password") or "")
+
         # Load human fallback
         self.human_fallback_checkbox.setChecked(
             bool(self._config_store.get_setting("human_fallback_enabled", default=False))
@@ -1326,6 +1334,11 @@ class SettingsPanel(QWidget):
                     self._config_store.set_secret_plaintext("verification_inbox_password", inbox_password)
                 else:
                     self._config_store.delete_secret("verification_inbox_password")
+                google_password = self.google_password_input.text().strip()
+                if google_password:
+                    self._config_store.set_secret_plaintext("google_account_password", google_password)
+                else:
+                    self._config_store.delete_secret("google_account_password")
 
                 self._config_store.set_setting(
                     "human_fallback_enabled", self.human_fallback_checkbox.isChecked(), "bool"
@@ -1975,6 +1988,7 @@ class SettingsPanel(QWidget):
         self.test_phone_input.clear()
         self.verification_inbox_address_input.clear()
         self.verification_inbox_password_input.clear()
+        self.google_password_input.clear()
         self.exploration_objective_input.setPlainText(DEFAULT_EXPLORATION_OBJECTIVE)
         self.ui_parser_mode_combo.setCurrentText("boost")
         self.omniparser_local_parse_timeout_input.setValue(120)

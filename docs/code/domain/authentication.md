@@ -12,6 +12,7 @@ Source: `src/mobile_crawler/domain/authentication.py`
 - `AuthenticationSession`
 
 ## Functions
+- `google_password_rule`
 - `generate_password`
 
 ## Imports

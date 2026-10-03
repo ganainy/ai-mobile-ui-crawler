@@ -1533,6 +1533,7 @@ class CrawlerAgentService:
         return getattr(agent_cfg, "max_actions_per_batch", "?")
 
     def _build_auth_session(self, app_package: str) -> AuthenticationSession:
+        from mobile_crawler.domain.authentication import GOOGLE_PASSWORD_KEY
         from mobile_crawler.infrastructure.adb_client import ADBClient
         from mobile_crawler.infrastructure.app_account_store import AppAccountStore
         from mobile_crawler.infrastructure.sms_reader import SmsReader
@@ -1555,6 +1556,7 @@ class CrawlerAgentService:
             human_fallback=HumanFallback(
                 HumanFallbackConfig.from_store(user_store, self.human_fallback_enabled_override), self.human_prompter
             ),
+            google_password=user_store.get_secret_plaintext(GOOGLE_PASSWORD_KEY) or "",
         )
 
     async def _detect_device_phone(self) -> None:
