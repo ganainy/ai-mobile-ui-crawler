@@ -8,7 +8,9 @@ from typing import TYPE_CHECKING
 
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import (
+    QAbstractButton,
     QAbstractItemView,
+    QAbstractSpinBox,
     QButtonGroup,
     QCheckBox,
     QComboBox,
@@ -19,9 +21,11 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMessageBox,
+    QPlainTextEdit,
     QPushButton,
     QRadioButton,
     QScrollArea,
+    QSlider,
     QSpinBox,
     QTabWidget,
     QTextEdit,
@@ -39,6 +43,18 @@ if TYPE_CHECKING:
     from mobile_crawler.infrastructure.user_config_store import UserConfigStore
 
 logger = logging.getLogger(__name__)
+
+# Input controls locked while a crawl runs. Tabs, scroll bars and scroll areas are not in this
+# list, so the user can still switch tabs and scroll during a run.
+_LOCKABLE_INPUTS = (
+    QAbstractButton,
+    QAbstractSpinBox,
+    QComboBox,
+    QLineEdit,
+    QPlainTextEdit,
+    QSlider,
+    QTextEdit,
+)
 
 
 DEFAULT_EXPLORATION_OBJECTIVE = (
@@ -89,6 +105,7 @@ class SettingsPanel(QWidget):
         self._keepalive_thread: threading.Thread | None = None
         self._keepalive_in_flight = False
         self._crawl_running = False
+        self._locked_inputs: list[QWidget] = []
         self._device_id: str | None = None
         self._status_bar_preview_device_id: str | None = None
         self._status_bar_preview_thread: threading.Thread | None = None
@@ -1685,8 +1702,21 @@ class SettingsPanel(QWidget):
         self.omniparser_keepalive_status_label.setText(f"{message} at {timestamp}")
 
     def set_crawl_running(self, running: bool) -> None:
-        """Pause/resume the OmniParser keep-alive timer around an active crawl."""
+        """Lock/unlock the settings inputs and pause/resume the OmniParser keep-alive timer around a crawl.
+
+        Tabs, scroll areas and the Save/Reset buttons stay usable: only input controls are locked,
+        and only those that were enabled before, so controls disabled by their own toggles stay so.
+        """
         self._crawl_running = running
+        if running:
+            for widget in self.findChildren(QWidget):
+                if isinstance(widget, _LOCKABLE_INPUTS) and widget.isEnabled():
+                    widget.setEnabled(False)
+                    self._locked_inputs.append(widget)
+        else:
+            for widget in self._locked_inputs:
+                widget.setEnabled(True)
+            self._locked_inputs.clear()
         self._apply_keepalive_state()
 
     def stop_keepalive(self) -> None:

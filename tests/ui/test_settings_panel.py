@@ -1070,3 +1070,27 @@ class TestKeyTestUsesSelectedModel:
         panel = _create_settings_panel(mock_config_store)
         panel.set_selected_ai("gemini", "gemini-3.8-flash")
         assert panel._model_for_key_test("opencode_go") is None
+
+
+class TestCrawlRunningLocksInputsOnly:
+    """During a crawl only input controls lock; tabs and scroll areas stay usable."""
+
+    def test_inputs_lock_and_unlock_while_tabs_and_scrolling_stay_enabled(self, qt_app, mock_config_store):
+        panel = _create_settings_panel(mock_config_store)
+        disabled_before = QLineEdit()  # a control already disabled by its own toggle
+        disabled_before.setEnabled(False)
+        panel.layout().addWidget(disabled_before)
+        scroll_areas = panel.findChildren(QScrollArea)
+        assert scroll_areas
+
+        panel.set_crawl_running(True)
+
+        assert panel.tab_widget.tabBar().isEnabled()
+        assert all(scroll.isEnabled() for scroll in scroll_areas)
+        assert not panel.gemini_api_key_input.isEnabled()
+        assert not disabled_before.isEnabled()
+
+        panel.set_crawl_running(False)
+
+        assert panel.gemini_api_key_input.isEnabled()
+        assert not disabled_before.isEnabled()  # restored only what it locked

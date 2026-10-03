@@ -1059,8 +1059,9 @@ class MainWindow(QMainWindow):
 
                 self.control_panel.update_state(CrawlState.UNINITIALIZED)
 
-        # Disable/enable configuration widgets
-        widgets_to_toggle = [self.device_selector, self.app_selector, self.ai_selector, self.settings_panel]
+        # Disable/enable configuration widgets. The settings panel is not disabled as a whole:
+        # that would also freeze its tabs and scroll areas. It locks only its input controls.
+        widgets_to_toggle = [self.device_selector, self.app_selector, self.ai_selector]
 
         for widget in widgets_to_toggle:
             if hasattr(widget, "setEnabled"):
