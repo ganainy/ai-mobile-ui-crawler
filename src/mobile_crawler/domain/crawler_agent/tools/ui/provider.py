@@ -171,6 +171,7 @@ class AndroidStateProvider(StateProvider):
         target_package: str | None = None,
         target_recovery_attempts: int = 3,
         target_recovery_grace_captures: int = 40,
+        empty_a11y_retries: int = 2,
         status_bar_exclusion_px: int = 0,
         bottom_bar_exclusion_px: int = 0,
     ) -> None:
@@ -192,6 +193,7 @@ class AndroidStateProvider(StateProvider):
         self.target_package = target_package
         self.target_recovery_attempts = target_recovery_attempts
         self.target_recovery_grace_captures = target_recovery_grace_captures
+        self.empty_a11y_retries = empty_a11y_retries
         self._external_captures = 0
         # Status Bar / Bottom Bar Exclusion: driver.screenshot() already
         # cropped this many px off the top/bottom (ADR-0002). OmniParser bbox
@@ -234,40 +236,52 @@ class AndroidStateProvider(StateProvider):
             except Exception as exc:
                 return exc, (time.perf_counter() - started) * 1000
 
-        (screenshot_result, breakdown["screenshot"]), (tree_result, breakdown["a11y"]) = await asyncio.gather(
-            timed(self._capture_screenshot_with_retry()),
-            timed(self.driver.get_ui_tree()),
-        )
-        if isinstance(screenshot_result, Exception):
-            raise screenshot_result
-        screenshot_bytes = screenshot_result
-
-        # Get device context
-        device_context = {}
-        screen_width = 1080
-        screen_height = 1920
-
-        if isinstance(tree_result, Exception):
-            logger.warning(f"get_ui_tree failed: {tree_result}")
-            phone_state = {}
-            a11y_tree = []
-            a11y_error = str(tree_result)
-        else:
-            ui_tree = tree_result
-            device_context = ui_tree.get("device_context", {})
-            screen_bounds = device_context.get("screen_bounds", {})
-            screen_width = screen_bounds.get("width", 1080)
-            screen_height = screen_bounds.get("height", 1920)
-            phone_state = ui_tree.get("phone_state", {})
-            # Portal reports the whole screen; the screenshot has the Status Bar /
-            # Bottom Bar Exclusion cropped off, so trim the tree to match.
-            a11y_tree = exclude_bars(
-                ui_tree.get("a11y_tree", []),
-                screen_height,
-                self.status_bar_exclusion_px,
-                self.bottom_bar_exclusion_px,
+        for empty_retry in range(self.empty_a11y_retries + 1):
+            (screenshot_result, breakdown["screenshot"]), (tree_result, breakdown["a11y"]) = await asyncio.gather(
+                timed(self._capture_screenshot_with_retry()),
+                timed(self.driver.get_ui_tree()),
             )
-            a11y_error = ui_tree.get("a11y_error")
+            if isinstance(screenshot_result, Exception):
+                raise screenshot_result
+            screenshot_bytes = screenshot_result
+
+            # Get device context
+            device_context = {}
+            screen_width = 1080
+            screen_height = 1920
+
+            if isinstance(tree_result, Exception):
+                logger.warning(f"get_ui_tree failed: {tree_result}")
+                phone_state = {}
+                a11y_tree = []
+                a11y_error = str(tree_result)
+            else:
+                ui_tree = tree_result
+                device_context = ui_tree.get("device_context", {})
+                screen_bounds = device_context.get("screen_bounds", {})
+                screen_width = screen_bounds.get("width", 1080)
+                screen_height = screen_bounds.get("height", 1920)
+                phone_state = ui_tree.get("phone_state", {})
+                # Portal reports the whole screen; the screenshot has the Status Bar /
+                # Bottom Bar Exclusion cropped off, so trim the tree to match.
+                a11y_tree = exclude_bars(
+                    ui_tree.get("a11y_tree", []),
+                    screen_height,
+                    self.status_bar_exclusion_px,
+                    self.bottom_bar_exclusion_px,
+                )
+                a11y_error = ui_tree.get("a11y_error")
+
+            if self.ui_parser_mode != "accessibility" or a11y_tree or empty_retry == self.empty_a11y_retries:
+                break
+            # Accessibility mode cannot use an empty tree (e.g. a browser the target
+            # app opened): return to the target app and capture again.
+            logger.warning(
+                "Empty a11y tree in accessibility mode (retry %s/%s); returning to the target app",
+                empty_retry + 1,
+                self.empty_a11y_retries,
+            )
+            await self._recover_from_empty_a11y_tree()
 
         # Determine UI parser mode and get elements
         omni_tree = None
@@ -474,7 +488,20 @@ class AndroidStateProvider(StateProvider):
             self.target_package,
         )
 
+        recovered, current_package, last_error = await self._relaunch_target_app(adb_executor)
+        if recovered:
+            return
+
+        detail = f"last_error={last_error}" if last_error else f"current_package={current_package}"
+        raise RuntimeError(
+            f"Unable to recover target app '{self.target_package}' before state capture "
+            f"after {self.target_recovery_attempts} attempts ({detail})"
+        )
+
+    async def _relaunch_target_app(self, adb_executor) -> tuple[bool, str | None, str | None]:
+        """Relaunch the target app; returns (recovered, current_package, last_error)."""
         last_error = None
+        current_package = None
         for attempt in range(1, self.target_recovery_attempts + 1):
             launch_result = adb_executor.am_start_recovery(self.target_package)
             if not launch_result.success:
@@ -488,13 +515,29 @@ class AndroidStateProvider(StateProvider):
                     attempt,
                     self.target_recovery_attempts,
                 )
-                return
+                return True, current_package, last_error
+        return False, current_package, last_error
 
-        detail = f"last_error={last_error}" if last_error else f"current_package={current_package}"
-        raise RuntimeError(
-            f"Unable to recover target app '{self.target_package}' before state capture "
-            f"after {self.target_recovery_attempts} attempts ({detail})"
+    async def _recover_from_empty_a11y_tree(self) -> None:
+        """Bring the target app back after an empty accessibility tree.
+
+        The foreground grace lets the agent work in a browser/WebView, but those
+        screens often expose no a11y tree, which accessibility mode cannot use.
+        """
+        if not self.target_package:
+            return
+        device_id = getattr(self.driver, "_serial", None) or getattr(
+            getattr(self.driver, "device", None), "serial", None
         )
+        if not device_id:
+            return
+        from mobile_crawler.domain.adb_action_executor import ADBActionExecutor
+
+        recovered, current_package, _ = await self._relaunch_target_app(ADBActionExecutor(device_id=device_id))
+        if recovered:
+            self._external_captures = 0
+        else:
+            logger.warning("Could not bring %s back after an empty a11y tree (current=%s)", self.target_package, current_package)
 
     async def screenshot(self) -> bytes:
         """Return raw PNG bytes of the current screen."""

@@ -275,6 +275,44 @@ async def test_accessibility_mode_without_a_tree_reports_why_instead_of_returnin
             await provider.get_state()
 
 
+@pytest.mark.asyncio
+async def test_accessibility_mode_returns_to_target_app_after_an_empty_tree(android_state_provider):
+    provider, driver = android_state_provider
+    provider.ui_parser_mode = "accessibility"
+    empty = {"a11y_tree": [], "phone_state": {}, "device_context": {}}
+    full = {
+        "a11y_tree": [{"text": "ok"}],
+        "phone_state": {},
+        "device_context": {"screen_bounds": {"width": 320, "height": 640}},
+    }
+    driver.get_ui_tree.side_effect = [empty, full]
+    mock_adb = Mock()
+    mock_adb.get_current_package.side_effect = ["com.brave.browser", "com.example.app"]
+    mock_adb.am_start_recovery.return_value = SimpleNamespace(success=True, error_message=None)
+
+    with patch("mobile_crawler.domain.adb_action_executor.ADBActionExecutor", return_value=mock_adb):
+        await provider.get_state()
+
+    mock_adb.am_start_recovery.assert_called_once_with("com.example.app")
+    assert driver.get_ui_tree.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_accessibility_mode_raises_only_after_empty_tree_retries_run_out(android_state_provider):
+    provider, driver = android_state_provider
+    provider.ui_parser_mode = "accessibility"
+    driver.get_ui_tree.return_value = {"a11y_tree": [], "phone_state": {}, "device_context": {}}
+    mock_adb = Mock()
+    mock_adb.get_current_package.return_value = "com.example.app"
+    mock_adb.am_start_recovery.return_value = SimpleNamespace(success=True, error_message=None)
+
+    with patch("mobile_crawler.domain.adb_action_executor.ADBActionExecutor", return_value=mock_adb):
+        with pytest.raises(RuntimeError, match="no accessibility tree"):
+            await provider.get_state()
+
+    assert driver.get_ui_tree.await_count == provider.empty_a11y_retries + 1
+
+
 def _rows(count, *, clickable):
     height = 2400 // count
     return [
