@@ -13,6 +13,7 @@ Exploration logic: action execution/verification, screen and state tracking, OCR
 - [[code/domain/api_key_check|domain.api_key_check]] - Check whether an AI provider API key is accepted by the provider.
 - [[code/domain/authentication|domain.authentication]] - Authentication as the first Guided Scenario (see CONTEXT.md: App Account, Verification Challenge).
 - [[code/domain/context_guard|domain.context_guard]] - UI dump validation module for crawl step guardrails.
+- [[code/domain/crawl_blockers|domain.crawl_blockers]] - Things outside the crawler that make a crawl impossible, classified into a clear user-facing message.
 - [[code/domain/crawler_agent/_index|domain.crawler_agent]] - Droidrun - A framework for controlling Android devices through LLM agents.
 - [[code/domain/crawler_agent_service|domain.crawler_agent_service]] - Internal crawler-agent service integration for Mobile Crawler.
 - [[code/domain/element_overlay_renderer|domain.element_overlay_renderer]] - Element overlay renderer for UI element labels on screenshots.

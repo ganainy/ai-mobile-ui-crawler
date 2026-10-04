@@ -15,6 +15,12 @@ import time
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
+from mobile_crawler.domain.crawl_blockers import (
+    SETTINGS_PACKAGES,
+    CrawlBlockedError,
+    is_blank_screenshot,
+    screenshot_blocked_error,
+)
 from mobile_crawler.domain.crawler_agent.tools.driver.base import DeviceDisconnectedError
 from mobile_crawler.domain.crawler_agent.tools.ui.a11y_completeness import count_nodes, evaluate
 from mobile_crawler.domain.crawler_agent.tools.ui.a11y_exclusion import exclude_bars
@@ -212,6 +218,9 @@ class AndroidStateProvider(StateProvider):
         # same elements, so the parse is skipped instead of repeated.
         self._last_parse_digest: str | None = None
         self._last_parse_elements: list[dict[str, Any]] | None = None
+        # Black screenshots (a secure window hides the screen from capture).
+        self._captures_done = 0
+        self._blank_streak = 0
 
     async def get_state(self) -> UIState:
         state_started = time.perf_counter()
@@ -244,6 +253,7 @@ class AndroidStateProvider(StateProvider):
             if isinstance(screenshot_result, Exception):
                 raise screenshot_result
             screenshot_bytes = screenshot_result
+            screenshot_blank = await self._check_blank_screenshot(screenshot_bytes)
 
             # Get device context
             device_context = {}
@@ -309,6 +319,8 @@ class AndroidStateProvider(StateProvider):
 
         elif self.ui_parser_mode == "omniparser":
             # Mode 2: Always use OmniParser (ignore a11y, no fallback)
+            if screenshot_blank:
+                raise screenshot_blocked_error(self.target_package)
             try:
                 omni_tree = await self._get_omni_parser_elements(
                     screenshot_bytes,
@@ -334,6 +346,11 @@ class AndroidStateProvider(StateProvider):
             )
             if not incomplete:
                 filtered = self.tree_filter.filter(a11y_tree, device_context)
+            elif screenshot_blank:
+                # Nothing to parse in a black image: use the a11y tree as it is.
+                logger.info("a11y tree incomplete (%s) but the screenshot is black -> skipping OmniParser", ", ".join(incomplete))
+                omni_status = "skipped (black screenshot)"
+                filtered = a11y_tree
             else:
                 logger.info(
                     "a11y tree incomplete (%s)%s -> running OmniParser",
@@ -457,6 +474,24 @@ class AndroidStateProvider(StateProvider):
             self._external_captures = 0
             return
 
+        # The device's own Settings (Developer Options, Wi-Fi, ADB...) are never part of exploring an
+        # app, and changing them can cut the connection the crawl runs on: no grace, straight back.
+        if current_package in SETTINGS_PACKAGES:
+            logger.warning(
+                "Foreground is %s (target=%s); returning to the target app at once (device settings are off limits)",
+                current_package,
+                self.target_package,
+            )
+            self._external_captures = 0
+            recovered, current_package, last_error = await self._relaunch_target_app(adb_executor)
+            if recovered:
+                return
+            detail = f"last_error={last_error}" if last_error else f"current_package={current_package}"
+            raise RuntimeError(
+                f"Unable to recover target app '{self.target_package}' from device settings "
+                f"after {self.target_recovery_attempts} attempts ({detail})"
+            )
+
         # Any foreign foreground — a browser tab, a WebView, a system dialog, an
         # unrecognized app, or an unresolvable (None) read — may be a legitimate
         # flow the target app launched (web login, permission prompt, account
@@ -539,6 +574,34 @@ class AndroidStateProvider(StateProvider):
         else:
             logger.warning("Could not bring %s back after an empty a11y tree (current=%s)", self.target_package, current_package)
 
+    async def _check_blank_screenshot(self, screenshot_bytes: bytes) -> bool:
+        """True when the screenshot is black (a secure window hides the screen).
+
+        The first capture of a run, or the third black one in a row, raises: the app blocks capture and
+        the crawl cannot see it. A black frame in between (video, transition) just skips OmniParser.
+        A black first frame is re-read once after a moment, since an app may still be starting.
+        """
+        first_capture = self._captures_done == 0
+        self._captures_done += 1
+        if not is_blank_screenshot(screenshot_bytes):
+            self._blank_streak = 0
+            return False
+        if first_capture:
+            await asyncio.sleep(1.5)
+            try:
+                if not is_blank_screenshot(await self._capture_screenshot_with_retry()):
+                    self._blank_streak = 0
+                    return False
+            except CrawlBlockedError:
+                raise
+            except Exception as e:
+                logger.debug(f"Re-capture after black screenshot failed: {e}")
+        self._blank_streak += 1
+        logger.warning("Screenshot is black (%s in a row)", self._blank_streak)
+        if first_capture or self._blank_streak >= 3:
+            raise screenshot_blocked_error(self.target_package)
+        return True
+
     async def screenshot(self) -> bytes:
         """Return raw PNG bytes of the current screen."""
         return await self._capture_screenshot_with_retry()
@@ -551,6 +614,8 @@ class AndroidStateProvider(StateProvider):
         for attempt in range(1, retries + 1):
             try:
                 return await self.driver.screenshot()
+            except CrawlBlockedError:
+                raise
             except Exception as e:
                 last_error = e
                 logger.warning(

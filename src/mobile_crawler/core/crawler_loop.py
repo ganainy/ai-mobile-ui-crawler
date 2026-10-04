@@ -21,6 +21,7 @@ from mobile_crawler.domain.errors import (
     FatalError,
     RecorderError,
 )
+from mobile_crawler.domain.crawl_blockers import CrawlBlockedError
 from mobile_crawler.domain.llm_errors import LLMCallError
 from mobile_crawler.domain.run_config_snapshot import (
     build_config_snapshot,
@@ -512,6 +513,9 @@ class CrawlerLoop:
             if status == "ERROR" and final_state.get("llm_error_kind"):
                 # The AI model is dead (no credit, bad key, empty replies...): tell the user clearly.
                 self._emit_event("on_error", run_id, None, LLMCallError(reason, final_state["llm_error_kind"]))
+            if status == "ERROR" and final_state.get("crawl_blocked_kind"):
+                # The app blocks screen capture or the device connection is gone: tell the user clearly.
+                self._emit_event("on_error", run_id, None, CrawlBlockedError(reason, final_state["crawl_blocked_kind"]))
 
             self._save_run_stats(run_id, run)
             self._generate_report(run_id)

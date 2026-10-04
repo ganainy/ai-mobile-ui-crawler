@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 
 from async_adbutils import adb
 
+from mobile_crawler.domain.crawl_blockers import device_lost_error
 from mobile_crawler.domain.crawler_agent.tools.driver.base import DeviceDriver
 
 if TYPE_CHECKING:
@@ -24,6 +25,9 @@ if TYPE_CHECKING:
 logger = logging.getLogger("crawler_agent")
 
 PORTAL_RETRY_SECONDS = 60.0
+
+# Longest a reconnect attempt (`adb connect`, then re-opening the device) may take.
+_RECONNECT_TIMEOUT_SECONDS = 20.0
 
 _APP_LABEL_CONCURRENCY = 16
 
@@ -123,7 +127,12 @@ class AndroidDriver(DeviceDriver):
                     proc = await asyncio.create_subprocess_exec(
                         "adb", "connect", self._serial, stdout=subprocess.PIPE, stderr=subprocess.PIPE
                     )
-                    stdout, stderr = await proc.communicate()
+                    try:
+                        # `adb connect` to a wireless port that went away can block for a long time.
+                        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=_RECONNECT_TIMEOUT_SECONDS)
+                    except asyncio.TimeoutError:
+                        proc.kill()
+                        raise
                     logger.info(
                         f"AndroidDriver adb connect stdout: {stdout.decode().strip()}, "
                         f"stderr: {stderr.decode().strip()}"
@@ -133,12 +142,13 @@ class AndroidDriver(DeviceDriver):
                     logger.error(f"Failed to execute adb connect in AndroidDriver: {re_err}")
 
             try:
-                await self.connect()
+                await asyncio.wait_for(self.connect(), timeout=_RECONNECT_TIMEOUT_SECONDS)
                 logger.info("AndroidDriver successfully reconnected to device.")
                 return True
             except Exception as conn_err:
                 logger.error(f"AndroidDriver reconnection failed: {conn_err}")
-                return False
+                # The device is gone: stop the crawl with a clear reason instead of retrying a dead link.
+                raise device_lost_error(self._serial, str(conn_err) or type(conn_err).__name__) from exception
         return False
 
     # -- input actions -------------------------------------------------------

@@ -38,6 +38,7 @@ from mobile_crawler.domain.guided_scenarios_generator import (
     guided_scenarios_config_key,
     guided_scenarios_url_override_config_key,
 )
+from mobile_crawler.domain.crawl_blockers import CrawlBlockedError
 from mobile_crawler.domain.llm_errors import LLMCallError
 from mobile_crawler.domain.models import ActionResult
 from mobile_crawler.domain.providers.registry import ProviderRegistry
@@ -904,6 +905,9 @@ class MainWindow(QMainWindow):
         if isinstance(error, LLMCallError):
             self._append_clean_log(LogLevel.ERROR, f"AI model error: {error}", "ui")
             self._show_error("AI model error - crawl stopped", str(error))
+        elif isinstance(error, CrawlBlockedError):
+            self._append_clean_log(LogLevel.ERROR, f"Crawl blocked: {error}", "ui")
+            self._show_error("Crawl stopped", str(error))
 
     def _on_step_by_step_toggled(self, enabled: bool) -> None:
         """Handle step-by-step mode toggle."""

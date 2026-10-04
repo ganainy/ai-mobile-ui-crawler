@@ -2,6 +2,8 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from mobile_crawler.domain.crawl_blockers import KIND_DEVICE_LOST, CrawlBlockedError
+
 from mobile_crawler.domain.crawler_agent.tools.driver.android import AndroidDriver
 
 
@@ -60,9 +62,11 @@ async def test_android_driver_tap_reconnect_failure(mock_subprocess_exec):
     # Mock connect method to fail during recovery
     driver.connect = AsyncMock(side_effect=Exception("connection failed"))
 
-    # Execute tap and expect it to raise original exception (or failure exception)
-    with pytest.raises(Exception, match="device offline"):
+    # A drop that cannot be reconnected ends the crawl with a clear "device lost" error
+    with pytest.raises(CrawlBlockedError, match="ADB connection") as excinfo:
         await driver.tap(100, 200)
+    assert excinfo.value.kind == KIND_DEVICE_LOST
+    assert "device offline" in str(excinfo.value.__cause__)
 
     # Assert device.click was called only once (failed and couldn't retry)
     assert driver.device.click.call_count == 1

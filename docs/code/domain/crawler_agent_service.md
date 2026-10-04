@@ -22,6 +22,7 @@ Source: `src/mobile_crawler/domain/crawler_agent_service.py`
 - [[code/domain/adb_action_executor|domain.adb_action_executor]]
 - [[code/domain/authentication|domain.authentication]]
 - [[code/domain/context_guard|domain.context_guard]]
+- [[code/domain/crawl_blockers|domain.crawl_blockers]]
 - [[code/domain/crawler_agent/agent/common/events|domain.crawler_agent.agent.common.events]]
 - [[code/domain/crawler_agent/agent/droid/crawler_agent|domain.crawler_agent.agent.droid.crawler_agent]]
 - [[code/domain/crawler_agent/agent/droid/events|domain.crawler_agent.agent.droid.events]]
