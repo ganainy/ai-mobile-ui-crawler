@@ -60,6 +60,8 @@ Optional integrations:
 - Android screen recording support for session video capture.
 - Replicate or local OmniParser configuration when using fallback-capable parser modes such as `boost`. See `docs/architecture/readmes/local-omniparser-setup.md` for local setup notes.
 
+> **Linux:** see [docs/linux-setup.md](docs/linux-setup.md) for the bash equivalents of the PowerShell steps below (Python 3.12 via uv, ADB over Wi-Fi, Docker group access, Phoenix).
+
 ## Prepare an Android Device for ADB
 
 Mobile Crawler needs the target device or emulator to be visible through ADB before you start the GUI or CLI crawl.
