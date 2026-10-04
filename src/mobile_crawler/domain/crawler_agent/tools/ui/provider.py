@@ -350,7 +350,7 @@ class AndroidStateProvider(StateProvider):
                 # Nothing to parse in a black image: use the a11y tree as it is.
                 logger.info("a11y tree incomplete (%s) but the screenshot is black -> skipping OmniParser", ", ".join(incomplete))
                 omni_status = "skipped (black screenshot)"
-                filtered = a11y_tree
+                filtered = self._filter_a11y_or_none(a11y_tree, device_context)
             else:
                 logger.info(
                     "a11y tree incomplete (%s)%s -> running OmniParser",
@@ -370,7 +370,7 @@ class AndroidStateProvider(StateProvider):
                 except Exception as e:
                     omni_status = f"failed ({e})"
                     logger.warning(f"OmniParser boost failed: {e}")
-                    filtered = a11y_tree
+                    filtered = self._filter_a11y_or_none(a11y_tree, device_context)
                     omni_tree = None
 
         breakdown["omniparser"] = self._last_omniparser_ms or 0.0
@@ -573,6 +573,10 @@ class AndroidStateProvider(StateProvider):
             self._external_captures = 0
         else:
             logger.warning("Could not bring %s back after an empty a11y tree (current=%s)", self.target_package, current_package)
+
+    def _filter_a11y_or_none(self, a11y_tree: Any, device_context: dict[str, Any]) -> Any:
+        """The filtered a11y tree for the formatter, or None when there is no tree (an empty tree is ``[]``)."""
+        return self.tree_filter.filter(a11y_tree, device_context) if a11y_tree else None
 
     async def _check_blank_screenshot(self, screenshot_bytes: bytes) -> bool:
         """True when the screenshot is black (a secure window hides the screen).

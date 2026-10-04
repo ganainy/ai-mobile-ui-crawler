@@ -24,6 +24,9 @@ updated: 2026-10-04
 ## Correction (user, runs 216-218)
 - The real cause of the integrity screen was that the device had **no screen-lock PIN**; the app's on-screen text still said Developer Options must be off, so that message is misleading (my first diagnosis took it at face value). The blocked-screenshot message and goal rule no longer name Developer Options as the cause.
 
+## Follow-up: run 222 crash (my bug)
+- Run 222 (Medisafe) died at step 4 with `'list' object has no attribute 'get'`: after Back left the app, a mid-run black frame hit my "skip OmniParser, use the a11y tree" branch with Portal returning `[]` (empty list), and `filtered = a11y_tree` handed that list to the formatter, which expects a filtered root node or `None`. The old OmniParser-failure fallback had the same latent bug. Both now go through `_filter_a11y_or_none`. Regression tests in `test_droidrun_target_package_guards.py`.
+
 ## Not done / unverified
 - Not tried on the phone or in the GUI. Stale `RUNNING` runs from a killed process are still not swept at startup (two processes could be live, so left alone).
 - Batch crawl does not abort on these errors yet.

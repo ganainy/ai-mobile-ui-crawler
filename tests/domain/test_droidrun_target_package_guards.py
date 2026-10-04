@@ -516,3 +516,49 @@ async def test_capture_info_line_reports_omniparser_failure(android_state_provid
         await _boost_state(provider, driver, _rows(6, clickable=False))
 
     assert "omniparser failed (replicate down)" in _capture_line(caplog)
+
+
+def _black_jpeg():
+    import io
+
+    from PIL import Image
+
+    out = io.BytesIO()
+    Image.new("RGB", (64, 128), (0, 0, 0)).save(out, format="JPEG")
+    return out.getvalue()
+
+
+@pytest.mark.asyncio
+async def test_boost_black_frame_with_empty_a11y_tree_skips_omniparser_and_formats_nothing(android_state_provider):
+    provider, driver = android_state_provider
+    provider._captures_done = 1  # not the run's first capture: a black frame only skips OmniParser
+    driver.screenshot.return_value = _black_jpeg()
+    provider.ui_parser_mode = "boost"
+    driver.get_ui_tree.return_value = {
+        "a11y_tree": [],  # Portal returned no tree
+        "phone_state": {},
+        "device_context": {"screen_bounds": {"width": 1080, "height": 2400}},
+    }
+    mock_adb = Mock()
+    mock_adb.get_current_package.return_value = "com.example.app"
+    with patch("mobile_crawler.domain.adb_action_executor.ADBActionExecutor", return_value=mock_adb):
+        await provider.get_state()
+    provider._get_omni_parser_elements.assert_not_awaited()
+    assert provider.tree_formatter.format.call_args.args[0] is None
+
+
+@pytest.mark.asyncio
+async def test_boost_omniparser_failure_with_empty_a11y_tree_formats_nothing(android_state_provider):
+    provider, driver = android_state_provider
+    provider._get_omni_parser_elements = AsyncMock(side_effect=RuntimeError("replicate down"))
+    provider.ui_parser_mode = "boost"
+    driver.get_ui_tree.return_value = {
+        "a11y_tree": [],
+        "phone_state": {},
+        "device_context": {"screen_bounds": {"width": 1080, "height": 2400}},
+    }
+    mock_adb = Mock()
+    mock_adb.get_current_package.return_value = "com.example.app"
+    with patch("mobile_crawler.domain.adb_action_executor.ADBActionExecutor", return_value=mock_adb):
+        await provider.get_state()
+    assert provider.tree_formatter.format.call_args.args[0] is None
