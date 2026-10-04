@@ -366,7 +366,13 @@ class AndroidStateProvider(StateProvider):
                     if omni_tree:
                         omni_source = "omni"
                         logger.debug(f"Using OmniParser boost ({len(omni_tree)} elements)")
-                    filtered = None
+                        filtered = None
+                    else:
+                        # OmniParser unavailable (e.g. no Replicate key / no local server) or
+                        # found nothing: fall back to whatever the a11y tree has instead of
+                        # handing the formatter neither source (0 elements -> step skipped).
+                        logger.warning("OmniParser returned no elements; falling back to the incomplete a11y tree")
+                        filtered = self.tree_filter.filter(a11y_tree, device_context) if a11y_tree else None
                 except Exception as e:
                     omni_status = f"failed ({e})"
                     logger.warning(f"OmniParser boost failed: {e}")
