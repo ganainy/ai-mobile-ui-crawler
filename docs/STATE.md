@@ -101,6 +101,7 @@ Entry point for the Obsidian vault (`docs/`). Claude reads this first each sessi
 - No pre-commit hook (removed 2026-09-25 at the user's request, with `.pre-commit-config.yaml` and the `pre-commit` dev dependency); black/ruff had already been dropped from it 2026-09-20. `[tool.ruff]`/`[tool.black]` in `pyproject.toml` are unchanged.
 
 ## Map of the vault
+- [findings/](findings/_index.md) - findings log from app testing, for the Masterarbeit
 - [Glossary](Glossary.md) - stub pointing at root `CONTEXT.md`
 - [code/](code/_index.md) - generated code-structure notes
 - [adr/](adr/) - architecture decisions
