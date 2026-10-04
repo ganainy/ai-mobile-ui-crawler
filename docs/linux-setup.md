@@ -144,7 +144,7 @@ Then run a crawl with `--enable-mobsf-analysis`. The API key is read from `.mobs
 
 ## 5. Disk and memory
 
-Docker images add up: Phoenix is about 1.5 GB and MobSF is several GB once unpacked. Check `df -h /var/lib/docker` before pulling. `uv cache clean` frees a lot of space if you used uv.
+Docker images add up: Phoenix is about 1.5 GB and MobSF is several GB once unpacked. Check `df -h /var/lib/docker` before pulling. `uv cache clean` frees a lot of space if you used uv. On a CLI-only machine you can also `uv pip uninstall PySide6 PySide6-Addons PySide6-Essentials shiboken6` (about 650 MB); the CLI keeps working, but `mobile-crawler-gui` will not start until you reinstall with `uv pip install -e .`.
 
 ## 6. Troubleshooting
 
