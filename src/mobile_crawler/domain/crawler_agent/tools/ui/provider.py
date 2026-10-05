@@ -63,7 +63,7 @@ BROWSER_PACKAGES = frozenset(
         "com.google.android.apps.chrome",
     }
 )
-BROWSER_GRACE_CAPTURES = 5
+BROWSER_GRACE_CAPTURES = 15
 
 
 async def fetch_state_with_retry(
@@ -521,6 +521,13 @@ class AndroidStateProvider(StateProvider):
 
         last_error = None
         for attempt in range(1, self.target_recovery_attempts + 1):
+            # A browser Custom Tab lives inside the app's own task, so relaunching the app
+            # only brings the same tab back to the front. Close it with BACK first.
+            for _ in range(3):
+                if adb_executor.get_current_package() not in BROWSER_PACKAGES:
+                    break
+                adb_executor.back()
+                await asyncio.sleep(0.7)
             launch_result = adb_executor.am_start_recovery(self.target_package)
             if not launch_result.success:
                 last_error = launch_result.error_message or "ADB launch command failed"
