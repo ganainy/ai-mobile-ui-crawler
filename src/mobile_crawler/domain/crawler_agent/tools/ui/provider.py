@@ -49,6 +49,22 @@ _RECOVERY_AFTER_ATTEMPT = 5
 # so it is never recovered from (the run's time/step limit still ends the crawl).
 UNLIMITED_GRACE_PACKAGES = frozenset({"com.google.android.gms"})
 
+# Browsers the app may hand off to (links, Custom Tabs). Only the app's own traffic is of
+# interest, so a detour gets just enough captures for a web login, then the app is relaunched.
+BROWSER_PACKAGES = frozenset(
+    {
+        "com.android.chrome",
+        "com.brave.browser",
+        "org.mozilla.firefox",
+        "com.sec.android.app.sbrowser",
+        "com.microsoft.emmx",
+        "com.opera.browser",
+        "com.duckduckgo.mobile.android",
+        "com.google.android.apps.chrome",
+    }
+)
+BROWSER_GRACE_CAPTURES = 5
+
 
 async def fetch_state_with_retry(
     fetch: Callable[[], Awaitable[dict[str, Any]]],
@@ -481,14 +497,17 @@ class AndroidStateProvider(StateProvider):
                 self.target_package,
             )
             return
-        if self._external_captures < self.target_recovery_grace_captures:
+        grace = self.target_recovery_grace_captures
+        if current_package in BROWSER_PACKAGES:
+            grace = min(grace, BROWSER_GRACE_CAPTURES)
+        if self._external_captures < grace:
             self._external_captures += 1
             logger.info(
                 "Foreground is %s (target=%s); allowing capture %s/%s before recovery",
                 current_package,
                 self.target_package,
                 self._external_captures,
-                self.target_recovery_grace_captures,
+                grace,
             )
             return
         self._external_captures = 0
