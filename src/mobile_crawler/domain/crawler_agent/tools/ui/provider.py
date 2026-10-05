@@ -69,7 +69,7 @@ BROWSER_PACKAGES = frozenset(
         "com.google.android.apps.chrome",
     }
 )
-BROWSER_GRACE_CAPTURES = 5
+BROWSER_GRACE_CAPTURES = 15
 
 
 async def fetch_state_with_retry(
@@ -525,7 +525,7 @@ class AndroidStateProvider(StateProvider):
                 self.target_package,
             )
             self._external_captures = 0
-            recovered, current_package, last_error = await self._relaunch_target_app(adb_executor)
+            recovered, current_package, last_error = await self._relaunch_target_app(adb_executor, current_package)
             if recovered:
                 return
             detail = f"last_error={last_error}" if last_error else f"current_package={current_package}"
@@ -568,7 +568,7 @@ class AndroidStateProvider(StateProvider):
             self.target_package,
         )
 
-        recovered, current_package, last_error = await self._relaunch_target_app(adb_executor)
+        recovered, current_package, last_error = await self._relaunch_target_app(adb_executor, current_package)
         if recovered:
             return
 
@@ -578,17 +578,28 @@ class AndroidStateProvider(StateProvider):
             f"after {self.target_recovery_attempts} attempts ({detail})"
         )
 
-    async def _relaunch_target_app(self, adb_executor) -> tuple[bool, str | None, str | None]:
-        """Relaunch the target app; returns (recovered, current_package, last_error)."""
+    async def _relaunch_target_app(self, adb_executor, foreground: str | None = None) -> tuple[bool, str | None, str | None]:
+        """Relaunch the target app; returns (recovered, current_package, last_error).
+
+        *foreground* is the package already known to be in front (saves a read; a browser there is closed with BACK first).
+        """
         last_error = None
         current_package = None
         for attempt in range(1, self.target_recovery_attempts + 1):
+            # A browser Custom Tab lives inside the app's own task, so relaunching the app
+            # only brings the same tab back to the front. Close it with BACK first.
+            for _ in range(3):
+                if foreground not in BROWSER_PACKAGES:
+                    break
+                adb_executor.back()
+                await asyncio.sleep(0.7)
+                foreground = adb_executor.get_current_package()
             launch_result = adb_executor.am_start_recovery(self.target_package)
             if not launch_result.success:
                 last_error = launch_result.error_message or "ADB launch command failed"
 
             await asyncio.sleep(0.5)
-            current_package = adb_executor.get_current_package()
+            current_package = foreground = adb_executor.get_current_package()
             if current_package == self.target_package:
                 logger.info(
                     "Recovered target app before state capture on attempt %s/%s",
