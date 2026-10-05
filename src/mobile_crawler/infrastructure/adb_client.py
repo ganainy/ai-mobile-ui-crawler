@@ -2,9 +2,17 @@
 
 import asyncio
 import logging
+import re
 import subprocess
 
 logger = logging.getLogger(__name__)
+
+_API_KEY_RE = re.compile(r"(api_key\s+)\S+")
+
+
+def redact_secrets(text: str) -> str:
+    """Mask `-e api_key <value>` (PCAPdroid) so it never lands in logs."""
+    return _API_KEY_RE.sub(r"\1***", text)
 
 BENIGN_ACTIVITY_DELIVERED_STDERR = (
     "Activity not started, intent has been delivered to currently running top-most instance"
@@ -74,7 +82,7 @@ class ADBClient:
             return combined_output, result.returncode
 
         except subprocess.TimeoutExpired:
-            logger.warning(f"ADB command timed out after {timeout}s: {' '.join(full_command)}")
+            logger.warning(f"ADB command timed out after {timeout}s: {redact_secrets(' '.join(full_command))}")
             return f"Command timed out after {timeout}s", -1
         except FileNotFoundError:
             logger.error(f"ADB executable not found: {self.adb_executable}")
