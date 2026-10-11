@@ -4,8 +4,12 @@ from __future__ import annotations
 
 import re
 
+_WORD = r"(?:done|completed?|finished)"
 _FINISHED = re.compile(
-    r"(\(\s*(done|completed?|finished)\s*\)\s*\.?\s*$)|(^\s*(done|completed?|finished)\s*[.!]?\s*$)",
+    rf"(\(\s*{_WORD}\s*\)\s*\.?\s*$)"  # "... (done)"
+    rf"|(^\s*[\[(]\s*{_WORD}\s*[\])])"  # "[Done] ..." / "(done) ..."
+    rf"|(^\s*{_WORD}\s*[:\-\u2013]\s)"  # "Done: ..." / "Done - ..."
+    rf"|(^\s*{_WORD}\s*[.!]?\s*$)",  # bare "done"
     re.IGNORECASE,
 )
 

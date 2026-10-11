@@ -6,11 +6,16 @@ def test_done_status_notes_are_finished():
     assert is_finished_subgoal("Consent dialog dismissed (Done).")
     assert is_finished_subgoal("done")
     assert is_finished_subgoal("Completed.")
+    assert is_finished_subgoal("[Done] Screenshot main menu layout.")
+    assert is_finished_subgoal("(done) consent handled")
+    assert is_finished_subgoal("Done: reached the main menu")
 
 
 def test_real_subgoals_are_not_finished():
     assert not is_finished_subgoal("Tap the Play button on the main menu")
     assert not is_finished_subgoal("Wait until the done button appears, then tap it")
+    assert not is_finished_subgoal("Tap the Done button")
+    assert not is_finished_subgoal("Done button at index 4 should be tapped")
     assert not is_finished_subgoal("")
     assert not is_finished_subgoal(None)
 
