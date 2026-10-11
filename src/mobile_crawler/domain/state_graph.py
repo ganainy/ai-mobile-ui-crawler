@@ -32,6 +32,12 @@ class StateGraphTracker:
         # Path of hashes visited in the current run, in order
         self.history: list[str] = []
 
+        # Coarse "what is on screen" fingerprints (labels only, no coordinates). The layout hash
+        # above includes exact bounds, so animated or OmniParser-parsed screens never repeat and
+        # a stuck agent looks like it is always on a "new" screen.
+        self.content_states: set[str] = set()
+        self.content_history: list[bool] = []  # True when that step showed new content
+
         # Set up dynamic content regex patterns to filter out
         self.time_pattern = re.compile(r"^\d{1,2}:\d{2}\s*(?:AM|PM)?$", re.IGNORECASE)
         self.battery_pattern = re.compile(r"^\d{1,3}%\s*$", re.IGNORECASE)
@@ -105,6 +111,31 @@ class StateGraphTracker:
         # Serialize to JSON with sorted keys
         canonical_str = json.dumps(stable_elements, sort_keys=True, ensure_ascii=True)
         return hashlib.sha256(canonical_str.encode("utf-8")).hexdigest()
+
+    def compute_content_hash(self, elements: list[dict[str, Any]]) -> str:
+        """Hash of the set of visible labels, ignoring positions and dynamic values."""
+        labels = set()
+        for el in elements or []:
+            if self.filter_dynamic_element(el):
+                continue
+            text = str(el.get("text") or el.get("content") or el.get("contentDescription") or "").strip().lower()
+            if text:
+                labels.add(text)
+        return hashlib.sha256("\n".join(sorted(labels)).encode("utf-8")).hexdigest()
+
+    def record_content(self, elements: list[dict[str, Any]]) -> bool:
+        """Record the visible labels; returns True if this set of labels was never seen before."""
+        content_hash = self.compute_content_hash(elements)
+        is_new = content_hash not in self.content_states
+        self.content_states.add(content_hash)
+        self.content_history.append(is_new)
+        return is_new
+
+    def detect_no_progress(self, window_size: int = 6) -> bool:
+        """True when none of the last *window_size* steps showed new content."""
+        if len(self.content_history) < window_size:
+            return False
+        return not any(self.content_history[-window_size:])
 
     def record_state(self, state_hash: str, step_number: int, package: str, activity: str) -> bool:
         """Record a visited state.

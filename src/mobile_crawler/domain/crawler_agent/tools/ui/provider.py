@@ -534,6 +534,16 @@ class AndroidStateProvider(StateProvider):
                 f"after {self.target_recovery_attempts} attempts ({detail})"
             )
 
+        # A foreground that is not the target may simply be the lock screen (the screen timed out
+        # or the phone locked). Wake/unlock it, or stop the run with a clear error instead of
+        # letting the agent act on a locked screen.
+        readiness = adb_executor.ensure_device_ready_for_crawl(timeout_seconds=5.0)
+        if not readiness.success:
+            if readiness.keyguard_locked or readiness.screen_on is False:
+                raise RuntimeError(f"Device is locked or its screen is off: {readiness.error_message}")
+            # Could not read the state (transient adb problem): do not abort the run over it.
+            logger.warning("Could not verify the device lock state: %s", readiness.error_message)
+
         # Any foreign foreground — a browser tab, a WebView, a system dialog, an
         # unrecognized app, or an unresolvable (None) read — may be a legitimate
         # flow the target app launched (web login, permission prompt, account
