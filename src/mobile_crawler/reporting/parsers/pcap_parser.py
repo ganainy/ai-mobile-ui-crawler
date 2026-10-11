@@ -53,5 +53,9 @@ class DpktPcapParser(PcapParser):
                             continue
         except FileNotFoundError:
             return []
+        except (dpkt.dpkt.NeedData, dpkt.dpkt.UnpackError, ValueError):
+            # Empty or truncated pcap (e.g. an app without INTERNET permission produced no
+            # traffic): report on what is readable instead of failing the whole report.
+            return requests
 
         return requests
