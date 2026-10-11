@@ -68,6 +68,7 @@ DEFAULTS: dict[str, Any] = {
     "enable_video_recording": False,
     # ADB screenrecord maximum/default is 180 seconds. Keep segments at or below this.
     "video_recording_segment_seconds": 180,
+    "video_defer_pull": False,
     # Directory on the Android device used for temporary video segments before pull.
     "video_recording_device_dir": "/sdcard/mobile-crawler/videos",
     # Wait after screenrecord stops before pulling the finalized MP4.

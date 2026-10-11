@@ -52,6 +52,11 @@ class VideoRecordingManager:
             config_manager.get("video_recording_segment_seconds", 180) or 180
         )
         self.segment_seconds = max(1, min(self.segment_seconds, 180))
+        # Pulling a ~20-30 MB segment during the crawl can saturate a weak wireless-adb
+        # link and drop the device mid-run. When set, finished segments stay on the device
+        # and are all pulled once the crawl has ended.
+        self.defer_pull = bool(config_manager.get("video_defer_pull", False))
+        self._deferred_segments: list = []
         self.finalize_wait = float(
             config_manager.get("video_recording_finalize_wait", 1.0) or 0.0
         )
@@ -145,6 +150,10 @@ class VideoRecordingManager:
             segment, self._current_segment = self._current_segment, None
             await self._pull_segment(segment)
 
+        for deferred in self._deferred_segments:
+            await self._pull_segment(deferred)
+        self._deferred_segments = []
+
         if self._pull_tasks:
             await asyncio.gather(*self._pull_tasks, return_exceptions=True)
 
@@ -197,10 +206,15 @@ class VideoRecordingManager:
                 logger.warning("Failed to roll video recording segment: %s", exc)
                 self._recording = False
                 if finished:
-                    await self._pull_segment(finished)
+                    if self.defer_pull:
+                        self._deferred_segments.append(finished)  # pulled after the crawl, like the others
+                    else:
+                        await self._pull_segment(finished)
                 await self._write_manifest_async()
                 return
-            if finished:
+            if finished and self.defer_pull:
+                self._deferred_segments.append(finished)
+            elif finished:
                 task = asyncio.create_task(self._pull_segment(finished))
                 self._pull_tasks.add(task)
                 task.add_done_callback(self._pull_tasks.discard)
