@@ -22,6 +22,7 @@ _PLAIN_KEYS = (
     "tracing_provider",
     "enable_traffic_capture",
     "enable_video_recording",
+    "video_recording_quality",
     "restart_app_before_run",
     "jev_shadow_enabled",
     "jev_shadow_model",
