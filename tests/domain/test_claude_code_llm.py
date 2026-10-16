@@ -20,8 +20,10 @@ def test_args_are_toolless_single_turn_and_carry_the_system_prompt():
     args = cc.build_args("haiku", "be brief")
     assert args[args.index("--tools") + 1] == ""
     assert args[args.index("--max-turns") + 1] == "1"
-    assert "--no-session-persistence" in args and args[args.index("--system-prompt") + 1] == "be brief"
-    assert "--system-prompt" not in cc.build_args("haiku", "")
+    assert "--no-session-persistence" in args
+    prompt = args[args.index("--system-prompt") + 1]
+    assert prompt.endswith("be brief") and "no callable tools" in prompt
+    assert cc.build_args("haiku", "")[cc.build_args("haiku", "").index("--system-prompt") + 1] == cc.FRAMING_NOTE
 
 
 def test_split_messages_keeps_text_and_images_in_order():

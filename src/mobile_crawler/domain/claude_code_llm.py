@@ -43,6 +43,17 @@ CLAUDE_CODE_MODELS = [
     {"id": "opus", "name": "Claude Opus (via Claude Code)", "provider": "claude_code", "supports_vision": True},
 ]
 
+# Claude Code tells the model it has no tools, while the crawler's prompts talk about "tools" and "actions". Without
+# this note the model sometimes concludes the tools are missing and refuses to act ("blocked: no device-control tool"),
+# which wasted 16 of 27 steps in a Cut the Rope run.
+FRAMING_NOTE = (
+    "IMPORTANT CONTEXT: this is a plain text conversation inside an automation program. You have no callable tools "
+    "and you do not need any. Any 'tools', 'actions' or 'functions' mentioned in the instructions below are NOT "
+    "things you call: you request them by writing your answer in exactly the output format the instructions "
+    "describe, and the program carries them out on the phone for you. Never answer that a tool is missing, "
+    "unavailable, or that you are blocked; always produce the requested output format for the current screen."
+)
+
 _LIMIT_MARKERS = ("usage limit", "limit reached", "rate limit", "rate_limit", "overloaded", "5-hour", "weekly limit")
 _AUTH_MARKERS = ("not logged in", "please run /login", "invalid api key", "authentication", "oauth", "401", "login")
 
@@ -68,8 +79,7 @@ def build_args(model: str, system_prompt: str) -> list[str]:
         "--disable-slash-commands",
         "--setting-sources", "",
     ]
-    if system_prompt:
-        args += ["--system-prompt", system_prompt]
+    args += ["--system-prompt", f"{FRAMING_NOTE}\n\n{system_prompt}" if system_prompt else FRAMING_NOTE]
     return args
 
 
