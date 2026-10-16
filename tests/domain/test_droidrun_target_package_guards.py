@@ -136,7 +136,7 @@ def android_state_provider():
     tree_filter = Mock()
     tree_filter.filter.return_value = [{"text": "ok"}]
     tree_formatter = Mock()
-    tree_formatter.format.return_value = ("formatted", "", [], {})
+    tree_formatter.format.return_value = ("formatted", "", [{"text": "ok"}], {})
 
     provider = AndroidStateProvider(
         driver=driver,

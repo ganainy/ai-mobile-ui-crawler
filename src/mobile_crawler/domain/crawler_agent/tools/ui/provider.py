@@ -43,6 +43,9 @@ capture_logger = logging.getLogger(__name__)
 _RETRY_DELAYS = [1.0, 2.0, 3.0, 5.0, 8.0, 10.0]
 _MAX_RETRIES = 7
 
+# Abort the run after this many consecutive captures with no UI elements at all.
+MAX_BLIND_CAPTURES = 6
+
 # After this many consecutive failures, run the recovery callback.
 # With the schedule above, this fires after ~11s (1+2+3+5).
 _RECOVERY_AFTER_ATTEMPT = 5
@@ -221,6 +224,8 @@ class AndroidStateProvider(StateProvider):
         # Black screenshots (a secure window hides the screen from capture).
         self._captures_done = 0
         self._blank_streak = 0
+        # Consecutive captures that produced no UI elements at all (any parser mode).
+        self._blind_captures = 0
 
     async def get_state(self) -> UIState:
         state_started = time.perf_counter()
@@ -391,6 +396,21 @@ class AndroidStateProvider(StateProvider):
         formatted_text, focused_text, elements, phone_state = self.tree_formatter.format(
             filtered, phone_state, omni_tree=omni_tree
         )
+
+        # Abort instead of burning the whole time limit on a blind agent: when no parser (Portal or
+        # OmniParser, in any mode) yields an element several captures in a row, the agent cannot
+        # act and just loops (e.g. accessibility service not delivering a tree).
+        if not elements:
+            self._blind_captures += 1
+            if self._blind_captures >= MAX_BLIND_CAPTURES:
+                raise RuntimeError(
+                    f"No UI elements for {self._blind_captures} consecutive captures "
+                    f"(a11y: {a11y_status}, omniparser: {omni_status}). Aborting: the agent cannot see the "
+                    "screen. Check that the Portal accessibility service is enabled and delivering a tree "
+                    "('mobile-crawler-cli a11y-portal status/enable --device ...')."
+                )
+        else:
+            self._blind_captures = 0
 
         # Compute layout hash for unique state identification
         layout_hash = None
