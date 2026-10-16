@@ -734,6 +734,7 @@ class MainWindow(QMainWindow):
         config_manager.set("enable_traffic_capture", enable_traffic_capture)
         config_manager.set("pcapdroid_tls_decryption", bool(enable_traffic_capture))
         config_manager.set("enable_video_recording", enable_video_recording)
+        config_manager.set("video_recording_quality", self.settings_panel.get_video_recording_quality())
         config_manager.set("enable_mobsf_analysis", enable_mobsf_analysis)
         config_manager.set("auto_run_mobsf_after_crawl", auto_run_mobsf)
         config_manager.set(

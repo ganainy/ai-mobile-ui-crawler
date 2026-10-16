@@ -32,6 +32,14 @@ class VideoSegment:
     error: str | None = None
 
 
+# quality -> (bit rate in bit/s or None for the device default, resolution scale)
+VIDEO_QUALITY_PRESETS: dict[str, tuple[int | None, float]] = {
+    "high": (None, 1.0),
+    "medium": (6_000_000, 1.0),
+    "low": (2_000_000, 0.5),
+}
+
+
 class VideoRecordingManager:
     """Records Android screen videos using segmented ADB screenrecord."""
 
@@ -56,6 +64,8 @@ class VideoRecordingManager:
         # link and drop the device mid-run. When set, finished segments stay on the device
         # and are all pulled once the crawl has ended.
         self.defer_pull = bool(config_manager.get("video_defer_pull", False))
+        quality = str(config_manager.get("video_recording_quality", "high") or "high").lower()
+        self.quality = quality if quality in VIDEO_QUALITY_PRESETS else "high"
         self._deferred_segments: list = []
         self.finalize_wait = float(
             config_manager.get("video_recording_finalize_wait", 1.0) or 0.0
@@ -219,6 +229,26 @@ class VideoRecordingManager:
                 self._pull_tasks.add(task)
                 task.add_done_callback(self._pull_tasks.discard)
 
+    async def _quality_args(self) -> list[str]:
+        """screenrecord flags for the configured quality ([] = device default)."""
+        bit_rate, scale = VIDEO_QUALITY_PRESETS[self.quality]
+        args: list[str] = []
+        if bit_rate:
+            args += ["--bit-rate", str(bit_rate)]
+        if scale < 1.0:
+            output, retcode = await self._run_adb_command_async(
+                ["shell", "wm", "size"], suppress_stderr=True, timeout=10.0
+            )
+            match = re.search(r"(\d+)x(\d+)", output or "") if retcode == 0 else None
+            if match:
+                # H.264 encoders want even dimensions.
+                width = int(int(match.group(1)) * scale) // 2 * 2
+                height = int(int(match.group(2)) * scale) // 2 * 2
+                args += ["--size", f"{width}x{height}"]
+            else:
+                logger.warning("Could not read the screen size; recording at full resolution")
+        return args
+
     async def _start_next_segment(self) -> None:
         self._part += 1
         timestamp = time.strftime("%Y%m%d_%H%M%S")
@@ -228,11 +258,13 @@ class VideoRecordingManager:
         )
         device_path = f"{self.device_dir}/{filename}"
 
+        quality_args = await self._quality_args()
         args = self._adb_base_args() + [
             "shell",
             "screenrecord",
             "--time-limit",
             str(self.segment_seconds),
+            *quality_args,
             device_path,
         ]
 

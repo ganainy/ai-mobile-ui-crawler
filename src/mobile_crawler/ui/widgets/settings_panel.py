@@ -859,6 +859,17 @@ class SettingsPanel(QWidget):
         video_layout = QVBoxLayout()
         self.enable_video_recording_checkbox = QCheckBox("Enable Video Recording")
         video_layout.addWidget(self.enable_video_recording_checkbox)
+        video_quality_layout = QHBoxLayout()
+        video_quality_layout.addWidget(QLabel("Video Quality:"))
+        self.video_quality_combo = QComboBox()
+        self.video_quality_combo.addItems(["high", "medium", "low"])
+        self.video_quality_combo.setToolTip(
+            "high: device default (about 20 Mbit/s, large files). medium: 6 Mbit/s. "
+            "low: 2 Mbit/s at half resolution (smallest files)."
+        )
+        video_quality_layout.addWidget(self.video_quality_combo)
+        video_quality_layout.addStretch()
+        video_layout.addLayout(video_quality_layout)
         video_group.setLayout(video_layout)
         layout.addWidget(video_group)
 
@@ -1173,6 +1184,9 @@ class SettingsPanel(QWidget):
         # Load video recording settings
         enable_video_recording = self._config_store.get_setting("enable_video_recording", default=False)
         self.enable_video_recording_checkbox.setChecked(enable_video_recording)
+        self.video_quality_combo.setCurrentText(
+            str(self._config_store.get_setting("video_recording_quality", default="high") or "high")
+        )
 
         # Load Run Report settings
         self.auto_generate_report_checkbox.setChecked(
@@ -1384,6 +1398,9 @@ class SettingsPanel(QWidget):
                 # Save video recording settings
                 enable_video_recording = self.enable_video_recording_checkbox.isChecked()
                 self._config_store.set_setting("enable_video_recording", enable_video_recording, "bool")
+                self._config_store.set_setting(
+                    "video_recording_quality", self.video_quality_combo.currentText(), "string"
+                )
 
                 # Save Run Report settings
                 self._config_store.set_setting(
@@ -1798,6 +1815,10 @@ class SettingsPanel(QWidget):
             True if traffic capture is enabled
         """
         return self.enable_traffic_capture_checkbox.isChecked()
+
+    def get_video_recording_quality(self) -> str:
+        """Get the selected video quality preset (high, medium or low)."""
+        return self.video_quality_combo.currentText()
 
     def get_enable_video_recording(self) -> bool:
         """Get the current video recording enabled state.

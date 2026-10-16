@@ -272,6 +272,12 @@ def _resolve_last(value: str, config_manager: ConfigManager, key: str, option: s
 @click.option("--provider", help="AI provider (gemini, openrouter, opencode_go, ollama)")
 @click.option("--enable-traffic-capture", is_flag=True, help="Enable PCAPdroid traffic capture during crawl")
 @click.option("--enable-video-recording", is_flag=True, help="Enable video recording during crawl")
+@click.option(
+    "--video-quality",
+    type=click.Choice(["high", "medium", "low"]),
+    default=None,
+    help="Video recording quality for this run: high (device default, large files), medium, or low (smallest). Default: the configured setting",
+)
 @click.option("--enable-mobsf-analysis", is_flag=True, help="Enable MobSF static analysis after crawl")
 @click.option(
     "--force-mobsf-rescan",
@@ -331,6 +337,7 @@ def crawl(
     provider: str | None,
     enable_traffic_capture: bool,
     enable_video_recording: bool,
+    video_quality: str | None,
     enable_mobsf_analysis: bool,
     force_mobsf_rescan: bool,
     no_report: bool,
@@ -375,6 +382,8 @@ def crawl(
             config_manager.override("pcapdroid_tls_decryption", True)
         if enable_video_recording:
             config_manager.override("enable_video_recording", True)
+        if video_quality:
+            config_manager.override("video_recording_quality", video_quality)
         if enable_mobsf_analysis:
             config_manager.override("enable_mobsf_analysis", True)
             config_manager.override("auto_run_mobsf_after_crawl", True)
