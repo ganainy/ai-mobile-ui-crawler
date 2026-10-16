@@ -369,10 +369,13 @@ async def test_state_provider_relaunches_after_default_grace_exhausted(android_s
     provider, _ = android_state_provider
     provider.target_recovery_grace_captures = 2
     mock_adb = Mock()
+    is_browser = foreign_package == "com.brave.browser"
     mock_adb.get_current_package.side_effect = [
         foreign_package,
         foreign_package,
         foreign_package,
+        # A browser is closed with BACK first; the read after BACK shows the app behind it.
+        *(["com.android.launcher"] if is_browser else []),
         "com.example.app",
     ]
     mock_adb.am_start_recovery.return_value = CrawlerActionResult(
@@ -388,6 +391,10 @@ async def test_state_provider_relaunches_after_default_grace_exhausted(android_s
         await provider.get_state()
 
     mock_adb.am_start_recovery.assert_called_once_with("com.example.app")
+    if is_browser:
+        mock_adb.back.assert_called_once()
+    else:
+        mock_adb.back.assert_not_called()
 
 
 @pytest.mark.asyncio
