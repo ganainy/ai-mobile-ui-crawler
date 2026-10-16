@@ -410,10 +410,16 @@ class ManagerAgent(Workflow):
 
                 self.state_graph_tracker.record_state(current_hash, step_num, pkg, act)
 
-                if self.state_graph_tracker.detect_loop(window_size=4):
+                self.state_graph_tracker.record_content(ui_state.elements)
+                no_progress = self.state_graph_tracker.detect_no_progress(window_size=6)
+
+                if self.state_graph_tracker.detect_loop(window_size=4) or no_progress:
                     hint = self.state_graph_tracker.get_loop_recovery_hint(current_hash, ui_state.elements)
                     self.shared_state.loop_warning = (
-                        "A navigation loop has been detected! You are visiting the same screens repeatedly."
+                        "No new content has appeared for the last 6 steps; whatever you are doing is not working. "
+                        "Stop repeating it and try something different."
+                        if no_progress
+                        else "A navigation loop has been detected! You are visiting the same screens repeatedly."
                     )
                     self.shared_state.loop_hint = hint
                     logger.warning(

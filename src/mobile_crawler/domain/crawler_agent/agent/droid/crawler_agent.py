@@ -43,6 +43,7 @@ from mobile_crawler.domain.crawler_agent.agent.external import load_agent
 from mobile_crawler.domain.crawler_agent.agent.fast_agent import FastAgent
 from mobile_crawler.domain.crawler_agent.agent.fast_agent.events import FastAgentOutputEvent
 from mobile_crawler.domain.crawler_agent.agent.manager import ManagerAgent, StatelessManagerAgent
+from mobile_crawler.domain.crawler_agent.agent.manager.subgoal_guard import NEXT_ACTION_SUBGOAL, is_finished_subgoal
 from mobile_crawler.domain.crawler_agent.agent.oneflows.structured_output_agent import StructuredOutputAgent
 from mobile_crawler.domain.crawler_agent.agent.trajectory import TrajectoryWriter
 from mobile_crawler.domain.crawler_agent.agent.utils.llm_loader import (
@@ -703,8 +704,13 @@ class CrawlerAgent(Workflow):
             self.shared_state.progress_summary = f"Answer: {ev.answer}"
             return FinalizeEvent(success=success, reason=ev.answer)
 
-        logger.info(f"▶️  Proceeding to Executor with subgoal: {ev.current_subgoal}")
-        return ExecutorInputEvent(current_subgoal=ev.current_subgoal)
+        subgoal = ev.current_subgoal
+        if is_finished_subgoal(subgoal):
+            # The Manager only reported "(done)"; the Executor would just wait. Give it a real task.
+            logger.warning(f"Manager returned a finished subgoal ({subgoal!r}); asking the Executor to explore instead")
+            subgoal = NEXT_ACTION_SUBGOAL
+        logger.info(f"▶️  Proceeding to Executor with subgoal: {subgoal}")
+        return ExecutorInputEvent(current_subgoal=subgoal)
 
     @step
     async def run_executor(self, ctx: Context, ev: ExecutorInputEvent) -> ExecutorResultEvent:
