@@ -11,6 +11,7 @@ from mobile_crawler.cli.console_reader import ConsoleReader
 from mobile_crawler.cli.crawl_batch import BatchResult, run_crawl_batch
 from mobile_crawler.cli.device_choice import DEVICE_HELP, resolve_device
 from mobile_crawler.cli.event_printer import PrettyEventListener
+from mobile_crawler.cli.omniparser_warmup_step import warm_up_omniparser_if_needed
 from mobile_crawler.cli.step_by_step_console import StepByStepConsole
 from mobile_crawler.cli.terminal_human_prompter import TerminalHumanPrompter
 from mobile_crawler.core.crawler_event_listener import CrawlerEventListener
@@ -409,7 +410,12 @@ def crawl(
         # A failed Phoenix start is reported once, by the Phoenix Pre-run Warning below.
         report_docker_autostart("Phoenix", phoenix_result if phoenix_result and phoenix_result[0] else None)
 
-        # stderr: stdout is the JSON event stream.
+        # stderr: stdout is the JSON event stream. Before the run starts, so a cold start is not charged to
+        # the crawl's time limit.
+        warmup_message = warm_up_omniparser_if_needed(config_manager)
+        if warmup_message:
+            click.echo(warmup_message, err=True)
+
         pre_run_warnings = collect_pre_run_warnings(config_manager, device)
         for warning in pre_run_warnings:
             click.echo(f"Warning: {warning.message}", err=True)
