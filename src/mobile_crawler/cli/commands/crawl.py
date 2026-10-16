@@ -270,7 +270,7 @@ def _resolve_last(value: str, config_manager: ConfigManager, key: str, option: s
 @click.option("--model", required=True, help="AI model to use")
 @click.option("--steps", type=int, help="Maximum number of crawl steps (per app)")
 @click.option("--duration", type=int, help="Maximum crawl duration in seconds (per app)")
-@click.option("--provider", help="AI provider (gemini, openrouter, opencode_go, ollama)")
+@click.option("--provider", help="AI provider (gemini, openrouter, opencode_go, claude_code, ollama)")
 @click.option("--enable-traffic-capture", is_flag=True, help="Enable PCAPdroid traffic capture during crawl")
 @click.option("--enable-video-recording", is_flag=True, help="Enable video recording during crawl")
 @click.option(

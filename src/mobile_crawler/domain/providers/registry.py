@@ -32,6 +32,20 @@ class ProviderRegistry:
         if self._config_store:
             self._load_persistent_cache()
 
+    def fetch_claude_code_models(self) -> list[dict[str, Any]]:
+        """Models served through the user's Claude Code login (fixed aliases; no network call, no key).
+
+        Raises when Claude Code is not installed, so the model picker shows why the list is empty.
+        """
+        from mobile_crawler.domain.claude_code_llm import CLAUDE_CODE_MODELS, claude_executable
+
+        if not claude_executable():
+            raise RuntimeError(
+                "Claude Code is not installed. Install it (curl -fsSL https://claude.ai/install.sh | bash) "
+                "and sign in with `claude auth login`."
+            )
+        return [dict(m) for m in CLAUDE_CODE_MODELS]
+
     def fetch_gemini_models(self, api_key: str) -> list[dict[str, Any]]:
         """Fetch available Gemini models.
 

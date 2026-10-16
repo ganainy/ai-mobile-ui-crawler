@@ -288,6 +288,18 @@ class PreCrawlValidator:
                     severity="error",
                 )
 
+        # Claude via the user's own Claude Code program: needs the program, signed in by the user.
+        if ai_provider == "claude_code":
+            from mobile_crawler.domain.claude_code_llm import claude_executable
+
+            if not claude_executable():
+                return ValidationError(
+                    field="claude_code",
+                    message="Claude Code is not installed. Install it (curl -fsSL https://claude.ai/install.sh | bash) "
+                    "and sign in with `claude auth login`.",
+                    severity="error",
+                )
+
         return None
 
     def _check_mobsf_reachable(self) -> ValidationError | None:

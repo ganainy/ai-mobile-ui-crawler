@@ -44,6 +44,12 @@ def load_llm(provider_name: str, model: str | None = None, **kwargs: Any) -> LLM
     if model is not None:
         kwargs["model"] = model
 
+    if provider_name == "ClaudeCode":
+        # Local class (the user's own Claude Code program), not a llama_index.llms.* package.
+        from mobile_crawler.domain.claude_code_llm import ClaudeCode
+
+        return ClaudeCode(**{k: v for k, v in kwargs.items() if v is not None and k in ("model", "timeout_seconds")})
+
     if provider_name == "OpenAILike":
         module_provider_part = "openai_like"
         kwargs.setdefault("is_chat_model", True)
