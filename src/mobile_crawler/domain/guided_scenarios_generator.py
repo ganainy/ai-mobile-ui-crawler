@@ -39,6 +39,7 @@ _PROVIDER_MAPPING = {
     "ollama": "Ollama",
     "openrouter": "OpenRouter",
     "opencode_go": "OpenAILike",
+    "claude_code": "ClaudeCode",
 }
 
 _PROVIDER_API_KEY_ENV = {

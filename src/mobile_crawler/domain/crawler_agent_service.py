@@ -276,6 +276,7 @@ class CrawlerAgentService:
             "ollama": "Ollama",
             "openrouter": "OpenRouter",
             "opencode_go": "OpenAILike",
+            "claude_code": "ClaudeCode",
         }
 
         if ai_provider not in provider_mapping:

@@ -60,6 +60,14 @@ def get_usage_from_response(provider: str, chat_rsp: ChatResponse) -> UsageResul
             total_tokens=usage.input_tokens + usage.output_tokens,
             requests=1,
         )
+    elif provider == "ClaudeCode":
+        usage = rsp.get("usage", {})
+        return UsageResult(
+            request_tokens=usage.get("input_tokens", 0),
+            response_tokens=usage.get("output_tokens", 0),
+            total_tokens=usage.get("input_tokens", 0) + usage.get("output_tokens", 0),
+            requests=1,
+        )
     elif provider == "Ollama":
         # Ollama response format uses different field names
         prompt_eval_count = rsp.get("prompt_eval_count", 0)
