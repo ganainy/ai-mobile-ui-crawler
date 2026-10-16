@@ -366,7 +366,13 @@ class AndroidStateProvider(StateProvider):
                     if omni_tree:
                         omni_source = "omni"
                         logger.debug(f"Using OmniParser boost ({len(omni_tree)} elements)")
-                    filtered = None
+                        filtered = None
+                    else:
+                        # OmniParser unavailable (e.g. no Replicate key / no local server) or
+                        # found nothing: fall back to whatever the a11y tree has instead of
+                        # handing the formatter neither source (0 elements -> step skipped).
+                        logger.warning("OmniParser returned no elements; falling back to the incomplete a11y tree")
+                        filtered = self._filter_a11y_or_none(a11y_tree, device_context)
                 except Exception as e:
                     omni_status = f"failed ({e})"
                     logger.warning(f"OmniParser boost failed: {e}")
@@ -575,8 +581,23 @@ class AndroidStateProvider(StateProvider):
             logger.warning("Could not bring %s back after an empty a11y tree (current=%s)", self.target_package, current_package)
 
     def _filter_a11y_or_none(self, a11y_tree: Any, device_context: dict[str, Any]) -> Any:
-        """The filtered a11y tree for the formatter, or None when there is no tree (an empty tree is ``[]``)."""
-        return self.tree_filter.filter(a11y_tree, device_context) if a11y_tree else None
+        """The filtered a11y tree for the formatter, or None when there is no tree (an empty tree is ``[]``).
+
+        Never raises: this runs in fallback paths, and a Portal tree may be a list of root nodes while
+        the filters work on a single root.
+        """
+        if not a11y_tree:
+            return None
+        try:
+            if isinstance(a11y_tree, list):
+                roots = [r for r in (self.tree_filter.filter(root, device_context) for root in a11y_tree if isinstance(root, dict)) if r]
+                if len(roots) == 1:
+                    return roots[0]
+                return {"className": "SyntheticRoot", "children": roots} if roots else None
+            return self.tree_filter.filter(a11y_tree, device_context)
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning("Could not filter the a11y tree for the fallback: %s", exc)
+            return None
 
     async def _check_blank_screenshot(self, screenshot_bytes: bytes) -> bool:
         """True when the screenshot is black (a secure window hides the screen).
