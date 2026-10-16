@@ -8,6 +8,7 @@ import time
 import xml.etree.ElementTree as ET
 from typing import TYPE_CHECKING, Any, Optional
 
+from mobile_crawler.infrastructure.adb_retry import run_with_retry
 from mobile_crawler.domain.run_folder_layout import RunFolderLayout
 
 if TYPE_CHECKING:
@@ -16,6 +17,14 @@ if TYPE_CHECKING:
     from mobile_crawler.infrastructure.session_folder_manager import SessionFolderManager
 
 logger = logging.getLogger(__name__)
+
+
+def _as_number(value, kind, default):
+    """Config values can be missing or odd (tests use mocks); fall back to the default instead of crashing."""
+    try:
+        return kind(value)
+    except (TypeError, ValueError):
+        return default
 
 PULL_TIMEOUT_SECONDS = 300.0
 
@@ -93,6 +102,17 @@ class TrafficCaptureManager:
         temp_client = ADBClient(adb_executable=adb_executable)
         return await temp_client.execute_async(
             self._device_scoped_args(command_list), suppress_stderr, timeout=timeout
+        )
+
+    async def _run_adb_with_retry_async(
+        self, command_list: list[str], what: str, suppress_stderr: bool = False, timeout: float | None = None
+    ) -> tuple[str, int]:
+        """Run an adb command, retrying transient wireless failures (settings: media_retry_*)."""
+        return await run_with_retry(
+            lambda: self._run_adb_command_async(command_list, suppress_stderr, **({} if timeout is None else {"timeout": timeout})),
+            what,
+            attempts=_as_number(self.config_manager.get("media_retry_attempts", 4), int, 4),
+            delay_seconds=_as_number(self.config_manager.get("media_retry_delay_seconds", 10.0), float, 10.0),
         )
 
     def is_capturing(self) -> bool:
@@ -448,7 +468,9 @@ class TrafficCaptureManager:
         if api_key:
             stop_command_args.extend(["-e", "api_key", str(api_key)])
 
-        stdout_stop, retcode_stop = await self._run_adb_command_async(stop_command_args, suppress_stderr=True)
+        stdout_stop, retcode_stop = await self._run_adb_with_retry_async(
+            stop_command_args, "PCAPdroid stop", suppress_stderr=True
+        )
         self._is_currently_capturing = False
 
         if retcode_stop != 0:
@@ -484,7 +506,9 @@ class TrafficCaptureManager:
         # Verify file exists on device before attempting to pull
         logger.debug(f"Checking if PCAP file exists on device: {device_pcap_full_path}")
         check_file_args = ["shell", "test", "-f", device_pcap_full_path]
-        stdout_check, retcode_check = await self._run_adb_command_async(check_file_args, suppress_stderr=True)
+        stdout_check, retcode_check = await self._run_adb_with_retry_async(
+            check_file_args, "PCAP existence check", suppress_stderr=True
+        )
 
         if retcode_check != 0:
             logger.warning(f"PCAP file not found at expected location: {device_pcap_full_path}")
@@ -520,8 +544,8 @@ class TrafficCaptureManager:
 
         logger.debug(f"PCAP file exists on device, attempting to pull: {device_pcap_full_path}")
         pull_command_args = ["pull", device_pcap_full_path, self.local_pcap_file_path]
-        stdout_pull, retcode_pull = await self._run_adb_command_async(
-            pull_command_args, timeout=PULL_TIMEOUT_SECONDS
+        stdout_pull, retcode_pull = await self._run_adb_with_retry_async(
+            pull_command_args, "PCAP pull", timeout=PULL_TIMEOUT_SECONDS
         )
 
         if retcode_pull != 0:

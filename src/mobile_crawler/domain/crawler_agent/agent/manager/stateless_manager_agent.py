@@ -14,6 +14,7 @@ from llama_index.core.workflow import Context, StartEvent, StopEvent, Workflow, 
 from opentelemetry import trace
 from pydantic import BaseModel
 
+from mobile_crawler.domain.crawler_agent.agent.manager.repeat_guard import repeated_actions_hint
 from mobile_crawler.domain.crawler_agent.agent.common.events import RecordUIStateEvent, ScreenshotEvent
 from mobile_crawler.domain.crawler_agent.agent.manager.events import (
     ManagerContextEvent,
@@ -249,7 +250,10 @@ class StatelessManagerAgent(Workflow):
                         if no_progress
                         else "A navigation loop has been detected! You are visiting the same screens repeatedly."
                     )
-                    self.shared_state.loop_hint = hint
+                    repeat_hint = repeated_actions_hint(
+                        self.shared_state.action_history, self.shared_state.summary_history
+                    )
+                    self.shared_state.loop_hint = f"{hint}\n{repeat_hint}".strip() if repeat_hint else hint
                     logger.warning(
                         f"Loop detected! Warning: {self.shared_state.loop_warning}, Hint: {self.shared_state.loop_hint}"
                     )
