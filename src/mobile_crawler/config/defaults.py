@@ -69,6 +69,9 @@ DEFAULTS: dict[str, Any] = {
     # ADB screenrecord maximum/default is 180 seconds. Keep segments at or below this.
     "video_recording_segment_seconds": 180,
     "video_defer_pull": False,
+    # Retries (with a growing pause) for PCAPdroid stop and the end-of-run pcap/video pulls when the wireless link flaps.
+    "media_retry_attempts": 4,
+    "media_retry_delay_seconds": 10.0,
     # Screenrecord quality: "high" (device default, ~20 Mbit/s, biggest files), "medium"
     # (6 Mbit/s) or "low" (2 Mbit/s at half resolution, roughly 10x smaller than high).
     "video_recording_quality": "high",

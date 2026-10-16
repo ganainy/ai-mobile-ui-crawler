@@ -14,7 +14,17 @@ if TYPE_CHECKING:
     from mobile_crawler.config.config_manager import ConfigManager
     from mobile_crawler.infrastructure.adb_client import ADBClient
 
+from mobile_crawler.infrastructure.adb_retry import run_with_retry
+
 logger = logging.getLogger(__name__)
+
+
+def _as_number(value, kind, default):
+    """Config values can be missing or odd; fall back to the default instead of crashing."""
+    try:
+        return kind(value)
+    except (TypeError, ValueError):
+        return default
 
 PULL_TIMEOUT_SECONDS = 300.0
 
@@ -302,6 +312,14 @@ class VideoRecordingManager:
                 process.kill()
                 await process.wait()
 
+    def _retry_settings(self) -> dict:
+        cfg = getattr(self, "config_manager", None)
+        get = cfg.get if cfg is not None else (lambda key, default=None: default)
+        return {
+            "attempts": _as_number(get("media_retry_attempts", 4), int, 4),
+            "delay_seconds": _as_number(get("media_retry_delay_seconds", 10.0), float, 10.0),
+        }
+
     async def _pull_segment(self, segment: VideoSegment) -> None:
         segment.stopped_at = time.strftime("%Y-%m-%dT%H:%M:%S")
         if self.finalize_wait > 0:
@@ -314,9 +332,10 @@ class VideoRecordingManager:
             await self._write_manifest_async()
             return
 
-        output, retcode = await self._run_adb_command_async(
-            ["shell", "test", "-f", segment.device_path],
-            suppress_stderr=True,
+        output, retcode = await run_with_retry(
+            lambda: self._run_adb_command_async(["shell", "test", "-f", segment.device_path], suppress_stderr=True),
+            "video segment existence check",
+            **self._retry_settings(),
         )
         if retcode != 0:
             segment.error = f"Device video file not found: {output}".strip()
@@ -325,9 +344,10 @@ class VideoRecordingManager:
             await self._write_manifest_async()
             return
 
-        output, retcode = await self._run_adb_command_async(
-            ["pull", segment.device_path, local_path],
-            timeout=PULL_TIMEOUT_SECONDS,
+        output, retcode = await run_with_retry(
+            lambda: self._run_adb_command_async(["pull", segment.device_path, local_path], timeout=PULL_TIMEOUT_SECONDS),
+            "video segment pull",
+            **self._retry_settings(),
         )
         if retcode != 0:
             segment.error = f"Failed to pull video segment: {output}".strip()
