@@ -144,6 +144,7 @@ class AIModelSelector(QWidget):
             ("Gemini", "gemini"),
             ("OpenRouter", "openrouter"),
             ("OpenCode Go", "opencode_go"),
+            ("Claude (your Claude Code login)", "claude_code"),
             ("Ollama (Local)", "ollama"),
         ]
 
@@ -260,6 +261,8 @@ class AIModelSelector(QWidget):
             return self.provider_registry.fetch_opencode_go_models()
         if provider == "ollama":
             return self.provider_registry.fetch_ollama_models()
+        if provider == "claude_code":
+            return self.provider_registry.fetch_claude_code_models()
         raise ValueError(f"Unsupported provider: {provider}")
 
     def _on_models_success(self, provider: str, models: list):

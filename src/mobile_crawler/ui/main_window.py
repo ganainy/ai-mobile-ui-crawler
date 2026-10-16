@@ -1629,6 +1629,9 @@ class MainWindow(QMainWindow):
         elif provider == "ollama":
             # Ollama doesn't need API key
             return "ollama"
+        elif provider == "claude_code":
+            # No key: the user signs in to Claude Code itself (`claude auth login`)
+            return "claude_code"
         return ""
 
     def _update_start_button_state(self) -> None:

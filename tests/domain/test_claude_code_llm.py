@@ -105,3 +105,14 @@ def test_load_llm_builds_it_without_an_api_key():
 
     llm = load_llm("ClaudeCode", model="haiku", api_key="ignored", temperature=0.0)
     assert llm.class_name() == "ClaudeCode" and llm.model == "haiku"
+
+
+def test_registry_lists_the_claude_code_models(monkeypatch):
+    from mobile_crawler.domain.providers.registry import ProviderRegistry
+
+    monkeypatch.setattr(cc, "claude_executable", lambda: "/bin/claude")
+    ids = [m["id"] for m in ProviderRegistry().fetch_claude_code_models()]
+    assert ids == ["haiku", "sonnet", "opus"]
+    monkeypatch.setattr(cc, "claude_executable", lambda: None)
+    with pytest.raises(RuntimeError, match="not installed"):
+        ProviderRegistry().fetch_claude_code_models()
